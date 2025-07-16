@@ -32,6 +32,7 @@ struct scm_fp_list {
 
 struct scm_cookie {
 	struct pid		*pid;		/* Skb credentials */
+	/*记录传递的文件*/
 	struct scm_fp_list	*fp;		/* Passed files		*/
 	struct scm_creds	creds;		/* Skb credentials	*/
 #ifdef CONFIG_SECURITY_NETWORK
@@ -182,8 +183,9 @@ static inline bool __scm_recv_common(struct socket *sock, struct msghdr *msg,
 
 	scm_passec(sock, msg, scm);
 
+	/*有对应的文件*/
 	if (scm->fp)
-		scm_detach_fds(msg, scm);
+		scm_detach_fds(msg, scm);/*关联scm中指明的file,为这些file分配fds并填充msg*/
 
 	return true;
 }
@@ -200,7 +202,7 @@ static inline void scm_recv(struct socket *sock, struct msghdr *msg,
 static inline void scm_recv_unix(struct socket *sock, struct msghdr *msg,
 				 struct scm_cookie *scm, int flags)
 {
-	if (!__scm_recv_common(sock, msg, scm, flags))
+	if (!__scm_recv_common(sock, msg, scm, flags))/*scm信息转recv msg*/
 		return;
 
 	if (test_bit(SOCK_PASSPIDFD, &sock->flags))

@@ -34,7 +34,7 @@ struct sock *unix_get_socket(struct file *filp)
 
 		/* PF_UNIX ? */
 		if (s && ops && ops->family == PF_UNIX)
-			u_sock = s;
+			u_sock = s;/*必须为unix socket*/
 	}
 
 	return u_sock;
@@ -51,6 +51,7 @@ void unix_inflight(struct user_struct *user, struct file *fp)
 	spin_lock(&unix_gc_lock);
 
 	if (s) {
+		/*传递的文件是unix socket*/
 		struct unix_sock *u = unix_sk(s);
 
 		if (atomic_long_inc_return(&u->inflight) == 1) {
@@ -118,8 +119,9 @@ int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 	if (!UNIXCB(skb).fp)
 		return -ENOMEM;
 
+	/*处理scm中附加的要发送的fd*/
 	for (i = scm->fp->count - 1; i >= 0; i--)
-		unix_inflight(scm->fp->user, scm->fp->fp[i]);
+		unix_inflight(scm->fp->user, scm->fp->fp[i]/*要发送的文件*/);
 	return 0;
 }
 EXPORT_SYMBOL(unix_attach_fds);

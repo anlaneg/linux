@@ -40,6 +40,7 @@ int ksys_ipc(unsigned int call, int first, unsigned long second,
 			return -ENOSYS;
 
 	case SEMGET:
+		/*实现semget调用*/
 		return ksys_semget(first, second, third);
 	case SEMCTL: {
 		unsigned long arg;
@@ -110,6 +111,7 @@ int ksys_ipc(unsigned int call, int first, unsigned long second,
 SYSCALL_DEFINE6(ipc, unsigned int, call, int, first, unsigned long, second,
 		unsigned long, third, void __user *, ptr, long, fifth)
 {
+	/*执行ipc系统调用*/
 	return ksys_ipc(call, first, second, third, ptr, fifth);
 }
 #endif

@@ -165,7 +165,7 @@ static inline void ib_set_flow(struct ib_uobject *uobj, struct ib_flow *ibflow,
 
 /*每个type对应的obj*/
 struct uverbs_api_object {
-	const struct uverbs_obj_type *type_attrs;
+	const struct uverbs_obj_type *type_attrs;/*此obj对应的type属性*/
 	const struct uverbs_obj_type_class *type_class;
 	u8 disabled:1;/*此明此obj是否被禁止*/
 	u32 id;

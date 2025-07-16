@@ -931,7 +931,7 @@ EXPORT_SYMBOL(genl_unregister_family);
  * Returns pointer to user specific header
  */
 void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
-		  const struct genl_family *family, int flags, u8 cmd)
+		  const struct genl_family *family, int flags, u8 cmd/*消息cmd*/)
 {
 	struct nlmsghdr *nlh;
 	struct genlmsghdr *hdr;

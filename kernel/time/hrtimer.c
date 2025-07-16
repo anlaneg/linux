@@ -1565,7 +1565,7 @@ static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 	if (IS_ENABLED(CONFIG_PREEMPT_RT) && !(mode & HRTIMER_MODE_HARD))
 		softtimer = true;
 
-	memset(timer, 0, sizeof(struct hrtimer));/*timer清零*/
+	memset(timer, 0, sizeof(struct hrtimer));/*timer指向的结构体直接清零*/
 
 	cpu_base = raw_cpu_ptr(&hrtimer_bases);
 
@@ -1957,7 +1957,7 @@ static enum hrtimer_restart hrtimer_wakeup(struct hrtimer *timer)
 
 	t->task = NULL;
 	if (task)
-		wake_up_process(task);
+		wake_up_process(task);/*尝试唤醒进程*/
 
 	return HRTIMER_NORESTART;
 }
@@ -2015,7 +2015,7 @@ static void __hrtimer_init_sleeper(struct hrtimer_sleeper *sl,
 	}
 
 	__hrtimer_init(&sl->timer, clock_id, mode);
-	sl->timer.function = hrtimer_wakeup;
+	sl->timer.function = hrtimer_wakeup;/*设置timer超时函数*/
 	sl->task = current;
 }
 

@@ -599,7 +599,7 @@ static int sem_more_checks(struct kern_ipc_perm *ipcp, struct ipc_params *params
 	return 0;
 }
 
-long ksys_semget(key_t key, int nsems, int semflg)
+long ksys_semget(key_t key, int nsems/*信号量数目*/, int semflg)
 {
 	struct ipc_namespace *ns;
 	static const struct ipc_ops sem_ops = {
@@ -609,18 +609,20 @@ long ksys_semget(key_t key, int nsems, int semflg)
 	};
 	struct ipc_params sem_params;
 
-	ns = current->nsproxy->ipc_ns;
+	ns = current->nsproxy->ipc_ns;/*这要求通信双方在一个ipc netns中*/
 
 	if (nsems < 0 || nsems > ns->sc_semmsl)
+		/*nsems数值不合法*/
 		return -EINVAL;
 
 	sem_params.key = key;
 	sem_params.flg = semflg;
 	sem_params.u.nsems = nsems;
 
-	return ipcget(ns, &sem_ids(ns), &sem_ops, &sem_params);
+	return ipcget(ns, &sem_ids(ns)/*此ns中记录的ids*/, &sem_ops, &sem_params);
 }
 
+/*实现semget系统调用*/
 SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
 {
 	return ksys_semget(key, nsems, semflg);

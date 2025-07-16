@@ -515,6 +515,7 @@ static void netlink_compare_arg_init(struct netlink_compare_arg *arg,
 	arg->portid = portid;
 }
 
+/*在table表中查找port_id对应的socket(需增加考虑net namespace)*/
 static struct sock *__netlink_lookup(struct netlink_table *table, u32 portid,
 				     struct net *net)
 {
@@ -1199,7 +1200,7 @@ static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 
 	sock = netlink_lookup(sock_net(ssk), ssk->sk_protocol, portid);
 	if (!sock)
-		return ERR_PTR(-ECONNREFUSED);
+		return ERR_PTR(-ECONNREFUSED);/*没有找到对应的socket(返回链接拒绝）*/
 
 	/* Don't bother queuing skb if kernel socket has no input function */
 	nlk = nlk_sk(sock);
@@ -1269,10 +1270,11 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 
 	nlk = nlk_sk(sk);
 
-	if ((atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
+	if ((atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf/*接收端容量不足*/ ||
 	     test_bit(NETLINK_S_CONGESTED, &nlk->state))) {
 		DECLARE_WAITQUEUE(wait, current);
 		if (!*timeo) {
+			/*超时时间为0，释放报文，要求重试*/
 			if (!ssk || netlink_is_kernel(ssk))
 				netlink_overrun(sk);
 			sock_put(sk);
@@ -1281,7 +1283,7 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 		}
 
 		__set_current_state(TASK_INTERRUPTIBLE);
-		add_wait_queue(&nlk->wait, &wait);
+		add_wait_queue(&nlk->wait, &wait);/*加入等待队列*/
 
 		if ((atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
 		     test_bit(NETLINK_S_CONGESTED, &nlk->state)) &&
@@ -1296,9 +1298,9 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 			kfree_skb(skb);
 			return sock_intr_errno(*timeo);
 		}
-		return 1;
+		return 1;/*指明上层重启调用*/
 	}
-	netlink_skb_set_owner_r(skb, sk);
+	netlink_skb_set_owner_r(skb, sk);/*更新skb所属的socket*/
 	return 0;
 }
 
@@ -1317,7 +1319,7 @@ static int __netlink_sendskb(struct sock *sk, struct sk_buff *skb)
 
 int netlink_sendskb(struct sock *sk, struct sk_buff *skb)
 {
-	int len = __netlink_sendskb(sk, skb);
+	int len = __netlink_sendskb(sk, skb);/*发送skb,并返回报文长度*/
 
 	sock_put(sk);
 	return len;
@@ -1378,7 +1380,7 @@ static int netlink_unicast_kernel(struct sock *sk/*接收方sock*/, struct sk_bu
 }
 
 int netlink_unicast(struct sock *ssk, struct sk_buff *skb,
-		    u32 portid, int nonblock)
+		    u32 portid/*目的地*/, int nonblock)
 {
 	struct sock *sk;
 	int err;
@@ -1386,9 +1388,9 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb,
 
 	skb = netlink_trim(skb, gfp_any());
 
-	timeo = sock_sndtimeo(ssk, nonblock);
+	timeo = sock_sndtimeo(ssk, nonblock);/*取发送超时时间*/
 retry:
-	//通过portid找到需要知会哪个sk
+	//通过portid找到需要知会哪个sk(即对端socket)
 	sk = netlink_getsockbyportid(ssk, portid);
 	if (IS_ERR(sk)) {
 		kfree_skb(skb);
@@ -1398,22 +1400,23 @@ retry:
 		//目标sk属于kernel,此报文被kernel接收,送给kernel进行处理
 		return netlink_unicast_kernel(sk, skb, ssk);
 
-	//其它需要中转的报文
+	//目标是用户态socket
 
 	if (sk_filter(sk, skb)) {
+		/*执行bpf等钩子点失败*/
 		err = skb->len;
 		kfree_skb(skb);
 		sock_put(sk);
 		return err;
 	}
 
-	err = netlink_attachskb(sk, skb, &timeo, ssk);
+	err = netlink_attachskb(sk/*接收socket*/, skb/*要发送的内容*/, &timeo, ssk/*发送socket*/);
 	if (err == 1)
 		goto retry;
 	if (err)
 		return err;
 
-	return netlink_sendskb(sk, skb);
+	return netlink_sendskb(sk, skb);/*发送报文，返回skb长度*/
 }
 EXPORT_SYMBOL(netlink_unicast);
 
@@ -1883,7 +1886,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		return -ENODATA;
 	}
 
-	err = scm_send(sock, msg, &scm, true);
+	err = scm_send(sock, msg, &scm, true);/*收集scm信息*/
 	if (err < 0)
 		return err;
 

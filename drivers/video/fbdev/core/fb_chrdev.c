@@ -19,11 +19,11 @@
 static struct fb_info *file_fb_info(struct file *file)
 {
 	struct inode *inode = file_inode(file);
-	int fbidx = iminor(inode);
+	int fbidx = iminor(inode);/*取fb index*/
 	struct fb_info *info = registered_fb[fbidx];
 
 	if (info != file->private_data)
-		info = NULL;
+		info = NULL;/*两者私有数据不相等*/
 	return info;
 }
 
@@ -40,7 +40,7 @@ static ssize_t fb_read(struct file *file, char __user *buf, size_t count, loff_t
 	if (info->state != FBINFO_STATE_RUNNING)
 		return -EPERM;
 
-	return info->fbops->fb_read(info, buf, count, ppos);
+	return info->fbops->fb_read(info, buf, count, ppos);/*转fbops执行读取*/
 }
 
 static ssize_t fb_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
@@ -56,7 +56,7 @@ static ssize_t fb_write(struct file *file, const char __user *buf, size_t count,
 	if (info->state != FBINFO_STATE_RUNNING)
 		return -EPERM;
 
-	return info->fbops->fb_write(info, buf, count, ppos);
+	return info->fbops->fb_write(info, buf, count, ppos);/*转fbops执行写入*/
 }
 
 static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
@@ -72,6 +72,7 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 	switch (cmd) {
 	case FBIOGET_VSCREENINFO:
+		/*取可变屏幕信息*/
 		lock_fb_info(info);
 		var = info->var;
 		unlock_fb_info(info);
@@ -92,16 +93,19 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			fbcon_update_vcs(info, var.activate & FB_ACTIVATE_ALL);
 		unlock_fb_info(info);
 		console_unlock();
+		/*将var填充进argp中*/
 		if (!ret && copy_to_user(argp, &var, sizeof(var)))
 			ret = -EFAULT;
 		break;
 	case FBIOGET_FSCREENINFO:
+		/*取固定屏幕信息*/
 		lock_fb_info(info);
 		memcpy(&fix, &info->fix, sizeof(fix));
 		if (info->flags & FBINFO_HIDE_SMEM_START)
 			fix.smem_start = 0;
 		unlock_fb_info(info);
 
+		/*将fix内容填充到argp*/
 		ret = copy_to_user(argp, &fix, sizeof(fix)) ? -EFAULT : 0;
 		break;
 	case FBIOPUTCMAP:
@@ -323,7 +327,7 @@ static int fb_mmap(struct file *file, struct vm_area_struct *vma)
 		return -ENODEV;
 
 	mutex_lock(&info->mm_lock);
-	res = info->fbops->fb_mmap(info, vma);
+	res = info->fbops->fb_mmap(info, vma);/*调用fbops完成fb_mmap*/
 	mutex_unlock(&info->mm_lock);
 
 	return res;
@@ -339,7 +343,7 @@ __releases(&info->lock)
 
 	info = get_fb_info(fbidx);
 	if (!info) {
-		request_module("fb%d", fbidx);
+		request_module("fb%d", fbidx);/*加载module后再试*/
 		info = get_fb_info(fbidx);
 		if (!info)
 			return -ENODEV;
@@ -350,10 +354,11 @@ __releases(&info->lock)
 	lock_fb_info(info);
 	if (!try_module_get(info->fbops->owner)) {
 		res = -ENODEV;
-		goto out;
+		goto out;/*增加fbops引用*/
 	}
 	file->private_data = info;
 	if (info->fbops->fb_open) {
+		/*执行fb_open*/
 		res = info->fbops->fb_open(info, 1);
 		if (res)
 			module_put(info->fbops->owner);
@@ -411,7 +416,7 @@ static const struct file_operations fb_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = fb_compat_ioctl,
 #endif
-	.mmap = fb_mmap,
+	.mmap = fb_mmap,/*fb字符设备响应mmap*/
 	.open = fb_open,
 	.release = fb_release,
 #if defined(HAVE_ARCH_FB_UNMAPPED_AREA) || \
@@ -429,7 +434,7 @@ int fb_register_chrdev(void)
 {
 	int ret;
 
-	ret = register_chrdev(FB_MAJOR, "fb", &fb_fops);
+	ret = register_chrdev(FB_MAJOR, "fb", &fb_fops);/*注册fb字符设备，指明fops*/
 	if (ret) {
 		pr_err("Unable to get major %d for fb devs\n", FB_MAJOR);
 		return ret;

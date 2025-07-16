@@ -223,6 +223,7 @@ void ib_uverbs_release_file(struct kref *ref)
 	kfree(file);
 }
 
+/*自ev_queue->event_list上取得一个ib_uverbs_event*/
 static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 				    struct file *filp, char __user *buf,
 				    size_t count, loff_t *pos,
@@ -234,6 +235,7 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 	spin_lock_irq(&ev_queue->lock);
 
 	while (list_empty(&ev_queue->event_list)) {
+		/*队列为空*/
 		if (ev_queue->is_closed) {
 			spin_unlock_irq(&ev_queue->lock);
 			return -EIO;
@@ -243,6 +245,7 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
+		/*list为空，阻塞等待*/
 		if (wait_event_interruptible(ev_queue->poll_wait,
 					     (!list_empty(&ev_queue->event_list) ||
 					      ev_queue->is_closed)))
@@ -251,12 +254,14 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 		spin_lock_irq(&ev_queue->lock);
 	}
 
+	/*拿取一个event*/
 	event = list_entry(ev_queue->event_list.next, struct ib_uverbs_event, list);
 
 	if (eventsz > count) {
 		ret   = -EINVAL;
 		event = NULL;
 	} else {
+		/*移除将被拿走到的event(移除首个）*/
 		list_del(ev_queue->event_list.next);
 		if (event->counter) {
 			++(*event->counter);
@@ -267,6 +272,7 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 	spin_unlock_irq(&ev_queue->lock);
 
 	if (event) {
+		/*将此event写入到buffer中*/
 		if (copy_to_user(buf, event, eventsz))
 			ret = -EFAULT;
 		else
@@ -304,11 +310,11 @@ static __poll_t ib_uverbs_event_poll(struct ib_uverbs_event_queue *ev_queue,
 {
 	__poll_t pollflags = 0;
 
-	poll_wait(filp, &ev_queue->poll_wait, wait);
+	poll_wait(filp, &ev_queue->poll_wait, wait);/*等待事件*/
 
 	spin_lock_irq(&ev_queue->lock);
 	if (!list_empty(&ev_queue->event_list))
-		pollflags = EPOLLIN | EPOLLRDNORM;
+		pollflags = EPOLLIN | EPOLLRDNORM;/*列表不为空，返回事件*/
 	else if (ev_queue->is_closed)
 		pollflags = EPOLLERR;
 	spin_unlock_irq(&ev_queue->lock);
@@ -351,7 +357,7 @@ static int ib_uverbs_comp_event_fasync(int fd, struct file *filp, int on)
 const struct file_operations uverbs_event_fops = {
 	.owner	 = THIS_MODULE,
 	.read	 = ib_uverbs_comp_event_read,
-	.poll    = ib_uverbs_comp_event_poll,
+	.poll    = ib_uverbs_comp_event_poll,/*实现event的poll*/
 	.release = uverbs_uobject_fd_release,
 	.fasync  = ib_uverbs_comp_event_fasync,
 	.llseek	 = no_llseek,
@@ -374,14 +380,16 @@ void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
 	unsigned long			flags;
 
 	if (!ev_queue)
-		return;
+		return;/*ev_queue不得为空*/
 
 	spin_lock_irqsave(&ev_queue->lock, flags);
 	if (ev_queue->is_closed) {
+		/*在关闭，不再产生event*/
 		spin_unlock_irqrestore(&ev_queue->lock, flags);
 		return;
 	}
 
+	/*申请ib_uverbs_event*/
 	entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
 	if (!entry) {
 		spin_unlock_irqrestore(&ev_queue->lock, flags);
@@ -393,11 +401,11 @@ void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
 	entry->desc.comp.cq_handle = cq->uobject->uevent.uobject.user_handle;
 	entry->counter		   = &uobj->comp_events_reported;
 
-	list_add_tail(&entry->list, &ev_queue->event_list);
+	list_add_tail(&entry->list, &ev_queue->event_list);/*将event挂接在event_list上*/
 	list_add_tail(&entry->obj_list, &uobj->comp_list);
 	spin_unlock_irqrestore(&ev_queue->lock, flags);
 
-	wake_up_interruptible(&ev_queue->poll_wait);
+	wake_up_interruptible(&ev_queue->poll_wait);/*唤醒等待进程程*/
 	kill_fasync(&ev_queue->async_queue, SIGIO, POLL_IN);
 }
 

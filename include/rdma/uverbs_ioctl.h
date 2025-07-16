@@ -323,8 +323,11 @@ struct uverbs_method_def {
 };
 
 struct uverbs_object_def {
+	/*obj类别，例如UVERBS_OBJECT_COMP_CHANNEL*/
 	u16					 id;
+	/*指明obj的属性（包含此类型的操作集）*/
 	const struct uverbs_obj_type	        *type_attrs;
+	/*methods数组大小*/
 	size_t				         num_methods;
 	/*针对obj的一组方法*/
 	const struct uverbs_method_def * const (*methods)[];
@@ -421,7 +424,8 @@ struct uapi_definition {
  * Object is only supported if the function pointer named ibdev_fn in struct
  * ib_device is not NULL.
  */
-#define UAPI_DEF_OBJ_NEEDS_FN(ibdev_fn)                                        \
+//定义变量uapi_definition，其类型为dev_fn
+#define UAPI_DEF_OBJ_NEEDS_FN(ibdev_fn/*函数名称*/)                                        \
 	{                                                                      \
 		.kind = UAPI_DEF_IS_SUPPORTED_DEV_FN,/*此函数被ib设备支持*/                          \
 		.scope = UAPI_SCOPE_OBJECT,                                    \
@@ -456,13 +460,14 @@ struct uapi_definition {
 	}
 
 /* Include another struct uapi_definition in this one */
-/*chain类型的uapi_defintion,其值为一个数组的uapi_definition*/
+/*定义结构体uapi_definition，其为chain类型,其值为一个数组的uapi_definition，例如：uverbs_def_obj_cq*/
 #define UAPI_DEF_CHAIN(_def_var)                                               \
 	{                                                                      \
 		.kind = UAPI_DEF_CHAIN, .chain = _def_var,                     \
 	}
 
 /* Temporary until the tree base description is replaced */
+/*定义结构体：uapi_definition，其类型为UAPI_DEF_CHAIN_OBJ_TREE，这种类型会设置object_start,chain_obj_tree*/
 #define UAPI_DEF_CHAIN_OBJ_TREE(_object_enum, _object_ptr, ...)                \
 	{                                                                      \
 		.kind = UAPI_DEF_CHAIN_OBJ_TREE,                               \
@@ -664,11 +669,12 @@ struct uverbs_attr {
 };
 
 struct uverbs_attr_bundle {
-	struct ib_udata driver_udata;
+	struct ib_udata driver_udata;/*driver要求的udata*/
 	struct ib_udata ucore;
 	struct ib_uverbs_file *ufile;
 	struct ib_ucontext *context;
 	struct ib_uobject *uobject;
+	/*标明某个属性存在*/
 	DECLARE_BITMAP(attr_present, UVERBS_API_ATTR_BKEY_LEN);
 	struct uverbs_attr attrs[];
 };
@@ -677,7 +683,7 @@ static inline bool uverbs_attr_is_valid(const struct uverbs_attr_bundle *attrs_b
 					unsigned int idx)
 {
 	return test_bit(uapi_bkey_attr(uapi_key_attr(idx)),
-			attrs_bundle->attr_present);
+			attrs_bundle->attr_present);/*检查此属性是否存在*/
 }
 
 /**
@@ -706,9 +712,9 @@ static inline const struct uverbs_attr *uverbs_attr_get(const struct uverbs_attr
 							u16 idx)
 {
 	if (!uverbs_attr_is_valid(attrs_bundle, idx))
-		return ERR_PTR(-ENOENT);
+		return ERR_PTR(-ENOENT);/*此属性未给出*/
 
-	return &attrs_bundle->attrs[uapi_bkey_attr(uapi_key_attr(idx))];
+	return &attrs_bundle->attrs[uapi_bkey_attr(uapi_key_attr(idx))];/*取此属性对应的值*/
 }
 
 static inline int uverbs_attr_get_enum_id(const struct uverbs_attr_bundle *attrs_bundle,
@@ -839,12 +845,12 @@ static inline int _uverbs_copy_from(void *to,
 	 * uverbs_copy_from_or_zero.
 	 */
 	if (unlikely(size < attr->ptr_attr.len))
-		return -EINVAL;
+		return -EINVAL;/*提供的空间不足以存在此属性*/
 
 	if (uverbs_attr_ptr_is_inline(attr))
-		memcpy(to, &attr->ptr_attr.data, attr->ptr_attr.len);
+		memcpy(to, &attr->ptr_attr.data, attr->ptr_attr.len);/*直接复制（内存平坦）*/
 	else if (copy_from_user(to, u64_to_user_ptr(attr->ptr_attr.data),
-				attr->ptr_attr.len))
+				attr->ptr_attr.len))/*通过指针访问并复制*/
 		return -EFAULT;
 
 	return 0;

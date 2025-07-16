@@ -1857,7 +1857,7 @@ __drm_fb_helper_initial_config_and_unlock(struct drm_fb_helper *fb_helper)
 
 	fb_helper->deferred_setup = false;
 
-	info = fb_helper->info;
+	info = fb_helper->info;/*使用fb_helper提供的info*/
 	info->var.pixclock = 0;
 
 	if (!drm_leak_fbdev_smem)

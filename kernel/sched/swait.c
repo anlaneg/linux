@@ -6,9 +6,9 @@
 void __init_swait_queue_head(struct swait_queue_head *q, const char *name,
 			     struct lock_class_key *key)
 {
-	raw_spin_lock_init(&q->lock);
+	raw_spin_lock_init(&q->lock);/*初始化锁*/
 	lockdep_set_class_and_name(&q->lock, key, name);
-	INIT_LIST_HEAD(&q->task_list);
+	INIT_LIST_HEAD(&q->task_list);/*初始化链表头*/
 }
 EXPORT_SYMBOL(__init_swait_queue_head);
 
@@ -26,7 +26,7 @@ void swake_up_locked(struct swait_queue_head *q, int wake_flags)
 		return;
 
 	curr = list_first_entry(&q->task_list, typeof(*curr), task_list);
-	try_to_wake_up(curr->task, TASK_NORMAL, wake_flags);
+	try_to_wake_up(curr->task, TASK_NORMAL, wake_flags);/*唤醒，使首个元素可调度*/
 	list_del_init(&curr->task_list);
 }
 EXPORT_SYMBOL(swake_up_locked);

@@ -2163,7 +2163,7 @@ struct ib_cq *__ib_create_cq(struct ib_device *device,
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, caller);
 
-	ret = device->ops.create_cq(cq, cq_attr, NULL);
+	ret = device->ops.create_cq(cq, cq_attr, NULL);/*创建cq,updata为NULL*/
 	if (ret) {
 		rdma_restrack_put(&cq->res);
 		kfree(cq);

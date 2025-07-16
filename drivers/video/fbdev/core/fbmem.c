@@ -36,6 +36,7 @@ int num_registered_fb __read_mostly;
 	for (i = 0; i < FB_MAX; i++)		\
 		if (!registered_fb[i]) {} else
 
+/*通过idx查找fb_info*/
 struct fb_info *get_fb_info(unsigned int idx)
 {
 	struct fb_info *fb_info;
@@ -387,6 +388,7 @@ static int fb_check_foreignness(struct fb_info *fi)
 	return 0;
 }
 
+/*注册fb设备*/
 static int do_register_framebuffer(struct fb_info *fb_info)
 {
 	int i;
@@ -438,7 +440,7 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 
 	fb_var_to_videomode(&mode, &fb_info->var);
 	fb_add_videomode(&mode, &fb_info->modelist);
-	registered_fb[i] = fb_info;/*记录此fb设备信息*/
+	registered_fb[i] = fb_info;/*记录(注册）此fb设备信息*/
 
 #ifdef CONFIG_GUMSTIX_AM200EPD
 	{

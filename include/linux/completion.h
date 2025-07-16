@@ -25,7 +25,7 @@
  */
 struct completion {
 	unsigned int done;
-	struct swait_queue_head wait;
+	struct swait_queue_head wait;/*用于挂接wait进程*/
 };
 
 #define init_completion_map(x, m) init_completion(x)

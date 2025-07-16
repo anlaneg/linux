@@ -24,7 +24,7 @@ struct fs_pin;
 #endif
 
 struct pid_namespace {
-	struct idr idr;
+	struct idr idr;/*从属于此pid ns的进程编号*/
 	struct rcu_head rcu;
 	unsigned int pid_allocated;
 	struct task_struct *child_reaper;

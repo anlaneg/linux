@@ -44,7 +44,7 @@ struct rxe_mmap_info {
 	struct list_head	pending_mmaps;
 	struct ib_ucontext	*context;
 	struct kref		ref;
-	void			*obj;
+	void			*obj;/*起始地址*/
 
 	struct mminfo info;
 };

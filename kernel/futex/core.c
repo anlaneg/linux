@@ -118,7 +118,7 @@ struct futex_hash_bucket *futex_hash(union futex_key *key)
 	u32 hash = jhash2((u32 *)key, offsetof(typeof(*key), both.offset) / 4,
 			  key->both.offset);
 
-	return &futex_queues[hash & (futex_hashsize - 1)];
+	return &futex_queues[hash & (futex_hashsize - 1)];/*取得桶头*/
 }
 
 
@@ -137,16 +137,17 @@ futex_setup_timer(ktime_t *time, struct hrtimer_sleeper *timeout,
 		  int flags, u64 range_ns)
 {
 	if (!time)
+		/*未指定超时时间，直接返回*/
 		return NULL;
 
 	hrtimer_init_sleeper_on_stack(timeout, (flags & FLAGS_CLOCKRT) ?
 				      CLOCK_REALTIME : CLOCK_MONOTONIC,
-				      HRTIMER_MODE_ABS);
+				      HRTIMER_MODE_ABS);/*实始化timeout,指明其超时后将被唤醒*/
 	/*
 	 * If range_ns is 0, calling hrtimer_set_expires_range_ns() is
 	 * effectively the same as calling hrtimer_set_expires().
 	 */
-	hrtimer_set_expires_range_ns(&timeout->timer, *time, range_ns);
+	hrtimer_set_expires_range_ns(&timeout->timer, *time, range_ns);/*设置超时时间*/
 
 	return timeout;
 }
@@ -221,7 +222,7 @@ static u64 get_inode_sequence_number(struct inode *inode)
 int get_futex_key(u32 __user *uaddr, unsigned int flags, union futex_key *key,
 		  enum futex_access rw)
 {
-	unsigned long address = (unsigned long)uaddr;
+	unsigned long address = (unsigned long)uaddr;/*用户态的futex-addr*/
 	struct mm_struct *mm = current->mm;
 	struct page *page;
 	struct folio *folio;
@@ -229,18 +230,18 @@ int get_futex_key(u32 __user *uaddr, unsigned int flags, union futex_key *key,
 	int err, ro = 0;
 	bool fshared;
 
-	fshared = flags & FLAGS_SHARED;
+	fshared = flags & FLAGS_SHARED;/*是否进程间共享*/
 
 	/*
 	 * The futex address must be "naturally" aligned.
 	 */
-	key->both.offset = address % PAGE_SIZE;
+	key->both.offset = address % PAGE_SIZE;/*页内偏移量*/
 	if (unlikely((address % sizeof(u32)) != 0))
-		return -EINVAL;
-	address -= key->both.offset;
+		return -EINVAL;/*必须按4字节对齐*/
+	address -= key->both.offset;/*将address以页对齐*/
 
 	if (unlikely(!access_ok(uaddr, sizeof(u32))))
-		return -EFAULT;
+		return -EFAULT;/*可访问*/
 
 	if (unlikely(should_fail_futex(fshared)))
 		return -EFAULT;
@@ -253,6 +254,7 @@ int get_futex_key(u32 __user *uaddr, unsigned int flags, union futex_key *key,
 	 *        but access_ok() should be faster than find_vma()
 	 */
 	if (!fshared) {
+		/*非进程间共享*/
 		/*
 		 * On no-MMU, shared futexes are treated as private, therefore
 		 * we must not include the current process in the key. Since
@@ -273,12 +275,13 @@ again:
 	if (unlikely(should_fail_futex(true)))
 		return -EFAULT;
 
-	err = get_user_pages_fast(address, 1, FOLL_WRITE, &page);
+	err = get_user_pages_fast(address, 1, FOLL_WRITE, &page);/*取address所属的page*/
 	/*
 	 * If write access is not required (eg. FUTEX_WAIT), try
 	 * and get read-only access.
 	 */
 	if (err == -EFAULT && rw == FUTEX_READ) {
+		/*尝试只读获取page*/
 		err = get_user_pages_fast(address, 1, 0, &page);
 		ro = 1;
 	}
@@ -304,7 +307,7 @@ again:
 	 * filesystem-backed pages, the precise page is required as the
 	 * index of the page determines the key.
 	 */
-	folio = page_folio(page);
+	folio = page_folio(page);/*page转folio*/
 	mapping = READ_ONCE(folio->mapping);
 
 	/*
@@ -388,7 +391,7 @@ again:
 			goto again;
 		}
 
-		inode = READ_ONCE(mapping->host);
+		inode = READ_ONCE(mapping->host);/*获得关联的inode*/
 		if (!inode) {
 			rcu_read_unlock();
 			folio_put(folio);
@@ -396,6 +399,7 @@ again:
 			goto again;
 		}
 
+		/*记录此关联对应的key*/
 		key->both.offset |= FUT_OFF_INODE; /* inode-based key */
 		key->shared.i_seq = get_inode_sequence_number(inode);
 		key->shared.pgoff = folio->index + folio_page_idx(folio, page);
@@ -461,15 +465,15 @@ int futex_cmpxchg_value_locked(u32 *curval, u32 __user *uaddr, u32 uval, u32 new
 	return ret;
 }
 
-int futex_get_value_locked(u32 *dest, u32 __user *from)
+int futex_get_value_locked(u32 *dest/*出参，要填充的内容*/, u32 __user *from)
 {
 	int ret;
 
 	pagefault_disable();
-	ret = __get_user(*dest, from);
+	ret = __get_user(*dest, from);/*读取from指针处理内容，填充到dest*/
 	pagefault_enable();
 
-	return ret ? -EFAULT : 0;
+	return ret ? -EFAULT : 0;/*返回 读取成功/失败*/
 }
 
 /**
@@ -553,7 +557,7 @@ void futex_q_unlock(struct futex_hash_bucket *hb)
 	futex_hb_waiters_dec(hb);
 }
 
-void __futex_queue(struct futex_q *q, struct futex_hash_bucket *hb)
+void __futex_queue(struct futex_q *q, struct futex_hash_bucket *hb/*桶头*/)
 {
 	int prio;
 
@@ -568,7 +572,7 @@ void __futex_queue(struct futex_q *q, struct futex_hash_bucket *hb)
 	prio = min(current->normal_prio, MAX_RT_PRIO);
 
 	plist_node_init(&q->list, prio);
-	plist_add(&q->list, &hb->chain);
+	plist_add(&q->list, &hb->chain);/*入队到桶头*/
 	q->task = current;
 }
 
@@ -615,7 +619,7 @@ retry:
 			spin_unlock(lock_ptr);
 			goto retry;
 		}
-		__futex_unqueue(q);
+		__futex_unqueue(q);/*出队*/
 
 		BUG_ON(q->pi_state);
 
@@ -665,11 +669,11 @@ static int handle_futex_death(u32 __user *uaddr, struct task_struct *curr,
 
 	/* Futex address must be 32bit aligned */
 	if ((((unsigned long)uaddr) % sizeof(*uaddr)) != 0)
-		return -1;
+		return -1;/*检测位置必须是以4字节对齐的*/
 
 retry:
 	if (get_user(uval, uaddr))
-		return -1;
+		return -1;/*取4字节数值失败*/
 
 	/*
 	 * Special case for regular (non PI) futexes. The unlock path in
@@ -716,7 +720,7 @@ retry:
 	}
 
 	if (owner != task_pid_vnr(curr))
-		return 0;
+		return 0;/*进程id不相等，忽略*/
 
 	/*
 	 * Ok, this dying thread is truly holding a futex
@@ -783,8 +787,8 @@ static inline int fetch_robust_entry(struct robust_list __user **entry,
 	if (get_user(uentry, (unsigned long __user *)head))
 		return -EFAULT;
 
-	*entry = (void __user *)(uentry & ~1UL);
-	*pi = uentry & 1;
+	*entry = (void __user *)(uentry & ~1UL);/*除1bit外，其它为robust_list指针*/
+	*pi = uentry & 1;/*1bit为标记此为pi*/
 
 	return 0;
 }
@@ -797,9 +801,9 @@ static inline int fetch_robust_entry(struct robust_list __user **entry,
  */
 static void exit_robust_list(struct task_struct *curr)
 {
-	struct robust_list_head __user *head = curr->robust_list;
+	struct robust_list_head __user *head = curr->robust_list;/*获得robust链表*/
 	struct robust_list __user *entry, *next_entry, *pending;
-	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
+	unsigned int limit = ROBUST_LIST_LIMIT/*最多处理数目*/, pi, pip;
 	unsigned int next_pi;
 	unsigned long futex_offset;
 	int rc;
@@ -809,18 +813,18 @@ static void exit_robust_list(struct task_struct *curr)
 	 * sys_set_robust_list()):
 	 */
 	if (fetch_robust_entry(&entry, &head->list.next, &pi))
-		return;
+		return;/*自head中取得entry及pi标记*/
 	/*
 	 * Fetch the relative futex offset:
 	 */
 	if (get_user(futex_offset, &head->futex_offset))
-		return;
+		return;/*自head中取得offset*/
 	/*
 	 * Fetch any possibly pending lock-add first, and handle it
 	 * if it exists:
 	 */
 	if (fetch_robust_entry(&pending, &head->list_op_pending, &pip))
-		return;
+		return;/*取得pending及pip*/
 
 	next_entry = NULL;	/* avoid warning with gcc */
 	while (entry != &head->list) {
@@ -828,13 +832,13 @@ static void exit_robust_list(struct task_struct *curr)
 		 * Fetch the next entry in the list before calling
 		 * handle_futex_death:
 		 */
-		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi);
+		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi);/*取next*/
 		/*
 		 * A pending lock might already be on the list, so
 		 * don't process it twice:
 		 */
 		if (entry != pending) {
-			if (handle_futex_death((void __user *)entry + futex_offset,
+			if (handle_futex_death((void __user *)entry + futex_offset/*形成锁位置*/,
 						curr, pi, HANDLE_DEATH_LIST))
 				return;
 		}
@@ -846,7 +850,7 @@ static void exit_robust_list(struct task_struct *curr)
 		 * Avoid excessively long or circular lists:
 		 */
 		if (!--limit)
-			break;
+			break;/*超过处理极限，退出*/
 
 		cond_resched();
 	}
@@ -982,7 +986,7 @@ static void exit_pi_state_list(struct task_struct *curr)
 		next = head->next;
 		pi_state = list_entry(next, struct futex_pi_state, list);
 		key = pi_state->key;
-		hb = futex_hash(&key);
+		hb = futex_hash(&key);/*获得其所在桶*/
 
 		/*
 		 * We can race against put_pi_state() removing itself from the
@@ -1019,7 +1023,7 @@ static void exit_pi_state_list(struct task_struct *curr)
 
 		WARN_ON(pi_state->owner != curr);
 		WARN_ON(list_empty(&pi_state->list));
-		list_del_init(&pi_state->list);
+		list_del_init(&pi_state->list);/*自链表上移除*/
 		pi_state->owner = NULL;
 
 		raw_spin_unlock(&curr->pi_lock);
@@ -1040,18 +1044,21 @@ static inline void exit_pi_state_list(struct task_struct *curr) { }
 static void futex_cleanup(struct task_struct *tsk)
 {
 	if (unlikely(tsk->robust_list)) {
+		/*处理robust_list上挂接的内容*/
 		exit_robust_list(tsk);
 		tsk->robust_list = NULL;
 	}
 
 #ifdef CONFIG_COMPAT
 	if (unlikely(tsk->compat_robust_list)) {
+		/*处理compat_robust_list挂接的内容*/
 		compat_exit_robust_list(tsk);
 		tsk->compat_robust_list = NULL;
 	}
 #endif
 
 	if (unlikely(!list_empty(&tsk->pi_state_list)))
+		/*处理pi_state_list挂接的内容*/
 		exit_pi_state_list(tsk);
 }
 
@@ -1156,6 +1163,7 @@ static int __init futex_init(void)
 	futex_hashsize = roundup_pow_of_two(256 * num_possible_cpus());
 #endif
 
+	/*用于挂接等待的mutex*/
 	futex_queues = alloc_large_system_hash("futex", sizeof(*futex_queues),
 					       futex_hashsize, 0, 0,
 					       &futex_shift, NULL,

@@ -8,7 +8,9 @@
 /* Second argument to futex syscall */
 
 
+/*wait操作*/
 #define FUTEX_WAIT		0
+/*wake操作*/
 #define FUTEX_WAKE		1
 #define FUTEX_FD		2
 #define FUTEX_REQUEUE		3
@@ -17,14 +19,19 @@
 #define FUTEX_LOCK_PI		6
 #define FUTEX_UNLOCK_PI		7
 #define FUTEX_TRYLOCK_PI	8
+/*wait操作且带有val3参数*/
 #define FUTEX_WAIT_BITSET	9
+/*wake操作且带有val3参数*/
 #define FUTEX_WAKE_BITSET	10
 #define FUTEX_WAIT_REQUEUE_PI	11
 #define FUTEX_CMP_REQUEUE_PI	12
 #define FUTEX_LOCK_PI2		13
 
+/*标记此futex的共享范围是private*/
 #define FUTEX_PRIVATE_FLAG	128
+/*标明clockid为real-time*/
 #define FUTEX_CLOCK_REALTIME	256
+/*用于取cmd的掩码*/
 #define FUTEX_CMD_MASK		~(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME)
 
 #define FUTEX_WAIT_PRIVATE	(FUTEX_WAIT | FUTEX_PRIVATE_FLAG)
@@ -108,7 +115,7 @@ struct futex_waitv {
  * changed.
  */
 struct robust_list {
-	struct robust_list __user *next;
+	struct robust_list __user *next;/*指向下一个list*/
 };
 
 /*
@@ -123,7 +130,7 @@ struct robust_list_head {
 	/*
 	 * The head of the list. Points back to itself if empty:
 	 */
-	struct robust_list list;
+	struct robust_list list;/*指向链表本身*/
 
 	/*
 	 * This relative offset is set by user-space, it gives the kernel

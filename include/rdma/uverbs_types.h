@@ -54,11 +54,14 @@ enum rdma_lookup_mode {
  * In all cases the caller must hold the ufile kref until alloc_commit or
  * alloc_abort returns.
  */
-struct uverbs_obj_type_class {
+struct uverbs_obj_type_class/*用于指明一类obj的使用方法*/ {
+	/*产生ib_uboject(仅用于申请）*/
 	struct ib_uobject *(*alloc_begin)(const struct uverbs_api_object *obj,
 					  struct uverbs_attr_bundle *attrs);
+	/*此函数调用后ib_uobject创建完成*/
 	/* This consumes the kref on uobj */
 	void (*alloc_commit)(struct ib_uobject *uobj);
+	/*此函数调用在alloc_commit之前，用于在alloc_commit之间释放由alloc_begin申请的uobj*/
 	/* This does not consume the kref on uobj */
 	void (*alloc_abort)(struct ib_uobject *uobj);
 
@@ -76,8 +79,8 @@ struct uverbs_obj_type_class {
 };
 
 struct uverbs_obj_type {
-	const struct uverbs_obj_type_class * const type_class;
-	size_t	     obj_size;
+	const struct uverbs_obj_type_class * const type_class;/*此obj的使用方法*/
+	size_t	     obj_size;/*obj所需内存大小*/
 };
 
 /*
@@ -142,12 +145,12 @@ struct uverbs_obj_fd_type {
 	 * destroy_object is called when the uobject is to be destroyed,
 	 * because the driver is removed or the FD is closed.
 	 */
-	struct uverbs_obj_type  type;
+	struct uverbs_obj_type  type;/*type基类*/
 	void (*destroy_object)(struct ib_uobject *uobj,
 			       enum rdma_remove_reason why);
-	const struct file_operations	*fops;
-	const char			*name;
-	int				flags;
+	const struct file_operations	*fops;/*文件操作集*/
+	const char			*name;/*文件名称*/
+	int				flags;/*文件权限，创建等标记*/
 };
 
 extern const struct uverbs_obj_type_class uverbs_idr_class;
@@ -156,10 +159,12 @@ int uverbs_uobject_fd_release(struct inode *inode, struct file *filp);
 
 #define UVERBS_BUILD_BUG_ON(cond) (sizeof(char[1 - 2 * !!(cond)]) -	\
 				   sizeof(char))
-#define UVERBS_TYPE_ALLOC_FD(_obj_size, _destroy_object, _fops, _name, _flags) \
+
+/*初始化uverbs_obj_fd_type类型的uverbs_obj_type*/
+#define UVERBS_TYPE_ALLOC_FD(_obj_size/*obj大小*/, _destroy_object, _fops/*fd类型obj的文件操作集*/, _name/*文件名称*/, _flags/*文件权限等标记*/) \
 	((&((const struct uverbs_obj_fd_type)				\
 	 {.type = {							\
-		.type_class = &uverbs_fd_class,				\
+		.type_class = &uverbs_fd_class,/*指明为fd类型的obj*/				\
 		.obj_size = (_obj_size) +				\
 			UVERBS_BUILD_BUG_ON((_obj_size) <               \
 					    sizeof(struct ib_uobject)), \
@@ -168,6 +173,7 @@ int uverbs_uobject_fd_release(struct inode *inode, struct file *filp);
 	 .fops = _fops,							\
 	 .name = _name,							\
 	 .flags = _flags}))->type)
+
 #define UVERBS_TYPE_ALLOC_IDR_SZ(_size, _destroy_object)	\
 	((&((const struct uverbs_obj_idr_type)				\
 	 {.type = {							\

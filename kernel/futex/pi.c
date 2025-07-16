@@ -395,7 +395,7 @@ static void __attach_to_pi_owner(struct task_struct *p, union futex_key *key,
 	pi_state->key = *key;
 
 	WARN_ON(!list_empty(&pi_state->list));
-	list_add(&pi_state->list, &p->pi_state_list);
+	list_add(&pi_state->list, &p->pi_state_list);/*附加到owner*/
 	/*
 	 * Assignment without holding pi_state->pi_mutex.wait_lock is safe
 	 * because there is no concurrency as the object is not published yet.
@@ -426,6 +426,7 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		return -EAGAIN;
 	p = find_get_task_by_vpid(pid);
 	if (!p)
+		/*没有找到pid对应的进程*/
 		return handle_exit_race(uaddr, uval, NULL);
 
 	if (unlikely(p->flags & PF_KTHREAD)) {
@@ -748,7 +749,7 @@ retry:
 	newtid = task_pid_vnr(newowner) | FUTEX_WAITERS;
 	/* Owner died? */
 	if (!pi_state->owner)
-		newtid |= FUTEX_OWNER_DIED;
+		newtid |= FUTEX_OWNER_DIED;/*指明owner died*/
 
 	err = futex_get_value_locked(&uval, uaddr);
 	if (err)
@@ -915,7 +916,7 @@ int fixup_pi_owner(u32 __user *uaddr, struct futex_q *q, int locked)
  *
  * Also serves as futex trylock_pi()'ing, and due semantics.
  */
-int futex_lock_pi(u32 __user *uaddr, unsigned int flags, ktime_t *time, int trylock)
+int futex_lock_pi(u32 __user *uaddr/*检测点*/, unsigned int flags, ktime_t *time/*超时时间*/, int trylock/*是否trylock*/)
 {
 	struct hrtimer_sleeper timeout, *to;
 	struct task_struct *exiting = NULL;
@@ -925,15 +926,15 @@ int futex_lock_pi(u32 __user *uaddr, unsigned int flags, ktime_t *time, int tryl
 	int res, ret;
 
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
-		return -ENOSYS;
+		return -ENOSYS;/*未开启*/
 
 	if (refill_pi_state_cache())
 		return -ENOMEM;
 
-	to = futex_setup_timer(time, &timeout, flags, 0);
+	to = futex_setup_timer(time, &timeout, flags, 0);/*启动timer*/
 
 retry:
-	ret = get_futex_key(uaddr, flags, &q.key, FUTEX_WRITE);
+	ret = get_futex_key(uaddr, flags, &q.key, FUTEX_WRITE);/*构建对应的key*/
 	if (unlikely(ret != 0))
 		goto out;
 
@@ -981,9 +982,10 @@ retry_private:
 	/*
 	 * Only actually queue now that the atomic ops are done:
 	 */
-	__futex_queue(&q, hb);
+	__futex_queue(&q, hb);/*加入到队列*/
 
 	if (trylock) {
+		/*检查是否可获得锁*/
 		ret = rt_mutex_futex_trylock(&q.pi_state->pi_mutex);
 		/* Fixup the trylock return value: */
 		ret = ret ? 0 : -EWOULDBLOCK;

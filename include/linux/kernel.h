@@ -51,6 +51,7 @@
 #define READ			0
 #define WRITE			1
 
+/*条件语句，为真时使用ptr,为假时使用NULL*/
 #define PTR_IF(cond, ptr)	((cond) ? (ptr) : NULL)
 
 #define u64_to_user_ptr(x) (		\

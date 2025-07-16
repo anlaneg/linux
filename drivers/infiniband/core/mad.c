@@ -3094,7 +3094,7 @@ static int ib_mad_port_close(struct ib_device *device, u32 port_num)
 	destroy_workqueue(port_priv->wq);
 	destroy_mad_qp(&port_priv->qp_info[1]);
 	destroy_mad_qp(&port_priv->qp_info[0]);
-	ib_free_cq(port_priv->cq);
+	ib_free_cq(port_priv->cq);/*释放cq*/
 	ib_dealloc_pd(port_priv->pd);
 	cleanup_recv_queue(&port_priv->qp_info[1]);
 	cleanup_recv_queue(&port_priv->qp_info[0]);

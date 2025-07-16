@@ -39,7 +39,7 @@ struct __large_struct { unsigned long buf[100]; };
 	__chk_user_ptr(ptr);					\
 	__get_user_size(__gu_val, __gu_addr, (size), __gu_err);	\
 	(x) = (__force __typeof__(*(ptr)))__gu_val;		\
-	__gu_err;						\
+	__gu_err;/*返回值*/						\
 })
 
 #define __get_user_check(x,ptr,size)					\

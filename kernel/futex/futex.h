@@ -262,7 +262,7 @@ extern void wait_for_owner_exiting(int ret, struct task_struct *exiting);
 static inline void futex_hb_waiters_inc(struct futex_hash_bucket *hb)
 {
 #ifdef CONFIG_SMP
-	atomic_inc(&hb->waiters);
+	atomic_inc(&hb->waiters);/*增加此桶头上waiter数增加*/
 	/*
 	 * Full barrier (A), see the ordering comment above.
 	 */

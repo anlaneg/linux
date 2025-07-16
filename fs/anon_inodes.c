@@ -24,6 +24,7 @@
 
 #include <linux/uaccess.h>
 
+/*匿名文件挂载点*/
 static struct vfsmount *anon_inode_mnt __ro_after_init;
 static struct inode *anon_inode_inode __ro_after_init;
 
@@ -76,9 +77,10 @@ static struct inode *anon_inode_make_secure_inode(
 	return inode;
 }
 
-static struct file *__anon_inode_getfile(const char *name,
-					 const struct file_operations *fops,
-					 void *priv, int flags,
+/*申请匿名文件*/
+static struct file *__anon_inode_getfile(const char *name/*文件名称*/,
+					 const struct file_operations *fops/*文件操作集*/,
+					 void *priv/*私有数据*/, int flags,
 					 const struct inode *context_inode,
 					 bool make_inode/*是否要创建inode*/)
 {
@@ -149,7 +151,7 @@ struct file *anon_inode_getfile(const char *name,
 				void *priv/*文件私有数据*/, int flags)
 {
 	/*申请匿名文件*/
-	return __anon_inode_getfile(name/*文件名称*/, fops/*文件关联的fops*/, priv, flags, NULL, false);
+	return __anon_inode_getfile(name/*文件名称*/, fops/*文件关联的fops*/, priv, flags, NULL, false/*不创建inode*/);
 }
 EXPORT_SYMBOL_GPL(anon_inode_getfile);
 

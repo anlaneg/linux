@@ -63,6 +63,7 @@ static __inline__ int scm_check_creds(struct ucred *creds)
 	return -EPERM;
 }
 
+/*处理unix socket传输的fd,将其对应的file填充到fpl列表中*/
 static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 {
 	int *fdp = (int*)CMSG_DATA(cmsg);
@@ -70,16 +71,18 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 	struct file **fpp;
 	int i, num;
 
+	/*检查存放的数目*/
 	num = (cmsg->cmsg_len - sizeof(struct cmsghdr))/sizeof(int);
 
 	if (num <= 0)
 		return 0;
 
 	if (num > SCM_MAX_FD)
-		return -EINVAL;
+		return -EINVAL;/*数目超限*/
 
 	if (!fpl)
 	{
+		/*fpl未指定空间，在这里申请*/
 		fpl = kmalloc(sizeof(struct scm_fp_list), GFP_KERNEL_ACCOUNT);
 		if (!fpl)
 			return -ENOMEM;
@@ -91,7 +94,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 	fpp = &fpl->fp[fpl->count];
 
 	if (fpl->count + num > fpl->max)
-		return -EINVAL;
+		return -EINVAL;/*传输的数目超过fpl空间*/
 
 	/*
 	 *	Verify the descriptors and increment the usage count.
@@ -99,17 +102,17 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 
 	for (i=0; i< num; i++)
 	{
-		int fd = fdp[i];
+		int fd = fdp[i];/*取得i号fd*/
 		struct file *file;
 
 		if (fd < 0 || !(file = fget_raw(fd)))
-			return -EBADF;
+			return -EBADF;/*fd有误*/
 		/* don't allow io_uring files */
 		if (io_is_uring_fops(file)) {
 			fput(file);
-			return -EINVAL;
+			return -EINVAL;/*不容许传输io_uring*/
 		}
-		*fpp++ = file;
+		*fpp++ = file;/*填充发送指明的file*/
 		fpl->count++;
 	}
 
@@ -152,16 +155,16 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 		   OK, let's add it...
 		 */
 		if (!CMSG_OK(msg, cmsg))
-			goto error;
+			goto error;/*格式有误*/
 
 		if (cmsg->cmsg_level != SOL_SOCKET)
-			continue;
+			continue;/*忽略掉所有非socket的level*/
 
 		switch (cmsg->cmsg_type)
 		{
 		case SCM_RIGHTS:
 			if (!ops || ops->family != PF_UNIX)
-				goto error;
+				goto error;/*仅支持unix socket*/
 			err=scm_fp_copy(cmsg, &p->fp);
 			if (err<0)
 				goto error;
@@ -200,6 +203,7 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			break;
 		}
 		default:
+			/*其它的type报错*/
 			goto error;
 		}
 	}
@@ -207,7 +211,7 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 	if (p->fp && !p->fp->count)
 	{
 		kfree(p->fp);
-		p->fp = NULL;
+		p->fp = NULL;/*fp如果未传递，则释放内存*/
 	}
 	return 0;
 
@@ -324,6 +328,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 		return;
 	}
 
+	/*scm->file关联对应的fd*/
 	for (i = 0; i < fdmax; i++) {
 		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags);
 		if (err < 0)

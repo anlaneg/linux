@@ -808,6 +808,7 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 	spin_unlock_irq(&sighand->siglock);
 }
 
+/*进程退出处理*/
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;

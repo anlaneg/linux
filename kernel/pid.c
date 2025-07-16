@@ -404,7 +404,7 @@ struct task_struct *pid_task(struct pid *pid, enum pid_type type)
 		first = rcu_dereference_check(hlist_first_rcu(&pid->tasks[type]),
 					      lockdep_tasklist_lock_is_held());
 		if (first)
-			result = hlist_entry(first, struct task_struct, pid_links[(type)]);
+			result = hlist_entry(first, struct task_struct, pid_links[(type)]);/*利用pid找到task_struct*/
 	}
 	return result;
 }
@@ -417,9 +417,10 @@ struct task_struct *find_task_by_pid_ns(pid_t nr, struct pid_namespace *ns)
 {
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
 			 "find_task_by_pid_ns() needs rcu_read_lock() protection");
-	return pid_task(find_pid_ns(nr, ns), PIDTYPE_PID);
+	return pid_task(find_pid_ns(nr, ns), PIDTYPE_PID);/*利用pid找到task_struct*/
 }
 
+/*通过pid查找task_struct*/
 struct task_struct *find_task_by_vpid(pid_t vnr)
 {
 	return find_task_by_pid_ns(vnr, task_active_pid_ns(current));

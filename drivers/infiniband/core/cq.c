@@ -335,7 +335,7 @@ void ib_free_cq(struct ib_cq *cq)
 	int ret;
 
 	if (WARN_ON_ONCE(atomic_read(&cq->usecnt)))
-		return;
+		return;/*引用计数不为零，直接返回*/
 	if (WARN_ON_ONCE(cq->cqe_used))
 		return;
 
@@ -355,6 +355,7 @@ void ib_free_cq(struct ib_cq *cq)
 
 	rdma_dim_destroy(cq);
 	trace_cq_free(cq);
+	/*调用驱动释放cq*/
 	ret = cq->device->ops.destroy_cq(cq, NULL);
 	WARN_ONCE(ret, "Destroy of kernel CQ shouldn't fail");
 	rdma_restrack_del(&cq->res);

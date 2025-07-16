@@ -271,6 +271,7 @@ static struct ib_uobject *alloc_uobj(struct uverbs_attr_bundle *attrs,
 		attrs->context = ucontext;
 	}
 
+	/*申请obj所需内存大小*/
 	uobj = kzalloc(obj->type_attrs->obj_size, GFP_KERNEL);
 	if (!uobj)
 		return ERR_PTR(-ENOMEM);
@@ -340,6 +341,7 @@ lookup_get_fd_uobject(const struct uverbs_api_object *obj,
 	int fdno = id;
 
 	if (fdno != id)
+		/*防止数值截断*/
 		return ERR_PTR(-EINVAL);
 
 	if (mode != UVERBS_LOOKUP_READ)
@@ -347,10 +349,11 @@ lookup_get_fd_uobject(const struct uverbs_api_object *obj,
 
 	if (!obj->type_attrs)
 		return ERR_PTR(-EIO);
+	/*获得fd_type指针*/
 	fd_type =
 		container_of(obj->type_attrs, struct uverbs_obj_fd_type, type);
 
-	f = fget(fdno);
+	f = fget(fdno);/*取得fd对应的file*/
 	if (!f)
 		return ERR_PTR(-EBADF);
 
@@ -463,30 +466,32 @@ alloc_begin_fd_uobject(const struct uverbs_api_object *obj,
 	if (IS_ERR(uobj))
 		return uobj;
 
+	/*由obj->type_attrs获得uverbs_obj_fd_type指针*/
 	fd_type =
 		container_of(obj->type_attrs, struct uverbs_obj_fd_type, type);
 	if (WARN_ON(fd_type->fops->release != &uverbs_uobject_fd_release &&
 		    fd_type->fops->release != &uverbs_async_event_release)) {
+		/*只支持以上两种release回调（校验fd_type指针）*/
 		ret = ERR_PTR(-EINVAL);
 		goto err_fd;
 	}
 
-	new_fd = get_unused_fd_flags(O_CLOEXEC);
+	new_fd = get_unused_fd_flags(O_CLOEXEC);/*取一个未用fd*/
 	if (new_fd < 0) {
 		ret = ERR_PTR(new_fd);
 		goto err_fd;
 	}
 
 	/* Note that uverbs_uobject_fd_release() is called during abort */
-	filp = anon_inode_getfile(fd_type->name, fd_type->fops, NULL,
-				  fd_type->flags);
+	filp = anon_inode_getfile(fd_type->name, fd_type->fops, NULL/*无私有数据*/,
+				  fd_type->flags);/*利用fd_type申请匿名文件*/
 	if (IS_ERR(filp)) {
 		ret = ERR_CAST(filp);
 		goto err_getfile;
 	}
-	uobj->object = filp;
+	uobj->object = filp;/*指向此文件*/
 
-	uobj->id = new_fd;
+	uobj->id = new_fd;/*为其关联的fd*/
 	return uobj;
 
 err_getfile:
@@ -513,6 +518,7 @@ struct ib_uobject *rdma_alloc_begin_uobject(const struct uverbs_api_object *obj,
 	if (!down_read_trylock(&ufile->hw_destroy_rwsem))
 		return ERR_PTR(-EIO);
 
+	/*创建obj*/
 	ret = obj->type_class->alloc_begin(obj, attrs);
 	if (IS_ERR(ret)) {
 		up_read(&ufile->hw_destroy_rwsem);
@@ -561,8 +567,8 @@ static void alloc_abort_fd_uobject(struct ib_uobject *uobj)
 {
 	struct file *filp = uobj->object;
 
-	fput(filp);
-	put_unused_fd(uobj->id);
+	fput(filp);/*释放此filep*/
+	put_unused_fd(uobj->id);/*回收占用的fd*/
 }
 
 static int __must_check destroy_hw_fd_uobject(struct ib_uobject *uobj,
@@ -619,21 +625,21 @@ static void swap_idr_uobjects(struct ib_uobject *obj_old,
 
 static void alloc_commit_fd_uobject(struct ib_uobject *uobj)
 {
-	int fd = uobj->id;
+	int fd = uobj->id;/*alloc_begin_fd_uobject时fd信息存放在uobj->id上*/
 	struct file *filp = uobj->object;
 
 	/* Matching put will be done in uverbs_uobject_fd_release() */
 	kref_get(&uobj->ufile->ref);
 
 	/* This shouldn't be used anymore. Use the file object instead */
-	uobj->id = 0;
+	uobj->id = 0;/*不再使用了，清零*/
 
 	/*
 	 * NOTE: Once we install the file we loose ownership of our kref on
 	 * uobj. It will be put by uverbs_uobject_fd_release()
 	 */
-	filp->private_data = uobj;
-	fd_install(fd, filp);
+	filp->private_data = uobj;/*记录私有数据为uobj*/
+	fd_install(fd, filp);/*使fd与file关联*/
 }
 
 /*
@@ -736,7 +742,7 @@ static void lookup_put_fd_uobject(struct ib_uobject *uobj,
 	 * This indirectly calls uverbs_uobject_fd_release() and free the
 	 * object
 	 */
-	fput(filp);
+	fput(filp);/*关闭此文件*/
 }
 
 void rdma_lookup_put_uobject(struct ib_uobject *uobj,

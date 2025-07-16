@@ -55,13 +55,14 @@
 	}
 
 #define DECLARE_UVERBS_NAMED_OBJECT(_object_id, _type_attrs, ...)              \
+		/*定义_object_id对应的结构体uverbs_method_def*/\
 	static const struct uverbs_method_def *const UVERBS_OBJECT_METHODS(    \
 		_object_id)[] = { __VA_ARGS__ };                               \
 	static const struct uverbs_object_def UVERBS_OBJECT(_object_id) = {    \
-		.id = _object_id,                                              \
-		.type_attrs = &_type_attrs,                                    \
-		.num_methods = ARRAY_SIZE(UVERBS_OBJECT_METHODS(_object_id)),  \
-		.methods = &UVERBS_OBJECT_METHODS(_object_id)                  \
+		.id = _object_id/*类型编号*/,                                              \
+		.type_attrs = &_type_attrs,/*obj类型属性*/                                    \
+		.num_methods = ARRAY_SIZE(UVERBS_OBJECT_METHODS(_object_id))/*结构体数目*/,  \
+		.methods = &UVERBS_OBJECT_METHODS(_object_id) /*指向上面定义的结构体*/                 \
 	}
 
 /*

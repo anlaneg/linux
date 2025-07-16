@@ -41,7 +41,7 @@
 struct task_struct;
 
 struct swait_queue_head {
-	raw_spinlock_t		lock;
+	raw_spinlock_t		lock;/*spinlock,用于保护task_list*/
 	struct list_head	task_list;
 };
 
@@ -55,6 +55,7 @@ struct swait_queue {
 	.task_list	= LIST_HEAD_INIT((name).task_list),		\
 }
 
+/*声明并初始化swait_queue类型变量*/
 #define DECLARE_SWAITQUEUE(name)					\
 	struct swait_queue name = __SWAITQUEUE_INITIALIZER(name)
 

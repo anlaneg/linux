@@ -1154,7 +1154,7 @@ static inline int nlmsg_unicast(struct sock *sk, struct sk_buff *skb, u32 portid
 
 	err = netlink_unicast(sk, skb, portid, MSG_DONTWAIT);
 	if (err > 0)
-		err = 0;
+		err = 0;/*对于返回值大于零的情况（认为成功）*/
 
 	return err;
 }

@@ -1902,7 +1902,7 @@ static void scm_stat_add(struct sock *sk, struct sk_buff *skb)
 	struct unix_sock *u = unix_sk(sk);
 
 	if (unlikely(fp && fp->count))
-		atomic_add(fp->count, &u->scm_stat.nr_fds);
+		atomic_add(fp->count, &u->scm_stat.nr_fds);/*统计信息nr_fds增加*/
 }
 
 static void scm_stat_del(struct sock *sk, struct sk_buff *skb)
@@ -1932,7 +1932,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 	int err;
 
 	wait_for_unix_gc();
-	err = scm_send(sock, msg, &scm, false);
+	err = scm_send(sock, msg, &scm, false);/*收集scm信息*/
 	if (err < 0)
 		return err;
 
@@ -2210,7 +2210,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 	int data_len;
 
 	wait_for_unix_gc();
-	err = scm_send(sock, msg, &scm, false);
+	err = scm_send(sock, msg, &scm, false);/*收集scm信息*/
 	if (err < 0)
 		return err;
 
@@ -2229,13 +2229,13 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 		goto out_err;
 	} else {
 		err = -ENOTCONN;
-		other = unix_peer(sk);
+		other = unix_peer(sk);/*取得对端unix socket*/
 		if (!other)
 			goto out_err;
 	}
 
 	if (sk->sk_shutdown & SEND_SHUTDOWN)
-		goto pipe_err;
+		goto pipe_err;/*socket关闭，执行pipe error*/
 
 	while (sent < len) {
 		size = len - sent;
@@ -2298,9 +2298,9 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 
 		maybe_add_creds(skb, sock, other);
 		scm_stat_add(other, skb);
-		skb_queue_tail(&other->sk_receive_queue, skb);
+		skb_queue_tail(&other->sk_receive_queue, skb);/*内容入队*/
 		unix_state_unlock(other);
-		other->sk_data_ready(other);
+		other->sk_data_ready(other);/*通知收到数据*/
 		sent += size;
 	}
 
@@ -2864,7 +2864,7 @@ unlock:
 
 	mutex_unlock(&u->iolock);
 	if (state->msg)
-		scm_recv_unix(sock, state->msg, &scm, flags);
+		scm_recv_unix(sock, state->msg, &scm, flags);/*scm信息转msg*/
 	else
 		scm_destroy(&scm);
 out:

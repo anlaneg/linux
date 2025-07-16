@@ -88,7 +88,7 @@ static int uverbs_response(struct uverbs_attr_bundle *attrs, const void *resp,
  * is smaller than the user buffer then the uncopied bytes in the user buffer
  * must be zero.
  */
-static int uverbs_request(struct uverbs_attr_bundle *attrs, void *req,
+static int uverbs_request(struct uverbs_attr_bundle *attrs, void *req/*出参*/,
 			  size_t req_len)
 {
 	if (copy_from_user(req, attrs->ucore.inbuf,
@@ -1020,6 +1020,7 @@ static int ib_uverbs_create_comp_channel(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 
+/*创建cq*/
 static int create_cq(struct uverbs_attr_bundle *attrs,
 		     struct ib_uverbs_ex_create_cq *cmd)
 {
@@ -1056,7 +1057,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	attr.comp_vector = cmd->comp_vector;
 	attr.flags = cmd->flags;
 
-	/*申请driver对应的cq结构体大小*/
+	/*申请driver指明的cq结构体大小*/
 	cq = rdma_zalloc_drv_obj(ib_dev, ib_cq);
 	if (!cq) {
 		ret = -ENOMEM;
@@ -1088,7 +1089,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	resp.base.cq_handle = obj->uevent.uobject.id;
 	resp.base.cqe = cq->cqe;
 	resp.response_length = uverbs_response_length(attrs, sizeof(resp));
-	return uverbs_response(attrs, &resp, sizeof(resp));
+	return uverbs_response(attrs, &resp, sizeof(resp));/*给用户态响应*/
 
 err_free:
 	rdma_restrack_put(&cq->res);
@@ -1108,6 +1109,7 @@ static int ib_uverbs_create_cq(struct uverbs_attr_bundle *attrs)
 	struct ib_uverbs_ex_create_cq	cmd_ex;
 	int ret;
 
+	/*填充cmd*/
 	ret = uverbs_request(attrs, &cmd, sizeof(cmd));
 	if (ret)
 		return ret;

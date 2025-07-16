@@ -30,6 +30,7 @@
 #define __LOCK(lock) \
   do { preempt_disable(); ___LOCK(lock); } while (0)
 
+/*禁止软中断*/
 #define __LOCK_BH(lock) \
   do { __local_bh_disable_ip(_THIS_IP_, SOFTIRQ_LOCK_OFFSET); ___LOCK(lock); } while (0)
 

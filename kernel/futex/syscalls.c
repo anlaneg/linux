@@ -34,7 +34,7 @@ SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 	if (unlikely(len != sizeof(*head)))
 		return -EINVAL;
 
-	current->robust_list = head;
+	current->robust_list = head;/*设置robust list*/
 
 	return 0;
 }
@@ -57,7 +57,7 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 
 	ret = -ESRCH;
 	if (!pid)
-		p = current;
+		p = current;/*未指明进程id使用当前进程*/
 	else {
 		p = find_task_by_vpid(pid);
 		if (!p)
@@ -66,9 +66,9 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 
 	ret = -EPERM;
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
-		goto err_unlock;
+		goto err_unlock;/*缺乏权限*/
 
-	head = p->robust_list;
+	head = p->robust_list;/*取此进程的robust_list*/
 	rcu_read_unlock();
 
 	if (put_user(sizeof(*head), len_ptr))
@@ -81,9 +81,10 @@ err_unlock:
 	return ret;
 }
 
-long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
-		u32 __user *uaddr2, u32 val2, u32 val3)
+long do_futex(u32 __user *uaddr/*检测位置*/, int op/*操作及标记*/, u32 val/*预期的值*/, ktime_t *timeout/*转换后的超时时间*/,
+		u32 __user *uaddr2, u32 val2/*传入的超时时间*/, u32 val3/*匹配掩码*/)
 {
+	/*op中包含了一部分标记，提取这些标记，当前有private,clockid等标记*/
 	unsigned int flags = futex_to_flags(op);
 	int cmd = op & FUTEX_CMD_MASK;
 
@@ -91,19 +92,24 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 		if (cmd != FUTEX_WAIT_BITSET &&
 		    cmd != FUTEX_WAIT_REQUEUE_PI &&
 		    cmd != FUTEX_LOCK_PI2)
+			/*仅以上几种cmd可以带clockrt标记*/
 			return -ENOSYS;
 	}
 
 	switch (cmd) {
 	case FUTEX_WAIT:
+		/*wait情况下,默认val3使用此值*/
 		val3 = FUTEX_BITSET_MATCH_ANY;
 		fallthrough;
 	case FUTEX_WAIT_BITSET:
-		return futex_wait(uaddr, flags, val, timeout, val3);
+		/*wait-bitset情况下，使用参数传入的val3*/
+		return futex_wait(uaddr, flags, val, timeout/*超时时间*/, val3);
 	case FUTEX_WAKE:
+		/*wake情况下,默认val3使用此值*/
 		val3 = FUTEX_BITSET_MATCH_ANY;
 		fallthrough;
 	case FUTEX_WAKE_BITSET:
+		/*wake-bitset情况下，使用参数传入的val3*/
 		return futex_wake(uaddr, flags, val, val3);
 	case FUTEX_REQUEUE:
 		return futex_requeue(uaddr, flags, uaddr2, flags, val, val2, NULL, 0);
@@ -119,6 +125,7 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	case FUTEX_UNLOCK_PI:
 		return futex_unlock_pi(uaddr, flags);
 	case FUTEX_TRYLOCK_PI:
+		/*mutex对应的trylock*/
 		return futex_lock_pi(uaddr, flags, NULL, 1);
 	case FUTEX_WAIT_REQUEUE_PI:
 		val3 = FUTEX_BITSET_MATCH_ANY;
@@ -157,15 +164,17 @@ futex_init_timeout(u32 cmd, u32 op, struct timespec64 *ts, ktime_t *t)
 	return 0;
 }
 
-SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
-		const struct __kernel_timespec __user *, utime,
-		u32 __user *, uaddr2, u32, val3)
+/*futex系统调用*/
+SYSCALL_DEFINE6(futex, u32 __user *, uaddr/*用户态futex_word（检测位置)*/, int, op/*操作标记*/, u32, val/*期待的标记*/,
+		const struct __kernel_timespec __user *, utime/*超时时间*/,
+		u32 __user *, uaddr2, u32, val3/*匹配掩码*/)
 {
-	int ret, cmd = op & FUTEX_CMD_MASK;
+	int ret, cmd = op & FUTEX_CMD_MASK;/*取操作命令*/
 	ktime_t t, *tp = NULL;
 	struct timespec64 ts;
 
 	if (utime && futex_cmd_has_timeout(cmd)) {
+		/*指定了超时时间且cmd有超时处理，初始化超时时间t*/
 		if (unlikely(should_fail_futex(!(op & FUTEX_PRIVATE_FLAG))))
 			return -EFAULT;
 		if (get_timespec64(&ts, utime))
@@ -176,7 +185,7 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 		tp = &t;
 	}
 
-	return do_futex(uaddr, op, val, tp, uaddr2, (unsigned long)utime, val3);
+	return do_futex(uaddr/*检测位置*/, op/*操作及标记*/, val/*预期的值*/, tp/*转换后的超时时间*/, uaddr2, (unsigned long)utime/*传入的超时时间*/, val3);
 }
 
 /**

@@ -163,21 +163,22 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 	if (!bitset)
 		return -EINVAL;
 
-	ret = get_futex_key(uaddr, flags, &key, FUTEX_READ);
+	ret = get_futex_key(uaddr, flags, &key, FUTEX_READ);/*先取key*/
 	if (unlikely(ret != 0))
 		return ret;
 
 	if ((flags & FLAGS_STRICT) && !nr_wake)
 		return 0;
 
-	hb = futex_hash(&key);
+	hb = futex_hash(&key);/*找到key对应的桶*/
 
 	/* Make sure we really have tasks to wakeup */
 	if (!futex_hb_waiters_pending(hb))
-		return ret;
+		return ret;/*这个桶上无等待，直接返回*/
 
 	spin_lock(&hb->lock);
 
+	/*遍历这个桶上所有waiter,检查是否可匹配（如果匹配，则唤醒）*/
 	plist_for_each_entry_safe(this, next, &hb->chain, list) {
 		if (futex_match (&this->key, &key)) {
 			if (this->pi_state || this->rt_waiter) {
@@ -187,9 +188,9 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 
 			/* Check if one of the bits is set in both bitsets */
 			if (!(this->bitset & bitset))
-				continue;
+				continue;/*通过设置的bitset来决定唤醒哪些。*/
 
-			this->wake(&wake_q, this);
+			this->wake(&wake_q, this);/*唤醒*/
 			if (++ret >= nr_wake)
 				break;
 		}
@@ -340,7 +341,7 @@ static long futex_wait_restart(struct restart_block *restart);
  * @q:		the futex_q to queue up on
  * @timeout:	the prepared hrtimer_sleeper, or null for no timeout
  */
-void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
+void futex_wait_queue(struct futex_hash_bucket *hb/*桶头*/, struct futex_q *q,
 			    struct hrtimer_sleeper *timeout)
 {
 	/*
@@ -349,8 +350,8 @@ void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
 	 * futex_queue() calls spin_unlock() upon completion, both serializing
 	 * access to the hash list and forcing another memory barrier.
 	 */
-	set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
-	futex_queue(q, hb);
+	set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);/*更新当前进程状态*/
+	futex_queue(q, hb);/*入队到桶,后续唤醒会在这个桶里查找有哪些futex_q在等待*/
 
 	/* Arm the timer */
 	if (timeout)
@@ -367,9 +368,9 @@ void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
 		 * is no timeout, or if it has yet to expire.
 		 */
 		if (!timeout || timeout->task)
-			schedule();
+			schedule();/*队列不为空，释放cpu等待*/
 	}
-	__set_current_state(TASK_RUNNING);
+	__set_current_state(TASK_RUNNING);/*恢复，将进程状态更正为running*/
 }
 
 /**
@@ -614,7 +615,7 @@ int futex_wait_setup(u32 __user *uaddr, u32 val, unsigned int flags,
 	 * while the syscall executes.
 	 */
 retry:
-	ret = get_futex_key(uaddr, flags, &q->key, FUTEX_READ);
+	ret = get_futex_key(uaddr, flags, &q->key, FUTEX_READ);/*填充q->key*/
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -624,9 +625,10 @@ retry_private:
 	ret = futex_get_value_locked(&uval, uaddr);
 
 	if (ret) {
+		/*读取失败了*/
 		futex_q_unlock(*hb);
 
-		ret = get_user(uval, uaddr);
+		ret = get_user(uval, uaddr);/*自uaddr中读取内容，并填充到uval中*/
 		if (ret)
 			return ret;
 
@@ -637,6 +639,7 @@ retry_private:
 	}
 
 	if (uval != val) {
+		/*读取到的内容与val不一致*/
 		futex_q_unlock(*hb);
 		ret = -EWOULDBLOCK;
 	}
@@ -644,7 +647,7 @@ retry_private:
 	return ret;
 }
 
-int __futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
+int __futex_wait(u32 __user *uaddr/*用户态futex_word(检测位置)*/, unsigned int flags, u32 val/*预期的值*/,
 		 struct hrtimer_sleeper *to, u32 bitset)
 {
 	struct futex_q q = futex_q_init;
@@ -652,6 +655,7 @@ int __futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
 	int ret;
 
 	if (!bitset)
+		/*bitset不得为零*/
 		return -EINVAL;
 
 	q.bitset = bitset;
@@ -661,15 +665,15 @@ retry:
 	 * Prepare to wait on uaddr. On success, it holds hb->lock and q
 	 * is initialized.
 	 */
-	ret = futex_wait_setup(uaddr, val, flags, &q, &hb);
+	ret = futex_wait_setup(uaddr, val, flags, &q, &hb/*出参，桶头*/);
 	if (ret)
 		return ret;
 
 	/* futex_queue and wait for wakeup, timeout, or a signal. */
-	futex_wait_queue(hb, &q, to);
+	futex_wait_queue(hb, &q, to);/*等待唤醒*/
 
 	/* If we were woken (and unqueued), we succeeded, whatever. */
-	if (!futex_unqueue(&q))
+	if (!futex_unqueue(&q))/*已唤醒出队*/
 		return 0;
 
 	if (to && !to->task)
@@ -680,12 +684,12 @@ retry:
 	 * victim of a spurious wakeup as well.
 	 */
 	if (!signal_pending(current))
-		goto retry;
+		goto retry;/*唤醒后没有发现未绝信号，继续retry*/
 
 	return -ERESTARTSYS;
 }
 
-int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val, ktime_t *abs_time, u32 bitset)
+int futex_wait(u32 __user *uaddr/*用户态futex_word(检测位置)*/, unsigned int flags/*标记*/, u32 val/*预期的值*/, ktime_t *abs_time/*超时时间*/, u32 bitset/*匹配掩码*/)
 {
 	struct hrtimer_sleeper timeout, *to;
 	struct restart_block *restart;
@@ -694,13 +698,14 @@ int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val, ktime_t *abs_time
 	to = futex_setup_timer(abs_time, &timeout, flags,
 			       current->timer_slack_ns);
 
-	ret = __futex_wait(uaddr, flags, val, to, bitset);
+	ret = __futex_wait(uaddr, flags, val, to/*超时timer*/, bitset);
 
 	/* No timeout, nothing to clean up. */
 	if (!to)
+		/*没有对应的timer（无超时时间处理）,直接返回*/
 		return ret;
 
-	hrtimer_cancel(&to->timer);
+	hrtimer_cancel(&to->timer); /*取消此timer*/
 	destroy_hrtimer_on_stack(&to->timer);
 
 	if (ret == -ERESTARTSYS) {

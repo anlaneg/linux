@@ -940,6 +940,7 @@ raw_atomic_fetch_sub_acquire(int i, atomic_t *v)
 static __always_inline int
 raw_atomic_fetch_sub_release(int i, atomic_t *v)
 {
+	/*释放语义（仅保证写操作的可见性）*/
 #if defined(arch_atomic_fetch_sub_release)
 	return arch_atomic_fetch_sub_release(i, v);
 #elif defined(arch_atomic_fetch_sub_relaxed)

@@ -140,11 +140,11 @@ int sk_filter_trim_cap(struct sock *sk, struct sk_buff *skb, unsigned int cap)
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_PFMEMALLOCDROP);
 		return -ENOMEM;
 	}
-	err = BPF_CGROUP_RUN_PROG_INET_INGRESS(sk, skb);
+	err = BPF_CGROUP_RUN_PROG_INET_INGRESS(sk, skb);/*触发cgroup ingress钩子*/
 	if (err)
 		return err;
 
-	err = security_sock_rcv_skb(sk, skb);
+	err = security_sock_rcv_skb(sk, skb);/*触发安全钩子*/
 	if (err)
 		return err;
 
@@ -155,7 +155,7 @@ int sk_filter_trim_cap(struct sock *sk, struct sk_buff *skb, unsigned int cap)
 		unsigned int pkt_len;
 
 		skb->sk = sk;
-		pkt_len = bpf_prog_run_save_cb(filter->prog, skb);
+		pkt_len = bpf_prog_run_save_cb(filter->prog, skb);/*运行filter指定的bpf程序*/
 		skb->sk = save_sk;
 		err = pkt_len ? pskb_trim(skb, max(cap, pkt_len)) : -EPERM;
 	}

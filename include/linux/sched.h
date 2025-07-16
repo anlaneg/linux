@@ -1011,7 +1011,7 @@ struct task_struct {
 
 	/* PID/PID hash table linkage. */
 	struct pid			*thread_pid;
-	struct hlist_node		pid_links[PIDTYPE_MAX];
+	struct hlist_node		pid_links[PIDTYPE_MAX];/*用于按不同pid进行串连*/
 	struct list_head		thread_node;
 
 	struct completion		*vfork_done;
@@ -1245,7 +1245,7 @@ struct task_struct {
 	u32				rmid;
 #endif
 #ifdef CONFIG_FUTEX
-	struct robust_list_head __user	*robust_list;
+	struct robust_list_head __user	*robust_list;/*通过set_robust_list系统调用设置，进程退出时清理*/
 #ifdef CONFIG_COMPAT
 	struct compat_robust_list_head __user *compat_robust_list;
 #endif

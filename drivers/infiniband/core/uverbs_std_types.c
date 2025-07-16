@@ -145,6 +145,7 @@ void ib_uverbs_free_event_queue(struct ib_uverbs_event_queue *event_queue)
 	kill_fasync(&event_queue->async_queue, SIGIO, POLL_IN);
 
 	spin_lock_irq(&event_queue->lock);
+	/*遍历并释放event_list上所有event*/
 	list_for_each_entry_safe(entry, tmp, &event_queue->event_list, list) {
 		if (entry->counter)
 			list_del(&entry->obj_list);
@@ -171,9 +172,10 @@ int uverbs_destroy_def_handler(struct uverbs_attr_bundle *attrs)
 }
 EXPORT_SYMBOL(uverbs_destroy_def_handler);
 
+/*定义UVERBS_OBJECT_COMP_CHANNEL obj*/
 DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_COMP_CHANNEL,
-	UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_completion_event_file),
+	UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_completion_event_file)/*obj大小*/,
 			     uverbs_completion_event_file_destroy_uobj,
 			     &uverbs_event_fops,
 			     "[infinibandevent]",

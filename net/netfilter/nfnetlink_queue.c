@@ -87,6 +87,7 @@ static unsigned int nfnl_queue_net_id __read_mostly;
 #define INSTANCE_BUCKETS	16
 struct nfnl_queue_net {
 	spinlock_t instances_lock;
+	/*队列情况*/
 	struct hlist_head instance_table[INSTANCE_BUCKETS];
 };
 
@@ -109,7 +110,7 @@ instance_lookup(struct nfnl_queue_net *q, u_int16_t queue_num)
 	head = &q->instance_table[instance_hashfn(queue_num)];
 	hlist_for_each_entry_rcu(inst, head, hlist) {
 		if (inst->queue_num == queue_num)
-			return inst;
+			return inst;/*通过queue_num找到对应的queue*/
 	}
 	return NULL;
 }
@@ -133,7 +134,7 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 		goto out_unlock;
 	}
 
-	inst->queue_num = queue_num;
+	inst->queue_num = queue_num;/*队列编号*/
 	inst->peer_portid = portid;
 	inst->queue_maxlen = NFQNL_QMAX_DEFAULT;
 	inst->copy_range = NFQNL_MAX_COPY_RANGE;
@@ -147,7 +148,7 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 	}
 
 	h = instance_hashfn(queue_num);
-	hlist_add_head_rcu(&inst->hlist, &q->instance_table[h]);
+	hlist_add_head_rcu(&inst->hlist, &q->instance_table[h]);/*添加此queue到hash表*/
 
 	spin_unlock(&q->instances_lock);
 
@@ -212,13 +213,13 @@ find_dequeue_entry(struct nfqnl_instance *queue, unsigned int id)
 
 	list_for_each_entry(i, &queue->queue_list, list) {
 		if (i->id == id) {
-			entry = i;
+			entry = i;/*找到要出队的id*/
 			break;
 		}
 	}
 
 	if (entry)
-		__dequeue_entry(queue, entry);
+		__dequeue_entry(queue, entry);/*出队*/
 
 	spin_unlock_bh(&queue->lock);
 
@@ -235,7 +236,7 @@ static void nfqnl_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 		rcu_read_lock();
 		ct_hook = rcu_dereference(nf_ct_hook);
 		if (ct_hook)
-			verdict = ct_hook->update(entry->state.net, entry->skb);
+			verdict = ct_hook->update(entry->state.net, entry->skb);/*skb查询并关联ct*/
 		rcu_read_unlock();
 
 		switch (verdict & NF_VERDICT_MASK) {
@@ -401,7 +402,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 	struct nlattr *nla;
 	struct nfqnl_msg_packet_hdr *pmsg;
 	struct nlmsghdr *nlh;
-	struct sk_buff *entskb = entry->skb;
+	struct sk_buff *entskb = entry->skb;/*对应的报文*/
 	struct net_device *indev;
 	struct net_device *outdev;
 	struct nf_conn *ct = NULL;
@@ -448,7 +449,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 	case NFQNL_COPY_NONE:
 		break;
 
-	case NFQNL_COPY_PACKET:
+	case NFQNL_COPY_PACKET:/*要求copy packet*/
 		if (!(queue->flags & NFQA_CFG_F_GSO) &&
 		    entskb->ip_summed == CHECKSUM_PARTIAL &&
 		    skb_checksum_help(entskb))
@@ -630,7 +631,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 		goto nla_put_failure;
 
 	if (cap_len > data_len &&
-	    nla_put_be32(skb, NFQA_CAP_LEN, htonl(cap_len)))
+	    nla_put_be32(skb, NFQA_CAP_LEN, htonl(cap_len)))/*存放报文长度*/
 		goto nla_put_failure;
 
 	if (nfqnl_put_packet_info(skb, entskb, csum_verify))
@@ -642,10 +643,11 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 		if (skb_tailroom(skb) < sizeof(*nla) + hlen)
 			goto nla_put_failure;
 
-		nla = skb_put(skb, sizeof(*nla));
+		nla = skb_put(skb, sizeof(*nla));/*增加tl*/
 		nla->nla_type = NFQA_PAYLOAD;
 		nla->nla_len = nla_attr_size(data_len);
 
+		/*填充负载内容到skb中*/
 		if (skb_zerocopy(skb, entskb, data_len, hlen))
 			goto nla_put_failure;
 	}
@@ -686,6 +688,7 @@ __nfqnl_enqueue_packet(struct net *net, struct nfqnl_instance *queue,
 	__be32 *packet_id_ptr;
 	int failopen = 0;
 
+	/*构造netlink消息*/
 	nskb = nfqnl_build_packet_message(net, queue, entry, &packet_id_ptr);
 	if (nskb == NULL) {
 		err = -ENOMEM;
@@ -711,7 +714,7 @@ __nfqnl_enqueue_packet(struct net *net, struct nfqnl_instance *queue,
 	*packet_id_ptr = htonl(entry->id);
 
 	/* nfnetlink_unicast will either free the nskb or add it to a socket */
-	err = nfnetlink_unicast(nskb, net, queue->peer_portid);
+	err = nfnetlink_unicast(nskb, net, queue->peer_portid);/*发送给对端*/
 	if (err < 0) {
 		if (queue->flags & NFQA_CFG_F_FAIL_OPEN) {
 			failopen = 1;
@@ -804,14 +807,14 @@ __nfqnl_enqueue_packet_gso(struct net *net, struct nfqnl_instance *queue,
 }
 
 static int
-nfqnl_enqueue_packet(struct nf_queue_entry *entry, unsigned int queuenum)
+nfqnl_enqueue_packet(struct nf_queue_entry *entry, unsigned int queuenum/*队列编号*/)
 {
 	unsigned int queued;
 	struct nfqnl_instance *queue;
 	struct sk_buff *skb, *segs, *nskb;
 	int err = -ENOBUFS;
 	struct net *net = entry->state.net;
-	struct nfnl_queue_net *q = nfnl_queue_pernet(net);
+	struct nfnl_queue_net *q = nfnl_queue_pernet(net);/*取得此net ns下nfnl_queue_net*/
 
 	/* rcu_read_lock()ed by nf_hook_thresh */
 	//查询指定队列
@@ -820,7 +823,7 @@ nfqnl_enqueue_packet(struct nf_queue_entry *entry, unsigned int queuenum)
 		return -ESRCH;
 
 	if (queue->copy_mode == NFQNL_COPY_NONE)
-		return -EINVAL;
+		return -EINVAL;/*queue模式必须为copy_none*/
 
 	skb = entry->skb;
 
@@ -910,7 +913,7 @@ nfqnl_set_mode(struct nfqnl_instance *queue,
 	switch (mode) {
 	case NFQNL_COPY_NONE:
 	case NFQNL_COPY_META:
-		queue->copy_mode = mode;
+		queue->copy_mode = mode;/*设置队列copy方式*/
 		queue->copy_range = 0;
 		break;
 
@@ -1229,7 +1232,7 @@ static int nfqnl_recv_verdict(struct sk_buff *skb, const struct nfnl_info *info,
 	int err;
 
 	queue = verdict_instance_lookup(q, queue_num,
-					NETLINK_CB(skb).portid);
+					NETLINK_CB(skb).portid);/*找到队列*/
 	if (IS_ERR(queue))
 		return PTR_ERR(queue);
 
@@ -1239,7 +1242,7 @@ static int nfqnl_recv_verdict(struct sk_buff *skb, const struct nfnl_info *info,
 
 	verdict = ntohl(vhdr->verdict);
 
-	entry = find_dequeue_entry(queue, ntohl(vhdr->id));
+	entry = find_dequeue_entry(queue, ntohl(vhdr->id));/*取队列头内容*/
 	if (entry == NULL)
 		return -ENOENT;
 
@@ -1276,7 +1279,7 @@ static int nfqnl_recv_verdict(struct sk_buff *skb, const struct nfnl_info *info,
 	if (nfqa[NFQA_PRIORITY])
 		entry->skb->priority = ntohl(nla_get_be32(nfqa[NFQA_PRIORITY]));
 
-	nfqnl_reinject(entry, verdict);
+	nfqnl_reinject(entry, verdict);/*将entry注入回流程*/
 	return 0;
 }
 
@@ -1436,7 +1439,7 @@ static const struct nfnl_callback nfqnl_cb[NFQNL_MSG_MAX] = {
 		.policy		= nfqa_verdict_policy
 	},
 	[NFQNL_MSG_CONFIG]	= {
-		.call		= nfqnl_recv_config,
+		.call		= nfqnl_recv_config,/*队列配置消息处理*/
 		.type		= NFNL_CB_MUTEX,
 		.attr_count	= NFQA_CFG_MAX,
 		.policy		= nfqa_cfg_policy
@@ -1609,7 +1612,7 @@ static int __init nfnetlink_queue_init(void)
 		goto cleanup_netlink_subsys;
 	}
 
-	nf_register_queue_handler(&nfqh);
+	nf_register_queue_handler(&nfqh);/*注册netlink queue*/
 
 	return status;
 

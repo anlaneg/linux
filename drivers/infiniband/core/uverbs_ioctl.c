@@ -689,6 +689,7 @@ int uverbs_get_flags64(u64 *to, const struct uverbs_attr_bundle *attrs_bundle,
 	else
 		return -EINVAL;
 
+	/*flags中存在不容许的bits,报错*/
 	if (flags & ~allowed_bits)
 		return -EINVAL;
 
@@ -698,7 +699,7 @@ int uverbs_get_flags64(u64 *to, const struct uverbs_attr_bundle *attrs_bundle,
 EXPORT_SYMBOL(uverbs_get_flags64);
 
 int uverbs_get_flags32(u32 *to, const struct uverbs_attr_bundle *attrs_bundle,
-		       size_t idx, u64 allowed_bits)
+		       size_t idx, u64 allowed_bits/*容许的所有标记位*/)
 {
 	u64 flags;
 	int ret;

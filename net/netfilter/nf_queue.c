@@ -154,7 +154,7 @@ static void nf_ip6_saveroute(const struct sk_buff *skb,
 }
 
 static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
-		      unsigned int index, unsigned int queuenum)
+		      unsigned int index, unsigned int queuenum/*队列编号*/)
 {
 	struct nf_queue_entry *entry = NULL;
 	const struct nf_queue_handler *qh;
@@ -162,13 +162,13 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 	int status;
 
 	/* QUEUE == DROP if no one is waiting, to be safe. */
-	qh = rcu_dereference(nf_queue_handler);
+	qh = rcu_dereference(nf_queue_handler);/*取如何处理nf_queue*/
 	if (!qh)
 		return -ESRCH;
 
 	switch (state->pf) {
 	case AF_INET:
-		route_key_size = sizeof(struct ip_rt_info);
+		route_key_size = sizeof(struct ip_rt_info);/*v4要上传的数据*/
 		break;
 	case AF_INET6:
 		route_key_size = sizeof(struct ip6_rt_info);
@@ -222,7 +222,7 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 		break;
 	}
 
-	status = qh->outfn(entry, queuenum);
+	status = qh->outfn(entry, queuenum);/*输出到队列*/
 	if (status < 0) {
 		nf_queue_entry_free(entry);
 		return status;
@@ -238,7 +238,7 @@ int nf_queue(struct sk_buff *skb, struct nf_hook_state *state,
 	int ret;
 
 	//将报文入队列指定队列
-	ret = __nf_queue(skb, state, index, verdict >> NF_VERDICT_QBITS);
+	ret = __nf_queue(skb, state, index, verdict >> NF_VERDICT_QBITS/*取队列编号*/);
 	if (ret < 0) {
 		if (ret == -ESRCH &&
 		    (verdict & NF_VERDICT_FLAG_QUEUE_BYPASS))
@@ -308,13 +308,13 @@ void nf_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 	net = entry->state.net;
 	pf = entry->state.pf;
 
-	hooks = nf_hook_entries_head(net, pf, entry->state.hook);
+	hooks = nf_hook_entries_head(net, pf, entry->state.hook/*上次的hook点*/);
 
 	i = entry->hook_index;
 	if (WARN_ON_ONCE(!hooks || i >= hooks->num_hook_entries)) {
 		kfree_skb(skb);
 		nf_queue_entry_free(entry);
-		return;
+		return;/*查不致对应的hook(可能module被移除了，丢包）*/
 	}
 
 	hook_entry = &hooks->hooks[i];
@@ -330,7 +330,7 @@ void nf_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 
 	if (verdict == NF_ACCEPT) {
 next_hook:
-		++i;
+		++i;/*增加hook点编号，继续上次的hook遍历*/
 		verdict = nf_iterate(skb, &entry->state, hooks, &i);
 	}
 
@@ -343,6 +343,7 @@ next_hook:
 		local_bh_enable();
 		break;
 	case NF_QUEUE:
+		/*入队*/
 		err = nf_queue(skb, &entry->state, i, verdict);
 		if (err == 1)
 			goto next_hook;

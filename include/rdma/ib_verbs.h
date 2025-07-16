@@ -1562,6 +1562,7 @@ struct ib_uobject {
 	struct ib_uverbs_file  *ufile;
 	/* FIXME, save memory: ufile->context == context */
 	struct ib_ucontext     *context;	/* associated user context */
+	/*按类型指向不同的obj（例如object可能是一个filep)*/
 	void		       *object;		/* containing object */
 	struct list_head	list;		/* link to context's list */
 	struct ib_rdmacg_object	cg_obj;		/* rdmacg object */
@@ -2362,7 +2363,7 @@ struct iw_cm_conn_param;
 			 !__same_type(((struct drv_struct *)NULL)->member,     \
 				      struct ib_struct)))
 
-/*申请一个driver对应的ib_type类型的obj*/
+/*申请某一个driver对应的ib_type类型的obj*/
 #define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type/*obj类型*/, gfp)                          \
 	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*此ib设备ib_type类型元素大小*/, \
 					   gfp, false))
@@ -2767,10 +2768,10 @@ struct ib_device_ops {
 	 */
 	int (*get_numa_node)(struct ib_device *dev);/*取此设备对应numa node*/
 
-	/*各obj的大小，名称格式约定*/
+	/*定义驱动要求的各obj的大小，名称按格式约定为”size_$(obj_name)"*/
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
 	DECLARE_RDMA_OBJ_SIZE(ib_counters);
-	DECLARE_RDMA_OBJ_SIZE(ib_cq);
+	DECLARE_RDMA_OBJ_SIZE(ib_cq);/*ib_cq结构体大小（各设备自定义）*/
 	DECLARE_RDMA_OBJ_SIZE(ib_mw);
 	DECLARE_RDMA_OBJ_SIZE(ib_pd);/*ib_pd结构体大小（各设备自定义）*/
 	DECLARE_RDMA_OBJ_SIZE(ib_qp);

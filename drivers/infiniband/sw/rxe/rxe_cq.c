@@ -59,7 +59,7 @@ int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参
 		return -ENOMEM;
 	}
 
-	/*将cq->queue->buf映射到用户态*/
+	/*将cq->queue->buf映射给用户态程序*/
 	err = do_mmap_info(rxe, uresp ? &uresp->mi : NULL, udata,
 			   cq->queue->buf/*要映射的内存*/, cq->queue->buf_size/*buffer大小*/, &cq->queue->ip);
 	if (err) {

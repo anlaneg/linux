@@ -240,13 +240,16 @@ struct fb_bitfield {
 #define KHZ2PICOS(a) (1000000000UL/(a))
 
 struct fb_var_screeninfo {
+	/*x像素大小*/
 	__u32 xres;			/* visible resolution		*/
+	/*y像素大小*/
 	__u32 yres;
 	__u32 xres_virtual;		/* virtual resolution		*/
 	__u32 yres_virtual;
 	__u32 xoffset;			/* offset from virtual to visible */
 	__u32 yoffset;			/* resolution			*/
 
+	/*每个像素占用多少bits*/
 	__u32 bits_per_pixel;		/* guess what			*/
 	__u32 grayscale;		/* 0 = color, 1 = grayscale,	*/
 					/* >1 = FOURCC			*/

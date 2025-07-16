@@ -2677,7 +2677,7 @@ struct vm_struct *find_vm_area(const void *addr)
 {
 	struct vmap_area *va;
 
-	va = find_vmap_area((unsigned long)addr);
+	va = find_vmap_area((unsigned long)addr);/*通过地址查找vmap_area*/
 	if (!va)
 		return NULL;
 
@@ -3497,7 +3497,7 @@ EXPORT_SYMBOL(vzalloc);
  */
 void *vmalloc_user(unsigned long size)
 {
-	/*申请虚拟的连续内存*/
+	/*申请虚拟的连续内存，供用户态使用*/
 	return __vmalloc_node_range(size, SHMLBA,  VMALLOC_START, VMALLOC_END,
 				    GFP_KERNEL | __GFP_ZERO, PAGE_KERNEL,
 				    VM_USERMAP, NUMA_NO_NODE,
@@ -3936,9 +3936,10 @@ int remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
  *
  * Similar to remap_pfn_range() (see mm/memory.c)
  */
-int remap_vmalloc_range(struct vm_area_struct *vma, void *addr,
-						unsigned long pgoff)
+int remap_vmalloc_range(struct vm_area_struct *vma, void *addr/*起始地址*/,
+						unsigned long pgoff/*偏移量*/)
 {
+	/*map vmalloc page到用户态*/
 	return remap_vmalloc_range_partial(vma, vma->vm_start,
 					   addr, pgoff,
 					   vma->vm_end - vma->vm_start);

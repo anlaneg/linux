@@ -17,7 +17,7 @@ int do_mmap_info(struct rxe_dev *rxe, struct mminfo __user *outbuf,
 	struct rxe_mmap_info *ip = NULL;
 
 	if (outbuf) {
-		/*创建mmap信息*/
+		/*设置mmap信息*/
 		ip = rxe_create_mmap_info(rxe, buf_size, udata, buf);
 		if (IS_ERR(ip)) {
 			err = PTR_ERR(ip);

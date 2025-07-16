@@ -410,7 +410,7 @@ static int ipcget_public(struct ipc_namespace *ns, struct ipc_ids *ids,
 	if (ipcp == NULL) {
 		/* key not used */
 		if (!(flg & IPC_CREAT))
-			err = -ENOENT;
+			err = -ENOENT;/*不存在，且不容许创建，报错*/
 		else
 			err = ops->getnew(ns, params);
 	} else {
@@ -674,8 +674,10 @@ int ipcget(struct ipc_namespace *ns, struct ipc_ids *ids,
 			const struct ipc_ops *ops, struct ipc_params *params)
 {
 	if (params->key == IPC_PRIVATE)
+		/*指定为私有key*/
 		return ipcget_new(ns, ids, ops, params);
 	else
+		/*这种为公用key*/
 		return ipcget_public(ns, ids, ops, params);
 }
 

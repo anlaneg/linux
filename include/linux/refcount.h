@@ -256,14 +256,15 @@ static inline void refcount_inc(refcount_t *r)
 	__refcount_inc(r, NULL);
 }
 
-static inline __must_check bool __refcount_sub_and_test(int i, refcount_t *r, int *oldp)
+static inline __must_check bool __refcount_sub_and_test(int i, refcount_t *r, int *oldp/*出参，存放旧值*/)
 {
 	int old = atomic_fetch_sub_release(i, &r->refs);
 
 	if (oldp)
-		*oldp = old;
+		*oldp = old;/*记录旧值*/
 
 	if (old == i) {
+		/*旧值与i相等，返回true*/
 		smp_acquire__after_ctrl_dep();
 		return true;
 	}
@@ -301,6 +302,7 @@ static inline __must_check bool refcount_sub_and_test(int i, refcount_t *r)
 
 static inline __must_check bool __refcount_dec_and_test(refcount_t *r, int *oldp)
 {
+	/*减1，如果旧值为1，则返回true,否则返回false,oldp中存放旧值*/
 	return __refcount_sub_and_test(1, r, oldp);
 }
 
@@ -319,6 +321,7 @@ static inline __must_check bool __refcount_dec_and_test(refcount_t *r, int *oldp
  */
 static inline __must_check bool refcount_dec_and_test(refcount_t *r)
 {
+	/*计数将被减1，如果其本来是1，则减并返回true,否则减后返回false*/
 	return __refcount_dec_and_test(r, NULL);
 }
 

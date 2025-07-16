@@ -397,7 +397,7 @@ static ssize_t ucma_get_event(struct ucma_file *file, const char __user *inbuf,
 	while (list_empty(&file->event_list)) {
 		mutex_unlock(&file->mut);
 
-		//链表为空，当前文件为非阻塞，则返回again
+		//链表为空，且当前文件为非阻塞，则返回eagain
 		if (file->filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
@@ -640,6 +640,7 @@ static ssize_t ucma_destroy_id(struct ucma_file *file, const char __user *inbuf,
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
+	/*响应events reported计数*/
 	resp.events_reported = ucma_destroy_private_ctx(ctx);
 	if (copy_to_user(u64_to_user_ptr(cmd.response),
 			 &resp, sizeof(resp)))

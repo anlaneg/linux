@@ -90,9 +90,9 @@ do_wait_for_common(struct completion *x,
 				break;
 			}
 			__prepare_to_swait(&x->wait, &wait);
-			__set_current_state(state);
-			raw_spin_unlock_irq(&x->wait.lock);
-			timeout = action(timeout);
+			__set_current_state(state);/*设置进程状态*/
+			raw_spin_unlock_irq(&x->wait.lock);/*解锁准备调度走*/
+			timeout = action(timeout);/*执行action回调,获得timeout*/
 			raw_spin_lock_irq(&x->wait.lock);
 		} while (!x->done && timeout);
 		__finish_swait(&x->wait, &wait);

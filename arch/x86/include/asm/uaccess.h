@@ -330,7 +330,7 @@ do {									\
 	 __get_user_asm(x, ptr, retval, "q")
 #endif
 
-#define __get_user_size(x, ptr, size, retval)				\
+#define __get_user_size(x/*存放目标*/, ptr/*指针*/, size/*长度*/, retval)				\
 do {									\
 	unsigned char x_u8__;						\
 									\

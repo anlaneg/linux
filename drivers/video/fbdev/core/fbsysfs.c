@@ -147,7 +147,7 @@ static ssize_t store_bpp(struct device *device, struct device_attribute *attr,
 	int err;
 
 	var = fb_info->var;
-	var.bits_per_pixel = simple_strtoul(buf, last, 0);
+	var.bits_per_pixel = simple_strtoul(buf, last, 0);/*设置像素占用bits数*/
 	if ((err = activate(fb_info, &var)))
 		return err;
 	return count;
@@ -157,7 +157,7 @@ static ssize_t show_bpp(struct device *device, struct device_attribute *attr,
 			char *buf)
 {
 	struct fb_info *fb_info = dev_get_drvdata(device);
-	return sysfs_emit(buf, "%d\n", fb_info->var.bits_per_pixel);
+	return sysfs_emit(buf, "%d\n", fb_info->var.bits_per_pixel);/*显示每像素占多少bits*/
 }
 
 static ssize_t store_rotate(struct device *device,
@@ -438,10 +438,11 @@ static int fb_init_device(struct fb_info *fb_info)
 {
 	int i, error = 0;
 
-	dev_set_drvdata(fb_info->dev, fb_info);
+	dev_set_drvdata(fb_info->dev, fb_info);/*设置driver私有数据*/
 
 	fb_info->class_flag |= FB_SYSFS_FLAG_ATTR;
 
+	/*添加设备属性,例如：/sys/devices/platform/141030000.pcie/pci0000:00/0000:00:00.0/graphics/fb0*/
 	for (i = 0; i < ARRAY_SIZE(device_attrs); i++) {
 		error = device_create_file(fb_info->dev, &device_attrs[i]);
 

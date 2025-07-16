@@ -2259,7 +2259,7 @@ signed long __sched schedule_timeout(signed long timeout)
 		 * but I' d like to return a valid offset (>=0) to allow
 		 * the caller to do everything it want with the retval.
 		 */
-		schedule();
+		schedule();/*主动调度走*/
 		goto out;
 	default:
 		/*

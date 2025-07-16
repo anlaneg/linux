@@ -80,19 +80,20 @@ void plist_add(struct plist_node *node, struct plist_head *head)
 	WARN_ON(!list_empty(&node->prio_list));
 
 	if (plist_head_empty(head))
-		goto ins_node;
+		goto ins_node;/*队列为空，直接加入到head*/
 
 	first = iter = plist_first(head);
 
 	do {
 		if (node->prio < iter->prio) {
+			/*node的优先级小于iter的优先级，node要添加在iter->node_list后面*/
 			node_next = &iter->node_list;
 			break;
 		}
 
 		prev = iter;
 		iter = list_entry(iter->prio_list.next,
-				struct plist_node, prio_list);
+				struct plist_node, prio_list);/*向前找*/
 	} while (iter != first);
 
 	if (!prev || prev->prio != node->prio)

@@ -1115,6 +1115,7 @@ EXPORT_SYMBOL(fget);
 
 struct file *fget_raw(unsigned int fd)
 {
+	/*通过fd获得其对应的file*/
 	return __fget(fd, 0);
 }
 EXPORT_SYMBOL(fget_raw);
@@ -1385,7 +1386,7 @@ int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
 	if (error)
 		return error;
 
-	new_fd = get_unused_fd_flags(o_flags);
+	new_fd = get_unused_fd_flags(o_flags);/*取得一个新的fd*/
 	if (new_fd < 0)
 		return new_fd;
 
@@ -1397,7 +1398,7 @@ int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
 		}
 	}
 
-	fd_install(new_fd, get_file(file));
+	fd_install(new_fd, get_file(file));/*此fd与file关联*/
 	__receive_sock(file);
 	return new_fd;
 }

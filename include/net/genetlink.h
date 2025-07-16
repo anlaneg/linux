@@ -547,7 +547,7 @@ int genlmsg_multicast_allns(const struct genl_family *family,
  */
 static inline int genlmsg_unicast(struct net *net, struct sk_buff *skb, u32 portid)
 {
-	//单播一个netlink消息
+	//单播发送一个netlink消息
 	return nlmsg_unicast(net->genl_sock, skb, portid);
 }
 

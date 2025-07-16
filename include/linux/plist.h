@@ -124,7 +124,7 @@ plist_head_init(struct plist_head *head)
  */
 static inline void plist_node_init(struct plist_node *node, int prio)
 {
-	node->prio = prio;
+	node->prio = prio;/*指定优先级*/
 	INIT_LIST_HEAD(&node->prio_list);
 	INIT_LIST_HEAD(&node->node_list);
 }

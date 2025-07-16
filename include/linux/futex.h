@@ -40,13 +40,13 @@ union futex_key {
 			struct mm_struct *mm;
 			u64 __tmp;
 		};
-		unsigned long address;
+		unsigned long address;/*页地址*/
 		unsigned int offset;
 	} private;
 	struct {
 		u64 ptr;
 		unsigned long word;
-		unsigned int offset;
+		unsigned int offset;/*在页内的偏移量*/
 	} both;
 };
 

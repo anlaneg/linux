@@ -68,7 +68,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	struct ib_device *ib_dev = attrs->context->device;
 	int ret;
 	u64 user_handle;
-	struct ib_cq_init_attr attr = {};
+	struct ib_cq_init_attr attr = {};/*cq创建用初始化参数（后面填充）*/
 	struct ib_cq                   *cq;
 	struct ib_uverbs_completion_event_file    *ev_file = NULL;
 	struct ib_uobject *ev_file_uobj;
@@ -77,10 +77,11 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	if (!ib_dev->ops.create_cq || !ib_dev->ops.destroy_cq)
 		return -EOPNOTSUPP;
 
+	/*填充参数.comp_vector,.cqe,user_handle,.flags*/
 	ret = uverbs_copy_from(&attr.comp_vector, attrs,
 			       UVERBS_ATTR_CREATE_CQ_COMP_VECTOR);
 	if (!ret)
-		/*取cqe数目*/
+		/*取cqe数目，并设置attr.cqe*/
 		ret = uverbs_copy_from(&attr.cqe, attrs,
 				       UVERBS_ATTR_CREATE_CQ_CQE);
 	if (!ret)
@@ -96,11 +97,12 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	if (ret)
 		return ret;
 
+	/*取cq_comp_channel*/
 	ev_file_uobj = uverbs_attr_get_uobject(attrs, UVERBS_ATTR_CREATE_CQ_COMP_CHANNEL);
 	if (!IS_ERR(ev_file_uobj)) {
 		ev_file = container_of(ev_file_uobj,
 				       struct ib_uverbs_completion_event_file,
-				       uobj);
+				       uobj);/*获得ev_file，并增加引用*/
 		uverbs_uobject_get(ev_file_uobj);
 	}
 
@@ -122,7 +124,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 		goto err_event_file;
 	}
 
-	cq->device        = ib_dev;
+	cq->device        = ib_dev;/*所属的ib设备*/
 	cq->uobject       = obj;
 	cq->comp_handler  = ib_uverbs_comp_handler;
 	cq->event_handler = ib_uverbs_cq_event_handler;
@@ -133,7 +135,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_set_name(&cq->res, NULL);
 
 	/*调用create_cq对cq进行初始化*/
-	ret = ib_dev->ops.create_cq(cq, &attr, &attrs->driver_udata);
+	ret = ib_dev->ops.create_cq(cq, &attr/*初始化参数*/, &attrs->driver_udata);
 	if (ret)
 		goto err_free;
 

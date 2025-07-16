@@ -120,8 +120,10 @@ struct cmsghdr {
 #define __CMSG_NXTHDR(ctl, len, cmsg) __cmsg_nxthdr((ctl),(len),(cmsg))
 #define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr((mhdr), (cmsg))
 
+/*len按sizeof(long)进行对齐*/
 #define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
 
+/*cmsg之后是cmsghdr,其后才为data*/
 #define CMSG_DATA(cmsg) \
 	((void *)(cmsg) + sizeof(struct cmsghdr))
 #define CMSG_USER_DATA(cmsg) \
@@ -129,14 +131,17 @@ struct cmsghdr {
 #define CMSG_SPACE(len) (sizeof(struct cmsghdr) + CMSG_ALIGN(len))
 #define CMSG_LEN(len) (sizeof(struct cmsghdr) + (len))
 
+/*len长度不足cmsghdr,则表示无cmsghdr,否则直接强转ctl为cmsghdr结构体指针*/
 #define __CMSG_FIRSTHDR(ctl,len) ((len) >= sizeof(struct cmsghdr) ? \
 				  (struct cmsghdr *)(ctl) : \
 				  (struct cmsghdr *)NULL)
 #define CMSG_FIRSTHDR(msg)	__CMSG_FIRSTHDR((msg)->msg_control, (msg)->msg_controllen)
+/*cmsg_len应在sizeof(cmsghdr)与mdr->msg_controllen之间*/
 #define CMSG_OK(mhdr, cmsg) ((cmsg)->cmsg_len >= sizeof(struct cmsghdr) && \
 			     (cmsg)->cmsg_len <= (unsigned long) \
 			     ((mhdr)->msg_controllen - \
 			      ((char *)(cmsg) - (char *)(mhdr)->msg_control)))
+/*遍历msg中的cmsg header*/
 #define for_each_cmsghdr(cmsg, msg) \
 	for (cmsg = CMSG_FIRSTHDR(msg); \
 	     cmsg; \
@@ -156,12 +161,13 @@ struct cmsghdr {
  */
 
 static inline struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size,
-					       struct cmsghdr *__cmsg)
+					       struct cmsghdr *__cmsg/*上一次的header*/)
 {
 	struct cmsghdr * __ptr;
 
 	__ptr = (struct cmsghdr*)(((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len));
 	if ((unsigned long)((char*)(__ptr+1) - (char *) __ctl) > __size)
+		/*指针位置超限，无空闲cmsghdr,返回NULL*/
 		return (struct cmsghdr *)0;
 
 	return __ptr;
@@ -169,7 +175,8 @@ static inline struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size
 
 static inline struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr *__cmsg)
 {
-	return __cmsg_nxthdr(__msg->msg_control, __msg->msg_controllen, __cmsg);
+	/*返回下一个cmsghdr*/
+	return __cmsg_nxthdr(__msg->msg_control/*起始header*/, __msg->msg_controllen/*总长度*/, __cmsg/*当前cmsghdr*/);
 }
 
 /*msg_iter可读写的数据长度*/

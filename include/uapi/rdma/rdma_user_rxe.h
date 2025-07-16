@@ -140,8 +140,8 @@ struct rxe_sge {
 };
 
 struct mminfo {
-	__aligned_u64		offset;
-	__u32			size;
+	__aligned_u64		offset;/*偏移起始位置*/
+	__u32			size;/*内存大小*/
 	__u32			pad;
 };
 
