@@ -207,7 +207,7 @@ static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr/*源ip*/,
 						    __be32 daddr/*目的ip*/,
 						    __u8 tos, __u8 ttl,
 						    __be16 tp_dst/*目的port*/,
-						    __be16 flags,
+						    const unsigned long *flags,
 						    __be64 tunnel_id/*隧道id号*/,
 						    int md_size/*选项长度*/)
 {
@@ -226,7 +226,7 @@ static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr/*源ip*/,
 
 /*创建并初始化ipv4 metadata dst*/
 static inline struct metadata_dst *ip_tun_rx_dst(struct sk_buff *skb,
-						 __be16 flags,
+						 const unsigned long *flags,
 						 __be64 tunnel_id,
 						 int md_size)
 {
@@ -242,7 +242,7 @@ static inline struct metadata_dst *__ipv6_tun_set_dst(const struct in6_addr *sad
 						      __u8 tos, __u8 ttl,
 						      __be16 tp_dst,
 						      __be32 label,
-						      __be16 flags,
+						      const unsigned long *flags,
 						      __be64 tunnel_id,
 						      int md_size)
 {
@@ -255,7 +255,7 @@ static inline struct metadata_dst *__ipv6_tun_set_dst(const struct in6_addr *sad
 
 	info = &tun_dst->u.tun_info;
 	info->mode = IP_TUNNEL_INFO_IPV6;
-	info->key.tun_flags = flags;
+	ip_tunnel_flags_copy(info->key.tun_flags, flags);
 	info->key.tun_id = tunnel_id;
 	info->key.tp_src = 0;
 	info->key.tp_dst = tp_dst;
@@ -272,7 +272,7 @@ static inline struct metadata_dst *__ipv6_tun_set_dst(const struct in6_addr *sad
 
 /*创建并初始化ipv6 metadata dst*/
 static inline struct metadata_dst *ipv6_tun_rx_dst(struct sk_buff *skb,
-						   __be16 flags,
+						   const unsigned long *flags,
 						   __be64 tunnel_id,
 						   int md_size)
 {

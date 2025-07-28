@@ -25,7 +25,9 @@
 #include <linux/hrtimer.h>
 #include <linux/slab.h>
 #include <linux/hashtable.h>
+#include <linux/bpf.h>
 
+#include <net/netdev_lock.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/netlink.h>
@@ -215,7 +217,7 @@ static struct Qdisc_ops *qdisc_lookup_default(const char *name)
 
 	for (q = qdisc_base; q; q = q->next) {
 		if (!strcmp(name, q->id)) {
-			if (!try_module_get(q->owner))
+			if (!bpf_try_module_get(q, q->owner))
 				q = NULL;
 			break;
 		}
@@ -239,7 +241,7 @@ int qdisc_set_default(const char *name)
 		//未查询到对应的qdisc，尝试加载module,并重查
 		/* Not found, drop lock and try to load module */
 		write_unlock(&qdisc_mod_lock);
-		request_module("sch_%s", name);
+		request_module(NET_SCH_ALIAS_PREFIX "%s", name);
 		write_lock(&qdisc_mod_lock);
 
 		ops = qdisc_lookup_default(name);
@@ -247,7 +249,7 @@ int qdisc_set_default(const char *name)
 
 	if (ops) {
 		/* Set new default */
-		module_put(default_qdisc_ops->owner);
+		bpf_module_put(default_qdisc_ops, default_qdisc_ops->owner);
 		default_qdisc_ops = ops;
 	}
 	write_unlock(&qdisc_mod_lock);
@@ -358,21 +360,24 @@ out:
 }
 
 /*通过classid查找qdisc对应的 leaf qdisc*/
-static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
+static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid,
+				struct netlink_ext_ack *extack)
 {
 	unsigned long cl;
 	const struct Qdisc_class_ops *cops = p->ops->cl_ops;
 
 	/*无分类ops,直接返回NULL*/
-	if (cops == NULL)
-		return NULL;
-
+	if (cops == NULL) {
+		NL_SET_ERR_MSG(extack, "Parent qdisc is not classful");
+		return ERR_PTR(-EOPNOTSUPP);
+	}
 	//通过classid找到对应的class
 	cl = cops->find(p, classid);
 
-	if (cl == 0)
-		return NULL;
-
+	if (cl == 0) {
+		NL_SET_ERR_MSG(extack, "Specified class not found");
+		return ERR_PTR(-ENOENT);
+	}
 	//找指定class绑定的队列
 	return cops->leaf(p, cl);
 }
@@ -387,7 +392,7 @@ static struct Qdisc_ops *qdisc_lookup_ops(struct nlattr *kind)
 		read_lock(&qdisc_mod_lock);
 		for (q = qdisc_base; q; q = q->next) {
 			if (nla_strcmp(kind, q->id) == 0) {
-				if (!try_module_get(q->owner))
+				if (!bpf_try_module_get(q, q->owner))
 					q = NULL;
 				break;
 			}
@@ -631,17 +636,6 @@ out:
 	/*记录报文长度*/
 	qdisc_skb_cb(skb)->pkt_len = pkt_len;
 }
-EXPORT_SYMBOL(__qdisc_calculate_pkt_len);
-
-void qdisc_warn_nonwc(const char *txt, struct Qdisc *qdisc)
-{
-	if (!(qdisc->flags & TCQ_F_WARN_NONWC)) {
-		pr_warn("%s: %s qdisc %X: is non-work-conserving?\n",
-			txt, qdisc->ops->id, qdisc->handle >> 16);
-		qdisc->flags |= TCQ_F_WARN_NONWC;
-	}
-}
-EXPORT_SYMBOL(qdisc_warn_nonwc);
 
 static enum hrtimer_restart qdisc_watchdog(struct hrtimer *timer)
 {
@@ -658,8 +652,7 @@ static enum hrtimer_restart qdisc_watchdog(struct hrtimer *timer)
 void qdisc_watchdog_init_clockid(struct qdisc_watchdog *wd, struct Qdisc *qdisc,
 				 clockid_t clockid)
 {
-	hrtimer_init(&wd->timer, clockid, HRTIMER_MODE_ABS_PINNED);
-	wd->timer.function = qdisc_watchdog;
+	hrtimer_setup(&wd->timer, qdisc_watchdog, clockid, HRTIMER_MODE_ABS_PINNED);
 	wd->qdisc = qdisc;
 }
 EXPORT_SYMBOL(qdisc_watchdog_init_clockid);
@@ -826,42 +819,33 @@ static u32 qdisc_alloc_handle(struct net_device *dev)
 
 void qdisc_tree_reduce_backlog(struct Qdisc *sch, int n, int len)
 {
-	bool qdisc_is_offloaded = sch->flags & TCQ_F_OFFLOADED;
 	const struct Qdisc_class_ops *cops;
 	unsigned long cl;
 	u32 parentid;
 	bool notify;
 	int drops;
 
-	if (n == 0 && len == 0)
-		return;
 	drops = max_t(int, n, 0);
 	rcu_read_lock();
 	while ((parentid = sch->parent)) {
-		if (TC_H_MAJ(parentid) == TC_H_MAJ(TC_H_INGRESS))
+		if (parentid == TC_H_ROOT)
 			break;
 
 		if (sch->flags & TCQ_F_NOPARENT)
 			break;
-		/* Notify parent qdisc only if child qdisc becomes empty.
-		 *
-		 * If child was empty even before update then backlog
-		 * counter is screwed and we skip notification because
-		 * parent class is already passive.
-		 *
-		 * If the original child was offloaded then it is allowed
-		 * to be seem as empty, so the parent is notified anyway.
-		 */
-		notify = !sch->q.qlen && !WARN_ON_ONCE(!n &&
-						       !qdisc_is_offloaded);
+		/* Notify parent qdisc only if child qdisc becomes empty. */
+		notify = !sch->q.qlen;
 		/* TODO: perform the search on a per txq basis */
-		sch = qdisc_lookup(qdisc_dev(sch), TC_H_MAJ(parentid));
+		sch = qdisc_lookup_rcu(qdisc_dev(sch), TC_H_MAJ(parentid));
 		if (sch == NULL) {
 			WARN_ON_ONCE(parentid != TC_H_ROOT);
 			break;
 		}
 		cops = sch->ops->cl_ops;
 		if (notify && cops->qlen_notify) {
+			/* Note that qlen_notify must be idempotent as it may get called
+			 * multiple times.
+			 */
 			cl = cops->find(sch, parentid);
 			cops->qlen_notify(sch, cl);
 		}
@@ -1273,6 +1257,12 @@ skip:
 			return -EINVAL;
 		}
 
+		if (new &&
+		    !(parent->flags & TCQ_F_MQROOT) &&
+		    rcu_access_pointer(new->stab)) {
+			NL_SET_ERR_MSG(extack, "STAB not supported on a non root");
+			return -EINVAL;
+		}
 		//采用new队列替代之前的old队列(对应的分类为cl)
 		err = cops->graft(parent, cl, new, &old, extack);
 		if (err)
@@ -1342,37 +1332,8 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 
 	//依据kind查找对应类型的qdisc_ops
 	ops = qdisc_lookup_ops(kind);
-#ifdef CONFIG_MODULES
-	//如果ops不存在，则尝试加载对应模块
-	if (ops == NULL && kind != NULL) {
-		char name[IFNAMSIZ];
-		if (nla_strscpy(name, kind, IFNAMSIZ) >= 0) {
-			/* We dropped the RTNL semaphore in order to
-			 * perform the module load.  So, even if we
-			 * succeeded in loading the module we have to
-			 * tell the caller to replay the request.  We
-			 * indicate this using -EAGAIN.
-			 * We replay the request because the device may
-			 * go away in the mean time.
-			 */
-			rtnl_unlock();
-			request_module("sch_%s", name);
-			rtnl_lock();
-			ops = qdisc_lookup_ops(kind);
-			if (ops != NULL) {
-				/* We will try again qdisc_lookup_ops,
-				 * so don't keep a reference.
-				 */
-				module_put(ops->owner);
-				err = -EAGAIN;
-				goto err_out;
-			}
-		}
-	}
-#endif
-
-	err = -ENOENT;
 	if (!ops) {
+		err = -ENOENT;
 		NL_SET_ERR_MSG(extack, "Specified qdisc kind is unknown");
 		goto err_out;
 	}
@@ -1423,7 +1384,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	 */
 	if ((dev->priv_flags & IFF_NO_QUEUE) && (dev->tx_queue_len == 0)) {
 		/*此设备没有队列，更新其队列长度*/
-		dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
+		WRITE_ONCE(dev->tx_queue_len, DEFAULT_TX_QUEUE_LEN);
 		netdev_info(dev, "Caught tx_queue_len zero misconfig\n");
 	}
 
@@ -1483,10 +1444,11 @@ err_out4:
 		ops->destroy(sch);
 	qdisc_put_stab(rtnl_dereference(sch->stab));
 err_out3:
+	lockdep_unregister_key(&sch->root_lock_key);
 	netdev_put(dev, &sch->dev_tracker);
 	qdisc_free(sch);
 err_out2:
-	module_put(ops->owner);
+	bpf_module_put(ops, ops->owner);
 err_out:
 	*errp = err;
 	return NULL;
@@ -1598,27 +1560,17 @@ const struct nla_policy rtm_tca_policy[TCA_MAX + 1] = {
  * Delete/get qdisc.
  */
 
-static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
-			struct netlink_ext_ack *extack)
+static int __tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
+			  struct netlink_ext_ack *extack,
+			  struct net_device *dev,
+			  struct nlattr *tca[TCA_MAX + 1],
+			  struct tcmsg *tcm)
 {
 	struct net *net = sock_net(skb->sk);
-	struct tcmsg *tcm = nlmsg_data(n);
-	struct nlattr *tca[TCA_MAX + 1];
-	struct net_device *dev;
-	u32 clid;
 	struct Qdisc *q = NULL;
 	struct Qdisc *p = NULL;
+	u32 clid;
 	int err;
-
-	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
-				     rtm_tca_policy, extack);
-	if (err < 0)
-		return err;
-
-	/*取待操作设备*/
-	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
-	if (!dev)
-		return -ENODEV;
 
 	clid = tcm->tcm_parent;
 	if (clid) {
@@ -1631,7 +1583,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 					NL_SET_ERR_MSG(extack, "Failed to find qdisc with specified classid");
 					return -ENOENT;
 				}
-				q = qdisc_leaf(p, clid);
+				q = qdisc_leaf(p, clid, extack);
 			} else if (dev_ingress_queue(dev)) {
 				q = rtnl_dereference(dev_ingress_queue(dev)->qdisc_sleeping);
 			}
@@ -1643,6 +1595,8 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 			NL_SET_ERR_MSG(extack, "Cannot find specified qdisc on specified device");
 			return -ENOENT;
 		}
+		if (IS_ERR(q))
+			return PTR_ERR(q);
 
 		/*指定的handle必须与q实际的handle一致*/
 		if (tcm->tcm_handle && q->handle != tcm->tcm_handle) {
@@ -1660,7 +1614,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 
 	/*队列type必须与实际的一致*/
 	if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], q->ops->id)) {
-		NL_SET_ERR_MSG(extack, "Invalid qdisc name");
+		NL_SET_ERR_MSG(extack, "Invalid qdisc name: must match existing qdisc");
 		return -EINVAL;
 	}
 
@@ -1684,6 +1638,31 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 	return 0;
 }
 
+static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
+			struct netlink_ext_ack *extack)
+{
+	struct net *net = sock_net(skb->sk);
+	struct tcmsg *tcm = nlmsg_data(n);
+	struct nlattr *tca[TCA_MAX + 1];
+	struct net_device *dev;
+	int err;
+
+	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
+				     rtm_tca_policy, extack);
+	if (err < 0)
+		return err;
+
+	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	netdev_lock_ops(dev);
+	err = __tc_get_qdisc(skb, n, extack, dev, tca, tcm);
+	netdev_unlock_ops(dev);
+
+	return err;
+}
+
 static bool req_create_or_replace(struct nlmsghdr *n)
 {
 	return (n->nlmsg_flags & NLM_F_CREATE &&
@@ -1703,40 +1682,18 @@ static bool req_change(struct nlmsghdr *n)
 		!(n->nlmsg_flags & NLM_F_EXCL));
 }
 
-/*
- * Create/change qdisc.
- */
-//创建或修改qdisc
-static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
-			   struct netlink_ext_ack *extack)
+static int __tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
+			     struct netlink_ext_ack *extack,
+			     struct net_device *dev,
+			     struct nlattr *tca[TCA_MAX + 1],
+			     struct tcmsg *tcm)
 {
-    /*当前net namespace*/
-	struct net *net = sock_net(skb->sk);
-	struct tcmsg *tcm;
-	struct nlattr *tca[TCA_MAX + 1];
-	struct net_device *dev;
+	struct Qdisc *q = NULL;
+	struct Qdisc *p = NULL;
 	u32 clid;
-	struct Qdisc *q, *p;
 	int err;
 
-replay:
-	/* Reinit, just in case something touches this. */
-	/*解析n位置向后偏sizeof(*tcm)后的属性内容*/
-	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
-				     rtm_tca_policy, extack);
-	if (err < 0)
-		return err;
-
-	/*取sizeof(*tcm)内容*/
-	tcm = nlmsg_data(n);
 	clid = tcm->tcm_parent;/*qdisc创建修改时，其值为class id*/
-	q = p = NULL;
-
-	//通过ifindex找到对应的dev
-	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
-	if (!dev)
-		return -ENODEV;
-
 
 	if (clid) {
 		/*class id被指定的情况处理，共有3种情况：
@@ -1753,7 +1710,9 @@ replay:
 					return -ENOENT;
 				}
 				/*clid是一个由major:minor组成，现在查此class绑定的队列*/
-				q = qdisc_leaf(p, clid);
+				q = qdisc_leaf(p, clid, extack);
+				if (IS_ERR(q))
+					return PTR_ERR(q);
 			} else if (/*指明为ingress qdisc情况,尝试创建ingress qdisc*/dev_ingress_queue_create(dev)) {
 				//创建/获取dev->ingress_queue成功，使用TC_H_INGRESS qdisc
 				q = rtnl_dereference(dev_ingress_queue(dev)->qdisc_sleeping);
@@ -1787,7 +1746,10 @@ replay:
 				if (!q)
 				    /*没有找到此handle指定的q,执行创建*/
 					goto create_n_graft;
-
+				if (q->parent != tcm->tcm_parent) {
+					NL_SET_ERR_MSG(extack, "Cannot move an existing qdisc to a different parent");
+					return -EINVAL;
+				}
 				if (n->nlmsg_flags & NLM_F_EXCL) {
 					//q已存在，报错
 					NL_SET_ERR_MSG(extack, "Exclusivity flag on, cannot override");
@@ -1797,7 +1759,7 @@ replay:
 				if (tca[TCA_KIND] &&
 				    nla_strcmp(tca[TCA_KIND], q->ops->id)) {
 					//配置指明的队列类型，与查找到的队列类型不一致
-					NL_SET_ERR_MSG(extack, "Invalid qdisc name");
+					NL_SET_ERR_MSG(extack, "Invalid qdisc name: must match existing qdisc");
 					return -EINVAL;
 				}
 				if (q->flags & TCQ_F_INGRESS) {
@@ -1878,7 +1840,7 @@ replay:
 
 	//指定了qdisc类型，但队列现有类型与其不相符，报错
 	if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], q->ops->id)) {
-		NL_SET_ERR_MSG(extack, "Invalid qdisc name");
+		NL_SET_ERR_MSG(extack, "Invalid qdisc name: must match existing qdisc");
 		return -EINVAL;
 	}
 
@@ -1886,7 +1848,7 @@ replay:
 	err = qdisc_change(q, tca, extack);
 	if (err == 0)
 		/*向用户态通知，qdisc发生变更*/
-		qdisc_notify(net, skb, n, clid, NULL, q, extack);
+		qdisc_notify(sock_net(skb->sk), skb, n, clid, NULL, q, extack);
 	return err;
 
 create_n_graft:
@@ -1926,13 +1888,9 @@ create_n_graft2:
 				 tcm->tcm_parent, tcm->tcm_handle,
 				 tca, &err, extack);
 	}
-
-	if (q == NULL) {
+	if (!q)
 		/*创建qdisc不成功，如有必要再尝试一遍*/
-		if (err == -EAGAIN)
-			goto replay;
 		return err;
-	}
 
 graft:
 	err = qdisc_graft(dev, p/*parent qdisc*/, skb, n, clid, q/*创建成功的qdisc*/, NULL, extack);
@@ -1943,6 +1901,58 @@ graft:
 	}
 
 	return 0;
+}
+
+static void request_qdisc_module(struct nlattr *kind)
+{
+	struct Qdisc_ops *ops;
+	char name[IFNAMSIZ];
+
+	if (!kind)
+		return;
+
+	ops = qdisc_lookup_ops(kind);
+	if (ops) {
+		bpf_module_put(ops, ops->owner);
+		return;
+	}
+
+	if (nla_strscpy(name, kind, IFNAMSIZ) >= 0) {
+		rtnl_unlock();
+		request_module(NET_SCH_ALIAS_PREFIX "%s", name);
+		rtnl_lock();
+	}
+}
+
+/*
+ * Create/change qdisc.
+ */
+static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
+			   struct netlink_ext_ack *extack)
+{
+	struct net *net = sock_net(skb->sk);
+	struct nlattr *tca[TCA_MAX + 1];
+	struct net_device *dev;
+	struct tcmsg *tcm;
+	int err;
+
+	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
+				     rtm_tca_policy, extack);
+	if (err < 0)
+		return err;
+
+	request_qdisc_module(tca[TCA_KIND]);
+
+	tcm = nlmsg_data(n);
+	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	netdev_lock_ops(dev);
+	err = __tc_modify_qdisc(skb, n, extack, dev, tca, tcm);
+	netdev_unlock_ops(dev);
+
+	return err;
 }
 
 static int tc_dump_qdisc_root(struct Qdisc *root, struct sk_buff *skb,
@@ -2032,17 +2042,23 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 			s_q_idx = 0;
 		q_idx = 0;
 
+		netdev_lock_ops(dev);
 		if (tc_dump_qdisc_root(rtnl_dereference(dev->qdisc),
 				       skb, cb, &q_idx, s_q_idx,
-				       true, tca[TCA_DUMP_INVISIBLE]) < 0)
+				       true, tca[TCA_DUMP_INVISIBLE]) < 0) {
+			netdev_unlock_ops(dev);
 			goto done;
+		}
 
 		dev_queue = dev_ingress_queue(dev);
 		if (dev_queue &&
 		    tc_dump_qdisc_root(rtnl_dereference(dev_queue->qdisc_sleeping),
 				       skb, cb, &q_idx, s_q_idx, false,
-				       tca[TCA_DUMP_INVISIBLE]) < 0)
+				       tca[TCA_DUMP_INVISIBLE]) < 0) {
+			netdev_unlock_ops(dev);
 			goto done;
+		}
+		netdev_unlock_ops(dev);
 
 cont:
 		idx++;
@@ -2281,31 +2297,21 @@ static void tc_bind_tclass(struct Qdisc *q, u32 portid, u32 clid,
 
 //class创建及更新
 //例如：tc class add dev eth0 parent 1: classid 1:1 htb rate 40mbit ceil 40mbit
-static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
-			 struct netlink_ext_ack *extack)
+static int __tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
+			   struct netlink_ext_ack *extack,
+			   struct net_device *dev,
+			   struct nlattr *tca[TCA_MAX + 1],
+			   struct tcmsg *tcm)
 {
 	struct net *net = sock_net(skb->sk);
-	struct tcmsg *tcm = nlmsg_data(n);
-	struct nlattr *tca[TCA_MAX + 1];
-	struct net_device *dev;
-	struct Qdisc *q = NULL;
 	const struct Qdisc_class_ops *cops;
+	struct Qdisc *q = NULL;
 	unsigned long cl = 0;
 	unsigned long new_cl;
 	u32 portid;
 	u32 clid;
 	u32 qid;
 	int err;
-
-	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
-				     rtm_tca_policy, extack);
-	if (err < 0)
-		return err;
-
-	//取关联的设备
-	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
-	if (!dev)
-		return -ENODEV;
 
 	/*
 	   parent == TC_H_UNSPEC - unspecified parent.
@@ -2404,6 +2410,12 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 		return -EOPNOTSUPP;
 	}
 
+	/* Prevent creation of traffic classes with classid TC_H_ROOT */
+	if (clid == TC_H_ROOT) {
+		NL_SET_ERR_MSG(extack, "Cannot create traffic class with classid TC_H_ROOT");
+		return -EINVAL;
+	}
+
 	new_cl = cl;
 	err = -EOPNOTSUPP;
 	if (cops->change)
@@ -2415,6 +2427,31 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 			tc_bind_tclass(q, portid, clid, new_cl);
 	}
 out:
+	return err;
+}
+
+static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
+			 struct netlink_ext_ack *extack)
+{
+	struct net *net = sock_net(skb->sk);
+	struct tcmsg *tcm = nlmsg_data(n);
+	struct nlattr *tca[TCA_MAX + 1];
+	struct net_device *dev;
+	int err;
+
+	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
+				     rtm_tca_policy, extack);
+	if (err < 0)
+		return err;
+
+	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	netdev_lock_ops(dev);
+	err = __tc_ctl_tclass(skb, n, extack, dev, tca, tcm);
+	netdev_unlock_ops(dev);
+
 	return err;
 }
 
@@ -2494,19 +2531,11 @@ static int tc_dump_tclass_root(struct Qdisc *root, struct sk_buff *skb,
 	return 0;
 }
 
-static int tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb)
+static int __tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb,
+			    struct tcmsg *tcm, struct net_device *dev)
 {
-	struct tcmsg *tcm = nlmsg_data(cb->nlh);
-	struct net *net = sock_net(skb->sk);
 	struct netdev_queue *dev_queue;
-	struct net_device *dev;
 	int t, s_t;
-
-	if (nlmsg_len(cb->nlh) < sizeof(*tcm))
-		return 0;
-	dev = dev_get_by_index(net, tcm->tcm_ifindex);
-	if (!dev)
-		return 0;
 
 	s_t = cb->args[0];
 	t = 0;
@@ -2524,8 +2553,30 @@ static int tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb)
 done:
 	cb->args[0] = t;
 
-	dev_put(dev);
 	return skb->len;
+}
+
+static int tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	struct tcmsg *tcm = nlmsg_data(cb->nlh);
+	struct net *net = sock_net(skb->sk);
+	struct net_device *dev;
+	int err;
+
+	if (nlmsg_len(cb->nlh) < sizeof(*tcm))
+		return 0;
+
+	dev = dev_get_by_index(net, tcm->tcm_ifindex);
+	if (!dev)
+		return 0;
+
+	netdev_lock_ops(dev);
+	err = __tc_dump_tclass(skb, cb, tcm, dev);
+	netdev_unlock_ops(dev);
+
+	dev_put(dev);
+
+	return err;
 }
 
 #ifdef CONFIG_PROC_FS
@@ -2572,9 +2623,22 @@ static struct pernet_operations psched_net_ops = {
 	.exit = psched_net_exit,
 };
 
-#if IS_ENABLED(CONFIG_RETPOLINE)
+#if IS_ENABLED(CONFIG_MITIGATION_RETPOLINE)
 DEFINE_STATIC_KEY_FALSE(tc_skip_wrapper);
 #endif
+
+static const struct rtnl_msg_handler psched_rtnl_msg_handlers[] __initconst = {
+	//qdisc新建修改,dump操作
+	{.msgtype = RTM_NEWQDISC, .doit = tc_modify_qdisc},
+	{.msgtype = RTM_DELQDISC, .doit = tc_get_qdisc},
+	{.msgtype = RTM_GETQDISC, .doit = tc_get_qdisc,
+	 .dumpit = tc_dump_qdisc},
+	//class分类的新建修改,dump操作定义
+	{.msgtype = RTM_NEWTCLASS, .doit = tc_ctl_tclass},
+	{.msgtype = RTM_DELTCLASS, .doit = tc_ctl_tclass},
+	{.msgtype = RTM_GETTCLASS, .doit = tc_ctl_tclass,
+	 .dumpit = tc_dump_tclass},
+};
 
 static int __init pktsched_init(void)
 {
@@ -2595,16 +2659,7 @@ static int __init pktsched_init(void)
 	register_qdisc(&mq_qdisc_ops);
 	register_qdisc(&noqueue_qdisc_ops);
 
-	//qdisc新建修改,dump操作
-	rtnl_register(PF_UNSPEC, RTM_NEWQDISC, tc_modify_qdisc, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_DELQDISC, tc_get_qdisc, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_GETQDISC, tc_get_qdisc, tc_dump_qdisc,
-		      0);
-	//class分类的新建修改,dump操作定义
-	rtnl_register(PF_UNSPEC, RTM_NEWTCLASS, tc_ctl_tclass, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_DELTCLASS, tc_ctl_tclass, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_GETTCLASS, tc_ctl_tclass, tc_dump_tclass,
-		      0);
+	rtnl_register_many(psched_rtnl_msg_handlers);
 
 	tc_wrapper_init();
 

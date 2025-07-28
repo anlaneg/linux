@@ -49,8 +49,7 @@ void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 }
 
 /* Must be called with rcu lock held */
-static struct tcp_congestion_ops *tcp_ca_find_autoload(struct net *net,
-						       const char *name)
+static struct tcp_congestion_ops *tcp_ca_find_autoload(const char *name)
 {
     /*查找指定名称的tcp拥塞控制算法*/
 	struct tcp_congestion_ops *ca = tcp_ca_find(name);
@@ -156,11 +155,7 @@ EXPORT_SYMBOL_GPL(tcp_unregister_congestion_control);
 int tcp_update_congestion_control(struct tcp_congestion_ops *ca, struct tcp_congestion_ops *old_ca)
 {
 	struct tcp_congestion_ops *existing;
-	int ret;
-
-	ret = tcp_validate_congestion_control(ca);
-	if (ret)
-		return ret;
+	int ret = 0;
 
 	ca->key = jhash(ca->name, sizeof(ca->name), strlen(ca->name));
 
@@ -193,7 +188,7 @@ int tcp_update_congestion_control(struct tcp_congestion_ops *ca, struct tcp_cong
 }
 
 /*通过拥塞算法名称查找其对应的key及ecn_ca*/
-u32 tcp_ca_get_key_by_name(struct net *net, const char *name, bool *ecn_ca)
+u32 tcp_ca_get_key_by_name(const char *name, bool *ecn_ca)
 {
 	const struct tcp_congestion_ops *ca;
 	u32 key = TCP_CA_UNSPEC;
@@ -201,7 +196,7 @@ u32 tcp_ca_get_key_by_name(struct net *net, const char *name, bool *ecn_ca)
 	might_sleep();
 
 	rcu_read_lock();
-	ca = tcp_ca_find_autoload(net, name);
+	ca = tcp_ca_find_autoload(name);
 	if (ca) {
 		key = ca->key;
 		*ecn_ca = ca->flags & TCP_CONG_NEEDS_ECN;
@@ -218,9 +213,10 @@ char *tcp_ca_get_name_by_key(u32 key, char *buffer)
 
 	rcu_read_lock();
 	ca = tcp_ca_find_key(key);
-	if (ca)
-		ret = strncpy(buffer, ca->name,
-			      TCP_CA_NAME_MAX);
+	if (ca) {
+		strscpy(buffer, ca->name, TCP_CA_NAME_MAX);
+		ret = buffer;
+	}
 	rcu_read_unlock();
 
 	return ret;
@@ -295,8 +291,9 @@ void tcp_cleanup_congestion_control(struct sock *sk)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	/*清除掉旧拥塞算法资源*/
-	if (icsk->icsk_ca_ops->release)
+	if (icsk->icsk_ca_initialized && icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
+	icsk->icsk_ca_initialized = 0;
 	bpf_module_put(icsk->icsk_ca_ops, icsk->icsk_ca_ops->owner);
 }
 
@@ -309,7 +306,7 @@ int tcp_set_default_congestion_control(struct net *net, const char *name)
 
 	rcu_read_lock();
 	/*查找拥塞算法*/
-	ca = tcp_ca_find_autoload(net, name);
+	ca = tcp_ca_find_autoload(name);
 	if (!ca) {
 		ret = -ENOENT;
 	} else if (!bpf_try_module_get(ca, ca->owner)) {
@@ -365,7 +362,7 @@ void tcp_get_default_congestion_control(struct net *net, char *name)
 
 	rcu_read_lock();
 	ca = rcu_dereference(net->ipv4.tcp_congestion_control);
-	strncpy(name, ca->name, TCP_CA_NAME_MAX);
+	strscpy(name, ca->name, TCP_CA_NAME_MAX);
 	rcu_read_unlock();
 }
 
@@ -452,7 +449,7 @@ int tcp_set_congestion_control(struct sock *sk, const char *name/*拥塞算法�
 	if (!load)
 		ca = tcp_ca_find(name);/*不主动加载*/
 	else
-		ca = tcp_ca_find_autoload(sock_net(sk), name);/*主动加载*/
+		ca = tcp_ca_find_autoload(name);/*主动加载*/
 
 	/* No change asking for existing value */
 	if (ca == icsk->icsk_ca_ops) {

@@ -100,7 +100,7 @@ static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr
 	entry = tcx_entry_fetch_or_create(dev, true, &created);
 	if (!entry)
 		return -ENOMEM;
-	tcx_miniq_set_active(entry, true);
+	tcx_miniq_inc(entry);
 	//初始化q->miniqp,并使dev->miniq_ingress指向它
 	mini_qdisc_pair_init(&q->miniqp, sch, &tcx_entry(entry)->miniq);
 	if (created)
@@ -132,7 +132,7 @@ static void ingress_destroy(struct Qdisc *sch)
 	tcf_block_put_ext(q->block, sch, &q->block_info);
 
 	if (entry) {
-		tcx_miniq_set_active(entry, false);
+		tcx_miniq_dec(entry);
 		if (!tcx_entry_is_active(entry)) {
 			tcx_entry_update(dev, NULL, true);
 			tcx_entry_free(entry);
@@ -180,6 +180,7 @@ static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
 	.ingress_block_get	=	ingress_ingress_block_get,
 	.owner			=	THIS_MODULE,
 };
+MODULE_ALIAS_NET_SCH("ingress");
 
 struct clsact_sched_data {
 	struct tcf_block *ingress_block;//ingress使用的block
@@ -278,7 +279,7 @@ static int clsact_init(struct Qdisc *sch, struct nlattr *opt,
 	entry = tcx_entry_fetch_or_create(dev, true, &created);
 	if (!entry)
 		return -ENOMEM;
-	tcx_miniq_set_active(entry, true);
+	tcx_miniq_inc(entry);
 	//初始化ingress
 	mini_qdisc_pair_init(&q->miniqp_ingress, sch, &tcx_entry(entry)->miniq);
 	if (created)
@@ -299,7 +300,7 @@ static int clsact_init(struct Qdisc *sch, struct nlattr *opt,
 	entry = tcx_entry_fetch_or_create(dev, false, &created);
 	if (!entry)
 		return -ENOMEM;
-	tcx_miniq_set_active(entry, true);
+	tcx_miniq_inc(entry);
 	//初始化egress
 	mini_qdisc_pair_init(&q->miniqp_egress, sch, &tcx_entry(entry)->miniq);
 	if (created)
@@ -327,7 +328,7 @@ static void clsact_destroy(struct Qdisc *sch)
 	tcf_block_put_ext(q->egress_block, sch, &q->egress_block_info);
 
 	if (ingress_entry) {
-		tcx_miniq_set_active(ingress_entry, false);
+		tcx_miniq_dec(ingress_entry);
 		if (!tcx_entry_is_active(ingress_entry)) {
 			tcx_entry_update(dev, NULL, true);
 			tcx_entry_free(ingress_entry);
@@ -335,7 +336,7 @@ static void clsact_destroy(struct Qdisc *sch)
 	}
 
 	if (egress_entry) {
-		tcx_miniq_set_active(egress_entry, false);
+		tcx_miniq_dec(egress_entry);
 		if (!tcx_entry_is_active(egress_entry)) {
 			tcx_entry_update(dev, NULL, false);
 			tcx_entry_free(egress_entry);
@@ -372,6 +373,7 @@ static struct Qdisc_ops clsact_qdisc_ops __read_mostly = {
 	.egress_block_get	=	clsact_egress_block_get,
 	.owner			=	THIS_MODULE,
 };
+MODULE_ALIAS_NET_SCH("clsact");
 
 static int __init ingress_module_init(void)
 {
@@ -399,6 +401,5 @@ static void __exit ingress_module_exit(void)
 module_init(ingress_module_init);
 module_exit(ingress_module_exit);
 
-MODULE_ALIAS("sch_clsact");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Ingress and clsact based ingress and egress qdiscs");

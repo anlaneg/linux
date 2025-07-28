@@ -102,6 +102,8 @@ static struct virtio_transport loopback_transport = {
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
 		.notify_set_rcvlowat      = virtio_transport_notify_set_rcvlowat,
 
+		.unsent_bytes             = virtio_transport_unsent_bytes,
+
 		.read_skb = virtio_transport_read_skb,
 	},
 
@@ -131,6 +133,10 @@ static void vsock_loopback_work(struct work_struct *work)
 
 	/*逐个处理报文*/
 	while ((skb = __skb_dequeue(&pkts))) {
+		/* Decrement the bytes_unsent counter without deallocating skb
+		 * It is freed by the receiver.
+		 */
+		virtio_transport_consume_skb_sent(skb, false);
 		/*交付tap处理（当前用于dump)*/
 		virtio_transport_deliver_tap_pkt(skb);
 		/*查找并交给socket*/

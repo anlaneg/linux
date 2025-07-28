@@ -147,6 +147,11 @@ enum kernfs_root_flag {
 	 * Support user xattrs to be written to nodes rooted at this root.
 	 */
 	KERNFS_ROOT_SUPPORT_USER_XATTR		= 0x0008,
+
+	/*
+	 * Renames must not change the parent node.
+	 */
+	KERNFS_ROOT_INVARIANT_PARENT		= 0x0010,
 };
 
 /* type-specific structures for kernfs_node union members */
@@ -199,8 +204,10 @@ struct kernfs_node {
 	 * never moved to a different parent, it is safe to access the
 	 * parent directly.
 	 */
-	struct kernfs_node	*parent;//指向父节点
-	const char		*name;//名称
+	struct kernfs_node	__rcu *__parent;//指向父节点
+	const char		__rcu *name;//名称
+
+	struct rb_node		rb;
 
 	struct rb_node		rb;//用于将节点加入红黑树中
 	
@@ -208,13 +215,14 @@ struct kernfs_node {
 	const void		*ns;	/* namespace tag */
 	//节点对应的hashcode,用于查询
 	unsigned int		hash;	/* ns + name hash */
+	unsigned short		flags;//指出此节点的能力(例如文件）
+	umode_t			mode;//权限
+
 	union {
 		struct kernfs_elem_dir		dir;//目录
 		struct kernfs_elem_symlink	symlink;//链接
 		struct kernfs_elem_attr		attr;//文件属性
 	};
-
-	void			*priv;/*节点的私有数据*/
 
 	/*
 	 * 64bit unique ID.  On 64bit ino setups, id is the ino.  On 32bit,
@@ -222,9 +230,10 @@ struct kernfs_node {
 	 */
 	u64			id;//编号
 
-	unsigned short		flags;//指出此节点的能力(例如文件）
-	umode_t			mode;//权限
+	void			*priv;/*节点的私有数据*/
 	struct kernfs_iattrs	*iattr;
+
+	struct rcu_head		rcu;
 };
 
 /*
@@ -396,7 +405,7 @@ static inline bool kernfs_ns_enabled(struct kernfs_node *kn)
 }
 
 int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen);
-int kernfs_path_from_node(struct kernfs_node *root_kn, struct kernfs_node *kn,
+int kernfs_path_from_node(struct kernfs_node *kn_to, struct kernfs_node *kn_from,
 			  char *buf, size_t buflen);
 void pr_cont_kernfs_name(struct kernfs_node *kn);
 void pr_cont_kernfs_path(struct kernfs_node *kn);
@@ -417,6 +426,7 @@ struct dentry *kernfs_node_dentry(struct kernfs_node *kn,
 struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 				       unsigned int flags, void *priv);
 void kernfs_destroy_root(struct kernfs_root *root);
+unsigned int kernfs_root_flags(struct kernfs_node *kn);
 
 struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
 					 const char *name, umode_t mode,
@@ -516,6 +526,8 @@ kernfs_create_root(struct kernfs_syscall_ops *scops, unsigned int flags,
 { return ERR_PTR(-ENOSYS); }
 
 static inline void kernfs_destroy_root(struct kernfs_root *root) { }
+static inline unsigned int kernfs_root_flags(struct kernfs_node *kn)
+{ return 0; }
 
 static inline struct kernfs_node *
 kernfs_create_dir_ns(struct kernfs_node *parent, const char *name,

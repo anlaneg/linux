@@ -11,12 +11,15 @@
 struct ucounts init_ucounts = {
 	.ns    = &init_user_ns,
 	.uid   = GLOBAL_ROOT_UID,
-	.count = ATOMIC_INIT(1),
+	.count = RCUREF_INIT(1),
 };
 
 #define UCOUNTS_HASHTABLE_BITS 10
 //存储ucount对应的哈希表
-static struct hlist_head ucounts_hashtable[(1 << UCOUNTS_HASHTABLE_BITS)];
+#define UCOUNTS_HASHTABLE_ENTRIES (1 << UCOUNTS_HASHTABLE_BITS)
+static struct hlist_nulls_head ucounts_hashtable[UCOUNTS_HASHTABLE_ENTRIES] = {
+	[0 ... UCOUNTS_HASHTABLE_ENTRIES - 1] = HLIST_NULLS_HEAD_INIT(0)
+};
 static DEFINE_SPINLOCK(ucounts_lock);
 
 #define ucounts_hashfn(ns, uid)						\
@@ -24,7 +27,6 @@ static DEFINE_SPINLOCK(ucounts_lock);
 		  UCOUNTS_HASHTABLE_BITS)
 #define ucounts_hashentry(ns, uid)	\
 	(ucounts_hashtable + ucounts_hashfn(ns, uid))
-
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table_set *
@@ -39,7 +41,7 @@ static int set_is_seen(struct ctl_table_set *set)
 }
 
 static int set_permissions(struct ctl_table_header *head,
-				  struct ctl_table *table)
+			   const struct ctl_table *table)
 {
 	struct user_namespace *user_ns =
 		container_of(head->set, struct user_namespace, set);
@@ -71,7 +73,7 @@ static long ue_int_max = INT_MAX;
 		.extra1		= &ue_zero,			\
 		.extra2		= &ue_int_max,			\
 	}
-static struct ctl_table user_table[] = {
+static const struct ctl_table user_table[] = {
 	UCOUNT_ENTRY("max_user_namespaces"),
 	UCOUNT_ENTRY("max_pid_namespaces"),
 	UCOUNT_ENTRY("max_uts_namespaces"),
@@ -88,7 +90,6 @@ static struct ctl_table user_table[] = {
 	UCOUNT_ENTRY("max_fanotify_groups"),
 	UCOUNT_ENTRY("max_fanotify_marks"),
 #endif
-	{ }
 };
 #endif /* CONFIG_SYSCTL */
 
@@ -97,7 +98,7 @@ bool setup_userns_sysctls(struct user_namespace *ns)
 #ifdef CONFIG_SYSCTL
 	struct ctl_table *tbl;
 
-	BUILD_BUG_ON(ARRAY_SIZE(user_table) != UCOUNT_COUNTS + 1);
+	BUILD_BUG_ON(ARRAY_SIZE(user_table) != UCOUNT_COUNTS);
 	setup_sysctl_set(&ns->set, &set_root, set_is_seen);
 	tbl = kmemdup(user_table, sizeof(user_table), GFP_KERNEL);
 	if (tbl) {
@@ -120,7 +121,7 @@ bool setup_userns_sysctls(struct user_namespace *ns)
 void retire_userns_sysctls(struct user_namespace *ns)
 {
 #ifdef CONFIG_SYSCTL
-	struct ctl_table *tbl;
+	const struct ctl_table *tbl;
 
 	tbl = ns->sysctls->ctl_table_arg;
 	unregister_sysctl_table(ns->sysctls);
@@ -129,14 +130,19 @@ void retire_userns_sysctls(struct user_namespace *ns)
 #endif
 }
 
-static struct ucounts *find_ucounts(struct user_namespace *ns, kuid_t uid, struct hlist_head *hashent)
+static struct ucounts *find_ucounts(struct user_namespace *ns, kuid_t uid,
+				    struct hlist_nulls_head *hashent)
 {
 	struct ucounts *ucounts;
+	struct hlist_nulls_node *pos;
 
 	//在hashent 哈希桶上查找(uid与ns)相同的ucounts
-	hlist_for_each_entry(ucounts, hashent, node) {
-		if (uid_eq(ucounts->uid, uid) && (ucounts->ns == ns))
-			return ucounts;
+	guard(rcu)();
+	hlist_nulls_for_each_entry_rcu(ucounts, pos, hashent, node) {
+		if (uid_eq(ucounts->uid, uid) && (ucounts->ns == ns)) {
+			if (rcuref_get(&ucounts->count))
+				return ucounts;
+		}
 	}
 	return NULL;
 }
@@ -144,80 +150,59 @@ static struct ucounts *find_ucounts(struct user_namespace *ns, kuid_t uid, struc
 /*返回ns,uid对应的ucounts,如果不存在，则创建*/
 static void hlist_add_ucounts(struct ucounts *ucounts)
 {
-	struct hlist_head *hashent = ucounts_hashentry(ucounts->ns, ucounts->uid);
+	struct hlist_nulls_head *hashent = ucounts_hashentry(ucounts->ns, ucounts->uid);
+
 	spin_lock_irq(&ucounts_lock);
-	hlist_add_head(&ucounts->node, hashent);
+	hlist_nulls_add_head_rcu(&ucounts->node, hashent);
 	spin_unlock_irq(&ucounts_lock);
-}
-
-static inline bool get_ucounts_or_wrap(struct ucounts *ucounts)
-{
-	/* Returns true on a successful get, false if the count wraps. */
-	return !atomic_add_negative(1, &ucounts->count);
-}
-
-struct ucounts *get_ucounts(struct ucounts *ucounts)
-{
-	if (!get_ucounts_or_wrap(ucounts)) {
-		put_ucounts(ucounts);
-		ucounts = NULL;
-	}
-	return ucounts;
 }
 
 struct ucounts *alloc_ucounts(struct user_namespace *ns, kuid_t uid)
 {
-    //获得对应的hash桶
-	struct hlist_head *hashent = ucounts_hashentry(ns, uid);
+	//获得对应的hash桶
+	struct hlist_nulls_head *hashent = ucounts_hashentry(ns, uid);
 	struct ucounts *ucounts, *new;
-	bool wrapped;
 
+	ucounts = find_ucounts(ns, uid, hashent);
+	if (ucounts)
+		return ucounts;
+
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return NULL;
+
+	new->ns = ns;
+	new->uid = uid;
+	rcuref_init(&new->count, 1);
+
+	//加锁并查询ucounts
 	spin_lock_irq(&ucounts_lock);
 	ucounts = find_ucounts(ns, uid, hashent);
-	if (!ucounts) {
-	    //解锁并创建new ucounts
+	if (ucounts) {
+		//已被其它线程创建，则释放new ucounts
 		spin_unlock_irq(&ucounts_lock);
-
-		new = kzalloc(sizeof(*new), GFP_KERNEL);
-		if (!new)
-			return NULL;
-
-		new->ns = ns;
-		new->uid = uid;
-		atomic_set(&new->count, 1);
-
-		//加锁并再次查询ucounts
-		spin_lock_irq(&ucounts_lock);
-		ucounts = find_ucounts(ns, uid, hashent);
-		if (ucounts) {
-		    //已被其它线程创建，则释放new ucounts
-			kfree(new);
-		} else {
-		    //不存在，将新创建的new ucounts加入到桶上
-			hlist_add_head(&new->node, hashent);
-			get_user_ns(new->ns);
-			spin_unlock_irq(&ucounts_lock);
-			return new;
-		}
+		kfree(new);
+		return ucounts;
 	}
-	wrapped = !get_ucounts_or_wrap(ucounts);
+
+	//不存在，将新创建的new ucounts加入到桶上
+	hlist_nulls_add_head_rcu(&new->node, hashent);
+	get_user_ns(new->ns);
 	spin_unlock_irq(&ucounts_lock);
-	if (wrapped) {
-		put_ucounts(ucounts);
-		return NULL;
-	}
-	return ucounts;
+	return new;
 }
 
 void put_ucounts(struct ucounts *ucounts)
 {
 	unsigned long flags;
 
-	if (atomic_dec_and_lock_irqsave(&ucounts->count, &ucounts_lock, flags)) {
-		hlist_del_init(&ucounts->node);
+	if (rcuref_put(&ucounts->count)) {
+		spin_lock_irqsave(&ucounts_lock, flags);
+		hlist_nulls_del_rcu(&ucounts->node);
 		spin_unlock_irqrestore(&ucounts_lock, flags);
+
 		put_user_ns(ucounts->ns);
-		kfree(ucounts);
+		kfree_rcu(ucounts, rcu);
 	}
 }
 
@@ -316,7 +301,8 @@ void dec_rlimit_put_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 	do_dec_rlimit_put_ucounts(ucounts, NULL, type);
 }
 
-long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type)
+long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type,
+			    bool override_rlimit)
 {
 	/* Caller must hold a reference to ucounts */
 	struct ucounts *iter;
@@ -326,10 +312,11 @@ long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 	for (iter = ucounts; iter; iter = iter->ns->ucounts) {
 		long new = atomic_long_add_return(1, &iter->rlimit[type]);
 		if (new < 0 || new > max)
-			goto unwind;
+			goto dec_unwind;
 		if (iter == ucounts)
 			ret = new;
-		max = get_userns_rlimit_max(iter->ns, type);
+		if (!override_rlimit)
+			max = get_userns_rlimit_max(iter->ns, type);
 		/*
 		 * Grab an extra ucount reference for the caller when
 		 * the rlimit count was previously 0.
@@ -343,7 +330,6 @@ long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 dec_unwind:
 	dec = atomic_long_sub_return(1, &iter->rlimit[type]);
 	WARN_ON_ONCE(dec < 0);
-unwind:
 	do_dec_rlimit_put_ucounts(ucounts, iter, type);
 	return 0;
 }

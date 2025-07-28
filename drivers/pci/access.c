@@ -38,10 +38,13 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 int noinline pci_bus_read_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type *value)	\
 {									\
-	int res;							\
 	unsigned long flags;						\
 	u32 data = 0;							\
-	if (PCI_##size##_BAD) return PCIBIOS_BAD_REGISTER_NUMBER;	\
+	int res;							\
+									\
+	if (PCI_##size##_BAD)						\
+		return PCIBIOS_BAD_REGISTER_NUMBER;			\
+									\
 	pci_lock_config(flags);						\
 	/*调用bus的read函数完成寄存器读取*/\
 	res = bus->ops->read(bus, devfn, pos, len, &data);		\
@@ -50,6 +53,7 @@ int noinline pci_bus_read_config_##size \
 	else								\
 		*value = (type)data;					\
 	pci_unlock_config(flags);					\
+									\
 	return res;							\
 }
 
@@ -57,12 +61,16 @@ int noinline pci_bus_read_config_##size \
 int noinline pci_bus_write_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type value)	\
 {									\
-	int res;							\
 	unsigned long flags;						\
-	if (PCI_##size##_BAD) return PCIBIOS_BAD_REGISTER_NUMBER;	\
+	int res;							\
+									\
+	if (PCI_##size##_BAD)						\
+		return PCIBIOS_BAD_REGISTER_NUMBER;			\
+									\
 	pci_lock_config(flags);						\
 	res = bus->ops->write(bus, devfn, pos, len, value);		\
 	pci_unlock_config(flags);					\
+									\
 	return res;							\
 }
 
@@ -220,26 +228,29 @@ static noinline void pci_wait_cfg(struct pci_dev *dev)
 }
 
 /* Returns 0 on success, negative values indicate error. */
-#define PCI_USER_READ_CONFIG(size, type)					\
+#define PCI_USER_READ_CONFIG(size, type)				\
 int pci_user_read_config_##size						\
 	(struct pci_dev *dev, int pos, type *val)			\
 {									\
-	int ret = PCIBIOS_SUCCESSFUL;					\
 	u32 data = -1;							\
+	int ret;							\
+									\
 	/*检查pos是否对齐，如果没对齐，则报错*/\
 	if (PCI_##size##_BAD)						\
 		return -EINVAL;						\
-	raw_spin_lock_irq(&pci_lock);				\
+									\
+	raw_spin_lock_irq(&pci_lock);					\
 	if (unlikely(dev->block_cfg_access))				\
 		pci_wait_cfg(dev);					\
 		/*通过bus中的ops进行read*/\
 	ret = dev->bus->ops->read(dev->bus, dev->devfn,			\
-					pos, sizeof(type), &data/*出参*/);	\
-	raw_spin_unlock_irq(&pci_lock);				\
+				  pos, sizeof(type), &data/*出参*/);		\
+	raw_spin_unlock_irq(&pci_lock);					\
 	if (ret)							\
 		PCI_SET_ERROR_RESPONSE(val);				\
 	else								\
 		*val = (type)data;					\
+									\
 	return pcibios_err_to_errno(ret);				\
 }									\
 EXPORT_SYMBOL_GPL(pci_user_read_config_##size);
@@ -249,17 +260,20 @@ EXPORT_SYMBOL_GPL(pci_user_read_config_##size);
 int pci_user_write_config_##size					\
 	(struct pci_dev *dev, int pos, type val)			\
 {									\
-	int ret = PCIBIOS_SUCCESSFUL;					\
+	int ret;							\
+									\
 	/*对齐检查*/\
 	if (PCI_##size##_BAD)						\
 		return -EINVAL;						\
-	raw_spin_lock_irq(&pci_lock);				\
+									\
+	raw_spin_lock_irq(&pci_lock);					\
 	if (unlikely(dev->block_cfg_access))				\
 		pci_wait_cfg(dev);					\
 	/*通过bus完成写操作*/\
 	ret = dev->bus->ops->write(dev->bus, dev->devfn,		\
-					pos, sizeof(type), val);	\
-	raw_spin_unlock_irq(&pci_lock);				\
+				   pos, sizeof(type), val);		\
+	raw_spin_unlock_irq(&pci_lock);					\
+									\
 	return pcibios_err_to_errno(ret);				\
 }									\
 EXPORT_SYMBOL_GPL(pci_user_write_config_##size);

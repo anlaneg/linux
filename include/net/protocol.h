@@ -49,6 +49,7 @@ struct net_protocol {
 				 * socket lookup?
 				 */
 				icmp_strict_tag_validation:1;
+	u32			secret;
 };
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -62,6 +63,7 @@ struct inet6_protocol {
 			       __be32 info);
 
 	unsigned int	flags;	/* INET6_PROTO_xxx */
+	u32		secret;
 };
 
 #define INET6_PROTO_NOPOLICY	0x1
@@ -71,6 +73,7 @@ struct inet6_protocol {
 struct net_offload {
 	struct offload_callbacks callbacks;
 	unsigned int		 flags;	/* Flags used by IPv6 for now */
+	u32			 secret;
 };
 /* This should be set for any extension header which is compatible with GSO. */
 #define INET6_PROTO_GSO_EXTHDR	0x1

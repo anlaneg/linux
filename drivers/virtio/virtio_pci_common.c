@@ -24,6 +24,16 @@ MODULE_PARM_DESC(force_legacy,
 		 "Force legacy mode for transitional virtio 1 devices");
 #endif
 
+bool vp_is_avq(struct virtio_device *vdev, unsigned int index)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+
+	if (!virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ))
+		return false;
+
+	return index == vp_dev->admin_vq.vq_index;
+}
+
 /* wait for pending irq handlers */
 void vp_synchronize_vectors(struct virtio_device *vdev)
 {
@@ -49,6 +59,19 @@ bool vp_notify(struct virtqueue *vq)
 	return true;
 }
 
+/* Notify all slow path virtqueues on an interrupt. */
+static void vp_vring_slow_path_interrupt(int irq,
+					 struct virtio_pci_device *vp_dev)
+{
+	struct virtio_pci_vq_info *info;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vp_dev->lock, flags);
+	list_for_each_entry(info, &vp_dev->slow_virtqueues, node)
+		vring_interrupt(irq, info->vq);
+	spin_unlock_irqrestore(&vp_dev->lock, flags);
+}
+
 /* Handle a configuration change: Tell driver if it wants to know. */
 //virtio设备发生配置变更中断，告知驱动配置变更
 static irqreturn_t vp_config_changed(int irq, void *opaque)
@@ -56,6 +79,7 @@ static irqreturn_t vp_config_changed(int irq, void *opaque)
 	struct virtio_pci_device *vp_dev = opaque;
 
 	virtio_config_changed(&vp_dev->vdev);
+	vp_vring_slow_path_interrupt(irq, vp_dev);
 	return IRQ_HANDLED;
 }
 
@@ -134,6 +158,9 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors/*请
 					GFP_KERNEL))
 			goto error;
 
+	if (!per_vq_vectors)
+		desc = NULL;
+
 	if (desc) {
 	    /*如果有cpu亲昵性配置，则添加flags*/
 		flags |= PCI_IRQ_AFFINITY;
@@ -188,12 +215,18 @@ error:
 	return err;
 }
 
+static bool vp_is_slow_path_vector(u16 msix_vec)
+{
+	return msix_vec == VP_MSIX_CONFIG_VECTOR;
+}
+
 //创建vq,设置vq物理地址，中断号
 static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int index/*虚队列编号*/,
 				     void (*callback/*虚队列报文中断回调*/)(struct virtqueue *vq),
 				     const char *name/*虚队列名称*/,
-				     bool ctx/*虚队列是否有context*/,
-				     u16 msix_vec/*中断号*/)
+				     bool ctx,
+				     u16 msix_vec/*中断号*/,
+				     struct virtio_pci_vq_info **p_info)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct virtio_pci_vq_info *info = kmalloc(sizeof *info, GFP_KERNEL);
@@ -214,14 +247,17 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int in
 	if (callback) {
 		spin_lock_irqsave(&vp_dev->lock, flags);
 		//将info添加到virtqueues队列
-		list_add(&info->node, &vp_dev->virtqueues);
+		if (!vp_is_slow_path_vector(msix_vec))
+			list_add(&info->node, &vp_dev->virtqueues);
+		else
+			list_add(&info->node, &vp_dev->slow_virtqueues);
 		spin_unlock_irqrestore(&vp_dev->lock, flags);
 	} else {
 		INIT_LIST_HEAD(&info->node);
 	}
 
 	/*为设备关联index号vq_info*/
-	vp_dev->vqs[index] = info;
+	*p_info = info;
 	return vq;
 
 out_info:
@@ -229,10 +265,9 @@ out_info:
 	return vq;
 }
 
-static void vp_del_vq(struct virtqueue *vq)
+static void vp_del_vq(struct virtqueue *vq, struct virtio_pci_vq_info *info)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vq->vdev);
-	struct virtio_pci_vq_info *info = vp_dev->vqs[vq->index];
 	unsigned long flags;
 
 	/*
@@ -253,19 +288,19 @@ static void vp_del_vq(struct virtqueue *vq)
 void vp_del_vqs(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	struct virtio_pci_vq_info *info;
 	struct virtqueue *vq, *n;
 	int i;
 
 	/*遍历vdev下所有vq*/
 	list_for_each_entry_safe(vq/*当前遍历的队列*/, n/*下一个队列*/, &vdev->vqs, list) {
-		if (vp_dev->is_avq(vdev, vq->index))
-			/*跳过admin vq*/
-			continue;
+		info = vp_is_avq(vdev, vq->index) ? vp_dev->admin_vq.info :
+						    vp_dev->vqs[vq->index];
 
 		if (vp_dev->per_vq_vectors) {
-			int v = vp_dev->vqs[vq->index]->msix_vector;
-
-			if (v != VIRTIO_MSI_NO_VECTOR) {
+			int v = info->msix_vector;
+			if (v != VIRTIO_MSI_NO_VECTOR &&
+			    !vp_is_slow_path_vector(v)) {
 				/*为此队列申请了中断，释放此中断*/
 				int irq = pci_irq_vector(vp_dev->pci_dev, v);
 
@@ -273,7 +308,7 @@ void vp_del_vqs(struct virtio_device *vdev)
 				free_irq(irq, vq);
 			}
 		}
-		vp_del_vq(vq);/*调用回调完成vq资源释放*/
+		vp_del_vq(vq, info);/*调用回调完成vq资源释放*/
 	}
 	vp_dev->per_vq_vectors = false;
 
@@ -308,34 +343,102 @@ void vp_del_vqs(struct virtio_device *vdev)
 	vp_dev->vqs = NULL;
 }
 
-static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
-		struct virtqueue *vqs[]/*出参，创建的各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx报文中断回调*/,
-		const char * const names[]/*各vq名称*/, bool per_vq_vectors/*是否每个队列一个msi-x向量*/,
-		const bool *ctx,
-		struct irq_affinity *desc)
+enum vp_vq_vector_policy {
+	VP_VQ_VECTOR_POLICY_EACH,
+	VP_VQ_VECTOR_POLICY_SHARED_SLOW,
+	VP_VQ_VECTOR_POLICY_SHARED,
+};
+
+static struct virtqueue *
+vp_find_one_vq_msix(struct virtio_device *vdev, int queue_idx,
+		    vq_callback_t *callback/*各队列对应的rx,tx报文中断回调*/, const char *name/*各vq名称*/, bool ctx,
+		    bool slow_path, int *allocated_vectors,
+		    enum vp_vq_vector_policy vector_policy,
+		    struct virtio_pci_vq_info **p_info)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	struct virtqueue *vq;
 	u16 msix_vec;
+	int err;
+
+	if (!callback)
+		msix_vec = VIRTIO_MSI_NO_VECTOR;
+	else if (vector_policy == VP_VQ_VECTOR_POLICY_EACH ||
+		 (vector_policy == VP_VQ_VECTOR_POLICY_SHARED_SLOW &&
+		 !slow_path))
+		msix_vec = (*allocated_vectors)++;
+	else if (vector_policy != VP_VQ_VECTOR_POLICY_EACH &&
+		 slow_path)
+		msix_vec = VP_MSIX_CONFIG_VECTOR;
+	else
+		msix_vec = VP_MSIX_VQ_VECTOR;
+	vq = vp_setup_vq(vdev, queue_idx, callback, name, ctx, msix_vec,
+			 p_info);
+	if (IS_ERR(vq))
+		return vq;
+
+	if (vector_policy == VP_VQ_VECTOR_POLICY_SHARED ||
+	    msix_vec == VIRTIO_MSI_NO_VECTOR ||
+	    vp_is_slow_path_vector(msix_vec))
+		return vq;
+
+	/* allocate per-vq irq if available and necessary */
+	snprintf(vp_dev->msix_names[msix_vec], sizeof(*vp_dev->msix_names),
+		 "%s-%s", dev_name(&vp_dev->vdev.dev), name);
+	err = request_irq(pci_irq_vector(vp_dev->pci_dev, msix_vec),
+			  vring_interrupt, 0,
+			  vp_dev->msix_names[msix_vec], vq);
+	if (err) {
+		vp_del_vq(vq, *p_info);
+		return ERR_PTR(err);
+	}
+
+	return vq;
+}
+
+static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs,
+			    struct virtqueue *vqs[],
+			    struct virtqueue_info vqs_info[],
+			    enum vp_vq_vector_policy vector_policy,
+			    struct irq_affinity *desc)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	struct virtio_pci_admin_vq *avq = &vp_dev->admin_vq;
+	struct virtqueue_info *vqi;
 	int i, err, nvectors, allocated_vectors, queue_idx = 0;
+	struct virtqueue *vq;
+	bool per_vq_vectors;
+	u16 avq_num = 0;
 
 	//创建nvqs个virtio_pci_vq_info指针
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
 
+	if (vp_dev->avq_index) {
+		err = vp_dev->avq_index(vdev, &avq->vq_index, &avq_num);
+		if (err)
+			goto error_find;
+	}
+
+	per_vq_vectors = vector_policy != VP_VQ_VECTOR_POLICY_SHARED;
+
 	if (per_vq_vectors) {
 		/* Best option: one for change interrupt, one per vq. */
 		nvectors = 1;
-		for (i = 0; i < nvqs; ++i)
-			if (names[i] && callbacks[i])
+		for (i = 0; i < nvqs; ++i) {
+			vqi = &vqs_info[i];
+			if (vqi->name && vqi->callback)
 				++nvectors;/*已命名，并具有callback的vq数目，即中断总数*/
+		}
+		if (avq_num && vector_policy == VP_VQ_VECTOR_POLICY_EACH)
+			++nvectors;
 	} else {
 		/* Second best: one for change, shared for all vqs. */
 		nvectors = 2;/*占用2个中断*/
 	}
 
-	err = vp_request_msix_vectors(vdev, nvectors/*中断数*/, per_vq_vectors,
-				      per_vq_vectors ? desc : NULL);
+	err = vp_request_msix_vectors(vdev, nvectors/*中断数*/, per_vq_vectors, desc);
 	if (err)
 		goto error_find;
 
@@ -343,44 +446,33 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚�
 	allocated_vectors = vp_dev->msix_used_vectors;
 	//遍历创建各个队列
 	for (i = 0; i < nvqs; ++i) {
-		if (!names[i]) {
+		vqi = &vqs_info[i];
+		if (!vqi->name) {
 			vqs[i] = NULL;/*未提供name,置为NULL*/
 			continue;
 		}
-
-		//未给定回调，置不使用中断
-		if (!callbacks[i])
-			msix_vec = VIRTIO_MSI_NO_VECTOR;
-		else if (vp_dev->per_vq_vectors)
-		    //每个vq一个中断，按序分配申请的中断
-			msix_vec = allocated_vectors++;
-		else
-			msix_vec = VP_MSIX_VQ_VECTOR;
 		//创建第i个虚队列
-		vqs[i] = vp_setup_vq(vdev, queue_idx++/*队列编号*/, callbacks[i], names[i],
-				     ctx ? ctx[i] : false,
-				     msix_vec/*队列对应的中断*/);
+		vqs[i] = vp_find_one_vq_msix(vdev, queue_idx++/*队列编号*/, vqi->callback,
+					     vqi->name, vqi->ctx, false,
+					     &allocated_vectors, vector_policy,
+					     &vp_dev->vqs[i]);
 		if (IS_ERR(vqs[i])) {
 			err = PTR_ERR(vqs[i]);
 			goto error_find;
 		}
-
-		if (!vp_dev->per_vq_vectors || msix_vec == VIRTIO_MSI_NO_VECTOR)
-			continue;
-
-		/* allocate per-vq irq if available and necessary */
-		snprintf(vp_dev->msix_names[msix_vec],
-			 sizeof *vp_dev->msix_names,
-			 "%s-%s",
-			 dev_name(&vp_dev->vdev.dev), names[i]);
-		/*针对msix_vec号中断，指定中断时调用其对应的callback*/
-		err = request_irq(pci_irq_vector(vp_dev->pci_dev, msix_vec),
-				  vring_interrupt, 0,
-				  vp_dev->msix_names[msix_vec],
-				  vqs[i]);
-		if (err)
-			goto error_find;
 	}
+
+	if (!avq_num)
+		return 0;
+	sprintf(avq->name, "avq.%u", avq->vq_index);
+	vq = vp_find_one_vq_msix(vdev, avq->vq_index, vp_modern_avq_done,
+				 avq->name, false, true, &allocated_vectors,
+				 vector_policy, &vp_dev->admin_vq.info);
+	if (IS_ERR(vq)) {
+		err = PTR_ERR(vq);
+		goto error_find;
+	}
+
 	return 0;
 
 error_find:
@@ -389,15 +481,24 @@ error_find:
 }
 
 static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned int nvqs,
-		struct virtqueue *vqs[], vq_callback_t *callbacks[],
-		const char * const names[], const bool *ctx)
+			    struct virtqueue *vqs[],
+			    struct virtqueue_info vqs_info[])
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	struct virtio_pci_admin_vq *avq = &vp_dev->admin_vq;
 	int i, err, queue_idx = 0;
+	struct virtqueue *vq;
+	u16 avq_num = 0;
 
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
+
+	if (vp_dev->avq_index) {
+		err = vp_dev->avq_index(vdev, &avq->vq_index, &avq_num);
+		if (err)
+			goto out_del_vqs;
+	}
 
 	//配置中断处理函数
 	err = request_irq(vp_dev->pci_dev->irq, vp_interrupt, IRQF_SHARED,
@@ -408,17 +509,30 @@ static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned int nvqs,
 	vp_dev->intx_enabled = 1;
 	vp_dev->per_vq_vectors = false;
 	for (i = 0; i < nvqs; ++i) {
-		if (!names[i]) {
+		struct virtqueue_info *vqi = &vqs_info[i];
+
+		if (!vqi->name) {
 			vqs[i] = NULL;
 			continue;
 		}
-		vqs[i] = vp_setup_vq(vdev, queue_idx++, callbacks[i], names[i],
-				     ctx ? ctx[i] : false,
-				     VIRTIO_MSI_NO_VECTOR);
+		vqs[i] = vp_setup_vq(vdev, queue_idx++, vqi->callback,
+				     vqi->name, vqi->ctx,
+				     VIRTIO_MSI_NO_VECTOR, &vp_dev->vqs[i]);
 		if (IS_ERR(vqs[i])) {
 			err = PTR_ERR(vqs[i]);
 			goto out_del_vqs;
 		}
+	}
+
+	if (!avq_num)
+		return 0;
+	sprintf(avq->name, "avq.%u", avq->vq_index);
+	vq = vp_setup_vq(vdev, queue_idx++, vp_modern_avq_done, avq->name,
+			 false, VIRTIO_MSI_NO_VECTOR,
+			 &vp_dev->admin_vq.info);
+	if (IS_ERR(vq)) {
+		err = PTR_ERR(vq);
+		goto out_del_vqs;
 	}
 
 	return 0;
@@ -429,28 +543,36 @@ out_del_vqs:
 
 /* the config->find_vqs() implementation */
 int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列（vq)总数目*/,
-		struct virtqueue *vqs[]/*出参，各vq地址*/, vq_callback_t *callbacks[]/*指出各vq对应的callback*/,
-		const char * const names[]/*指出各vq名称*/, const bool *ctx/*指出各vq是否有context*/,
+		struct virtqueue *vqs[]/*出参，各vq地址*/, struct virtqueue_info vqs_info[],
 		struct irq_affinity *desc)
 {
 	int err;
 
 	/* Try MSI-X with one vector per queue. */
 	//尝试为每个队列申请个msi-x向量
-	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, true, ctx, desc);
+	err = vp_find_vqs_msix(vdev, nvqs, vqs, vqs_info,
+			       VP_VQ_VECTOR_POLICY_EACH, desc);
+	if (!err)
+		return 0;
+	/* Fallback: MSI-X with one shared vector for config and
+	 * slow path queues, one vector per queue for the rest.
+	 */
+	err = vp_find_vqs_msix(vdev, nvqs, vqs, vqs_info,
+			       VP_VQ_VECTOR_POLICY_SHARED_SLOW, desc);
 	if (!err)
 		return 0;
 	//尝试失败，按virtio标准规定，至少２个，至多0x800个向量，故尝试２个
 	//A device that has an MSI-X capability SHOULD support at least 2 and at most 0x800 MSI-X vectors.
 	/* Fallback: MSI-X with one vector for config, one shared for queues. */
-	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, false, ctx, desc);
+	err = vp_find_vqs_msix(vdev, nvqs, vqs, vqs_info,
+			       VP_VQ_VECTOR_POLICY_SHARED, desc);
 	if (!err)
 		return 0;
 	/* Is there an interrupt? If not give up. */
 	if (!(to_vp_device(vdev)->pci_dev->irq))
 		return err;
 	/* Finally fall back to regular interrupts. */
-	return vp_find_vqs_intx(vdev, nvqs, vqs, callbacks, names, ctx);
+	return vp_find_vqs_intx(vdev, nvqs, vqs, vqs_info);
 }
 
 const char *vp_bus_name(struct virtio_device *vdev)
@@ -495,7 +617,8 @@ const struct cpumask *vp_get_vq_affinity(struct virtio_device *vdev, int index)
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 
 	if (!vp_dev->per_vq_vectors ||
-	    vp_dev->vqs[index]->msix_vector == VIRTIO_MSI_NO_VECTOR)
+	    vp_dev->vqs[index]->msix_vector == VIRTIO_MSI_NO_VECTOR ||
+	    vp_is_slow_path_vector(vp_dev->vqs[index]->msix_vector))
 		return NULL;
 
 	return pci_irq_get_affinity(vp_dev->pci_dev,
@@ -608,6 +731,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 	vp_dev->vdev.dev.release = virtio_pci_release_dev;
 	vp_dev->pci_dev = pci_dev;
 	INIT_LIST_HEAD(&vp_dev->virtqueues);
+	INIT_LIST_HEAD(&vp_dev->slow_virtqueues);
 	spin_lock_init(&vp_dev->lock);
 
 	/* enable the device */
@@ -715,6 +839,46 @@ static int virtio_pci_sriov_configure(struct pci_dev *pci_dev, int num_vfs)
 	return num_vfs;
 }
 
+static void virtio_pci_reset_prepare(struct pci_dev *pci_dev)
+{
+	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
+	int ret = 0;
+
+	ret = virtio_device_reset_prepare(&vp_dev->vdev);
+	if (ret) {
+		if (ret != -EOPNOTSUPP)
+			dev_warn(&pci_dev->dev, "Reset prepare failure: %d",
+				 ret);
+		return;
+	}
+
+	if (pci_is_enabled(pci_dev))
+		pci_disable_device(pci_dev);
+}
+
+static void virtio_pci_reset_done(struct pci_dev *pci_dev)
+{
+	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
+	int ret;
+
+	if (pci_is_enabled(pci_dev))
+		return;
+
+	ret = pci_enable_device(pci_dev);
+	if (!ret) {
+		pci_set_master(pci_dev);
+		ret = virtio_device_reset_done(&vp_dev->vdev);
+	}
+
+	if (ret && ret != -EOPNOTSUPP)
+		dev_warn(&pci_dev->dev, "Reset done failure: %d", ret);
+}
+
+static const struct pci_error_handlers virtio_pci_err_handler = {
+	.reset_prepare  = virtio_pci_reset_prepare,
+	.reset_done     = virtio_pci_reset_done,
+};
+
 static struct pci_driver virtio_pci_driver = {
 	.name		= "virtio-pci",
 	//用于pci设备与driver间的match,只要vendor是redhat，则就能匹配
@@ -728,6 +892,7 @@ static struct pci_driver virtio_pci_driver = {
 	.driver.pm	= &virtio_pci_pm_ops,
 #endif
 	.sriov_configure = virtio_pci_sriov_configure,/*virtio设备支持sriov*/
+	.err_handler	= &virtio_pci_err_handler,
 };
 
 struct virtio_device *virtio_pci_vf_get_pf_dev(struct pci_dev *pdev)

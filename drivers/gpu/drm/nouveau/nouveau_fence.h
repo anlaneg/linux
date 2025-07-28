@@ -44,6 +44,7 @@ struct nouveau_fence_chan {
 	u32 context;
 	char name[32];
 
+	struct work_struct uevent_work;
 	struct nvif_event event;
 	int notify_ref, dead, killed;
 };
@@ -82,6 +83,7 @@ void nv17_fence_resume(struct nouveau_drm *drm);
 int nv50_fence_create(struct nouveau_drm *);
 int nv84_fence_create(struct nouveau_drm *);
 int nvc0_fence_create(struct nouveau_drm *);
+int gv100_fence_create(struct nouveau_drm *);
 
 struct nv84_fence_chan {
 	struct nouveau_fence_chan base;

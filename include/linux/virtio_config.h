@@ -19,6 +19,20 @@ struct virtio_shm_region {
 typedef void vq_callback_t(struct virtqueue *);
 
 /**
+ * struct virtqueue_info - Info for a virtqueue passed to find_vqs().
+ * @name: virtqueue description. Used mainly for debugging, NULL for
+ *        a virtqueue unused by the driver.
+ * @callback: A callback to invoke on a used buffer notification.
+ *            NULL for a virtqueue that does not need a callback.
+ * @ctx: A flag to indicate to maintain an extra context per virtqueue.
+ */
+struct virtqueue_info {
+	const char *name;/*各vq对应的名称*/
+	vq_callback_t *callback;/*各vq对应的中断回调函数*/
+	bool ctx;
+};
+
+/**
  * struct virtio_config_ops - operations for configuring a virtio device
  * Note: Do not assume that a transport implements all of the operations
  *       getting/setting a value as a simple read/write! Generally speaking,
@@ -53,10 +67,7 @@ typedef void vq_callback_t(struct virtqueue *);
  *	vdev: the virtio_device
  *	nvqs: the number of virtqueues to find
  *	vqs: on success, includes new virtqueues
- *	callbacks: array of callbacks, for each virtqueue
- *		include a NULL entry for vqs that do not need a callback
- *	names: array of virtqueue names (mainly for debugging)
- *		include a NULL entry for vqs unused by driver
+ *	vqs_info: array of virtqueue info structures
  *	Returns 0 on success or error status
  * @del_vqs: free virtqueues found by find_vqs().
  * @synchronize_cbs: synchronize with the virtqueue callbacks (optional)
@@ -93,8 +104,6 @@ typedef void vq_callback_t(struct virtqueue *);
  *	Returns 0 on success or error status
  *	If disable_vq_and_reset is set, then enable_vq_after_reset must also be
  *	set.
- * @create_avq: create admin virtqueue resource.
- * @destroy_avq: destroy admin virtqueue resource.
  */
 struct virtio_config_ops {
 	//具体一个virtio设备的配置项获取，给定offset，取其对应的buffer内容
@@ -112,9 +121,9 @@ struct virtio_config_ops {
 	//重置设备
 	void (*reset)(struct virtio_device *vdev);
 	//构造对应的nvqs个虚队列
-	int (*find_vqs)(struct virtio_device *, unsigned nvqs/*虚队列总数，rx+tx+ctl队列*/,
-			struct virtqueue *vqs[]/*出参，指向各队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx回调*/,
-			const char * const names[]/*各vq名称*/, const bool *ctx/**/,
+	int (*find_vqs)(struct virtio_device *vdev, unsigned int nvqs/*虚队列总数，rx+tx+ctl队列*/,
+			struct virtqueue *vqs[]/*出参，指向各队列地址*/,
+			struct virtqueue_info vqs_info[],
 			struct irq_affinity *desc);
 	/*删除所有vqs*/
 	void (*del_vqs)(struct virtio_device *);
@@ -130,7 +139,7 @@ struct virtio_config_ops {
 			       const struct cpumask *cpu_mask);
 	/*获取vq中断亲和*/
 	const struct cpumask *(*get_vq_affinity)(struct virtio_device *vdev,
-			int index);
+						 int index);
 	/*用于获取指定cap 对应的map内存起始地址，长度*/
 	bool (*get_shm_region)(struct virtio_device *vdev,
 			       struct virtio_shm_region *region, u8 id);
@@ -138,10 +147,6 @@ struct virtio_config_ops {
 	int (*disable_vq_and_reset)(struct virtqueue *vq);
 	/*reset vq后使能vq*/
 	int (*enable_vq_after_reset)(struct virtqueue *vq);
-	/*创建admin vq*/
-	int (*create_avq)(struct virtio_device *vdev);
-	/*移除admin vq*/
-	void (*destroy_avq)(struct virtio_device *vdev);
 };
 
 /* If driver didn't advertise the feature, it will never appear. */
@@ -236,37 +241,28 @@ static inline bool virtio_has_dma_quirk(const struct virtio_device *vdev)
 }
 
 static inline
+int virtio_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*vq数目*/,
+		    struct virtqueue *vqs[]/*出参，生成的各vq指针*/,
+		    struct virtqueue_info vqs_info[],
+		    struct irq_affinity *desc/*出参*/)
+{
+	/*依据具体的virtio设备来处理，例如调用vp_find_vqs回调*/
+	return vdev->config->find_vqs(vdev, nvqs, vqs, vqs_info, desc);
+}
+
+static inline
 struct virtqueue *virtio_find_single_vq(struct virtio_device *vdev,
 					vq_callback_t *c, const char *n)
 {
-	vq_callback_t *callbacks[] = { c };
-	const char *names[] = { n };
+	struct virtqueue_info vqs_info[] = {
+		{ n, c },
+	};
 	struct virtqueue *vq;
-	int err = vdev->config->find_vqs(vdev, 1, &vq, callbacks, names, NULL,
-					 NULL);
+	int err = virtio_find_vqs(vdev, 1, &vq, vqs_info, NULL);
+
 	if (err < 0)
 		return ERR_PTR(err);
 	return vq;
-}
-
-static inline
-int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs/*vq数目*/,
-			struct virtqueue *vqs[]/*出参，生成的各vq指针*/, vq_callback_t *callbacks[]/*各vq对应的中断回调函数*/,
-			const char * const names[]/*各vq对应的名称*/,
-			struct irq_affinity *desc/*出参*/)
-{
-	/*依据具体的virtio设备来处理，例如调用vp_find_vqs回调*/
-	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, NULL, desc);
-}
-
-static inline
-int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs/*vq数目*/,
-			struct virtqueue *vqs[]/*出参，生成的各vq指针*/, vq_callback_t *callbacks[]/*各vq对应的中断回调函数*/,
-			const char * const names[]/*各vq对应的名称*/, const bool *ctx,
-			struct irq_affinity *desc)
-{
-	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, ctx,
-				      desc);
 }
 
 /**
@@ -359,6 +355,8 @@ static inline
 bool virtio_get_shm_region(struct virtio_device *vdev,
 			   struct virtio_shm_region *region, u8 id)
 {
+	if (!region->len)
+		return false;
 	if (!vdev->config->get_shm_region)
 		return false;
 	return vdev->config->get_shm_region(vdev, region, id);

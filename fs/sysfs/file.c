@@ -19,6 +19,12 @@
 
 #include "sysfs.h"
 
+static struct kobject *sysfs_file_kobj(struct kernfs_node *kn)
+{
+	guard(rcu)();
+	return rcu_dereference(kn->__parent)->priv;
+}
+
 /*
  * Determine ktype->sysfs_ops for the given kernfs_node.  This function
  * must be called while holding an active reference.
@@ -26,7 +32,7 @@
 //针对kernfs_node来返回sysfs_ops
 static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 {
-	struct kobject *kobj = kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(kn);
 
 	if (kn->flags & KERNFS_LOCKDEP)
 		lockdep_assert_held(kn);
@@ -42,7 +48,7 @@ static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 {
 	struct kernfs_open_file *of = sf->private;
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 	const struct sysfs_ops *ops = sysfs_file_ops(of->kn);
 	ssize_t count;
 	char *buf;
@@ -87,7 +93,7 @@ static ssize_t sysfs_kf_bin_read(struct kernfs_open_file *of, char *buf,
 				 size_t count, loff_t pos)
 {
 	struct bin_attribute *battr = of->kn->priv;
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 	loff_t size = file_inode(of->file)->i_size;
 
 	if (!count)
@@ -100,8 +106,11 @@ static ssize_t sysfs_kf_bin_read(struct kernfs_open_file *of, char *buf,
 			count = size - pos;
 	}
 
-	if (!battr->read)
+	if (!battr->read && !battr->read_new)
 		return -EIO;
+
+	if (battr->read_new)
+		return battr->read_new(of->file, kobj, battr, buf, pos, count);
 
 	//通过二进制属性的read函数进行处理
 	return battr->read(of->file, kobj, battr, buf, pos, count);
@@ -113,7 +122,7 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 {
     //取文件对应的sysfs_ops
 	const struct sysfs_ops *ops = sysfs_file_ops(of->kn);
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 	ssize_t len;
 
 	/*
@@ -142,7 +151,7 @@ static ssize_t sysfs_kf_write(struct kernfs_open_file *of, char *buf,
 			      size_t count, loff_t pos)
 {
 	const struct sysfs_ops *ops = sysfs_file_ops(of->kn);
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 
 	if (!count)
 		return 0;
@@ -155,7 +164,7 @@ static ssize_t sysfs_kf_bin_write(struct kernfs_open_file *of, char *buf,
 				  size_t count, loff_t pos)
 {
 	struct bin_attribute *battr = of->kn->priv;
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 	loff_t size = file_inode(of->file)->i_size;
 
 	if (size) {
@@ -166,8 +175,11 @@ static ssize_t sysfs_kf_bin_write(struct kernfs_open_file *of, char *buf,
 	if (!count)
 		return 0;
 
-	if (!battr->write)
+	if (!battr->write && !battr->write_new)
 		return -EIO;
+
+	if (battr->write_new)
+		return battr->write_new(of->file, kobj, battr, buf, pos, count);
 
 	//二进制调用battr的write进行写
 	return battr->write(of->file, kobj, battr, buf, pos, count);
@@ -177,7 +189,7 @@ static int sysfs_kf_bin_mmap(struct kernfs_open_file *of,
 			     struct vm_area_struct *vma)
 {
 	struct bin_attribute *battr = of->kn->priv;
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 
 	//二进制调用mmap来进行读写
 	return battr->mmap(of->file, kobj, battr, vma);
@@ -187,7 +199,7 @@ static loff_t sysfs_kf_bin_llseek(struct kernfs_open_file *of, loff_t offset,
 				  int whence)
 {
 	struct bin_attribute *battr = of->kn->priv;
-	struct kobject *kobj = of->kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(of->kn);
 
 	if (battr->llseek)
 		return battr->llseek(of->file, kobj, battr, offset, whence);
@@ -344,7 +356,7 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 }
 
 int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
-		const struct bin_attribute *battr, umode_t mode,
+		const struct bin_attribute *battr, umode_t mode, size_t size,
 		kuid_t uid, kgid_t gid, const void *ns)
 {
 	const struct attribute *attr = &battr->attr;
@@ -352,13 +364,19 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 	const struct kernfs_ops *ops;
 	struct kernfs_node *kn;
 
+	if (battr->read && battr->read_new)
+		return -EINVAL;
+
+	if (battr->write && battr->write_new)
+		return -EINVAL;
+
 	if (battr->mmap)
 		ops = &sysfs_bin_kfops_mmap;
-	else if (battr->read && battr->write)
+	else if ((battr->read || battr->read_new) && (battr->write || battr->write_new))
 		ops = &sysfs_bin_kfops_rw;
-	else if (battr->read)
+	else if (battr->read || battr->read_new)
 		ops = &sysfs_bin_kfops_ro;
-	else if (battr->write)
+	else if (battr->write || battr->write_new)
 		ops = &sysfs_bin_kfops_wo;
 	else
 		ops = &sysfs_file_kfops_empty;
@@ -370,7 +388,7 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 	//调用文件创建,使mode仅9个bit生效
 	//使用“操作集","属性“
 	kn = __kernfs_create_file(parent, attr->name, mode & 0777, uid, gid,
-				  battr->size/*文件大小*/, ops/*文件操作集*/, (void *)attr/*文件私有数据*/, ns, key);
+				  size/*文件大小*/, ops/*文件操作集*/, (void *)attr/*文件私有数据*/, ns, key);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
 			sysfs_warn_dup(parent, attr->name);
@@ -502,6 +520,8 @@ struct kernfs_node *sysfs_break_active_protection(struct kobject *kobj,
 	kn = kernfs_find_and_get(kobj->sd, attr->name);
 	if (kn)
 		kernfs_break_active_protection(kn);
+	else
+		kobject_put(kobj);
 	return kn;
 }
 EXPORT_SYMBOL_GPL(sysfs_break_active_protection);
@@ -519,7 +539,7 @@ EXPORT_SYMBOL_GPL(sysfs_break_active_protection);
  */
 void sysfs_unbreak_active_protection(struct kernfs_node *kn)
 {
-	struct kobject *kobj = kn->parent->priv;
+	struct kobject *kobj = sysfs_file_kobj(kn);
 
 	kernfs_unbreak_active_protection(kn);
 	kernfs_put(kn);
@@ -621,8 +641,8 @@ int sysfs_create_bin_file(struct kobject *kobj,
 
 	kobject_get_ownership(kobj, &uid, &gid);
 	//添加二进制文件到kobj->sd
-	return sysfs_add_bin_file_mode_ns(kobj->sd, attr, attr->attr.mode, uid,
-					   gid, NULL);
+	return sysfs_add_bin_file_mode_ns(kobj->sd, attr, attr->attr.mode,
+					  attr->size, uid, gid, NULL);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_bin_file);
 
@@ -828,3 +848,30 @@ int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
 	return len;
 }
 EXPORT_SYMBOL_GPL(sysfs_emit_at);
+
+/**
+ *	sysfs_bin_attr_simple_read - read callback to simply copy from memory.
+ *	@file:	attribute file which is being read.
+ *	@kobj:	object to which the attribute belongs.
+ *	@attr:	attribute descriptor.
+ *	@buf:	destination buffer.
+ *	@off:	offset in bytes from which to read.
+ *	@count:	maximum number of bytes to read.
+ *
+ * Simple ->read() callback for bin_attributes backed by a buffer in memory.
+ * The @private and @size members in struct bin_attribute must be set to the
+ * buffer's location and size before the bin_attribute is created in sysfs.
+ *
+ * Bounds check for @off and @count is done in sysfs_kf_bin_read().
+ * Negative value check for @off is done in vfs_setpos() and default_llseek().
+ *
+ * Returns number of bytes written to @buf.
+ */
+ssize_t sysfs_bin_attr_simple_read(struct file *file, struct kobject *kobj,
+				   const struct bin_attribute *attr, char *buf,
+				   loff_t off, size_t count)
+{
+	memcpy(buf, attr->private + off, count);
+	return count;
+}
+EXPORT_SYMBOL_GPL(sysfs_bin_attr_simple_read);

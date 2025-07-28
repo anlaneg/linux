@@ -138,6 +138,7 @@ struct Qdisc {
 	struct qdisc_skb_head	q;//保存skb的队列
 	struct gnet_stats_basic_sync bstats;
 	struct gnet_stats_queue	qstats;
+	int                     owner;
 	unsigned long		state;
 	unsigned long		state2; /* must be written under qdisc spinlock */
 	struct Qdisc            *next_sched;
@@ -149,6 +150,7 @@ struct Qdisc {
 
 	struct rcu_head		rcu;
 	netdevice_tracker	dev_tracker;
+	struct lock_class_key	root_lock_key;
 	/* private data */
 	long privdata[] ____cacheline_aligned;
 };
@@ -265,12 +267,7 @@ static inline bool qdisc_may_bulk(const struct Qdisc *qdisc)
 /*检查此txq可用的极限值*/
 static inline int qdisc_avail_bulklimit(const struct netdev_queue *txq)
 {
-#ifdef CONFIG_BQL
-	/* Non-BQL migrated drivers will return 0, too. */
-	return dql_avail(&txq->dql);
-#else
-	return 0;
-#endif
+	return netdev_queue_dql_avail(txq);
 }
 
 struct Qdisc_class_ops {
@@ -501,7 +498,13 @@ struct tcf_proto {
 	spinlock_t		lock;
 	//标记此tp正在被删除
 	bool			deleting;
+<<<<<<< HEAD
 	refcount_t		refcnt;//引用计数
+=======
+	bool			counted;
+	bool			usesw;
+	refcount_t		refcnt;
+>>>>>>> upstream/master
 	struct rcu_head		rcu;
 	struct hlist_node	destroy_ht_node;
 };
@@ -555,6 +558,7 @@ struct tcf_block {
 	//用于挂接struct tcf_block_owner_item类型,指明谁使用此block
 	struct list_head owner_list;
 	bool keep_dst;
+	atomic_t useswcnt;
 	atomic_t offloadcnt; /* Number of oddloaded filters */
 	unsigned int nooffloaddevcnt; /* Number of devs unable to do offload */
 	unsigned int lockeddevcnt; /* Number of devs that require rtnl lock. */
@@ -888,6 +892,14 @@ static inline bool qdisc_tx_changing(const struct net_device *dev)
 	return false;
 }
 
+/* "noqueue" qdisc identified by not having any enqueue, see noqueue_init() */
+static inline bool qdisc_txq_has_no_queue(const struct netdev_queue *txq)
+{
+	struct Qdisc *qdisc = rcu_access_pointer(txq->qdisc);
+
+	return qdisc->enqueue == NULL;
+}
+
 /* Is the device using the noop qdisc on all queues?  */
 static inline bool qdisc_tx_is_noop(const struct net_device *dev)
 {
@@ -933,13 +945,12 @@ static inline void qdisc_calculate_pkt_len(struct sk_buff *skb,
 static inline int qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 				struct sk_buff **to_free)
 {
-	qdisc_calculate_pkt_len(skb, sch);
 	return sch->enqueue(skb, sch, to_free);
 }
 
 //累计bstats的字节数及报文数
 static inline void _bstats_update(struct gnet_stats_basic_sync *bstats,
-				  __u64 bytes, __u32 packets)
+				  __u64 bytes, __u64 packets)
 {
 	u64_stats_update_begin(&bstats->syncp);
 	u64_stats_add(&bstats->bytes, bytes);
@@ -1057,14 +1068,6 @@ static inline void qdisc_qstats_qlen_backlog(struct Qdisc *sch,  __u32 *qlen,
 	*backlog = qstats.backlog;
 }
 
-static inline void qdisc_tree_flush_backlog(struct Qdisc *sch)
-{
-	__u32 qlen, backlog;
-
-	qdisc_qstats_qlen_backlog(sch, &qlen, &backlog);
-	qdisc_tree_reduce_backlog(sch, qlen, backlog);
-}
-
 static inline void qdisc_purge_queue(struct Qdisc *sch)
 {
 	__u32 qlen, backlog;
@@ -1130,7 +1133,25 @@ static inline struct sk_buff *__qdisc_dequeue_head(struct qdisc_skb_head *qh)
 	return skb;
 }
 
+<<<<<<< HEAD
 //自先进先出队列的头部位置出队一个报文
+=======
+static inline struct sk_buff *qdisc_dequeue_internal(struct Qdisc *sch, bool direct)
+{
+	struct sk_buff *skb;
+
+	skb = __skb_dequeue(&sch->gso_skb);
+	if (skb) {
+		sch->q.qlen--;
+		return skb;
+	}
+	if (direct)
+		return __qdisc_dequeue_head(&sch->q);
+	else
+		return sch->dequeue(sch);
+}
+
+>>>>>>> upstream/master
 static inline struct sk_buff *qdisc_dequeue_head(struct Qdisc *sch)
 {
 	struct sk_buff *skb = __qdisc_dequeue_head(&sch->q);
@@ -1348,6 +1369,14 @@ static inline int qdisc_drop(struct sk_buff *skb, struct Qdisc *sch,
 	qdisc_qstats_drop(sch);
 
 	return NET_XMIT_DROP;
+}
+
+static inline int qdisc_drop_reason(struct sk_buff *skb, struct Qdisc *sch,
+				    struct sk_buff **to_free,
+				    enum skb_drop_reason reason)
+{
+	tcf_set_drop_reason(skb, reason);
+	return qdisc_drop(skb, sch, to_free);
 }
 
 static inline int qdisc_drop_all(struct sk_buff *skb, struct Qdisc *sch,

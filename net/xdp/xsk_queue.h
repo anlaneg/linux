@@ -266,7 +266,7 @@ u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
 			nr_frags = 0;
 		} else {
 			nr_frags++;
-			if (nr_frags == pool->netdev->xdp_zc_max_segs) {
+			if (nr_frags == pool->xdp_zc_max_segs) {
 				nr_frags = 0;
 				break;
 			}
@@ -312,11 +312,6 @@ static inline u32 xskq_cons_nb_entries(struct xsk_queue *q, u32 max)
 	entries = q->cached_prod - q->cached_cons;
 
 	return entries >= max ? max : entries;
-}
-
-static inline bool xskq_cons_has_entries(struct xsk_queue *q, u32 cnt)
-{
-	return xskq_cons_nb_entries(q, cnt) >= cnt;
 }
 
 static inline bool xskq_cons_peek_addr_unchecked(struct xsk_queue *q, u64 *addr)

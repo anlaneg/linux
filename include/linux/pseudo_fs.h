@@ -6,6 +6,7 @@
 struct pseudo_fs_context {
 	/*用于指明super block的ops*/
 	const struct super_operations *ops;
+	const struct export_operations *eops;
 	const struct xattr_handler * const *xattr;
 	/*对pseudo-fs而言，此dentry ops将被赋给dentry*/
 	const struct dentry_operations *dops;

@@ -49,23 +49,10 @@ static char *resp_state_name[] = {
 /* rxe_recv calls here to add a request packet to the input queue */
 void rxe_resp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
-	int must_sched;
-	struct rxe_pkt_info *pkt = SKB_TO_PKT(skb);
-
 	/*将skb添加到qp->req_pkts队列*/
 	skb_queue_tail(&qp->req_pkts, skb);
-
-	/*检查是否需要调度（队列长度大于1，则需要调度，先保证前面的报文处理；rc rdma操作必调度）*/
-	must_sched = (pkt->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST) ||
-			(skb_queue_len(&qp->req_pkts) > 1);
-
-	/*触发task,使其开始处理收到的报文*/
-	if (must_sched)
-		/*触发调度*/
-		rxe_sched_task(&qp->resp.task);
-	else
-		/*无论等待调度，直接运行此task*/
-		rxe_run_task(&qp->resp.task);
+	/*触发调度*/
+	rxe_sched_task(&qp->recv_task);
 }
 
 /*rxe_resp_queue_pkt函数将报文填充到qp->req_pkts中，此函数负责自队列peek首个报文*/
@@ -383,9 +370,22 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	/*
 	 * See IBA C9-92
 	 * For UD QPs we only check if the packet will fit in the
-	 * receive buffer later. For rmda operations additional
+	 * receive buffer later. For RDMA operations additional
 	 * length checks are performed in check_rkey.
 	 */
+	if ((qp_type(qp) == IB_QPT_GSI) || (qp_type(qp) == IB_QPT_UD)) {
+		unsigned int payload = payload_size(pkt);
+		unsigned int recv_buffer_len = 0;
+		int i;
+
+		for (i = 0; i < qp->resp.wqe->dma.num_sge; i++)
+			recv_buffer_len += qp->resp.wqe->dma.sge[i].length;
+		if (payload + sizeof(union rdma_network_hdr) > recv_buffer_len) {
+			rxe_dbg_qp(qp, "The receive buffer is too small for this UD packet.\n");
+			return RESPST_ERR_LENGTH;
+		}
+	}
+
 	if (pkt->mask & RXE_PAYLOAD_MASK && ((qp_type(qp) == IB_QPT_RC) ||
 					     (qp_type(qp) == IB_QPT_UC))) {
 		/*报文中有payload,且qp为rc/uc时进入*/
@@ -396,20 +396,20 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 		    (pkt->mask & RXE_END_MASK)) {
 			if (unlikely(payload > mtu)) {
 				/*报文的opcode(首或尾）提供的payload大于mtu*/
-				rxe_dbg_qp(qp, "only packet too long");
+				rxe_dbg_qp(qp, "only packet too long\n");
 				return RESPST_ERR_LENGTH;
 			}
 		} else if ((pkt->mask & RXE_START_MASK) ||
 			   (pkt->mask & RXE_MIDDLE_MASK)) {
 			/*报文的opcode(首或中间的）报文的payload必须与mtu相等*/
 			if (unlikely(payload != mtu)) {
-				rxe_dbg_qp(qp, "first or middle packet not mtu");
+				rxe_dbg_qp(qp, "first or middle packet not mtu\n");
 				return RESPST_ERR_LENGTH;
 			}
 		} else if (pkt->mask & RXE_END_MASK) {
 			/*end报文的payload不得为0，不得大于mtu*/
 			if (unlikely((payload == 0) || (payload > mtu))) {
-				rxe_dbg_qp(qp, "last packet zero or too long");
+				rxe_dbg_qp(qp, "last packet zero or too long\n");
 				return RESPST_ERR_LENGTH;
 			}
 		}
@@ -419,7 +419,7 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	if (pkt->mask & RXE_RETH_MASK) {
 		if (reth_len(pkt) > (1U << 31)) {
 			/*指明的dma长度有误*/
-			rxe_dbg_qp(qp, "dma length too long");
+			rxe_dbg_qp(qp, "dma length too long\n");
 			return RESPST_ERR_LENGTH;
 		}
 	}
@@ -758,10 +758,16 @@ static enum resp_states atomic_reply(struct rxe_qp *qp,
 	if (!res->replay) {
 		u64 iova = qp->resp.va + qp->resp.offset;
 
-		err = rxe_mr_do_atomic_op(mr, iova, pkt->opcode,
-					  atmeth_comp(pkt),
-					  atmeth_swap_add(pkt),
-					  &res->atomic.orig_val);
+		if (is_odp_mr(mr))
+			err = rxe_odp_atomic_op(mr, iova, pkt->opcode,
+						atmeth_comp(pkt),
+						atmeth_swap_add(pkt),
+						&res->atomic.orig_val);
+		else
+			err = rxe_mr_do_atomic_op(mr, iova, pkt->opcode,
+						  atmeth_comp(pkt),
+						  atmeth_swap_add(pkt),
+						  &res->atomic.orig_val);
 		if (err)
 			return err;
 
@@ -799,7 +805,16 @@ static enum resp_states atomic_write_reply(struct rxe_qp *qp,
 	value = *(u64 *)payload_addr(pkt);
 	iova = qp->resp.va + qp->resp.offset;
 
-	err = rxe_mr_do_atomic_write(mr, iova, value);
+	/* See IBA oA19-28 */
+	if (unlikely(mr->state != RXE_MR_STATE_VALID)) {
+		rxe_dbg_mr(mr, "mr not in valid state\n");
+		return RESPST_ERR_RKEY_VIOLATION;
+	}
+
+	if (is_odp_mr(mr))
+		err = rxe_odp_do_atomic_write(mr, iova, value);
+	else
+		err = rxe_mr_do_atomic_write(mr, iova, value);
 	if (err)
 		return err;
 
@@ -1222,7 +1237,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 		}
 	} else {
 		if (wc->status != IB_WC_WR_FLUSH_ERR)
-			rxe_err_qp(qp, "non-flush error status = %d",
+			rxe_err_qp(qp, "non-flush error status = %d\n",
 				wc->status);
 	}
 
@@ -1547,7 +1562,7 @@ static int flush_recv_wqe(struct rxe_qp *qp, struct rxe_recv_wqe *wqe)
 
 	err = rxe_cq_post(qp->rcq, &cqe, 0);
 	if (err)
-		rxe_dbg_cq(qp->rcq, "post cq failed err = %d", err);
+		rxe_dbg_cq(qp->rcq, "post cq failed err = %d\n", err);
 
 	return err;
 }
@@ -1592,7 +1607,7 @@ static void flush_recv_queue(struct rxe_qp *qp, bool notify)
 
 /*处理收到的请求类报文（已串到qp->req_pkts链表）并进行响应,
  * （包括将报文内容填充到用户态指明的recv_wr)*/
-int rxe_responder(struct rxe_qp *qp)
+int rxe_receiver(struct rxe_qp *qp)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);/*关联的rxe设备*/
 	enum resp_states state;

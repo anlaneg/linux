@@ -115,9 +115,8 @@ static void ip6_list_rcv_finish(struct net *net, struct sock *sk,
 {
 	struct sk_buff *skb, *next, *hint = NULL;
 	struct dst_entry *curr_dst = NULL;
-	struct list_head sublist;
+	LIST_HEAD(sublist);
 
-	INIT_LIST_HEAD(&sublist);
 	list_for_each_entry_safe(skb, next, head, list) {
 		struct dst_entry *dst;
 
@@ -176,9 +175,9 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 
 	SKB_DR_SET(reason, NOT_SPECIFIED);
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL ||
-	    !idev/*设备无inet6_dev，丢包*/ || unlikely(idev->cnf.disable_ipv6)/*inet6设置禁止了ipv6*/) {
+	    !idev/*设备无inet6_dev，丢包*/ || unlikely(READ_ONCE(idev->cnf.disable_ipv6))/*inet6设置禁止了ipv6*/) {
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDISCARDS);
-		if (idev && unlikely(idev->cnf.disable_ipv6))
+		if (idev && unlikely(READ_ONCE(idev->cnf.disable_ipv6)))
 			SKB_DR_SET(reason, IPV6DISABLED);
 		goto drop;
 	}
@@ -249,7 +248,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	if (!ipv6_addr_is_multicast(&hdr->daddr) &&
 	    (skb->pkt_type == PACKET_BROADCAST ||
 	     skb->pkt_type == PACKET_MULTICAST) &&
-	    idev->cnf.drop_unicast_in_l2_multicast) {
+	    READ_ONCE(idev->cnf.drop_unicast_in_l2_multicast)) {
 		SKB_DR_SET(reason, UNICAST_IN_L2_MULTICAST);
 		/*mac层是组播，但目的ip不是组播，丢包*/
 		goto err;
@@ -351,9 +350,8 @@ void ipv6_list_rcv(struct list_head *head, struct packet_type *pt,
 	struct net_device *curr_dev = NULL;
 	struct net *curr_net = NULL;
 	struct sk_buff *skb, *next;
-	struct list_head sublist;
+	LIST_HEAD(sublist);
 
-	INIT_LIST_HEAD(&sublist);
 	list_for_each_entry_safe(skb, next, head, list) {
 		struct net_device *dev = skb->dev;
 		struct net *net = dev_net(dev);
@@ -513,10 +511,8 @@ discard:
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	skb_clear_delivery_time(skb);
-	rcu_read_lock();
 	/*local in报文投递*/
 	ip6_protocol_deliver_rcu(net, skb, 0, false);
-	rcu_read_unlock();
 
 	return 0;
 }
@@ -524,10 +520,16 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 /*路由确定此ipv6报文送主机，此函数走local_in钩子点*/
 int ip6_input(struct sk_buff *skb)
 {
-    /*ipv6走local in流程*/
-	return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
-		       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
-		       ip6_input_finish);
+	int res;
+
+	rcu_read_lock();
+    	/*ipv6走local in流程*/
+	res = NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
+		      dev_net_rcu(skb->dev), NULL, skb, skb->dev, NULL,
+		      ip6_input_finish);
+	rcu_read_unlock();
+
+	return res;
 }
 EXPORT_SYMBOL_GPL(ip6_input);
 

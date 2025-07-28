@@ -349,7 +349,7 @@ void nci_rsp_packet(struct nci_dev *ndev, struct sk_buff *skb)
 
 	/* we got a rsp, stop the cmd timer */
 	//停掉cmd的timer,我们已收到响应
-	del_timer(&ndev->cmd_timer);
+	timer_delete(&ndev->cmd_timer);
 
 	pr_debug("NCI RX: MT=rsp, PBF=%d, GID=0x%x, OID=0x%x, plen=%d\n",
 		 nci_pbf(skb->data),

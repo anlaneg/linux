@@ -243,7 +243,7 @@ static long xsk_map_delete_elem(struct bpf_map *map, void *key)
 	struct xsk_map *m = container_of(map, struct xsk_map, map);
 	struct xdp_sock __rcu **map_entry;
 	struct xdp_sock *old_xs;
-	int k = *(u32 *)key;
+	u32 k = *(u32 *)key;
 
 	/*要删除的索引k超过最大值，参数无效*/
 	if (k >= map->max_entries)

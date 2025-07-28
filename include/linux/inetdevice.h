@@ -59,14 +59,16 @@ struct in_device {
 
 /*取attr对应的配置*/
 #define IPV4_DEVCONF(cnf, attr) ((cnf).data[IPV4_DEVCONF_ ## attr - 1])
+#define IPV4_DEVCONF_RO(cnf, attr) READ_ONCE(IPV4_DEVCONF(cnf, attr))
 #define IPV4_DEVCONF_ALL(net, attr) \
 	IPV4_DEVCONF((*(net)->ipv4.devconf_all), attr)
+#define IPV4_DEVCONF_ALL_RO(net, attr) READ_ONCE(IPV4_DEVCONF_ALL(net, attr))
 
 /*取ipv4设备具体的一个配置项*/
-static inline int ipv4_devconf_get(struct in_device *in_dev, int index)
+static inline int ipv4_devconf_get(const struct in_device *in_dev, int index)
 {
 	index--;
-	return in_dev->cnf.data[index];
+	return READ_ONCE(in_dev->cnf.data[index]);
 }
 
 //设置具体的一项inet4设备配置
@@ -75,7 +77,7 @@ static inline void ipv4_devconf_set(struct in_device *in_dev, int index,
 {
 	index--;
 	set_bit(index, in_dev->cnf.state);
-	in_dev->cnf.data[index] = val;
+	WRITE_ONCE(in_dev->cnf.data[index], val);
 }
 
 static inline void ipv4_devconf_setall(struct in_device *in_dev)
@@ -91,18 +93,18 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 	ipv4_devconf_set((in_dev), IPV4_DEVCONF_ ## attr, (val))
 
 #define IN_DEV_ANDCONF(in_dev, attr) \
-	(IPV4_DEVCONF_ALL(dev_net(in_dev->dev), attr) && \
+	(IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), attr) && \
 	 IN_DEV_CONF_GET((in_dev), attr))
 
 #define IN_DEV_NET_ORCONF(in_dev, net, attr) \
-	(IPV4_DEVCONF_ALL(net, attr)/*取all 设备配置*/ || \
+	(IPV4_DEVCONF_ALL_RO(net, attr)/*取all 设备配置*/ || \
 	 IN_DEV_CONF_GET((in_dev), attr)/*取给定设备的配置*/)
 
 #define IN_DEV_ORCONF(in_dev, attr) \
 	IN_DEV_NET_ORCONF(in_dev, dev_net(in_dev->dev), attr)
 
 #define IN_DEV_MAXCONF(in_dev, attr) \
-	(max(IPV4_DEVCONF_ALL(dev_net(in_dev->dev), attr), \
+	(max(IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), attr), \
 	     IN_DEV_CONF_GET((in_dev), attr)))
 
 /*ipv4设备是否处理转发状态*/
@@ -151,7 +153,7 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 
 //inet4接口地址（对inet4简写成in表示很无语）
 struct in_ifaddr {
-	struct hlist_node	hash;
+	struct hlist_node	addr_lst;
 	//用于串连下一个inet4接口地址
 	struct in_ifaddr	__rcu *ifa_next;
 	/*地址对应的inet4设备*/
@@ -252,6 +254,10 @@ static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 	for (ifa = rtnl_dereference((in_dev)->ifa_list); ifa;	\
 	     ifa = rtnl_dereference(ifa->ifa_next))
 
+#define in_dev_for_each_ifa_rtnl_net(net, ifa, in_dev)			\
+	for (ifa = rtnl_net_dereference(net, (in_dev)->ifa_list); ifa;	\
+	     ifa = rtnl_net_dereference(net, ifa->ifa_next))
+
 //遍历此in_dev上所有ip地址列表
 #define in_dev_for_each_ifa_rcu(ifa, in_dev)			\
 	for (ifa = rcu_dereference((in_dev)->ifa_list); ifa;	\
@@ -279,6 +285,11 @@ static inline struct in_device *in_dev_get(const struct net_device *dev)
 static inline struct in_device *__in_dev_get_rtnl(const struct net_device *dev)
 {
 	return rtnl_dereference(dev->ip_ptr);
+}
+
+static inline struct in_device *__in_dev_get_rtnl_net(const struct net_device *dev)
+{
+	return rtnl_net_dereference(dev_net(dev), dev->ip_ptr);
 }
 
 /* called with rcu_read_lock or rtnl held */

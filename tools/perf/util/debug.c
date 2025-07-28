@@ -27,13 +27,14 @@
 #include <linux/ctype.h>
 
 #ifdef HAVE_LIBTRACEEVENT
-#include <traceevent/event-parse.h>
+#include <event-parse.h>
 #else
 #define LIBTRACEEVENT_VERSION 0
 #endif
 
 /*当前日志输出级别*/
 int verbose;
+int debug_kmaps;
 int debug_peo_args;
 bool dump_trace = false, quiet = false;
 int debug_ordered_events;
@@ -41,12 +42,13 @@ static int redirect_to_stderr;
 int debug_data_convert;
 static FILE *_debug_file;
 bool debug_display_time;
+int debug_type_profile;
 
 FILE *debug_file(void)
 {
 	if (!_debug_file) {
-		pr_warning_once("debug_file not set");
 		debug_set_file(stderr);
+		pr_warning_once("debug_file not set");
 	}
 	return _debug_file;
 }
@@ -231,6 +233,8 @@ static struct sublevel_option debug_opts[] = {
 	{ .name = "stderr",		.value_ptr = &redirect_to_stderr},
 	{ .name = "data-convert",	.value_ptr = &debug_data_convert },
 	{ .name = "perf-event-open",	.value_ptr = &debug_peo_args },
+	{ .name = "kmaps",		.value_ptr = &debug_kmaps },
+	{ .name = "type-profile",	.value_ptr = &debug_type_profile },
 	{ .name = NULL, }
 };
 
@@ -269,6 +273,8 @@ int perf_quiet_option(void)
 	/* For debug variables that are used as bool types, set to 0. */
 	redirect_to_stderr = 0;
 	debug_peo_args = 0;
+	debug_kmaps = 0;
+	debug_type_profile = 0;
 
 	return 0;
 }

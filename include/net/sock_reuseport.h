@@ -29,7 +29,7 @@ struct sock_reuseport {
 	unsigned int		has_conns:1;
 	struct bpf_prog __rcu	*prog;		/* optional BPF sock selector */
 	//记录可reuse的sockets
-	struct sock		*socks[];	/* array of sock pointers */
+	struct sock		*socks[] __counted_by(max_socks);
 };
 
 extern int reuseport_alloc(struct sock *sk, bool bind_inany);

@@ -25,9 +25,14 @@ enum
 	//收到的字节数
 	IPSTATS_MIB_INOCTETS,			/* InOctets */
 	IPSTATS_MIB_INDELIVERS,			/* InDelivers */
-	IPSTATS_MIB_OUTFORWDATAGRAMS,		/* OutForwDatagrams */
+	IPSTATS_MIB_NOECTPKTS,			/* InNoECTPkts */
+	IPSTATS_MIB_ECT1PKTS,			/* InECT1Pkts */
+	IPSTATS_MIB_ECT0PKTS,			/* InECT0Pkts */
+	IPSTATS_MIB_CEPKTS,			/* InCEPkts */
 	IPSTATS_MIB_OUTREQUESTS,		/* OutRequests */
+	IPSTATS_MIB_OUTPKTS,			/* OutTransmits */
 	IPSTATS_MIB_OUTOCTETS,			/* OutOctets */
+	IPSTATS_MIB_OUTFORWDATAGRAMS,		/* OutForwDatagrams */
 /* other fields */
 	//头部错误
 	IPSTATS_MIB_INHDRERRORS,		/* InHdrErrors */
@@ -56,16 +61,7 @@ enum
 	IPSTATS_MIB_INBCASTOCTETS,		/* InBcastOctets */
 	IPSTATS_MIB_OUTBCASTOCTETS,		/* OutBcastOctets */
 	IPSTATS_MIB_CSUMERRORS,			/* InCsumErrors */
-	//Non ECN-Capable Transport, Non-ECT
-	IPSTATS_MIB_NOECTPKTS,			/* InNoECTPkts */
-	//ECN Capable Transport, ECT(0)
-	IPSTATS_MIB_ECT1PKTS,			/* InECT1Pkts */
-	//ECN Capable Transport, ECT(1)
-	IPSTATS_MIB_ECT0PKTS,			/* InECT0Pkts */
-	//Congestion Encountered, CE.
-	IPSTATS_MIB_CEPKTS,			/* InCEPkts */
 	IPSTATS_MIB_REASM_OVERLAPS,		/* ReasmOverlaps */
-	IPSTATS_MIB_OUTPKTS,			/* OutTransmits */
 	__IPSTATS_MIB_MAX
 };
 
@@ -197,6 +193,9 @@ enum
 	LINUX_MIB_TIMEWAITKILLED,		/* TimeWaitKilled */
 	LINUX_MIB_PAWSACTIVEREJECTED,		/* PAWSActiveRejected */
 	LINUX_MIB_PAWSESTABREJECTED,		/* PAWSEstabRejected */
+	LINUX_MIB_TSECRREJECTED,		/* TSEcrRejected */
+	LINUX_MIB_PAWS_OLD_ACK,			/* PAWSOldAck */
+	LINUX_MIB_PAWS_TW_REJECTED,		/* PAWSTimewait */
 	LINUX_MIB_DELAYEDACKS,			/* DelayedACKs */
 	LINUX_MIB_DELAYEDACKLOCKED,		/* DelayedACKLocked */
 	LINUX_MIB_DELAYEDACKLOST,		/* DelayedACKLost */
@@ -348,6 +347,10 @@ enum
 	LINUX_MIB_XFRMFWDHDRERROR,		/* XfrmFwdHdrError*/
 	LINUX_MIB_XFRMOUTSTATEINVALID,		/* XfrmOutStateInvalid */
 	LINUX_MIB_XFRMACQUIREERROR,		/* XfrmAcquireError */
+	LINUX_MIB_XFRMOUTSTATEDIRERROR,		/* XfrmOutStateDirError */
+	LINUX_MIB_XFRMINSTATEDIRERROR,		/* XfrmInStateDirError */
+	LINUX_MIB_XFRMINIPTFSERROR,		/* XfrmInIptfsError */
+	LINUX_MIB_XFRMOUTNOQSPACE,		/* XfrmOutNoQueueSpace */
 	__LINUX_MIB_XFRMMAX
 };
 
@@ -367,6 +370,11 @@ enum
 	LINUX_MIB_TLSRXDEVICERESYNC,		/* TlsRxDeviceResync */
 	LINUX_MIB_TLSDECRYPTRETRY,		/* TlsDecryptRetry */
 	LINUX_MIB_TLSRXNOPADVIOL,		/* TlsRxNoPadViolation */
+	LINUX_MIB_TLSRXREKEYOK,			/* TlsRxRekeyOk */
+	LINUX_MIB_TLSRXREKEYERROR,		/* TlsRxRekeyError */
+	LINUX_MIB_TLSTXREKEYOK,			/* TlsTxRekeyOk */
+	LINUX_MIB_TLSTXREKEYERROR,		/* TlsTxRekeyError */
+	LINUX_MIB_TLSRXREKEYRECEIVED,		/* TlsRxRekeyReceived */
 	__LINUX_MIB_TLSMAX
 };
 

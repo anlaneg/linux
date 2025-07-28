@@ -120,13 +120,11 @@ retry:
 int fd_statfs(int fd, struct kstatfs *st)
 {
 	/*针对fd拿到struct fd,然后针对fd拿到path,再调用statfs*/
-	struct fd f = fdget_raw(fd);
-	int error = -EBADF;
-	if (f.file) {
-		error = vfs_statfs(&f.file->f_path, st);
-		fdput(f);
-	}
-	return error;
+	CLASS(fd_raw, f)(fd);
+
+	if (fd_empty(f))
+		return -EBADF;
+	return vfs_statfs(&fd_file(f)->f_path, st);
 }
 
 static int do_statfs_native(struct kstatfs *st, struct statfs __user *p)

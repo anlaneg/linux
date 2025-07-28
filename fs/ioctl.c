@@ -41,7 +41,7 @@
  *
  * Returns 0 on success, -errno on error.
  */
-long vfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+int vfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int error = -ENOTTY;
 
@@ -230,16 +230,16 @@ static int ioctl_fiemap(struct file *filp, struct fiemap __user *ufiemap)
 	return error;
 }
 
-static long ioctl_file_clone(struct file *dst_file, unsigned long srcfd,
-			     u64 off, u64 olen, u64 destoff)
+static int ioctl_file_clone(struct file *dst_file, unsigned long srcfd,
+			    u64 off, u64 olen, u64 destoff)
 {
-	struct fd src_file = fdget(srcfd);
+	CLASS(fd, src_file)(srcfd);
 	loff_t cloned;
 	int ret;
 
-	if (!src_file.file)
+	if (fd_empty(src_file))
 		return -EBADF;
-	cloned = vfs_clone_file_range(src_file.file, off, dst_file, destoff,
+	cloned = vfs_clone_file_range(fd_file(src_file), off, dst_file, destoff,
 				      olen, 0);
 	if (cloned < 0)
 		ret = cloned;
@@ -247,12 +247,11 @@ static long ioctl_file_clone(struct file *dst_file, unsigned long srcfd,
 		ret = -EINVAL;
 	else
 		ret = 0;
-	fdput(src_file);
 	return ret;
 }
 
-static long ioctl_file_clone_range(struct file *file,
-				   struct file_clone_range __user *argp)
+static int ioctl_file_clone_range(struct file *file,
+				  struct file_clone_range __user *argp)
 {
 	struct file_clone_range args;
 
@@ -399,8 +398,8 @@ static int ioctl_fsfreeze(struct file *filp)
 
 	/* Freeze */
 	if (sb->s_op->freeze_super)
-		return sb->s_op->freeze_super(sb, FREEZE_HOLDER_USERSPACE);
-	return freeze_super(sb, FREEZE_HOLDER_USERSPACE);
+		return sb->s_op->freeze_super(sb, FREEZE_HOLDER_USERSPACE, NULL);
+	return freeze_super(sb, FREEZE_HOLDER_USERSPACE, NULL);
 }
 
 static int ioctl_fsthaw(struct file *filp)
@@ -412,8 +411,8 @@ static int ioctl_fsthaw(struct file *filp)
 
 	/* Thaw */
 	if (sb->s_op->thaw_super)
-		return sb->s_op->thaw_super(sb, FREEZE_HOLDER_USERSPACE);
-	return thaw_super(sb, FREEZE_HOLDER_USERSPACE);
+		return sb->s_op->thaw_super(sb, FREEZE_HOLDER_USERSPACE, NULL);
+	return thaw_super(sb, FREEZE_HOLDER_USERSPACE, NULL);
 }
 
 static int ioctl_file_dedupe_range(struct file *file,
@@ -765,12 +764,42 @@ static int ioctl_fssetxattr(struct file *file, void __user *argp)
 	return err;
 }
 
+static int ioctl_getfsuuid(struct file *file, void __user *argp)
+{
+	struct super_block *sb = file_inode(file)->i_sb;
+	struct fsuuid2 u = { .len = sb->s_uuid_len, };
+
+	if (!sb->s_uuid_len)
+		return -ENOTTY;
+
+	memcpy(&u.uuid[0], &sb->s_uuid, sb->s_uuid_len);
+
+	return copy_to_user(argp, &u, sizeof(u)) ? -EFAULT : 0;
+}
+
+static int ioctl_get_fs_sysfs_path(struct file *file, void __user *argp)
+{
+	struct super_block *sb = file_inode(file)->i_sb;
+
+	if (!strlen(sb->s_sysfs_name))
+		return -ENOTTY;
+
+	struct fs_sysfs_path u = {};
+
+	u.len = scnprintf(u.name, sizeof(u.name), "%s/%s", sb->s_type->name, sb->s_sysfs_name);
+
+	return copy_to_user(argp, &u, sizeof(u)) ? -EFAULT : 0;
+}
+
 /*
  * do_vfs_ioctl() is not for drivers and not intended to be EXPORT_SYMBOL()'d.
  * It's just a simple helper for sys_ioctl and compat_sys_ioctl.
  *
  * When you add any new common ioctls to the switches above and below,
  * please ensure they have compatible arguments in compat mode.
+ *
+ * The LSM mailing list should also be notified of any command additions or
+ * changes, as specific LSMs may be affected.
  */
 static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 			unsigned int cmd, unsigned long arg)
@@ -794,7 +823,8 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 		return ioctl_fioasync(fd, filp, argp);
 
 	case FIOQSIZE:
-		if (S_ISDIR(inode->i_mode) || S_ISREG(inode->i_mode) ||
+		if (S_ISDIR(inode->i_mode) ||
+		    (S_ISREG(inode->i_mode) && !IS_ANON_FILE(inode)) ||
 		    S_ISLNK(inode->i_mode)) {
 			loff_t res = inode_get_bytes(inode);
 			return copy_to_user(argp, &res, sizeof(res)) ?
@@ -829,7 +859,7 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 		return ioctl_file_dedupe_range(filp, argp);
 
 	case FIONREAD:
-		if (!S_ISREG(inode->i_mode))
+		if (!S_ISREG(inode->i_mode) || IS_ANON_FILE(inode))
 			return vfs_ioctl(filp, cmd, arg);
 
 		return put_user(i_size_read(inode) - filp->f_pos,
@@ -847,9 +877,15 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 	case FS_IOC_FSSETXATTR:
 		return ioctl_fssetxattr(filp, argp);
 
+	case FS_IOC_GETFSUUID:
+		return ioctl_getfsuuid(filp, argp);
+
+	case FS_IOC_GETFSSYSFSPATH:
+		return ioctl_get_fs_sysfs_path(filp, argp);
+
 	default:
-	    /*仅针对普通文件执行的其它ioctl cmd处理*/
-		if (S_ISREG(inode->i_mode))
+	    	/*仅针对普通文件执行的其它ioctl cmd处理*/
+		if (S_ISREG(inode->i_mode) && !IS_ANON_FILE(inode))
 			return file_ioctl(filp, cmd, argp);
 		break;
 	}
@@ -860,24 +896,22 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 /*实现ioctl系统调用*/
 SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {
-	struct fd f = fdget(fd);/*取fd结构体*/
+	CLASS(fd, f)(fd);/*取fd结构体*/
 	int error;
 
-	if (!f.file)
+	if (fd_empty(f))
 		return -EBADF;
 
-	error = security_file_ioctl(f.file, cmd, arg);
+	error = security_file_ioctl(fd_file(f), cmd, arg);
 	if (error)
-		goto out;
+		return error;
 
 	/*处理著名ioctl cmd*/
-	error = do_vfs_ioctl(f.file/*取得操作的文件*/, fd, cmd, arg);
+	error = do_vfs_ioctl(fd_file(f)/*取得操作的文件*/, fd, cmd, arg);
 	if (error == -ENOIOCTLCMD)
 		/*没有找到对应的cmd,调用vfs_ioctl处理*/
-		error = vfs_ioctl(f.file, cmd, arg);
+		error = vfs_ioctl(fd_file(f), cmd, arg);
 
-out:
-	fdput(f);
 	return error;
 }
 
@@ -923,35 +957,35 @@ COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 		       compat_ulong_t, arg)
 {
     /*由fd获得file*/
-	struct fd f = fdget(fd);
+	CLASS(fd, f)(fd);
 	int error;
 
-	if (!f.file)
+	if (fd_empty(f))
 		return -EBADF;
 
-	error = security_file_ioctl_compat(f.file, cmd, arg);
+	error = security_file_ioctl_compat(fd_file(f), cmd, arg);
 	if (error)
-		goto out;
+		return error;
 
 	switch (cmd) {
 	/* FICLONE takes an int argument, so don't use compat_ptr() */
 	case FICLONE:
-		error = ioctl_file_clone(f.file, arg, 0, 0, 0);
+		error = ioctl_file_clone(fd_file(f), arg, 0, 0, 0);
 		break;
 
 #if defined(CONFIG_X86_64)
 	/* these get messy on amd64 due to alignment differences */
 	case FS_IOC_RESVSP_32:
 	case FS_IOC_RESVSP64_32:
-		error = compat_ioctl_preallocate(f.file, 0, compat_ptr(arg));
+		error = compat_ioctl_preallocate(fd_file(f), 0, compat_ptr(arg));
 		break;
 	case FS_IOC_UNRESVSP_32:
 	case FS_IOC_UNRESVSP64_32:
-		error = compat_ioctl_preallocate(f.file, FALLOC_FL_PUNCH_HOLE,
+		error = compat_ioctl_preallocate(fd_file(f), FALLOC_FL_PUNCH_HOLE,
 				compat_ptr(arg));
 		break;
 	case FS_IOC_ZERO_RANGE_32:
-		error = compat_ioctl_preallocate(f.file, FALLOC_FL_ZERO_RANGE,
+		error = compat_ioctl_preallocate(fd_file(f), FALLOC_FL_ZERO_RANGE,
 				compat_ptr(arg));
 		break;
 #endif
@@ -972,22 +1006,18 @@ COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 	 */
 	default:
 	    /*其它著名cmd处理*/
-		error = do_vfs_ioctl(f.file, fd, cmd,
+		error = do_vfs_ioctl(fd_file(f), fd, cmd,
 				     (unsigned long)compat_ptr(arg));
 		if (error != -ENOIOCTLCMD)
 			break;
 
 		/*非著名cmd，如果file ops恰提供了compat_ioctl,则调用*/
-		if (f.file->f_op->compat_ioctl)
-			error = f.file->f_op->compat_ioctl(f.file, cmd, arg);
+		if (fd_file(f)->f_op->compat_ioctl)
+			error = fd_file(f)->f_op->compat_ioctl(fd_file(f), cmd, arg);
 		if (error == -ENOIOCTLCMD)
 			error = -ENOTTY;
 		break;
 	}
-
- out:
-	fdput(f);
-
 	return error;
 }
 #endif

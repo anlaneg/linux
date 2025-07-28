@@ -784,7 +784,6 @@ static struct virtio_driver p9_virtio_drv = {
 	.feature_table  = features,
 	.feature_table_size = ARRAY_SIZE(features),
 	.driver.name    = KBUILD_MODNAME,
-	.driver.owner	= THIS_MODULE,
 	.id_table	= id_table,/*指明匹配virtio 9p设备*/
 	.probe		= p9_virtio_probe,
 	.remove		= p9_virtio_remove,

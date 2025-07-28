@@ -15,7 +15,6 @@
 #include <linux/delay.h>
 #include <linux/time.h>
 #include <linux/etherdevice.h>
-#include <linux/genetlink.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
@@ -255,11 +254,13 @@ void ovs_dp_detach_port(struct vport *p)
 /* Must be called with rcu_read_lock. */
 void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对应的key值*/)
 {
+	struct ovs_pcpu_storage *ovs_pcpu = this_cpu_ptr(ovs_pcpu_storage);
 	const struct vport *p = OVS_CB(skb)->input_vport;
 	struct datapath *dp = p->dp;
 	struct sw_flow *flow;
 	struct sw_flow_actions *sf_acts;
 	struct dp_stats_percpu *stats;
+	bool ovs_pcpu_locked = false;
 	u64 *stats_counter;
 	u32 n_mask_hit;
 	u32 n_cache_hit;
@@ -305,11 +306,27 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 	//更新flow的状态信息
 	ovs_flow_stats_update(flow, key->tp.flags, skb);
 	sf_acts = rcu_dereference(flow->sf_acts);
+	/* This path can be invoked recursively: Use the current task to
+	 * identify recursive invocation - the lock must be acquired only once.
+	 * Even with disabled bottom halves this can be preempted on PREEMPT_RT.
+	 * Limit the locking to RT to avoid assigning `owner' if it can be
+	 * avoided.
+	 */
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) && ovs_pcpu->owner != current) {
+		local_lock_nested_bh(&ovs_pcpu_storage->bh_lock);
+		ovs_pcpu->owner = current;
+		ovs_pcpu_locked = true;
+	}
+
 	//flow查找成功，执行action
 	error = ovs_execute_actions(dp, skb, sf_acts, key);
 	if (unlikely(error))
 		net_dbg_ratelimited("ovs: action execution error on datapath %s: %d\n",
 				    ovs_dp_name(dp), error);
+	if (ovs_pcpu_locked) {
+		ovs_pcpu->owner = NULL;
+		local_unlock_nested_bh(&ovs_pcpu_storage->bh_lock);
+	}
 
 	stats_counter = &stats->n_hit;
 
@@ -705,8 +722,14 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	sf_acts = rcu_dereference(flow->sf_acts);
 
 	local_bh_disable();
+	local_lock_nested_bh(&ovs_pcpu_storage->bh_lock);
+	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+		this_cpu_write(ovs_pcpu_storage->owner, current);
 	//针对此报文执行action
 	err = ovs_execute_actions(dp, packet, sf_acts, &flow->key);
+	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+		this_cpu_write(ovs_pcpu_storage->owner, NULL);
+	local_unlock_nested_bh(&ovs_pcpu_storage->bh_lock);
 	local_bh_enable();
 	rcu_read_unlock();
 
@@ -1895,8 +1918,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	parms.dp = dp;
 	parms.port_no = OVSP_LOCAL;
 	parms.upcall_portids = a[OVS_DP_ATTR_UPCALL_PID];
-	parms.desired_ifindex = a[OVS_DP_ATTR_IFINDEX]
-		? nla_get_s32(a[OVS_DP_ATTR_IFINDEX]) : 0;
+	parms.desired_ifindex = nla_get_s32_default(a[OVS_DP_ATTR_IFINDEX], 0);
 
 	/* So far only local changes have been made, now need the lock. */
 	ovs_lock();
@@ -2174,6 +2196,7 @@ static int ovs_vport_cmd_fill_info(struct vport *vport, struct sk_buff *skb,
 {
 	struct ovs_header *ovs_header;
 	struct ovs_vport_stats vport_stats;
+	struct net *net_vport;
 	int err;
 
 	ovs_header = genlmsg_put(skb, portid, seq, &dp_vport_genl_family,
@@ -2190,12 +2213,15 @@ static int ovs_vport_cmd_fill_info(struct vport *vport, struct sk_buff *skb,
 	    nla_put_u32(skb, OVS_VPORT_ATTR_IFINDEX, vport->dev->ifindex))
 		goto nla_put_failure;
 
-	if (!net_eq(net, dev_net(vport->dev))) {
-		int id = peernet2id_alloc(net, dev_net(vport->dev), gfp);
+	rcu_read_lock();
+	net_vport = dev_net_rcu(vport->dev);
+	if (!net_eq(net, net_vport)) {
+		int id = peernet2id_alloc(net, net_vport, GFP_ATOMIC);
 
 		if (nla_put_s32(skb, OVS_VPORT_ATTR_NETNSID, id))
-			goto nla_put_failure;
+			goto nla_put_failure_unlock;
 	}
+	rcu_read_unlock();
 
 	ovs_vport_get_stats(vport, &vport_stats);
 	if (nla_put_64bit(skb, OVS_VPORT_ATTR_STATS,
@@ -2216,6 +2242,8 @@ static int ovs_vport_cmd_fill_info(struct vport *vport, struct sk_buff *skb,
 	genlmsg_end(skb, ovs_header);
 	return 0;
 
+nla_put_failure_unlock:
+	rcu_read_unlock();
 nla_put_failure:
 	err = -EMSGSIZE;
 error:
@@ -2345,8 +2373,7 @@ static int ovs_vport_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	//vport在datapath中的编号
-	port_no = a[OVS_VPORT_ATTR_PORT_NO]
-		? nla_get_u32(a[OVS_VPORT_ATTR_PORT_NO]) : 0;
+	port_no = nla_get_u32_default(a[OVS_VPORT_ATTR_PORT_NO], 0);
 	if (port_no >= DP_MAX_PORTS)
 		return -EFBIG;
 
@@ -2389,8 +2416,8 @@ restart:
 	parms.dp = dp;
 	parms.port_no = port_no;
 	parms.upcall_portids = a[OVS_VPORT_ATTR_UPCALL_PID];
-	parms.desired_ifindex = a[OVS_VPORT_ATTR_IFINDEX]
-		? nla_get_s32(a[OVS_VPORT_ATTR_IFINDEX]) : 0;
+	parms.desired_ifindex = nla_get_s32_default(a[OVS_VPORT_ATTR_IFINDEX],
+						    0);
 
 	//新建vport
 	vport = new_vport(&parms);
@@ -2810,7 +2837,7 @@ static struct pernet_operations ovs_net_ops = {
 };
 
 static const char * const ovs_drop_reasons[] = {
-#define S(x)	(#x),
+#define S(x) [(x) & ~SKB_DROP_REASON_SUBSYS_MASK] = (#x),
 	OVS_DROP_REASONS(S)
 #undef S
 };
@@ -2819,6 +2846,28 @@ static struct drop_reason_list drop_reason_list_ovs = {
 	.reasons = ovs_drop_reasons,
 	.n_reasons = ARRAY_SIZE(ovs_drop_reasons),
 };
+
+static int __init ovs_alloc_percpu_storage(void)
+{
+	unsigned int cpu;
+
+	ovs_pcpu_storage = alloc_percpu(*ovs_pcpu_storage);
+	if (!ovs_pcpu_storage)
+		return -ENOMEM;
+
+	for_each_possible_cpu(cpu) {
+		struct ovs_pcpu_storage *ovs_pcpu;
+
+		ovs_pcpu = per_cpu_ptr(ovs_pcpu_storage, cpu);
+		local_lock_init(&ovs_pcpu->bh_lock);
+	}
+	return 0;
+}
+
+static void ovs_free_percpu_storage(void)
+{
+	free_percpu(ovs_pcpu_storage);
+}
 
 static int __init dp_init(void)
 {
@@ -2829,13 +2878,13 @@ static int __init dp_init(void)
 
 	pr_info("Open vSwitch switching datapath\n");
 
-	err = action_fifos_init();
+	err = ovs_alloc_percpu_storage();
 	if (err)
 		goto error;
 
 	err = ovs_internal_dev_rtnl_link_register();
 	if (err)
-		goto error_action_fifos_exit;
+		goto error;
 
 	err = ovs_flow_init();
 	if (err)
@@ -2878,9 +2927,8 @@ error_flow_exit:
 	ovs_flow_exit();
 error_unreg_rtnl_link:
 	ovs_internal_dev_rtnl_link_unregister();
-error_action_fifos_exit:
-	action_fifos_exit();
 error:
+	ovs_free_percpu_storage();
 	return err;
 }
 
@@ -2895,7 +2943,7 @@ static void dp_cleanup(void)
 	ovs_vport_exit();
 	ovs_flow_exit();
 	ovs_internal_dev_rtnl_link_unregister();
-	action_fifos_exit();
+	ovs_free_percpu_storage();
 }
 
 module_init(dp_init);

@@ -29,10 +29,7 @@
 
 /*
  * Each block ramdisk device has a xarray brd_pages of pages that stores
- * the pages containing the block device's contents. A brd page's ->index is
- * its offset in PAGE_SIZE units. This is similar to, but in no way connected
- * with, the kernel's pagecache or buffer cache (which sit above our block
- * device).
+ * the pages containing the block device's contents.
  */
 struct brd_device {
 	int			brd_number;/*brd设备唯一编号*/
@@ -51,58 +48,45 @@ struct brd_device {
  */
 static struct page *brd_lookup_page(struct brd_device *brd, sector_t sector)
 {
-	pgoff_t idx;
-	struct page *page;
-
 	/*扇区数向右移PAGE_SECTORS_SHIFT，即可换算为page数*/
-	idx = sector >> PAGE_SECTORS_SHIFT; /* sector to page index */
-	page = xa_load(&brd->brd_pages, idx);/*加载idx号page*/
-
-	BUG_ON(page && page->index != idx);/*索引必须相等*/
-
-	return page;/*返回此扇区对应的page*/
+	return xa_load(&brd->brd_pages, sector >> PAGE_SECTORS_SHIFT);/*加载idx号page*/
 }
 
 /*
  * Insert a new page for a given sector, if one does not already exist.
  */
-static int brd_insert_page(struct brd_device *brd, sector_t sector, gfp_t gfp)
+static struct page *brd_insert_page(struct brd_device *brd, sector_t sector,
+		blk_opf_t opf)
+	__releases(rcu)
+	__acquires(rcu)
 {
-	pgoff_t idx;
-	struct page *page, *cur;
-	int ret = 0;
+	gfp_t gfp = (opf & REQ_NOWAIT) ? GFP_NOWAIT : GFP_NOIO;
+	struct page *page, *ret;
 
-	page = brd_lookup_page(brd, sector);
-	if (page)
-		/*此page存在，返回0*/
-		return 0;
-
+	rcu_read_unlock();
 	/*申请一个page*/
 	page = alloc_page(gfp | __GFP_ZERO | __GFP_HIGHMEM);
-	if (!page)
-		return -ENOMEM;
-
-	xa_lock(&brd->brd_pages);
-
-	idx = sector >> PAGE_SECTORS_SHIFT;/*记录此page的索引*/
-	page->index = idx;/*设置此page的索引*/
-
-	/*在index位置存储此page*/
-	cur = __xa_cmpxchg(&brd->brd_pages, idx, NULL, page, gfp);
-
-	if (unlikely(cur)) {
-		/*此位置原page指针不为空，新内容释放，复用旧内容*/
-		__free_page(page);
-		ret = xa_err(cur);
-		if (!ret && (cur->index != idx))
-			ret = -EIO;
-	} else {
-		brd->brd_nr_pages++;/*brd占用的内存数增加*/
+	if (!page) {
+		rcu_read_lock();
+		return ERR_PTR(-ENOMEM);
 	}
 
+	xa_lock(&brd->brd_pages);
+	/*在index位置存储此page*/
+	ret = __xa_cmpxchg(&brd->brd_pages, sector >> PAGE_SECTORS_SHIFT/*记录此page的索引*/, NULL,
+			page, gfp);
+	rcu_read_lock();
+	if (ret) {
+		/*此位置原page指针不为空，新内容释放，复用旧内容*/
+		xa_unlock(&brd->brd_pages);
+		__free_page(page);
+		if (xa_is_err(ret))
+			return ERR_PTR(xa_err(ret));
+		return ret;
+	}
+	brd->brd_nr_pages++;/*brd占用的内存数增加*/
 	xa_unlock(&brd->brd_pages);
-
-	return ret;
+	return page;
 }
 
 /*
@@ -124,138 +108,79 @@ static void brd_free_pages(struct brd_device *brd)
 }
 
 /*
- * copy_to_brd_setup must be called before copy_to_brd. It may sleep.
+ * Process a single segment.  The segment is capped to not cross page boundaries
+ * in both the bio and the brd backing memory.
  */
-static int copy_to_brd_setup(struct brd_device *brd, sector_t sector, size_t n,
-			     gfp_t gfp)
+static bool brd_rw_bvec(struct brd_device *brd, struct bio *bio)
 {
-	/*此扇区在page中的偏移量*/
-	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
-	size_t copy;
-	int ret;
-
-	copy = min_t(size_t, n, PAGE_SIZE - offset);
-	ret = brd_insert_page(brd, sector, gfp);
-	if (ret)
-		/*添加page失败，返回*/
-		return ret;
-	if (copy < n) {
-		/*要写的内容过长，再增加一个page*/
-		sector += copy >> SECTOR_SHIFT;
-		ret = brd_insert_page(brd, sector, gfp);
-	}
-	return ret;
-}
-
-/*
- * Copy n bytes from src to the brd starting at sector. Does not sleep.
- */
-static void copy_to_brd(struct brd_device *brd, const void *src,
-			sector_t sector, size_t n)
-{
+	struct bio_vec bv = bio_iter_iovec(bio, bio->bi_iter);
+	sector_t sector = bio->bi_iter.bi_sector;
+	u32 offset = (sector & (PAGE_SECTORS - 1)) << SECTOR_SHIFT;
+	blk_opf_t opf = bio->bi_opf;
 	struct page *page;
-	void *dst;
-	/*扇区在page中的偏移*/
-	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
-	size_t copy;
+	void *kaddr;
 
-	/*在此页中需复制的内容长度*/
-	copy = min_t(size_t, n, PAGE_SIZE - offset);
+	bv.bv_len = min_t(u32, bv.bv_len, PAGE_SIZE - offset);
+
+	rcu_read_lock();
 	page = brd_lookup_page(brd, sector);
-	BUG_ON(!page);
-
-	dst = kmap_atomic(page);
-	memcpy(dst + offset, src, copy);/*写入page*/
-	kunmap_atomic(dst);
-
-	if (copy < n) {
-		src += copy;
-		sector += copy >> SECTOR_SHIFT;
-		copy = n - copy;
-		page = brd_lookup_page(brd, sector);/*数据没写完，再写剩余的*/
-		BUG_ON(!page);
-
-		dst = kmap_atomic(page);
-		memcpy(dst, src, copy);
-		kunmap_atomic(dst);
+	if (!page && op_is_write(opf)) {
+		page = brd_insert_page(brd, sector, opf);
+		if (IS_ERR(page))
+			goto out_error;
 	}
-}
 
-/*
- * Copy n bytes to dst from the brd starting at sector. Does not sleep.
- */
-static void copy_from_brd(void *dst, struct brd_device *brd,
-			sector_t sector, size_t n)
-{
-	struct page *page;
-	void *src;
-	/*扇区在page中的偏移*/
-	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
-	size_t copy;
-
-	/*在此页中需复制的内容长度*/
-	copy = min_t(size_t, n, PAGE_SIZE - offset);
-	page = brd_lookup_page(brd, sector);/*查询扇区对应的page*/
-	if (page) {
-		src = kmap_atomic(page);
-		memcpy(dst, src + offset, copy);/*读取数据，写入到dst*/
-		kunmap_atomic(src);
-	} else
-		memset(dst, 0, copy);/*这一页之前没有写，直接返回0*/
-
-	if (copy < n) {
-		/*仍存在一些数据没有读取，再取一个页将剩余数据复制进来*/
-		dst += copy;
-		sector += copy >> SECTOR_SHIFT;
-		copy = n - copy;
-		page = brd_lookup_page(brd, sector);
-		if (page) {
-			src = kmap_atomic(page);
-			memcpy(dst, src, copy);
-			kunmap_atomic(src);
-		} else
-			memset(dst, 0, copy);
-	}
-}
-
-/*
- * Process a single bvec of a bio.
- */
-static int brd_do_bvec(struct brd_device *brd, struct page *page/*要写入/读取的页*/,
-			unsigned int len/*要写入/读取的内容长度*/, unsigned int off/*要写入/读取内容在page中的偏移量*/, blk_opf_t opf,
-			sector_t sector/*写入/读取位置对应的起始扇区*/)
-{
-	void *mem;
-	int err = 0;
-
+	kaddr = bvec_kmap_local(&bv);
 	if (op_is_write(opf)) {
-		/*写操作*/
-		/*
-		 * Must use NOIO because we don't want to recurse back into the
-		 * block or filesystem layers from page reclaim.
-		 */
-		gfp_t gfp = opf & REQ_NOWAIT ? GFP_NOWAIT : GFP_NOIO;
-
-		err = copy_to_brd_setup(brd, sector, len, gfp);
-		if (err)
-			/*准备page失败，跳出*/
-			goto out;
-	}
-
-	mem = kmap_atomic(page);
-	if (!op_is_write(opf)) {
-		/*读操作，自brd中读取并写入到mem对应的page*/
-		copy_from_brd(mem + off, brd, sector, len);
-		flush_dcache_page(page);
+		memcpy_to_page(page, offset, kaddr, bv.bv_len);
 	} else {
-		flush_dcache_page(page);
-		/*写操作，将mem对应的page的内容写入brd*/
-		copy_to_brd(brd, mem + off, sector, len);
+		if (page)
+			memcpy_from_page(kaddr, page, offset, bv.bv_len);
+		else
+			memset(kaddr, 0, bv.bv_len);
 	}
-	kunmap_atomic(mem);
+	kunmap_local(kaddr);
+	rcu_read_unlock();
 
-out:
-	return err;
+	bio_advance_iter_single(bio, &bio->bi_iter, bv.bv_len);
+	return true;
+
+out_error:
+	rcu_read_unlock();
+	if (PTR_ERR(page) == -ENOMEM && (opf & REQ_NOWAIT))
+		bio_wouldblock_error(bio);
+	else
+		bio_io_error(bio);
+	return false;
+}
+
+static void brd_free_one_page(struct rcu_head *head)
+{
+	struct page *page = container_of(head, struct page, rcu_head);
+
+	__free_page(page);
+}
+
+static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
+{
+	sector_t aligned_sector = round_up(sector, PAGE_SECTORS);
+	sector_t aligned_end = round_down(
+			sector + (size >> SECTOR_SHIFT), PAGE_SECTORS);
+	struct page *page;
+
+	if (aligned_end <= aligned_sector)
+		return;
+
+	xa_lock(&brd->brd_pages);
+	while (aligned_sector < aligned_end && aligned_sector < rd_size * 2) {
+		page = __xa_erase(&brd->brd_pages, aligned_sector >> PAGE_SECTORS_SHIFT);
+		if (page) {
+			call_rcu(&page->rcu_head, brd_free_one_page);
+			brd->brd_nr_pages--;
+		}
+		aligned_sector += PAGE_SECTORS;
+	}
+	xa_unlock(&brd->brd_pages);
 }
 
 /*响应bio操作*/
@@ -263,31 +188,18 @@ static void brd_submit_bio(struct bio *bio)
 {
 	/*取要操作的brd设备*/
 	struct brd_device *brd = bio->bi_bdev->bd_disk->private_data;
-	sector_t sector = bio->bi_iter.bi_sector;
-	struct bio_vec bvec;/*局部变量记录遍历内容*/
-	struct bvec_iter iter;
 
-	/*遍历bio对应的所有bio_vec(bi_io_vec),针对每一个执行相应的读写操作*/
-	bio_for_each_segment(bvec, bio, iter) {
-		unsigned int len = bvec.bv_len;
-		int err;
-
-		/* Don't support un-aligned buffer */
-		WARN_ON_ONCE((bvec.bv_offset & (SECTOR_SIZE - 1)) ||
-				(len & (SECTOR_SIZE - 1)));
-
-		err = brd_do_bvec(brd, bvec.bv_page/*本轮要访问的页*/, len/*本轮要访问的内存长度*/, bvec.bv_offset/*本轮要访问的起始位置*/,
-				  bio->bi_opf, sector);
-		if (err) {
-			if (err == -ENOMEM && bio->bi_opf & REQ_NOWAIT) {
-				bio_wouldblock_error(bio);
-				return;
-			}
-			bio_io_error(bio);
-			return;
-		}
-		sector += len >> SECTOR_SHIFT;
+	if (unlikely(op_is_discard(bio->bi_opf))) {
+		brd_do_discard(brd, bio->bi_iter.bi_sector,
+				bio->bi_iter.bi_size);
+		bio_endio(bio);
+		return;
 	}
+
+	do {
+		if (!brd_rw_bvec(brd, bio))
+			return;
+	} while (bio->bi_iter.bi_size);
 
 	bio_endio(bio);
 }
@@ -312,6 +224,7 @@ static int max_part = 1;
 module_param(max_part, int, 0444);
 MODULE_PARM_DESC(max_part, "Num Minors to reserve between devices");
 
+MODULE_DESCRIPTION("Ram backed block device driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(RAMDISK_MAJOR);
 MODULE_ALIAS("rd");
@@ -331,7 +244,39 @@ __setup("ramdisk_size=", ramdisk_size);
  * (should share code eventually).
  */
 static LIST_HEAD(brd_devices);/*用于记录系统中所有brd设备*/
+static DEFINE_MUTEX(brd_devices_mutex);
 static struct dentry *brd_debugfs_dir;
+
+static struct brd_device *brd_find_or_alloc_device(int i)
+{
+	struct brd_device *brd;
+
+	mutex_lock(&brd_devices_mutex);
+	list_for_each_entry(brd, &brd_devices, brd_list) {
+		if (brd->brd_number == i) {
+			mutex_unlock(&brd_devices_mutex);
+			return ERR_PTR(-EEXIST);
+		}
+	}
+
+	brd = kzalloc(sizeof(*brd), GFP_KERNEL);
+	if (!brd) {
+		mutex_unlock(&brd_devices_mutex);
+		return ERR_PTR(-ENOMEM);
+	}
+	brd->brd_number	= i;
+	list_add_tail(&brd->brd_list, &brd_devices);
+	mutex_unlock(&brd_devices_mutex);
+	return brd;
+}
+
+static void brd_free_device(struct brd_device *brd)
+{
+	mutex_lock(&brd_devices_mutex);
+	list_del(&brd->brd_list);
+	mutex_unlock(&brd_devices_mutex);
+	kfree(brd);
+}
 
 static int brd_alloc(int i/*要创建的brd设备编号*/)
 {
@@ -339,18 +284,26 @@ static int brd_alloc(int i/*要创建的brd设备编号*/)
 	struct gendisk *disk;
 	char buf[DISK_NAME_LEN];
 	int err = -ENOMEM;
-
-	list_for_each_entry(brd, &brd_devices, brd_list)
-		if (brd->brd_number == i)
-			/*此设备已存在*/
-			return -EEXIST;
+	struct queue_limits lim = {
+		/*
+		 * This is so fdisk will align partitions on 4k, because of
+		 * direct_access API needing 4k alignment, returning a PFN
+		 * (This is only a problem on very small devices <= 4M,
+		 *  otherwise fdisk will align on 1M. Regardless this call
+		 *  is harmless)
+		 */
+		.physical_block_size	= PAGE_SIZE,
+		.max_hw_discard_sectors	= UINT_MAX,
+		.max_discard_segments	= 1,
+		.discard_granularity	= PAGE_SIZE,
+		.features		= BLK_FEAT_SYNCHRONOUS |
+					  BLK_FEAT_NOWAIT,
+	};
 
 	/*申请brd设备*/
-	brd = kzalloc(sizeof(*brd), GFP_KERNEL);
-	if (!brd)
-		return -ENOMEM;
-	brd->brd_number		= i;
-	list_add_tail(&brd->brd_list, &brd_devices);
+	brd = brd_find_or_alloc_device(i);
+	if (IS_ERR(brd))
+		return PTR_ERR(brd);
 
 	xa_init(&brd->brd_pages);
 
@@ -360,10 +313,11 @@ static int brd_alloc(int i/*要创建的brd设备编号*/)
 				&brd->brd_nr_pages);
 
 	/*申请一个disk*/
-	disk = brd->brd_disk = blk_alloc_disk(NUMA_NO_NODE);
-	if (!disk)
+	disk = brd->brd_disk = blk_alloc_disk(&lim, NUMA_NO_NODE);
+	if (IS_ERR(disk)) {
+		err = PTR_ERR(disk);
 		goto out_free_dev;
-
+	}
 	disk->major		= RAMDISK_MAJOR;
 	disk->first_minor	= i * max_part;
 	disk->minors		= max_part;
@@ -374,19 +328,6 @@ static int brd_alloc(int i/*要创建的brd设备编号*/)
 	/*设置此块设备sectors总数，这里乘了2，即换算为disk的总字节数大小（单位为k)*/
 	set_capacity(disk, rd_size * 2);
 	
-	/*
-	 * This is so fdisk will align partitions on 4k, because of
-	 * direct_access API needing 4k alignment, returning a PFN
-	 * (This is only a problem on very small devices <= 4M,
-	 *  otherwise fdisk will align on 1M. Regardless this call
-	 *  is harmless)
-	 */
-	blk_queue_physical_block_size(disk->queue, PAGE_SIZE);
-
-	/* Tell the block layer that this is not a rotational device */
-	blk_queue_flag_set(QUEUE_FLAG_NONROT, disk->queue);
-	blk_queue_flag_set(QUEUE_FLAG_SYNCHRONOUS, disk->queue);
-	blk_queue_flag_set(QUEUE_FLAG_NOWAIT, disk->queue);
 	err = add_disk(disk);/*添加此disk到系统*/
 	if (err)
 		goto out_cleanup_disk;
@@ -396,8 +337,7 @@ static int brd_alloc(int i/*要创建的brd设备编号*/)
 out_cleanup_disk:
 	put_disk(disk);
 out_free_dev:
-	list_del(&brd->brd_list);
-	kfree(brd);
+	brd_free_device(brd);
 	return err;
 }
 
@@ -417,8 +357,7 @@ static void brd_cleanup(void)
 		del_gendisk(brd->brd_disk);
 		put_disk(brd->brd_disk);
 		brd_free_pages(brd);
-		list_del(&brd->brd_list);
-		kfree(brd);
+		brd_free_device(brd);
 	}
 }
 
@@ -446,17 +385,6 @@ static int __init brd_init(void)
 {
 	int err, i;
 
-	brd_check_and_reset_par();
-
-	brd_debugfs_dir = debugfs_create_dir("ramdisk_pages", NULL);
-
-	/*申请rd_nr块block设备*/
-	for (i = 0; i < rd_nr; i++) {
-		err = brd_alloc(i);
-		if (err)
-			goto out_free;
-	}
-
 	/*
 	 * brd module now has a feature to instantiate underlying device
 	 * structure on-demand, provided that there is an access dev node.
@@ -472,11 +400,19 @@ static int __init brd_init(void)
 	 *	dynamically.
 	 */
 
+	brd_check_and_reset_par();
+
+	brd_debugfs_dir = debugfs_create_dir("ramdisk_pages", NULL);
+
 	if (__register_blkdev(RAMDISK_MAJOR, "ramdisk", brd_probe)) {
 		/*注册block设备失败*/
 		err = -EIO;
 		goto out_free;
 	}
+
+	/*申请rd_nr块block设备*/
+	for (i = 0; i < rd_nr; i++)
+		brd_alloc(i);
 
 	pr_info("brd: module loaded\n");
 	return 0;

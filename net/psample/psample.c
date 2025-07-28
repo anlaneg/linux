@@ -227,7 +227,7 @@ static int __psample_ip_tun_to_nlattr(struct sk_buff *skb,
 	const struct ip_tunnel_key *tun_key = &tun_info->key;
 	int tun_opts_len = tun_info->options_len;
 
-	if (tun_key->tun_flags & TUNNEL_KEY &&
+	if (test_bit(IP_TUNNEL_KEY_BIT, tun_key->tun_flags) &&
 	    nla_put_be64(skb, PSAMPLE_TUNNEL_KEY_ATTR_ID, tun_key->tun_id,
 			 PSAMPLE_TUNNEL_KEY_ATTR_PAD))
 		return -EMSGSIZE;
@@ -263,10 +263,10 @@ static int __psample_ip_tun_to_nlattr(struct sk_buff *skb,
 		return -EMSGSIZE;
 	if (nla_put_u8(skb, PSAMPLE_TUNNEL_KEY_ATTR_TTL, tun_key->ttl))
 		return -EMSGSIZE;
-	if ((tun_key->tun_flags & TUNNEL_DONT_FRAGMENT) &&
+	if (test_bit(IP_TUNNEL_DONT_FRAGMENT_BIT, tun_key->tun_flags) &&
 	    nla_put_flag(skb, PSAMPLE_TUNNEL_KEY_ATTR_DONT_FRAGMENT))
 		return -EMSGSIZE;
-	if ((tun_key->tun_flags & TUNNEL_CSUM) &&
+	if (test_bit(IP_TUNNEL_CSUM_BIT, tun_key->tun_flags) &&
 	    nla_put_flag(skb, PSAMPLE_TUNNEL_KEY_ATTR_CSUM))
 		return -EMSGSIZE;
 	if (tun_key->tp_src &&
@@ -275,15 +275,16 @@ static int __psample_ip_tun_to_nlattr(struct sk_buff *skb,
 	if (tun_key->tp_dst &&
 	    nla_put_be16(skb, PSAMPLE_TUNNEL_KEY_ATTR_TP_DST, tun_key->tp_dst))
 		return -EMSGSIZE;
-	if ((tun_key->tun_flags & TUNNEL_OAM) &&
+	if (test_bit(IP_TUNNEL_OAM_BIT, tun_key->tun_flags) &&
 	    nla_put_flag(skb, PSAMPLE_TUNNEL_KEY_ATTR_OAM))
 		return -EMSGSIZE;
 	if (tun_opts_len) {
-		if (tun_key->tun_flags & TUNNEL_GENEVE_OPT &&
+		if (test_bit(IP_TUNNEL_GENEVE_OPT_BIT, tun_key->tun_flags) &&
 		    nla_put(skb, PSAMPLE_TUNNEL_KEY_ATTR_GENEVE_OPTS,
 			    tun_opts_len, tun_opts))
 			return -EMSGSIZE;
-		else if (tun_key->tun_flags & TUNNEL_ERSPAN_OPT &&
+		else if (test_bit(IP_TUNNEL_ERSPAN_OPT_BIT,
+				  tun_key->tun_flags) &&
 			 nla_put(skb, PSAMPLE_TUNNEL_KEY_ATTR_ERSPAN_OPTS,
 				 tun_opts_len, tun_opts))
 			return -EMSGSIZE;
@@ -322,7 +323,7 @@ static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 	int tun_opts_len = tun_info->options_len;
 	int sum = nla_total_size(0);	/* PSAMPLE_ATTR_TUNNEL */
 
-	if (tun_key->tun_flags & TUNNEL_KEY)
+	if (test_bit(IP_TUNNEL_KEY_BIT, tun_key->tun_flags))
 		sum += nla_total_size_64bit(sizeof(u64));
 
 	if (tun_info->mode & IP_TUNNEL_INFO_BRIDGE)
@@ -345,20 +346,21 @@ static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 	if (tun_key->tos)
 		sum += nla_total_size(sizeof(u8));
 	sum += nla_total_size(sizeof(u8));	/* TTL */
-	if (tun_key->tun_flags & TUNNEL_DONT_FRAGMENT)
+	if (test_bit(IP_TUNNEL_DONT_FRAGMENT_BIT, tun_key->tun_flags))
 		sum += nla_total_size(0);
-	if (tun_key->tun_flags & TUNNEL_CSUM)
+	if (test_bit(IP_TUNNEL_CSUM_BIT, tun_key->tun_flags))
 		sum += nla_total_size(0);
 	if (tun_key->tp_src)
 		sum += nla_total_size(sizeof(u16));
 	if (tun_key->tp_dst)
 		sum += nla_total_size(sizeof(u16));
-	if (tun_key->tun_flags & TUNNEL_OAM)
+	if (test_bit(IP_TUNNEL_OAM_BIT, tun_key->tun_flags))
 		sum += nla_total_size(0);
 	if (tun_opts_len) {
-		if (tun_key->tun_flags & TUNNEL_GENEVE_OPT)
+		if (test_bit(IP_TUNNEL_GENEVE_OPT_BIT, tun_key->tun_flags))
 			sum += nla_total_size(tun_opts_len);
-		else if (tun_key->tun_flags & TUNNEL_ERSPAN_OPT)
+		else if (test_bit(IP_TUNNEL_ERSPAN_OPT_BIT,
+				  tun_key->tun_flags))
 			sum += nla_total_size(tun_opts_len);
 	}
 
@@ -366,8 +368,9 @@ static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 }
 #endif
 
-void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
-			   u32 sample_rate/*采样速率*/, const struct psample_metadata *md)
+void psample_sample_packet(struct psample_group *group,
+			   const struct sk_buff *skb, u32 sample_rate/*采样速率*/,
+			   const struct psample_metadata *md)
 {
 	ktime_t tstamp = ktime_get_real();
 	int out_ifindex = md->out_ifindex;
@@ -382,6 +385,10 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 	void *data;
 	int ret;
 
+	if (!genl_has_listeners(&psample_nl_family, group->net,
+				PSAMPLE_NL_MCGRP_SAMPLE))
+		return;
+
 	//计算采样netlink消息大小
 	meta_len = (in_ifindex ? nla_total_size(sizeof(u16)) : 0) +
 		   (out_ifindex ? nla_total_size(sizeof(u16)) : 0) +
@@ -393,7 +400,11 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 		   nla_total_size(sizeof(u32)) +	/* group_num */
 		   nla_total_size(sizeof(u32)) +	/* seq */
 		   nla_total_size_64bit(sizeof(u64)) +	/* timestamp */
-		   nla_total_size(sizeof(u16));		/* protocol */
+		   nla_total_size(sizeof(u16)) +	/* protocol */
+		   (md->user_cookie_len ?
+		    nla_total_size(md->user_cookie_len) : 0) + /* user cookie */
+		   (md->rate_as_probability ?
+		    nla_total_size(0) : 0);	/* rate as probability */
 
 #ifdef CONFIG_INET
 	//skb上有metadata则合并tunnel信息长度
@@ -502,6 +513,15 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 			goto error;
 	}
 #endif
+
+	if (md->user_cookie && md->user_cookie_len &&
+	    nla_put(nl_skb, PSAMPLE_ATTR_USER_COOKIE, md->user_cookie_len,
+		    md->user_cookie))
+		goto error;
+
+	if (md->rate_as_probability &&
+	    nla_put_flag(nl_skb, PSAMPLE_ATTR_SAMPLE_PROBABILITY))
+		goto error;
 
 	//报文发送到用户态
 	genlmsg_end(nl_skb, data);

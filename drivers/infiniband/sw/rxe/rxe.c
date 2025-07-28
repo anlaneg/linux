@@ -32,12 +32,11 @@ void rxe_dealloc(struct ib_device *ib_dev)
 
 	WARN_ON(!RB_EMPTY_ROOT(&rxe->mcg_tree));
 
-	if (rxe->tfm)
-		crypto_free_shash(rxe->tfm);
+	mutex_destroy(&rxe->usdev_lock);
 }
 
 /* initialize rxe device parameters */
-static void rxe_init_device_param(struct rxe_dev *rxe)
+static void rxe_init_device_param(struct rxe_dev *rxe, struct net_device *ndev)
 {
     /*rxey设备备对应的参数*/
 	rxe->max_inline_data			= RXE_MAX_INLINE_DATA;
@@ -71,10 +70,42 @@ static void rxe_init_device_param(struct rxe_dev *rxe)
 	rxe->attr.max_fast_reg_page_list_len	= RXE_MAX_FMR_PAGE_LIST_LEN;
 	rxe->attr.max_pkeys			= RXE_MAX_PKEYS;
 	rxe->attr.local_ca_ack_delay		= RXE_LOCAL_CA_ACK_DELAY;
+
+	if (ndev->addr_len) {
+		memcpy(rxe->raw_gid, ndev->dev_addr,
+			min_t(unsigned int, ndev->addr_len, ETH_ALEN));
+	} else {
+		/*
+		 * This device does not have a HW address, but
+		 * connection mangagement requires a unique gid.
+		 */
+		eth_random_addr(rxe->raw_gid);
+	}
+
 	addrconf_addr_eui48((unsigned char *)&rxe->attr.sys_image_guid,
-			rxe->ndev->dev_addr);
+			rxe->raw_gid);
 
 	rxe->max_ucontext			= RXE_MAX_UCONTEXT;
+
+	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
+		rxe->attr.kernel_cap_flags |= IBK_ON_DEMAND_PAGING;
+
+		/* IB_ODP_SUPPORT_IMPLICIT is not supported right now. */
+		rxe->attr.odp_caps.general_caps |= IB_ODP_SUPPORT;
+
+		rxe->attr.odp_caps.per_transport_caps.ud_odp_caps |= IB_ODP_SUPPORT_SEND;
+		rxe->attr.odp_caps.per_transport_caps.ud_odp_caps |= IB_ODP_SUPPORT_RECV;
+		rxe->attr.odp_caps.per_transport_caps.ud_odp_caps |= IB_ODP_SUPPORT_SRQ_RECV;
+
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_SEND;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_RECV;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_WRITE;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_READ;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_ATOMIC;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_SRQ_RECV;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_FLUSH;
+		rxe->attr.odp_caps.per_transport_caps.rc_odp_caps |= IB_ODP_SUPPORT_ATOMIC_WRITE;
+	}
 }
 
 /* initialize port attributes */
@@ -107,7 +138,7 @@ static void rxe_init_port_param(struct rxe_port *port)
 /* initialize port state, note IB convention that HCA ports are always
  * numbered from 1
  */
-static void rxe_init_ports(struct rxe_dev *rxe)
+static void rxe_init_ports(struct rxe_dev *rxe, struct net_device *ndev)
 {
 	struct rxe_port *port = &rxe->port;
 
@@ -115,7 +146,7 @@ static void rxe_init_ports(struct rxe_dev *rxe)
 	rxe_init_port_param(port);
 	/*使用mac地址更新port_guid*/
 	addrconf_addr_eui48((unsigned char *)&port->port_guid,
-			    rxe->ndev->dev_addr);
+			    rxe->raw_gid);
 	spin_lock_init(&port->port_lock);
 }
 
@@ -134,12 +165,12 @@ static void rxe_init_pools(struct rxe_dev *rxe)
 }
 
 /* initialize rxe device state */
-static void rxe_init(struct rxe_dev *rxe)
+static void rxe_init(struct rxe_dev *rxe, struct net_device *ndev)
 {
 	/* init default device parameters */
-	rxe_init_device_param(rxe);
+	rxe_init_device_param(rxe, ndev);
 
-	rxe_init_ports(rxe);
+	rxe_init_ports(rxe, ndev);
 	/*初始化各种类型的pool*/
 	rxe_init_pools(rxe);
 
@@ -170,22 +201,21 @@ void rxe_set_mtu(struct rxe_dev *rxe, unsigned int ndev_mtu)
 	port->attr.active_mtu = mtu;
 	/*对应的mtu大小*/
 	port->mtu_cap = ib_mtu_enum_to_int(mtu);
-
-	rxe_info_dev(rxe, "Set mtu to %d", port->mtu_cap);
 }
 
 /* called by ifc layer to create new rxe device.
  * The caller should allocate memory for rxe by calling ib_alloc_device.
  */
-int rxe_add(struct rxe_dev *rxe, unsigned int mtu/*底层netdev对应的mtu*/, const char *ibdev_name/*ib设备名称*/)
+int rxe_add(struct rxe_dev *rxe, unsigned int mtu/*底层netdev对应的mtu*/, const char *ibdev_name/*ib设备名称*/,
+			struct net_device *ndev)
 {
 	/*初始化rxe设备*/
-	rxe_init(rxe);
+	rxe_init(rxe, ndev);
 	/*利用mtu设置rxe port的mtu枚举*/
 	rxe_set_mtu(rxe, mtu);
 
 	/*注册设备*/
-	return rxe_register_device(rxe, ibdev_name);
+	return rxe_register_device(rxe, ibdev_name, ndev);
 }
 
 /*负责创建rxe类型的ib设备，指定名称为ibdev_name,底层的网络设备为ndev*/
@@ -196,7 +226,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 
 	if (is_vlan_dev(ndev)) {
 	    	/*不能是vlan设备*/
-		rxe_err("rxe creation allowed on top of a real device only");
+		rxe_err("rxe creation allowed on top of a real device only\n");
 		err = -EPERM;
 		goto err;
 	}
@@ -206,7 +236,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 	if (rxe) {
 	    	/*设备已存在，报错*/
 		ib_device_put(&rxe->ib_dev);
-		rxe_err_dev(rxe, "already configured on %s", ndev->name);
+		rxe_err_dev(rxe, "already configured on %s\n", ndev->name);
 		err = -EEXIST;
 		goto err;
 	}

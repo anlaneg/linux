@@ -4,7 +4,6 @@
 
 #include <linux/rhashtable.h>
 #include <linux/atomic.h>
-#include <linux/workqueue.h>
 #include <net/sock.h>
 
 /* flags */
@@ -42,10 +41,10 @@ struct netlink_sock {
 	int			dump_done_errno;
 	//netlink socket回调上下文
 	struct netlink_callback	cb;
-	struct mutex		*cb_mutex;
-	struct mutex		cb_def_mutex;
 	//负责收取netlink消息（每个protocol一个对应的netlink_rcv)
 	//所有发向kernel的netlink消息均均会调用此函数
+	struct mutex		nl_cb_mutex;
+
 	void			(*netlink_rcv)(struct sk_buff *skb);
 	int			(*netlink_bind)(struct net *net, int group);
 	void			(*netlink_unbind)(struct net *net, int group);
@@ -55,7 +54,6 @@ struct netlink_sock {
 
 	struct rhash_head	node;
 	struct rcu_head		rcu;
-	struct work_struct	work;
 };
 
 static inline struct netlink_sock *nlk_sk(struct sock *sk)

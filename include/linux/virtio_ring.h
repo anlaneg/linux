@@ -97,6 +97,7 @@ struct virtqueue *vring_create_virtqueue_dma(unsigned int index,
  * Creates a virtqueue with a standard layout but a caller-allocated
  * ring.
  */
+//创建virtqueue
 struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      unsigned int num,
 				      unsigned int vring_align,
@@ -105,7 +106,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      bool ctx,
 				      void *pages,
 				      bool (*notify)(struct virtqueue *vq),
-				      void (*callback)(struct virtqueue *vq),
+				      void (*callback/*split格式报文收取函数*/)(struct virtqueue *vq),
 				      const char *name);
 
 /*

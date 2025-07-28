@@ -231,15 +231,16 @@ static int ext2_link (struct dentry * old_dentry, struct inode * dir,
 }
 
 //ext2目录创建
-static int ext2_mkdir(struct mnt_idmap * idmap,
-	struct inode * dir, struct dentry * dentry, umode_t mode)
+static struct dentry *ext2_mkdir(struct mnt_idmap * idmap,
+				 struct inode * dir, struct dentry * dentry,
+				 umode_t mode)
 {
 	struct inode * inode;
 	int err;
 
 	err = dquot_initialize(dir);
 	if (err)
-		return err;
+		return ERR_PTR(err);
 
 	inode_inc_link_count(dir);
 
@@ -266,7 +267,7 @@ static int ext2_mkdir(struct mnt_idmap * idmap,
 
 	d_instantiate_new(dentry, inode);
 out:
-	return err;
+	return ERR_PTR(err);
 
 out_fail:
 	inode_dec_link_count(inode);

@@ -135,7 +135,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_set_name(&cq->res, NULL);
 
 	/*调用create_cq对cq进行初始化*/
-	ret = ib_dev->ops.create_cq(cq, &attr/*初始化参数*/, &attrs->driver_udata);
+	ret = ib_dev->ops.create_cq(cq, &attr/*初始化参数*/, attrs);
 	if (ret)
 		goto err_free;
 

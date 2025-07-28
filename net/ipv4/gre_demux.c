@@ -79,7 +79,7 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 		return -EINVAL;
 
 	//依据gre协议头的flags字段，决定gre头部的长度
-	tpi->flags = gre_flags_to_tnl_flags(greh->flags);
+	gre_flags_to_tnl_flags(tpi->flags, greh->flags);
 	hdr_len = gre_calc_hlen(tpi->flags);
 
 	//要求整个gre均在平坦内存中
@@ -223,7 +223,7 @@ static const struct net_protocol net_gre_protocol = {
 
 static int __init gre_init(void)
 {
-	pr_info("GRE over IPv4 demultiplexor driver\n");
+	pr_info("GRE over IPv4 demultiplexer driver\n");
 
 	//为ip层注册gre协议的处理回调，收到gre协议报文后gre_rcv将被调用
 	if (inet_add_protocol(&net_gre_protocol, IPPROTO_GRE) < 0) {
@@ -242,5 +242,5 @@ module_init(gre_init);
 module_exit(gre_exit);
 
 MODULE_DESCRIPTION("GRE over IPv4 demultiplexer driver");
-MODULE_AUTHOR("D. Kozlov (xeb@mail.ru)");
+MODULE_AUTHOR("D. Kozlov <xeb@mail.ru>");
 MODULE_LICENSE("GPL");

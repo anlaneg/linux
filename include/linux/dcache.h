@@ -59,6 +59,8 @@ struct qstr {
 };
 
 #define QSTR_INIT(n,l) { { { .len = l } }, .name = n }
+#define QSTR_LEN(n,l) (struct qstr)QSTR_INIT(n,l)
+#define QSTR(n) QSTR_LEN(n, strlen(n))
 
 extern const struct qstr empty_name;
 extern const struct qstr slash_name;
@@ -70,16 +72,24 @@ extern const struct qstr dotdot_name;
  * large memory footprint increase).
  */
 #ifdef CONFIG_64BIT
-# define DNAME_INLINE_LEN 40 /* 192 bytes */
+# define DNAME_INLINE_WORDS 5 /* 192 bytes */
 #else
 # ifdef CONFIG_SMP
-#  define DNAME_INLINE_LEN 40 /* 128 bytes */
+#  define DNAME_INLINE_WORDS 9 /* 128 bytes */
 # else
-#  define DNAME_INLINE_LEN 44 /* 128 bytes */
+#  define DNAME_INLINE_WORDS 11 /* 128 bytes */
 # endif
 #endif
 
+#define DNAME_INLINE_LEN (DNAME_INLINE_WORDS*sizeof(unsigned long))
+
+union shortname_store {
+	unsigned char string[DNAME_INLINE_LEN];
+	unsigned long words[DNAME_INLINE_WORDS];
+};
+
 #define d_lock	d_lockref.lock
+#define d_iname d_shortname.string
 
 //定义dir entry数据结构（注意并不只有目录才有dentry,link,file均有）
 // 用于反映名称与inode之间的关系
@@ -98,11 +108,10 @@ struct dentry {
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
 					 * negative */
 	//默认提供的可存放短名称的空间
-	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
+	union shortname_store d_shortname;
+	/* --- cacheline 1 boundary (64 bytes) was 32 bytes ago --- */
 
 	/* Ref lookup also touches following */
-	/*引用计数*/
-	struct lockref d_lockref;	/* per-dentry lock and refcount */
 	/*dentry对应的操作集*/
 	const struct dentry_operations *d_op;
 	/*dentry所属的(super block)超级块指针*/
@@ -110,6 +119,12 @@ struct dentry {
 	unsigned long d_time;		/* used by d_revalidate */
 	/*dentry的私有数据，用于各fs自主指定*/
 	void *d_fsdata;			/* fs-specific data */
+	/* --- cacheline 2 boundary (128 bytes) --- */
+	/*引用计数*/
+	struct lockref d_lockref;	/* per-dentry lock and refcount
+					 * keep separate from RCU lookup area if
+					 * possible!
+					 */
 
 	union {
 		struct list_head d_lru;		/* LRU list */
@@ -141,9 +156,15 @@ enum dentry_d_lock_class
 	DENTRY_D_LOCK_NESTED
 };
 
+enum d_real_type {
+	D_REAL_DATA,
+	D_REAL_METADATA,
+};
+
 struct dentry_operations {
 	/*用于校验dentry是否有效，返回>0表示有效，返回<0表示无效，返回0也表示无效，但需要多些操作*/
-	int (*d_revalidate)(struct dentry *, unsigned int);
+	int (*d_revalidate)(struct inode *, const struct qstr *,
+			    struct dentry *, unsigned int);
 	int (*d_weak_revalidate)(struct dentry *, unsigned int);
 	/*计算dentry下对应name的hash值，结果填充到qstr中*/
 	int (*d_hash)(const struct dentry *, struct qstr *);
@@ -159,7 +180,9 @@ struct dentry_operations {
 	char *(*d_dname)(struct dentry *, char *, int);
 	struct vfsmount *(*d_automount)(struct path *);
 	int (*d_manage)(const struct path *, bool);
-	struct dentry *(*d_real)(struct dentry *, const struct inode *);
+	struct dentry *(*d_real)(struct dentry *, enum d_real_type type);
+	bool (*d_unalias_trylock)(const struct dentry *);
+	void (*d_unalias_unlock)(const struct dentry *);
 } ____cacheline_aligned;
 
 /*
@@ -171,79 +194,74 @@ struct dentry_operations {
  */
 
 /* d_flags entries */
-//标记有d_hash回调
-#define DCACHE_OP_HASH			BIT(0)
-//标记有d_compare回调，需要采用此回调进行比对
-#define DCACHE_OP_COMPARE		BIT(1)
-//标记有d_revalidate回调
-#define DCACHE_OP_REVALIDATE		BIT(2)
-//标记有d_delete回调
-#define DCACHE_OP_DELETE		BIT(3)
-//标记有d_prune回调
-#define DCACHE_OP_PRUNE			BIT(4)
+enum dentry_flags {
+	//标记有d_hash回调
+	DCACHE_OP_HASH			= BIT(0),
+	//标记有d_compare回调，需要采用此回调进行比对
+	DCACHE_OP_COMPARE		= BIT(1),
+	//标记有d_revalidate回调
+	DCACHE_OP_REVALIDATE		= BIT(2),
+	//标记有d_delete回调
+	DCACHE_OP_DELETE		= BIT(3),
+	//标记有d_prune回调
+	DCACHE_OP_PRUNE			= BIT(4),
+	/*
+	 * This dentry is possibly not currently connected to the dcache tree,
+	 * in which case its parent will either be itself, or will have this
+	 * flag as well.  nfsd will not use a dentry with this bit set, but will
+	 * first endeavour to clear the bit either by discovering that it is
+	 * connected, or by performing lookup operations.  Any filesystem which
+	 * supports nfsd_operations MUST have a lookup function which, if it
+	 * finds a directory inode with a DCACHE_DISCONNECTED dentry, will
+	 * d_move that dentry into place and return that dentry rather than the
+	 * passed one, typically using d_splice_alias.
+	 */
+	DCACHE_DISCONNECTED		= BIT(5),
+	DCACHE_REFERENCED		= BIT(6),	/* Recently used, don't discard. */
+	DCACHE_DONTCACHE		= BIT(7),	/* Purge from memory on final dput() */
+	//指明此dentry不能被挂载
+	DCACHE_CANT_MOUNT		= BIT(8),
+	DCACHE_GENOCIDE			= BIT(9),
+	DCACHE_SHRINK_LIST		= BIT(10),
+	//标记有d_weak_revalidate回调
+	DCACHE_OP_WEAK_REVALIDATE	= BIT(11),
+	/*
+	 * this dentry has been "silly renamed" and has to be deleted on the
+	 * last dput()
+	 */
+	DCACHE_NFSFS_RENAMED		= BIT(12),
+	DCACHE_FSNOTIFY_PARENT_WATCHED	= BIT(13),	/* Parent inode is watched by some fsnotify listener */
+	DCACHE_DENTRY_KILLED		= BIT(14),
+	/*标记是一个挂载点*/
+	DCACHE_MOUNTED			= BIT(15),	/* is a mountpoint */
+	DCACHE_NEED_AUTOMOUNT		= BIT(16),	/* handle automount on this dir */
+	DCACHE_MANAGE_TRANSIT		= BIT(17),	/* manage transit from this dirent */
+	DCACHE_LRU_LIST			= BIT(18),
+/*指明当前dentry类型,占用3个bit位（最多表示8种）*/
+	DCACHE_ENTRY_TYPE		= (7 << 19),	/* bits 19..21 are for storing type: */
+/*dentry未指明dentry type*/
+	DCACHE_MISS_TYPE		= (0 << 19),	/* Negative dentry */
+	DCACHE_WHITEOUT_TYPE		= (1 << 19),	/* Whiteout dentry (stop pathwalk) */
+/*dentry为dir类型*/
+	DCACHE_DIRECTORY_TYPE		= (2 << 19),	/* Normal directory */
+	DCACHE_AUTODIR_TYPE		= (3 << 19),	/* Lookupless directory (presumed automount) */
+/*dentry为普通文件*/
+	DCACHE_REGULAR_TYPE		= (4 << 19),	/* Regular file type */
+/*dentry为特殊类型文件*/
+	DCACHE_SPECIAL_TYPE		= (5 << 19),	/* Other file type */
+/*dentry为link类型文件*/
+	DCACHE_SYMLINK_TYPE		= (6 << 19),	/* Symlink */
+	DCACHE_NOKEY_NAME		= BIT(22),	/* Encrypted name encoded without key */
+//标记有d_real回调
+	DCACHE_OP_REAL			= BIT(23),
+	DCACHE_PAR_LOOKUP		= BIT(24),	/* being looked up (with parent locked shared) */
+	DCACHE_DENTRY_CURSOR		= BIT(25),
+//标记dentry释放时，不需要经过ruc等待
+	DCACHE_NORCU			= BIT(26),	/* No RCU delay for freeing */
+};
 
-#define	DCACHE_DISCONNECTED		BIT(5)
-     /* This dentry is possibly not currently connected to the dcache tree, in
-      * which case its parent will either be itself, or will have this flag as
-      * well.  nfsd will not use a dentry with this bit set, but will first
-      * endeavour to clear the bit either by discovering that it is connected,
-      * or by performing lookup operations.   Any filesystem which supports
-      * nfsd_operations MUST have a lookup function which, if it finds a
-      * directory inode with a DCACHE_DISCONNECTED dentry, will d_move that
-      * dentry into place and return that dentry rather than the passed one,
-      * typically using d_splice_alias. */
-
-#define DCACHE_REFERENCED		BIT(6) /* Recently used, don't discard. */
-
-#define DCACHE_DONTCACHE		BIT(7) /* Purge from memory on final dput() */
-
-//指明此dentry不能被挂载
-#define DCACHE_CANT_MOUNT		BIT(8)
-#define DCACHE_SHRINK_LIST		BIT(10)
-
-//标记有d_weak_revalidate回调
-#define DCACHE_OP_WEAK_REVALIDATE	BIT(11)
-
-#define DCACHE_NFSFS_RENAMED		BIT(12)
-     /* this dentry has been "silly renamed" and has to be deleted on the last
-      * dput() */
-#define DCACHE_FSNOTIFY_PARENT_WATCHED	BIT(14)
-     /* Parent inode is watched by some fsnotify listener */
-
-#define DCACHE_DENTRY_KILLED		BIT(15)
-
-/*标记是一个挂载点*/
-#define DCACHE_MOUNTED			BIT(16) /* is a mountpoint */
-#define DCACHE_NEED_AUTOMOUNT		BIT(17) /* handle automount on this dir */
-#define DCACHE_MANAGE_TRANSIT		BIT(18) /* manage transit from this dirent */
 #define DCACHE_MANAGED_DENTRY \
 	(DCACHE_MOUNTED|DCACHE_NEED_AUTOMOUNT|DCACHE_MANAGE_TRANSIT)
-
-#define DCACHE_LRU_LIST			BIT(19)
-
-/*指明当前dentry类型,占用3个bit位（最多表示8种）*/
-#define DCACHE_ENTRY_TYPE		(7 << 20) /* bits 20..22 are for storing type: */
-/*dentry未指明dentry type*/
-#define DCACHE_MISS_TYPE		(0 << 20) /* Negative dentry */
-#define DCACHE_WHITEOUT_TYPE		(1 << 20) /* Whiteout dentry (stop pathwalk) */
-/*dentry为dir类型*/
-#define DCACHE_DIRECTORY_TYPE		(2 << 20) /* Normal directory */
-#define DCACHE_AUTODIR_TYPE		(3 << 20) /* Lookupless directory (presumed automount) */
-/*dentry为普通文件*/
-#define DCACHE_REGULAR_TYPE		(4 << 20) /* Regular file type */
-/*dentry为特殊类型文件*/
-#define DCACHE_SPECIAL_TYPE		(5 << 20) /* Other file type */
-/*dentry为link类型文件*/
-#define DCACHE_SYMLINK_TYPE		(6 << 20) /* Symlink */
-
-#define DCACHE_NOKEY_NAME		BIT(25) /* Encrypted name encoded without key */
-//标记有d_real回调
-#define DCACHE_OP_REAL			BIT(26)
-
-#define DCACHE_PAR_LOOKUP		BIT(28) /* being looked up (with parent locked shared) */
-#define DCACHE_DENTRY_CURSOR		BIT(29)
-//标记dentry释放时，不需要经过ruc等待
-#define DCACHE_NORCU			BIT(30) /* No RCU delay for freeing */
 
 extern seqlock_t rename_lock;
 
@@ -266,7 +284,6 @@ extern struct dentry * d_splice_alias(struct inode *, struct dentry *);
 extern struct dentry * d_add_ci(struct dentry *, struct inode *, struct qstr *);
 extern bool d_same_name(const struct dentry *dentry, const struct dentry *parent,
 			const struct qstr *name);
-extern struct dentry * d_exact_alias(struct dentry *, struct inode *);
 extern struct dentry *d_find_any_alias(struct inode *inode);
 extern struct dentry * d_obtain_alias(struct inode *);
 extern struct dentry * d_obtain_root(struct inode *);
@@ -301,12 +318,13 @@ extern void d_exchange(struct dentry *, struct dentry *);
 extern struct dentry *d_ancestor(struct dentry *, struct dentry *);
 
 extern struct dentry *d_lookup(const struct dentry *, const struct qstr *);
-extern struct dentry *d_hash_and_lookup(struct dentry *, struct qstr *);
 
 static inline unsigned d_count(const struct dentry *dentry)
 {
 	return dentry->d_lockref.count;
 }
+
+ino_t d_parent_ino(struct dentry *dentry);
 
 /*
  * helper function for dentry_operations.d_dname() members
@@ -544,12 +562,7 @@ static inline int simple_positive(const struct dentry *dentry)
 	return d_really_is_positive(dentry) && !d_unhashed(dentry);
 }
 
-extern int sysctl_vfs_cache_pressure;
-
-static inline unsigned long vfs_pressure_ratio(unsigned long val)
-{
-	return mult_frac(val, sysctl_vfs_cache_pressure, 100);
-}
+unsigned long vfs_pressure_ratio(unsigned long val);
 
 /**
  * d_inode - Get the actual inode of this dentry
@@ -596,24 +609,23 @@ static inline struct inode *d_backing_inode(const struct dentry *upper)
 /**
  * d_real - Return the real dentry
  * @dentry: the dentry to query
- * @inode: inode to select the dentry from multiple layers (can be NULL)
+ * @type: the type of real dentry (data or metadata)
  *
  * If dentry is on a union/overlay, then return the underlying, real dentry.
  * Otherwise return the dentry itself.
  *
  * See also: Documentation/filesystems/vfs.rst
  */
-static inline struct dentry *d_real(struct dentry *dentry,
-				    const struct inode *inode)
+static inline struct dentry *d_real(struct dentry *dentry, enum d_real_type type)
 {
 	if (unlikely(dentry->d_flags & DCACHE_OP_REAL))
-		return dentry->d_op->d_real(dentry, inode);
+		return dentry->d_op->d_real(dentry, type);
 	else
 		return dentry;
 }
 
 /**
- * d_real_inode - Return the real inode
+ * d_real_inode - Return the real inode hosting the data
  * @dentry: The dentry to query
  *
  * If dentry is on a union/overlay, then return the underlying, real inode.
@@ -622,12 +634,12 @@ static inline struct dentry *d_real(struct dentry *dentry,
 static inline struct inode *d_real_inode(const struct dentry *dentry)
 {
 	/* This usage of d_real() results in const dentry */
-	return d_backing_inode(d_real((struct dentry *) dentry, NULL));
+	return d_inode(d_real((struct dentry *) dentry, D_REAL_DATA));
 }
 
 struct name_snapshot {
 	struct qstr name;
-	unsigned char inline_name[DNAME_INLINE_LEN];
+	union shortname_store inline_name;
 };
 void take_dentry_name_snapshot(struct name_snapshot *, struct dentry *);
 void release_dentry_name_snapshot(struct name_snapshot *);

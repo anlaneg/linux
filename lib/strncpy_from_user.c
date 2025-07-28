@@ -120,6 +120,18 @@ long strncpy_from_user(char *dst, const char __user *src, long count)
 	if (unlikely(count <= 0))
 		return 0;//0长度或者不合适的长度，直接返回NULL
 
+	kasan_check_write(dst, count);
+	check_object_size(dst, count, false);
+
+	if (can_do_masked_user_access()) {
+		long retval;
+
+		src = masked_user_access_begin(src);
+		retval = do_strncpy_from_user(dst, src, count, count);
+		user_read_access_end();
+		return retval;
+	}
+
 	max_addr = TASK_SIZE_MAX;//当前进程的最大地址
 	src_addr = (unsigned long)untagged_addr(src);
 	if (likely(src_addr < max_addr)) {
@@ -134,8 +146,6 @@ long strncpy_from_user(char *dst, const char __user *src, long count)
 		if (max > count)
 			max = count;
 
-		kasan_check_write(dst, count);
-		check_object_size(dst, count, false);
 		if (user_read_access_begin(src, max)) {
 			retval = do_strncpy_from_user(dst, src, count, max);
 			user_read_access_end();

@@ -2006,6 +2006,7 @@ raw_atomic_xchg_relaxed(atomic_t *v, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_cmpxchg() elsewhere.
  *
@@ -2034,6 +2035,7 @@ raw_atomic_cmpxchg(atomic_t *v, int old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with acquire ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_cmpxchg_acquire() elsewhere.
  *
@@ -2062,6 +2064,7 @@ raw_atomic_cmpxchg_acquire(atomic_t *v, int old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with release ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_cmpxchg_release() elsewhere.
  *
@@ -2089,6 +2092,7 @@ raw_atomic_cmpxchg_release(atomic_t *v, int old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with relaxed ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_cmpxchg_relaxed() elsewhere.
  *
@@ -2113,7 +2117,8 @@ raw_atomic_cmpxchg_relaxed(atomic_t *v, int old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with full ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg() elsewhere.
  *
@@ -2146,7 +2151,8 @@ raw_atomic_try_cmpxchg(atomic_t *v, int *old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with acquire ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_acquire() elsewhere.
  *
@@ -2179,7 +2185,8 @@ raw_atomic_try_cmpxchg_acquire(atomic_t *v, int *old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with release ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_release() elsewhere.
  *
@@ -2211,7 +2218,8 @@ raw_atomic_try_cmpxchg_release(atomic_t *v, int *old, int new)
  * @new: int value to assign
  *
  * If (@v == @old), atomically updates @v to @new with relaxed ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_relaxed() elsewhere.
  *
@@ -2235,7 +2243,7 @@ raw_atomic_try_cmpxchg_relaxed(atomic_t *v, int *old, int new)
 
 /**
  * raw_atomic_sub_and_test() - atomic subtract and test if zero with full ordering
- * @i: int value to add
+ * @i: int value to subtract
  * @v: pointer to atomic_t
  *
  * Atomically updates @v to (@v - @i) with full ordering.
@@ -2404,6 +2412,7 @@ raw_atomic_add_negative_relaxed(int i, atomic_t *v)
  * @u: int value to compare with
  *
  * If (@v != @u), atomically updates @v to (@v + @a) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_fetch_add_unless() elsewhere.
  *
@@ -2433,6 +2442,7 @@ raw_atomic_fetch_add_unless(atomic_t *v, int a, int u)
  * @u: int value to compare with
  *
  * If (@v != @u), atomically updates @v to (@v + @a) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_add_unless() elsewhere.
  *
@@ -2453,6 +2463,7 @@ raw_atomic_add_unless(atomic_t *v, int a, int u)
  * @v: pointer to atomic_t
  *
  * If (@v != 0), atomically updates @v to (@v + 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_inc_not_zero() elsewhere.
  *
@@ -2473,6 +2484,7 @@ raw_atomic_inc_not_zero(atomic_t *v)
  * @v: pointer to atomic_t
  *
  * If (@v >= 0), atomically updates @v to (@v + 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_inc_unless_negative() elsewhere.
  *
@@ -2500,6 +2512,7 @@ raw_atomic_inc_unless_negative(atomic_t *v)
  * @v: pointer to atomic_t
  *
  * If (@v <= 0), atomically updates @v to (@v - 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_dec_unless_positive() elsewhere.
  *
@@ -2527,6 +2540,7 @@ raw_atomic_dec_unless_positive(atomic_t *v)
  * @v: pointer to atomic_t
  *
  * If (@v > 0), atomically updates @v to (@v - 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic_dec_if_positive() elsewhere.
  *
@@ -4118,6 +4132,7 @@ raw_atomic64_xchg_relaxed(atomic64_t *v, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_cmpxchg() elsewhere.
  *
@@ -4146,6 +4161,7 @@ raw_atomic64_cmpxchg(atomic64_t *v, s64 old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with acquire ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_cmpxchg_acquire() elsewhere.
  *
@@ -4174,6 +4190,7 @@ raw_atomic64_cmpxchg_acquire(atomic64_t *v, s64 old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with release ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_cmpxchg_release() elsewhere.
  *
@@ -4201,6 +4218,7 @@ raw_atomic64_cmpxchg_release(atomic64_t *v, s64 old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with relaxed ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_cmpxchg_relaxed() elsewhere.
  *
@@ -4225,7 +4243,8 @@ raw_atomic64_cmpxchg_relaxed(atomic64_t *v, s64 old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with full ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg() elsewhere.
  *
@@ -4258,7 +4277,8 @@ raw_atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with acquire ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_acquire() elsewhere.
  *
@@ -4291,7 +4311,8 @@ raw_atomic64_try_cmpxchg_acquire(atomic64_t *v, s64 *old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with release ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_release() elsewhere.
  *
@@ -4323,7 +4344,8 @@ raw_atomic64_try_cmpxchg_release(atomic64_t *v, s64 *old, s64 new)
  * @new: s64 value to assign
  *
  * If (@v == @old), atomically updates @v to @new with relaxed ordering.
- * Otherwise, updates @old to the current value of @v.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_relaxed() elsewhere.
  *
@@ -4347,7 +4369,7 @@ raw_atomic64_try_cmpxchg_relaxed(atomic64_t *v, s64 *old, s64 new)
 
 /**
  * raw_atomic64_sub_and_test() - atomic subtract and test if zero with full ordering
- * @i: s64 value to add
+ * @i: s64 value to subtract
  * @v: pointer to atomic64_t
  *
  * Atomically updates @v to (@v - @i) with full ordering.
@@ -4516,6 +4538,7 @@ raw_atomic64_add_negative_relaxed(s64 i, atomic64_t *v)
  * @u: s64 value to compare with
  *
  * If (@v != @u), atomically updates @v to (@v + @a) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_fetch_add_unless() elsewhere.
  *
@@ -4545,6 +4568,7 @@ raw_atomic64_fetch_add_unless(atomic64_t *v, s64 a, s64 u)
  * @u: s64 value to compare with
  *
  * If (@v != @u), atomically updates @v to (@v + @a) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_add_unless() elsewhere.
  *
@@ -4565,6 +4589,7 @@ raw_atomic64_add_unless(atomic64_t *v, s64 a, s64 u)
  * @v: pointer to atomic64_t
  *
  * If (@v != 0), atomically updates @v to (@v + 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_inc_not_zero() elsewhere.
  *
@@ -4585,6 +4610,7 @@ raw_atomic64_inc_not_zero(atomic64_t *v)
  * @v: pointer to atomic64_t
  *
  * If (@v >= 0), atomically updates @v to (@v + 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_inc_unless_negative() elsewhere.
  *
@@ -4612,6 +4638,7 @@ raw_atomic64_inc_unless_negative(atomic64_t *v)
  * @v: pointer to atomic64_t
  *
  * If (@v <= 0), atomically updates @v to (@v - 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_dec_unless_positive() elsewhere.
  *
@@ -4639,6 +4666,7 @@ raw_atomic64_dec_unless_positive(atomic64_t *v)
  * @v: pointer to atomic64_t
  *
  * If (@v > 0), atomically updates @v to (@v - 1) with full ordering.
+ * Otherwise, @v is not modified and relaxed ordering is provided.
  *
  * Safe to use in noinstr code; prefer atomic64_dec_if_positive() elsewhere.
  *
@@ -4663,4 +4691,4 @@ raw_atomic64_dec_if_positive(atomic64_t *v)
 }
 
 #endif /* _LINUX_ATOMIC_FALLBACK_H */
-// eec048affea735b8464f58e6d96992101f8f85f1
+// b565db590afeeff0d7c9485ccbca5bb6e155749f

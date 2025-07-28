@@ -19,6 +19,7 @@
 #include <asm/tlbflush.h>
 #include <asm/elf.h>
 
+<<<<<<< HEAD
 /*
  * pmd_huge() returns 1 if @pmd is hugetlb related entry, that is normal
  * hugetlb entry or non-present (migration or hwpoisoned) hugetlb entry.
@@ -154,6 +155,8 @@ get_unmapped_area:
 				pgoff, flags);
 }
 #endif /* CONFIG_HUGETLB_PAGE */
+=======
+>>>>>>> upstream/master
 
 #ifdef CONFIG_X86_64
 bool __init arch_hugetlb_valid_size(unsigned long size)

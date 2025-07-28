@@ -488,13 +488,13 @@ static inline int ptr_ring_consume_batched_bh(struct ptr_ring *r,
 /* Not all gfp_t flags (besides GFP_KERNEL) are allowed. See
  * documentation for vmalloc for which of them are legal.
  */
-static inline void **__ptr_ring_init_queue_alloc(unsigned int size, gfp_t gfp)
+static inline void **__ptr_ring_init_queue_alloc_noprof(unsigned int size, gfp_t gfp)
 {
 	if (size > KMALLOC_MAX_SIZE / sizeof(void *))
 	    /*size过大，返回NULL*/
 		return NULL;
 	/*申请长度为size的数组，元素为(void*)*/
-	return kvmalloc_array(size, sizeof(void *), gfp | __GFP_ZERO);
+	return kvmalloc_array_noprof(size, sizeof(void *), gfp | __GFP_ZERO);
 }
 
 /*设置ring长度*/
@@ -513,10 +513,10 @@ static inline void __ptr_ring_set_size(struct ptr_ring *r, int size)
 }
 
 //初始化ring
-static inline int ptr_ring_init(struct ptr_ring *r, int size/*ring长度*/, gfp_t gfp)
+static inline int ptr_ring_init_noprof(struct ptr_ring *r, int size/*ring长度*/, gfp_t gfp)
 {
 	//申请长度为size的queue队列
-	r->queue = __ptr_ring_init_queue_alloc(size, gfp);
+	r->queue = __ptr_ring_init_queue_alloc_noprof(size, gfp);
 	if (!r->queue)
 		return -ENOMEM;
 
@@ -528,6 +528,7 @@ static inline int ptr_ring_init(struct ptr_ring *r, int size/*ring长度*/, gfp_
 
 	return 0;
 }
+#define ptr_ring_init(...)	alloc_hooks(ptr_ring_init_noprof(__VA_ARGS__))
 
 /*
  * Return entries into ring. Destroy entries that don't fit.
@@ -619,12 +620,12 @@ static inline void **__ptr_ring_swap_queue(struct ptr_ring *r, void **queue/*新
  * In particular if you consume ring in interrupt or BH context, you must
  * disable interrupts/BH when doing so.
  */
-static inline int ptr_ring_resize(struct ptr_ring *r, int size, gfp_t gfp,
+static inline int ptr_ring_resize_noprof(struct ptr_ring *r, int size, gfp_t gfp,
 				  void (*destroy)(void *))
 {
 	unsigned long flags;
 	/*申请一个新队列*/
-	void **queue = __ptr_ring_init_queue_alloc(size, gfp);
+	void **queue = __ptr_ring_init_queue_alloc_noprof(size, gfp);
 	void **old;
 
 	if (!queue)
@@ -643,43 +644,43 @@ static inline int ptr_ring_resize(struct ptr_ring *r, int size, gfp_t gfp,
 
 	return 0;
 }
+#define ptr_ring_resize(...)	alloc_hooks(ptr_ring_resize_noprof(__VA_ARGS__))
 
 /*
  * Note: producer lock is nested within consumer lock, so if you
  * resize you must make sure all uses nest correctly.
- * In particular if you consume ring in interrupt or BH context, you must
- * disable interrupts/BH when doing so.
+ * In particular if you consume ring in BH context, you must
+ * disable BH when doing so.
  */
-static inline int ptr_ring_resize_multiple(struct ptr_ring **rings,
-					   unsigned int nrings/*队列数*/,
-					   int size/*队列长度*/,
-					   gfp_t gfp, void (*destroy)(void *))
+static inline int ptr_ring_resize_multiple_bh_noprof(struct ptr_ring **rings,
+						     unsigned int nrings/*队列数*/,
+						     int size/*队列长度*/, gfp_t gfp,
+						     void (*destroy)(void *))
 {
-	unsigned long flags;
 	void ***queues;
 	int i;
 
 	/*申请queues指针*/
-	queues = kmalloc_array(nrings, sizeof(*queues), gfp);
+	queues = kmalloc_array_noprof(nrings, sizeof(*queues), gfp);
 	if (!queues)
 		goto noqueues;
 	//每个queues指针,对应的申请一个ring队列（新的大小）
 	for (i = 0; i < nrings; ++i) {
 		/*ring中的元素是void* */
-		queues[i] = __ptr_ring_init_queue_alloc(size, gfp);
+		queues[i] = __ptr_ring_init_queue_alloc_noprof(size, gfp);
 		if (!queues[i])
 			goto nomem;
 	}
 
 	for (i = 0; i < nrings; ++i) {
 		/*同时占有生产者与消费者锁*/
-		spin_lock_irqsave(&(rings[i])->consumer_lock, flags);
+		spin_lock_bh(&(rings[i])->consumer_lock);
 		spin_lock(&(rings[i])->producer_lock);
 		//将旧ring中的数据移至新的queues中,交换指针
 		queues[i] = __ptr_ring_swap_queue(rings[i]/*旧queue*/, queues[i]/*新queue*/,
 						  size, gfp, destroy);
 		spin_unlock(&(rings[i])->producer_lock);
-		spin_unlock_irqrestore(&(rings[i])->consumer_lock, flags);
+		spin_unlock_bh(&(rings[i])->consumer_lock);
 	}
 
 	//将旧的释放掉
@@ -699,6 +700,8 @@ nomem:
 noqueues:
 	return -ENOMEM;
 }
+#define ptr_ring_resize_multiple_bh(...) \
+		alloc_hooks(ptr_ring_resize_multiple_bh_noprof(__VA_ARGS__))
 
 /*针对r中的所有元素，调用destroy回调*/
 static inline void ptr_ring_cleanup(struct ptr_ring *r, void (*destroy)(void *))

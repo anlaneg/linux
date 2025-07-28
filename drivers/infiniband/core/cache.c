@@ -602,8 +602,8 @@ static int __ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
 out_unlock:
 	mutex_unlock(&table->lock);
 	if (ret)
-		pr_warn("%s: unable to add gid %pI6 error=%d\n",
-			__func__, gid->raw, ret);
+		pr_warn_ratelimited("%s: unable to add gid %pI6 error=%d\n",
+				    __func__, gid->raw, ret);
 	return ret;
 }
 
@@ -820,7 +820,6 @@ err_free_table:
 static void release_gid_table(struct ib_device *device,
 			      struct ib_gid_table *table)
 {
-	bool leak = false;
 	int i;
 
 	if (!table)
@@ -829,15 +828,12 @@ static void release_gid_table(struct ib_device *device,
 	for (i = 0; i < table->sz; i++) {
 		if (is_gid_entry_free(table->data_vec[i]))
 			continue;
-		if (kref_read(&table->data_vec[i]->kref) > 1) {
-			dev_err(&device->dev,
-				"GID entry ref leak for index %d ref=%u\n", i,
-				kref_read(&table->data_vec[i]->kref));
-			leak = true;
-		}
+
+		WARN_ONCE(true,
+			  "GID entry ref leak for dev %s index %d ref=%u\n",
+			  dev_name(&device->dev), i,
+			  kref_read(&table->data_vec[i]->kref));
 	}
-	if (leak)
-		return;
 
 	mutex_destroy(&table->lock);
 	kfree(table->data_vec);
@@ -1170,6 +1166,7 @@ err:
 }
 EXPORT_SYMBOL(ib_find_cached_pkey);
 
+<<<<<<< HEAD
 int ib_find_exact_cached_pkey(struct ib_device *device, u32 port_num,
 			      u16 pkey/*要匹配的pkey*/, u16 *index/*出参，相等pkey的索引号*/)
 {
@@ -1207,6 +1204,8 @@ err:
 }
 EXPORT_SYMBOL(ib_find_exact_cached_pkey);
 
+=======
+>>>>>>> upstream/master
 int ib_get_cached_lmc(struct ib_device *device, u32 port_num, u8 *lmc)
 {
 	unsigned long flags;
@@ -1599,6 +1598,12 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 		device->port_data[port].cache.pkey = pkey_cache;
 	}
 	device->port_data[port].cache.lmc = tprops->lmc;
+
+	if (device->port_data[port].cache.port_state != IB_PORT_NOP &&
+	    device->port_data[port].cache.port_state != tprops->state)
+		ibdev_info(device, "Port: %d Link %s\n", port,
+			   ib_port_state_to_str(tprops->state));
+
 	device->port_data[port].cache.port_state = tprops->state;
 
 	/*更新subnet-prefix*/
@@ -1707,8 +1712,10 @@ int ib_cache_setup_one(struct ib_device *device)
 
 	rdma_for_each_port (device, p) {
 		err = ib_cache_update(device, p, true, true, true);
-		if (err)
+		if (err) {
+			gid_table_cleanup_one(device);
 			return err;
+		}
 	}
 
 	return 0;

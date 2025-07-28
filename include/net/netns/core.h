@@ -15,6 +15,7 @@ struct netns_core {
 	int	sysctl_somaxconn;
 	int	sysctl_optmem_max;
 	u8	sysctl_txrehash;/*是否容许tx方向rethink hash*/
+	u8	sysctl_tstamp_allow_data;
 
 #ifdef CONFIG_PROC_FS
 	struct prot_inuse __percpu *prot_inuse;

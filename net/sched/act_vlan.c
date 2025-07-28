@@ -100,6 +100,7 @@ out:
 	if (skb_at_tc_ingress(skb))
 		skb_pull_rcsum(skb, skb->mac_len);
 
+	skb_reset_mac_len(skb);
 	return action;
 
 drop:
@@ -432,6 +433,7 @@ static struct tc_action_ops act_vlan_ops = {
 	.offload_act_setup =	tcf_vlan_offload_act_setup,
 	.size		=	sizeof(struct tcf_vlan),
 };
+MODULE_ALIAS_NET_ACT("vlan");
 
 static __net_init int vlan_init_net(struct net *net)
 {

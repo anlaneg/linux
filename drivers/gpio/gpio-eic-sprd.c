@@ -10,8 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
-#include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/spinlock.h>
 
 /* EIC registers definition */
@@ -108,7 +108,6 @@ static struct sprd_eic *to_sprd_eic(struct notifier_block *nb)
 
 struct sprd_eic_variant_data {
 	enum sprd_eic_type type;
-	u32 num_eics;
 };
 
 static const char *sprd_eic_label_name[SPRD_EIC_MAX] = {
@@ -118,22 +117,18 @@ static const char *sprd_eic_label_name[SPRD_EIC_MAX] = {
 
 static const struct sprd_eic_variant_data sc9860_eic_dbnc_data = {
 	.type = SPRD_EIC_DEBOUNCE,
-	.num_eics = 8,
 };
 
 static const struct sprd_eic_variant_data sc9860_eic_latch_data = {
 	.type = SPRD_EIC_LATCH,
-	.num_eics = 8,
 };
 
 static const struct sprd_eic_variant_data sc9860_eic_async_data = {
 	.type = SPRD_EIC_ASYNC,
-	.num_eics = 8,
 };
 
 static const struct sprd_eic_variant_data sc9860_eic_sync_data = {
 	.type = SPRD_EIC_SYNC,
-	.num_eics = 8,
 };
 
 static inline void __iomem *sprd_eic_offset_base(struct sprd_eic *sprd_eic,
@@ -208,9 +203,10 @@ static int sprd_eic_direction_input(struct gpio_chip *chip, unsigned int offset)
 	return 0;
 }
 
-static void sprd_eic_set(struct gpio_chip *chip, unsigned int offset, int value)
+static int sprd_eic_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	/* EICs are always input, nothing need to do here. */
+	return 0;
 }
 
 static int sprd_eic_set_debounce(struct gpio_chip *chip, unsigned int offset,
@@ -619,9 +615,10 @@ static int sprd_eic_probe(struct platform_device *pdev)
 	struct gpio_irq_chip *irq;
 	struct sprd_eic *sprd_eic;
 	struct resource *res;
+	u16 num_banks = 0;
 	int ret, i;
 
-	pdata = of_device_get_match_data(dev);
+	pdata = device_get_match_data(dev);
 	if (!pdata) {
 		dev_err(dev, "No matching driver data found.\n");
 		return -EINVAL;
@@ -652,10 +649,12 @@ static int sprd_eic_probe(struct platform_device *pdev)
 		sprd_eic->base[i] = devm_ioremap_resource(dev, res);
 		if (IS_ERR(sprd_eic->base[i]))
 			return PTR_ERR(sprd_eic->base[i]);
+
+		num_banks++;
 	}
 
 	sprd_eic->chip.label = sprd_eic_label_name[sprd_eic->type];
-	sprd_eic->chip.ngpio = pdata->num_eics;
+	sprd_eic->chip.ngpio = num_banks * SPRD_EIC_PER_BANK_NR;
 	sprd_eic->chip.base = -1;
 	sprd_eic->chip.parent = dev;
 	sprd_eic->chip.direction_input = sprd_eic_direction_input;
@@ -664,7 +663,7 @@ static int sprd_eic_probe(struct platform_device *pdev)
 		sprd_eic->chip.request = sprd_eic_request;
 		sprd_eic->chip.free = sprd_eic_free;
 		sprd_eic->chip.set_config = sprd_eic_set_config;
-		sprd_eic->chip.set = sprd_eic_set;
+		sprd_eic->chip.set_rv = sprd_eic_set;
 		fallthrough;
 	case SPRD_EIC_ASYNC:
 	case SPRD_EIC_SYNC:

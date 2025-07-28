@@ -76,7 +76,7 @@
 struct device;
 struct attribute_group;
 
-struct miscdevice  {
+struct miscdevice {
     //取值为MISC_DYNAMIC_MINOR时，采用动态minor方式
 	int minor;
 	const char *name;//设备名称

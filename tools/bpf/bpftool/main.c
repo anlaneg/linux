@@ -155,7 +155,7 @@ static int do_version(int argc, char **argv)
 			     BPFTOOL_MINOR_VERSION, BPFTOOL_PATCH_VERSION);
 #endif
 		jsonw_name(json_wtr, "libbpf_version");
-		jsonw_printf(json_wtr, "\"%d.%d\"",
+		jsonw_printf(json_wtr, "\"%u.%u\"",
 			     libbpf_major_version(), libbpf_minor_version());
 
 		jsonw_name(json_wtr, "features");
@@ -389,7 +389,7 @@ static int do_batch(int argc, char **argv)
 			/*cp指向的位置是一个续行符，继续读取，并合并对应续行，移除续行符*/
 			if (!fgets(contline, sizeof(contline), fp) ||
 			    strlen(contline) == 0) {
-				p_err("missing continuation line on command %d",
+				p_err("missing continuation line on command %u",
 				      lines);
 				err = -1;
 				goto err_close;
@@ -402,7 +402,7 @@ static int do_batch(int argc, char **argv)
 
 			if (strlen(buf) + strlen(contline) + 1 > sizeof(buf)) {
 				/*内容过长*/
-				p_err("command %d is too long", lines);
+				p_err("command %u is too long", lines);
 				err = -1;
 				goto err_close;
 			}
@@ -446,7 +446,7 @@ static int do_batch(int argc, char **argv)
 		err = -1;
 	} else {
 		if (!json_output)
-			printf("processed %d commands\n", lines);
+			printf("processed %u commands\n", lines);
 	}
 err_close:
 	if (fp != stdin)

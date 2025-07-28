@@ -215,7 +215,7 @@ static int rxe_init_sq(struct rxe_qp *qp, struct ib_qp_init_attr *init,
 	qp->sq.queue = rxe_queue_init(rxe, &qp->sq.max_wr/*队列长度*/, wqe_size,
 				      QUEUE_TYPE_FROM_CLIENT);
 	if (!qp->sq.queue) {
-		rxe_err_qp(qp, "Unable to allocate send queue");
+		rxe_err_qp(qp, "Unable to allocate send queue\n");
 		err = -ENOMEM;
 		goto err_out;
 	}
@@ -226,7 +226,7 @@ static int rxe_init_sq(struct rxe_qp *qp, struct ib_qp_init_attr *init,
 			   qp->sq.queue->buf, qp->sq.queue->buf_size,
 			   &qp->sq.queue->ip);
 	if (err) {
-		rxe_err_qp(qp, "do_mmap_info failed, err = %d", err);
+		rxe_err_qp(qp, "do_mmap_info failed, err = %d\n", err);
 		goto err_free;
 	}
 
@@ -260,7 +260,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	err = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, 0, &qp->sk);
 	if (err < 0)
 		return err;
-	qp->sk->sk->sk_user_data = qp;/*指明此socket对应私有数据为此qp*/
+	qp->sk->sk->sk_user_data = (void *)(uintptr_t)qp->elem.index;/*指明此socket对应私有数据为此qp index*/
 
 	/* pick a source UDP port number for this QP based on
 	 * the source QPN. this spreads traffic for different QPs
@@ -283,10 +283,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->req.opcode		= -1;
 	qp->comp.opcode		= -1;
 
-	/*qp->send_q中填充好的send_wqe处理，负责构造skb并向外发送报文*/
-	rxe_init_task(&qp->req.task, qp, rxe_requester);
-	/*收到对端发送过来的响应，针对响应内容生成send_cq上的通知内容。*/
-	rxe_init_task(&qp->comp.task, qp, rxe_completer);
+	rxe_init_task(&qp->send_task, qp, rxe_sender);
 
 	qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
 	if (init->qp_type == IB_QPT_RC) {
@@ -314,7 +311,7 @@ static int rxe_init_rq(struct rxe_qp *qp, struct ib_qp_init_attr *init,
 	qp->rq.queue = rxe_queue_init(rxe, &qp->rq.max_wr, wqe_size,
 				      QUEUE_TYPE_FROM_CLIENT);
 	if (!qp->rq.queue) {
-		rxe_err_qp(qp, "Unable to allocate recv queue");
+		rxe_err_qp(qp, "Unable to allocate recv queue\n");
 		err = -ENOMEM;
 		goto err_out;
 	}
@@ -325,7 +322,7 @@ static int rxe_init_rq(struct rxe_qp *qp, struct ib_qp_init_attr *init,
 			   qp->rq.queue->buf, qp->rq.queue->buf_size,
 			   &qp->rq.queue->ip);
 	if (err) {
-		rxe_err_qp(qp, "do_mmap_info failed, err = %d", err);
+		rxe_err_qp(qp, "do_mmap_info failed, err = %d\n", err);
 		goto err_free;
 	}
 
@@ -361,7 +358,7 @@ static int rxe_qp_init_resp(struct rxe_dev *rxe, struct rxe_qp *qp,
 	}
 
 	/*处理收取到的请求类报文，针对这些报文进行响应（包括将报文内容填充到用户态指明的recv_wr)*/
-	rxe_init_task(&qp->resp.task, qp, rxe_responder);
+	rxe_init_task(&qp->recv_task, qp, rxe_receiver);
 
 	qp->resp.opcode		= OPCODE_NONE;
 	qp->resp.msn		= 0;
@@ -541,14 +538,12 @@ err1:
 static void rxe_qp_reset(struct rxe_qp *qp)
 {
 	/* stop tasks from running */
-	rxe_disable_task(&qp->resp.task);
-	rxe_disable_task(&qp->comp.task);
-	rxe_disable_task(&qp->req.task);
+	rxe_disable_task(&qp->recv_task);
+	rxe_disable_task(&qp->send_task);
 
 	/* drain work and packet queuesc */
-	rxe_requester(qp);/*排空qp中的内容*/
-	rxe_completer(qp);
-	rxe_responder(qp);
+	rxe_sender(qp);
+	rxe_receiver(qp);
 
 	if (qp->rq.queue)
 		rxe_queue_reset(qp->rq.queue);
@@ -575,9 +570,8 @@ static void rxe_qp_reset(struct rxe_qp *qp)
 	cleanup_rd_atomic_resources(qp);
 
 	/* reenable tasks */
-	rxe_enable_task(&qp->resp.task);
-	rxe_enable_task(&qp->comp.task);
-	rxe_enable_task(&qp->req.task);
+	rxe_enable_task(&qp->recv_task);
+	rxe_enable_task(&qp->send_task);
 }
 
 /* move the qp to the error state */
@@ -589,9 +583,8 @@ void rxe_qp_error(struct rxe_qp *qp)
 	qp->attr.qp_state = IB_QPS_ERR;
 
 	/* drain work and packet queues */
-	rxe_sched_task(&qp->resp.task);
-	rxe_sched_task(&qp->comp.task);
-	rxe_sched_task(&qp->req.task);
+	rxe_sched_task(&qp->recv_task);
+	rxe_sched_task(&qp->send_task);
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 }
 
@@ -602,8 +595,7 @@ static void rxe_qp_sqd(struct rxe_qp *qp, struct ib_qp_attr *attr,
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	qp->attr.sq_draining = 1;
-	rxe_sched_task(&qp->comp.task);
-	rxe_sched_task(&qp->req.task);
+	rxe_sched_task(&qp->send_task);
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 }
 
@@ -808,6 +800,7 @@ int rxe_qp_to_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask)
 	 * Yield the processor
 	 */
 	spin_lock_irqsave(&qp->state_lock, flags);
+	attr->cur_qp_state = qp_state(qp);
 	if (qp->attr.sq_draining) {
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		cond_resched();
@@ -843,24 +836,25 @@ static void rxe_qp_do_cleanup(struct work_struct *work)
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 	qp->qp_timeout_jiffies = 0;
 
-	if (qp_type(qp) == IB_QPT_RC) {
-		del_timer_sync(&qp->retrans_timer);
-		del_timer_sync(&qp->rnr_nak_timer);
+	/* In the function timer_setup, .function is initialized. If .function
+	 * is NULL, it indicates the function timer_setup is not called, the
+	 * timer is not initialized. Or else, the timer is initialized.
+	 */
+	if (qp_type(qp) == IB_QPT_RC && qp->retrans_timer.function &&
+		qp->rnr_nak_timer.function) {
+		timer_delete_sync(&qp->retrans_timer);
+		timer_delete_sync(&qp->rnr_nak_timer);
 	}
 
-	if (qp->resp.task.func)
-		rxe_cleanup_task(&qp->resp.task);
+	if (qp->recv_task.func)
+		rxe_cleanup_task(&qp->recv_task);
 
-	if (qp->req.task.func)
-		rxe_cleanup_task(&qp->req.task);
-
-	if (qp->comp.task.func)
-		rxe_cleanup_task(&qp->comp.task);
+	if (qp->send_task.func)
+		rxe_cleanup_task(&qp->send_task);
 
 	/* flush out any receive wr's or pending requests */
-	rxe_requester(qp);/*排空qp中的内容*/
-	rxe_completer(qp);
-	rxe_responder(qp);
+	rxe_sender(qp);
+	rxe_receiver(qp);
 
 	if (qp->sq.queue)
 		rxe_queue_cleanup(qp->sq.queue);

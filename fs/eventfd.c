@@ -266,7 +266,7 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 	ssize_t res;
 	__u64 ucnt;
 
-	if (count < sizeof(ucnt))
+	if (count != sizeof(ucnt))
 		return -EINVAL;
 	if (copy_from_user(&ucnt, buf, sizeof(ucnt)))
 		return -EFAULT;
@@ -302,14 +302,19 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 {
 	struct eventfd_ctx *ctx = f->private_data;
+	__u64 cnt;
 
 	spin_lock_irq(&ctx->wqh.lock);
-	seq_printf(m, "eventfd-count: %16llx\n",
-		   (unsigned long long)ctx->count);/*显示event数*/
+	cnt = ctx->count;
 	spin_unlock_irq(&ctx->wqh.lock);
-	seq_printf(m, "eventfd-id: %d\n", ctx->id);
-	seq_printf(m, "eventfd-semaphore: %d\n",
-		   !!(ctx->flags & EFD_SEMAPHORE));
+
+	seq_printf(m,
+		   "eventfd-count: %16llx\n"
+		   "eventfd-id: %d\n"
+		   "eventfd-semaphore: %d\n",
+		   cnt,
+		   ctx->id,
+		   !!(ctx->flags & EFD_SEMAPHORE));/*显示event数*/
 }
 #endif
 
@@ -363,15 +368,12 @@ EXPORT_SYMBOL_GPL(eventfd_fget);
  */
 struct eventfd_ctx *eventfd_ctx_fdget(int fd)
 {
-    /*通过fd找到其对应的eventfd_ctx*/
-	struct eventfd_ctx *ctx;
-	struct fd f = fdget(fd);
-	if (!f.file)
+    	/*通过fd找到其对应的eventfd_ctx*/
+	CLASS(fd, f)(fd);
+	if (fd_empty(f))
 		return ERR_PTR(-EBADF);
 	//取文件私有数据，即eventfd_ctx
-	ctx = eventfd_ctx_fileget(f.file);
-	fdput(f);
-	return ctx;
+	return eventfd_ctx_fileget(fd_file(f));
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_fdget);
 
@@ -408,6 +410,7 @@ static int do_eventfd(unsigned int count, int flags)
 	/* Check the EFD_* constants for consistency.  */
 	BUILD_BUG_ON(EFD_CLOEXEC != O_CLOEXEC);
 	BUILD_BUG_ON(EFD_NONBLOCK != O_NONBLOCK);
+	BUILD_BUG_ON(EFD_SEMAPHORE != (1 << 0));
 
 	/*有效flags检查*/
 	if (flags & ~EFD_FLAGS_SET)
@@ -432,14 +435,13 @@ static int do_eventfd(unsigned int count, int flags)
 		goto err;
 
 	/*申请一个匿名文件，指明eventfd文件对应的fops*/
-	file = anon_inode_getfile("[eventfd]", &eventfd_fops, ctx, flags);
+	file = anon_inode_getfile_fmode("[eventfd]", &eventfd_fops,
+					ctx, flags, FMODE_NOWAIT);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
 		fd = PTR_ERR(file);
 		goto err;
 	}
-
-	file->f_mode |= FMODE_NOWAIT;
 	fd_install(fd, file);/*fd与文件关联*/
 	return fd;
 err:

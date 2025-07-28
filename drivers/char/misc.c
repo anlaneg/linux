@@ -58,33 +58,29 @@ static LIST_HEAD(misc_list);/*记录系统中所有misc设备*/
 static DEFINE_MUTEX(misc_mtx);
 
 /*
- * Assigned numbers, used for dynamic minors
+ * Assigned numbers.
  */
-#define DYNAMIC_MINORS 128 /* like dynamic majors */
 //记录哪些动态minors已分配（bitmap)
 static DEFINE_IDA(misc_minors_ida);
 
 /*为misc设备申请minor*/
-static int misc_minor_alloc(void)
+static int misc_minor_alloc(int minor)
 {
-	int ret;
+	int ret = 0;
 
-	ret = ida_alloc_max(&misc_minors_ida, DYNAMIC_MINORS - 1, GFP_KERNEL);
-	if (ret >= 0) {
-		ret = DYNAMIC_MINORS - ret - 1;
-	} else {
+	if (minor == MISC_DYNAMIC_MINOR) {
+		/* allocate free id */
 		ret = ida_alloc_range(&misc_minors_ida, MISC_DYNAMIC_MINOR + 1,
 				      MINORMASK, GFP_KERNEL);
+	} else {
+		ret = ida_alloc_range(&misc_minors_ida, minor, minor, GFP_KERNEL);
 	}
 	return ret;
 }
 
 static void misc_minor_free(int minor)
 {
-	if (minor < DYNAMIC_MINORS)
-		ida_free(&misc_minors_ida, DYNAMIC_MINORS - minor - 1);
-	else if (minor > MISC_DYNAMIC_MINOR)
-		ida_free(&misc_minors_ida, minor);
+	ida_free(&misc_minors_ida, minor);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -231,7 +227,7 @@ int misc_register(struct miscdevice *misc)
 
 	if (is_dynamic) {
 	    //为动态minor分配一个编号
-		int i = misc_minor_alloc();
+		int i = misc_minor_alloc(misc->minor);
 
 		if (i < 0) {
 		    //查找不到时，返回最大值
@@ -243,12 +239,19 @@ int misc_register(struct miscdevice *misc)
 	} else {
 	    //指定了minor，故先检查是否此minor是否已分配
 		struct miscdevice *c;
+		int i;
 
 		list_for_each_entry(c, &misc_list, list) {
 			if (c->minor == misc->minor) {
 				err = -EBUSY;/*不可分配*/
 				goto out;
 			}
+		}
+
+		i = misc_minor_alloc(misc->minor);
+		if (i < 0) {
+			err = -EBUSY;
+			goto out;
 		}
 	}
 
@@ -259,9 +262,9 @@ int misc_register(struct miscdevice *misc)
 		device_create_with_groups(&misc_class, misc->parent, dev,
 					  misc/*驱动的私有数据*/, misc->groups, "%s"/*设备名称format*/, misc->name);
 	if (IS_ERR(misc->this_device)) {
+		misc_minor_free(misc->minor);
 	    //注册失败，回退动态minor占用的那个编号
 		if (is_dynamic) {
-			misc_minor_free(misc->minor);
 			misc->minor = MISC_DYNAMIC_MINOR;
 		}
 		err = PTR_ERR(misc->this_device);
@@ -315,7 +318,7 @@ static int __init misc_init(void)
 
 	err = -EIO;
 	/*先注册misc字符设备，通过其可定位具体的misc设备*/
-	if (register_chrdev(MISC_MAJOR, "misc", &misc_fops))
+	if (__register_chrdev(MISC_MAJOR, 0, MINORMASK + 1, "misc", &misc_fops))
 		goto fail_printk;
 	return 0;
 

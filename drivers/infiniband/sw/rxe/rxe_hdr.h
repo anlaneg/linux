@@ -271,7 +271,7 @@ static inline void __bth_set_resv6a(void *arg)
 {
 	struct rxe_bth *bth = arg;
 
-	bth->qpn = cpu_to_be32(~BTH_RESV6A_MASK);
+	bth->qpn &= cpu_to_be32(~BTH_RESV6A_MASK);
 }
 
 /*检查是否有ackreq标记,即发送方要求进行主动ack*/

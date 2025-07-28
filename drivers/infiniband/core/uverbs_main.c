@@ -52,6 +52,7 @@
 #include <rdma/ib.h>
 #include <rdma/uverbs_std_types.h>
 #include <rdma/rdma_netlink.h>
+#include <rdma/ib_ucaps.h>
 
 #include "uverbs.h"
 #include "core_priv.h"
@@ -76,6 +77,7 @@ static dev_t dynamic_uverbs_dev;
 static DEFINE_IDA(uverbs_ida);
 static int ib_uverbs_add_one(struct ib_device *device);
 static void ib_uverbs_remove_one(struct ib_device *device, void *client_data);
+static struct ib_client uverbs_client;
 
 static char *uverbs_devnode(const struct device *dev, umode_t *mode)
 {
@@ -218,6 +220,7 @@ void ib_uverbs_release_file(struct kref *ref)
 
 	if (file->disassociate_page)
 		__free_pages(file->disassociate_page, 0);
+	mutex_destroy(&file->disassociation_lock);
 	mutex_destroy(&file->umap_lock);
 	mutex_destroy(&file->ucontext_lock);
 	kfree(file);
@@ -360,7 +363,6 @@ const struct file_operations uverbs_event_fops = {
 	.poll    = ib_uverbs_comp_event_poll,/*实现event的poll*/
 	.release = uverbs_uobject_fd_release,
 	.fasync  = ib_uverbs_comp_event_fasync,
-	.llseek	 = no_llseek,
 };
 
 const struct file_operations uverbs_async_event_fops = {
@@ -369,7 +371,6 @@ const struct file_operations uverbs_async_event_fops = {
 	.poll    = ib_uverbs_async_event_poll,
 	.release = uverbs_async_event_release,
 	.fasync  = ib_uverbs_async_event_fasync,
-	.llseek	 = no_llseek,
 };
 
 void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
@@ -715,9 +716,14 @@ static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma)
 		ret = PTR_ERR(ucontext);
 		goto out;
 	}
+
+	mutex_lock(&file->disassociation_lock);
+
 	vma->vm_ops = &rdma_umap_ops;
 	/*调用设备对应的mmap*/
 	ret = ucontext->device->ops.mmap(ucontext, vma);
+
+	mutex_unlock(&file->disassociation_lock);
 out:
 	srcu_read_unlock(&file->device->disassociate_srcu, srcu_key);
 	return ret;
@@ -739,6 +745,8 @@ static void rdma_umap_open(struct vm_area_struct *vma)
 	/* We are racing with disassociation */
 	if (!down_read_trylock(&ufile->hw_destroy_rwsem))
 		goto out_zap;
+	mutex_lock(&ufile->disassociation_lock);
+
 	/*
 	 * Disassociation already completed, the VMA should already be zapped.
 	 */
@@ -750,10 +758,12 @@ static void rdma_umap_open(struct vm_area_struct *vma)
 		goto out_unlock;
 	rdma_umap_priv_init(priv, vma, opriv->entry);
 
+	mutex_unlock(&ufile->disassociation_lock);
 	up_read(&ufile->hw_destroy_rwsem);
 	return;
 
 out_unlock:
+	mutex_unlock(&ufile->disassociation_lock);
 	up_read(&ufile->hw_destroy_rwsem);
 out_zap:
 	/*
@@ -837,7 +847,7 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 {
 	struct rdma_umap_priv *priv, *next_priv;
 
-	lockdep_assert_held(&ufile->hw_destroy_rwsem);
+	mutex_lock(&ufile->disassociation_lock);
 
 	while (1) {
 		struct mm_struct *mm = NULL;
@@ -863,8 +873,10 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 			break;
 		}
 		mutex_unlock(&ufile->umap_lock);
-		if (!mm)
+		if (!mm) {
+			mutex_unlock(&ufile->disassociation_lock);
 			return;
+		}
 
 		/*
 		 * The umap_lock is nested under mmap_lock since it used within
@@ -894,7 +906,31 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 		mmap_read_unlock(mm);
 		mmput(mm);
 	}
+
+	mutex_unlock(&ufile->disassociation_lock);
 }
+
+/**
+ * rdma_user_mmap_disassociate() - Revoke mmaps for a device
+ * @device: device to revoke
+ *
+ * This function should be called by drivers that need to disable mmaps for the
+ * device, for instance because it is going to be reset.
+ */
+void rdma_user_mmap_disassociate(struct ib_device *device)
+{
+	struct ib_uverbs_device *uverbs_dev =
+		ib_get_client_data(device, &uverbs_client);
+	struct ib_uverbs_file *ufile;
+
+	mutex_lock(&uverbs_dev->lists_mutex);
+	list_for_each_entry(ufile, &uverbs_dev->uverbs_file_list, list) {
+		if (ufile->ucontext)
+			uverbs_user_mmap_disassociate(ufile);
+	}
+	mutex_unlock(&uverbs_dev->lists_mutex);
+}
+EXPORT_SYMBOL(rdma_user_mmap_disassociate);
 
 /*
  * ib_uverbs_open() does not need the BKL:
@@ -967,6 +1003,8 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 	mutex_init(&file->umap_lock);
 	INIT_LIST_HEAD(&file->umaps);
 
+	mutex_init(&file->disassociation_lock);
+
 	filp->private_data = file;
 	list_add_tail(&file->list, &dev->uverbs_file_list);
 	mutex_unlock(&dev->lists_mutex);
@@ -1010,7 +1048,6 @@ static const struct file_operations uverbs_fops = {
 	.write	 = ib_uverbs_write,
 	.open	 = ib_uverbs_open,
 	.release = ib_uverbs_close,
-	.llseek	 = no_llseek,
 	.unlocked_ioctl = ib_uverbs_ioctl,
 	.compat_ioctl = compat_ptr_ioctl,
 };
@@ -1022,7 +1059,6 @@ static const struct file_operations uverbs_mmap_fops = {
 	.mmap    = ib_uverbs_mmap,/*响应mmap调用*/
 	.open	 = ib_uverbs_open,
 	.release = ib_uverbs_close,
-	.llseek	 = no_llseek,
 	.unlocked_ioctl = ib_uverbs_ioctl,
 	.compat_ioctl = compat_ptr_ioctl,
 };
@@ -1141,7 +1177,8 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	struct ib_uverbs_device *uverbs_dev;
 	int ret;
 
-	if (!device->ops.alloc_ucontext)
+	if (!device->ops.alloc_ucontext ||
+	    device->type == RDMA_DEVICE_TYPE_SMI)
 		/*ib设备必须支持alloc ucontext*/
 		return -EOPNOTSUPP;
 
@@ -1345,6 +1382,7 @@ static void __exit ib_uverbs_cleanup(void)
 				 IB_UVERBS_NUM_FIXED_MINOR);
 	unregister_chrdev_region(dynamic_uverbs_dev,
 				 IB_UVERBS_NUM_DYNAMIC_MINOR);
+	ib_cleanup_ucaps();
 	mmu_notifier_synchronize();
 }
 

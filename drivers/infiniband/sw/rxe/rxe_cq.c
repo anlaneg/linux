@@ -30,7 +30,7 @@ int rxe_cq_chk_attr(struct rxe_dev *rxe, struct rxe_cq *cq,
 	    /*cqe数目不得小于当前队列中已有元素数*/
 		count = queue_count(cq->queue, QUEUE_TYPE_TO_CLIENT);
 		if (cqe < count) {
-			rxe_dbg_cq(cq, "cqe(%d) < current # elements in queue (%d)",
+			rxe_dbg_cq(cq, "cqe(%d) < current # elements in queue (%d)\n",
 					cqe, count);
 			goto err1;
 		}
@@ -62,11 +62,8 @@ int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参
 	/*将cq->queue->buf映射给用户态程序*/
 	err = do_mmap_info(rxe, uresp ? &uresp->mi : NULL, udata,
 			   cq->queue->buf/*要映射的内存*/, cq->queue->buf_size/*buffer大小*/, &cq->queue->ip);
-	if (err) {
-		vfree(cq->queue->buf);
-		kfree(cq->queue);
+	if (err)
 		return err;
-	}
 
 	cq->is_user = uresp;
 
@@ -103,7 +100,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe/*cqe中要填充的内容
 	full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
 	if (unlikely(full)) {
 		/*取cqe时发现cq队列为满，产生一个cq_err event*/
-		rxe_err_cq(cq, "queue full");
+		rxe_err_cq(cq, "queue full\n");
 		spin_unlock_irqrestore(&cq->cq_lock, flags);
 		if (cq->ibcq.event_handler) {
 			ev.device = cq->ibcq.device;

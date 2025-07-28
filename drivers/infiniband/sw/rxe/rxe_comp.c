@@ -115,7 +115,7 @@ static enum ib_wc_opcode wr_to_wc_opcode(enum ib_wr_opcode opcode)
 /*重传定时器被触发*/
 void retransmit_timer(struct timer_list *t)
 {
-	struct rxe_qp *qp = from_timer(qp, t, retrans_timer);
+	struct rxe_qp *qp = timer_container_of(qp, t, retrans_timer);
 	unsigned long flags;
 
 	rxe_dbg_qp(qp, "retransmit timer fired\n");
@@ -123,7 +123,7 @@ void retransmit_timer(struct timer_list *t)
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (qp->valid) {
 		qp->comp.timeout = 1;/*标记timeout*/
-		rxe_sched_task(&qp->comp.task);
+		rxe_sched_task(&qp->send_task);
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 }
@@ -131,20 +131,9 @@ void retransmit_timer(struct timer_list *t)
 /*向qp->resp_pkts中添加skb,并运行qp->comp.task*/
 void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
-	int must_sched;
-
+	rxe_counter_inc(SKB_TO_PKT(skb)->rxe, RXE_CNT_SENDER_SCHED);
 	skb_queue_tail(&qp->resp_pkts, skb);/*报文入队*/
-
-	/*队列长度大于1，则需要调度（保证前面的报文先处理）*/
-	must_sched = skb_queue_len(&qp->resp_pkts) > 1;
-	if (must_sched != 0)
-		/*complete调度统计增加*/
-		rxe_counter_inc(SKB_TO_PKT(skb)->rxe, RXE_CNT_COMPLETER_SCHED);
-
-	if (must_sched)
-		rxe_sched_task(&qp->comp.task);
-	else
-		rxe_run_task(&qp->comp.task);
+	rxe_sched_task(&qp->send_task);
 }
 
 static inline enum comp_state get_wqe(struct rxe_qp *qp,
@@ -330,7 +319,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 					qp->comp.psn = pkt->psn;
 					if (qp->req.wait_psn) {
 						qp->req.wait_psn = 0;
-						rxe_sched_task(&qp->req.task);
+						qp->req.again = 1;
 					}
 				}
 				return COMPST_ERROR_RETRY;
@@ -438,7 +427,7 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		}
 	} else {
 		if (wqe->status != IB_WC_WR_FLUSH_ERR)
-			rxe_err_qp(qp, "non-flush error status = %d",
+			rxe_err_qp(qp, "non-flush error status = %d\n",
 				wqe->status);
 	}
 }
@@ -482,7 +471,7 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	 */
 	if (qp->req.wait_fence) {
 		qp->req.wait_fence = 0;
-		rxe_sched_task(&qp->req.task);
+		qp->req.again = 1;
 	}
 }
 
@@ -521,7 +510,7 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 		if (qp->req.need_rd_atomic) {
 			qp->comp.timeout_retry = 0;
 			qp->req.need_rd_atomic = 0;
-			rxe_sched_task(&qp->req.task);
+			qp->req.again = 1;
 		}
 	}
 
@@ -547,7 +536,7 @@ static inline enum comp_state complete_wqe(struct rxe_qp *qp,
 
 		if (qp->req.wait_psn) {
 			qp->req.wait_psn = 0;
-			rxe_sched_task(&qp->req.task);
+			qp->req.again = 1;
 		}
 	}
 
@@ -589,7 +578,7 @@ static int flush_send_wqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 
 	err = rxe_cq_post(qp->scq, &cqe, 0);
 	if (err)
-		rxe_dbg_cq(qp->scq, "post cq failed, err = %d", err);
+		rxe_dbg_cq(qp->scq, "post cq failed, err = %d\n", err);
 
 	return err;
 }
@@ -662,6 +651,8 @@ int rxe_completer(struct rxe_qp *qp)
 	enum comp_state state;
 	int ret;
 	unsigned long flags;
+
+	qp->req.again = 0;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (!qp->valid || qp_state(qp) == IB_QPS_ERR ||
@@ -749,7 +740,7 @@ int rxe_completer(struct rxe_qp *qp)
 
 			if (qp->req.wait_psn) {
 				qp->req.wait_psn = 0;
-				rxe_sched_task(&qp->req.task);
+				qp->req.again = 1;
 			}
 
 			state = COMPST_DONE;
@@ -804,7 +795,7 @@ int rxe_completer(struct rxe_qp *qp)
 							RXE_CNT_COMP_RETRY);
 					qp->req.need_retry = 1;
 					qp->comp.started_retry = 1;
-					rxe_sched_task(&qp->req.task);
+					qp->req.again = 1;
 				}
 				goto done;
 
@@ -855,8 +846,9 @@ done:
 	ret = 0;
 	goto out;
 exit:
-	ret = -EAGAIN;
+	ret = (qp->req.again) ? 0 : -EAGAIN;
 out:
+	qp->req.again = 0;
 	if (pkt)
 		free_pkt(pkt);
 	return ret;

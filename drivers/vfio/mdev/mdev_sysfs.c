@@ -169,7 +169,7 @@ static void mdev_type_release(struct kobject *kobj)
 }
 
 //定义mdev_type的kobj类型
-static struct kobj_type mdev_type_ktype = {
+static const struct kobj_type mdev_type_ktype = {
 	.sysfs_ops	= &mdev_type_sysfs_ops,
 	.release	= mdev_type_release,
 	.default_groups	= mdev_type_groups,

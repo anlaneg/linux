@@ -168,25 +168,8 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	skb->dev = dev;
 	skb_reset_mac_header(skb);//定义当前data位置为以太头位置
 
-	eth = (struct ethhdr *)skb->data;
-	//使data移动到以太头之后
-	skb_pull_inline(skb, ETH_HLEN);
-
-	if (unlikely(!ether_addr_equal_64bits(eth->h_dest,
-					      dev->dev_addr))) {
-		//目的mac地址为广播mac或者组播mac
-		if (unlikely(is_multicast_ether_addr_64bits(eth->h_dest))) {
-			if (ether_addr_equal_64bits(eth->h_dest, dev->broadcast))
-				//如果是广播报文，指明类型为广播报文
-				skb->pkt_type = PACKET_BROADCAST;
-			else
-				//组播报文
-				skb->pkt_type = PACKET_MULTICAST;
-		} else {
-			//目的mac地址与当前设备mac地址不同
-			skb->pkt_type = PACKET_OTHERHOST;
-		}
-	}
+	eth = eth_skb_pull_mac(skb);
+	eth_skb_pkt_type(skb, dev);
 
 	/*
 	 * Some variants of DSA tagging don't have an ethertype field

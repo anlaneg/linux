@@ -24,7 +24,7 @@ static int rxe_query_device(struct ib_device *ibdev,
 	int err;
 
 	if (udata->inlen || udata->outlen) {
-		rxe_dbg_dev(rxe, "malformed udata");
+		rxe_dbg_dev(rxe, "malformed udata\n");
 	    	/*此接口要求两者为0*/
 		err = -EINVAL;
 		goto err_out;
@@ -35,7 +35,7 @@ static int rxe_query_device(struct ib_device *ibdev,
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -44,11 +44,18 @@ static int rxe_query_port(struct ib_device *ibdev,
 			  u32 port_num, struct ib_port_attr *attr)
 {
 	struct rxe_dev *rxe = to_rdev(ibdev);
+	struct net_device *ndev;
 	int err, ret;
 
 	if (port_num != 1) {
 		err = -EINVAL;
-		rxe_dbg_dev(rxe, "bad port_num = %d", port_num);
+		rxe_dbg_dev(rxe, "bad port_num = %d\n", port_num);
+		goto err_out;
+	}
+
+	ndev = rxe_ib_device_get_netdev(ibdev);
+	if (!ndev) {
+		err = -ENODEV;
 		goto err_out;
 	}
 
@@ -60,9 +67,10 @@ static int rxe_query_port(struct ib_device *ibdev,
 	ret = ib_get_eth_speed(ibdev, port_num, &attr->active_speed,
 			       &attr->active_width);
 
+	attr->state = ib_get_curr_port_state(ndev);
 	if (attr->state == IB_PORT_ACTIVE)
 		attr->phys_state = IB_PORT_PHYS_STATE_LINK_UP;
-	else if (dev_get_flags(rxe->ndev) & IFF_UP)
+	else if (dev_get_flags(ndev) & IFF_UP)
 	    /*如果底层网络设备为up,则变更为polling*/
 		attr->phys_state = IB_PORT_PHYS_STATE_POLLING;
 	else
@@ -70,11 +78,24 @@ static int rxe_query_port(struct ib_device *ibdev,
 
 	mutex_unlock(&rxe->usdev_lock);
 
+	dev_put(ndev);
 	return ret;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
+}
+
+static int rxe_query_gid(struct ib_device *ibdev, u32 port, int idx,
+			 union ib_gid *gid)
+{
+	struct rxe_dev *rxe = to_rdev(ibdev);
+
+	/* subnet_prefix == interface_id == 0; */
+	memset(gid, 0, sizeof(*gid));
+	memcpy(gid->raw, rxe->raw_gid, ETH_ALEN);
+
+	return 0;
 }
 
 /*rxe获取index指明的pkey*/
@@ -87,7 +108,7 @@ static int rxe_query_pkey(struct ib_device *ibdev,
 	if (index != 0) {
 		/*仅支持index为0*/
 		err = -EINVAL;
-		rxe_dbg_dev(rxe, "bad pkey index = %d", index);
+		rxe_dbg_dev(rxe, "bad pkey index = %d\n", index);
 		goto err_out;
 	}
 
@@ -95,7 +116,7 @@ static int rxe_query_pkey(struct ib_device *ibdev,
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -108,7 +129,7 @@ static int rxe_modify_device(struct ib_device *ibdev,
 	if (mask & ~(IB_DEVICE_MODIFY_SYS_IMAGE_GUID |
 		     IB_DEVICE_MODIFY_NODE_DESC)) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_dev(rxe, "unsupported mask = 0x%x", mask);
+		rxe_dbg_dev(rxe, "unsupported mask = 0x%x\n", mask);
 		goto err_out;
 	}
 
@@ -123,7 +144,7 @@ static int rxe_modify_device(struct ib_device *ibdev,
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -136,14 +157,14 @@ static int rxe_modify_port(struct ib_device *ibdev, u32 port_num,
 
 	if (port_num != 1) {
 		err = -EINVAL;
-		rxe_dbg_dev(rxe, "bad port_num = %d", port_num);
+		rxe_dbg_dev(rxe, "bad port_num = %d\n", port_num);
 		goto err_out;
 	}
 
 	//TODO is shutdown useful
 	if (mask & ~(IB_PORT_RESET_QKEY_CNTR)) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_dev(rxe, "unsupported mask = 0x%x", mask);
+		rxe_dbg_dev(rxe, "unsupported mask = 0x%x\n", mask);
 		goto err_out;
 	}
 
@@ -157,7 +178,7 @@ static int rxe_modify_port(struct ib_device *ibdev, u32 port_num,
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -170,14 +191,14 @@ static enum rdma_link_layer rxe_get_link_layer(struct ib_device *ibdev,
 
 	if (port_num != 1) {
 		err = -EINVAL;
-		rxe_dbg_dev(rxe, "bad port_num = %d", port_num);
+		rxe_dbg_dev(rxe, "bad port_num = %d\n", port_num);
 		goto err_out;
 	}
 
 	return IB_LINK_LAYER_ETHERNET;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -190,7 +211,7 @@ static int rxe_port_immutable(struct ib_device *ibdev, u32 port_num,
 
 	if (port_num != 1) {
 		err = -EINVAL;
-		rxe_dbg_dev(rxe, "bad port_num = %d", port_num);
+		rxe_dbg_dev(rxe, "bad port_num = %d\n", port_num);
 		goto err_out;
 	}
 
@@ -207,7 +228,7 @@ static int rxe_port_immutable(struct ib_device *ibdev, u32 port_num,
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -220,7 +241,7 @@ static int rxe_alloc_ucontext(struct ib_ucontext *ibuc, struct ib_udata *udata)
 
 	err = rxe_add_to_pool(&rxe->uc_pool, uc);
 	if (err)
-		rxe_err_dev(rxe, "unable to create uc");
+		rxe_err_dev(rxe, "unable to create uc\n");
 
 	return err;
 }
@@ -232,7 +253,7 @@ static void rxe_dealloc_ucontext(struct ib_ucontext *ibuc)
 
 	err = rxe_cleanup(uc);
 	if (err)
-		rxe_err_uc(uc, "cleanup failed, err = %d", err);
+		rxe_err_uc(uc, "cleanup failed, err = %d\n", err);
 }
 
 /* pd */
@@ -246,14 +267,14 @@ static int rxe_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	/*初始化pd所属的pool*/
 	err = rxe_add_to_pool(&rxe->pd_pool, pd);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to alloc pd");
+		rxe_dbg_dev(rxe, "unable to alloc pd\n");
 		goto err_out;
 	}
 
 	return 0;
 
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -264,7 +285,7 @@ static int rxe_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 
 	err = rxe_cleanup(pd);
 	if (err)
-		rxe_err_pd(pd, "cleanup failed, err = %d", err);
+		rxe_err_pd(pd, "cleanup failed, err = %d\n", err);
 
 	return 0;
 }
@@ -293,7 +314,7 @@ static int rxe_create_ah(struct ib_ah *ibah,
 	err = rxe_add_to_pool_ah(&rxe->ah_pool, ah,
 			init_attr->flags & RDMA_CREATE_AH_SLEEPABLE);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to create ah");
+		rxe_dbg_dev(rxe, "unable to create ah\n");
 		goto err_out;
 	}
 
@@ -302,7 +323,7 @@ static int rxe_create_ah(struct ib_ah *ibah,
 
 	err = rxe_ah_chk_attr(ah, init_attr->ah_attr);
 	if (err) {
-		rxe_dbg_ah(ah, "bad attr");
+		rxe_dbg_ah(ah, "bad attr\n");
 		goto err_cleanup;
 	}
 
@@ -312,7 +333,7 @@ static int rxe_create_ah(struct ib_ah *ibah,
 					 sizeof(uresp->ah_num));
 		if (err) {
 			err = -EFAULT;
-			rxe_dbg_ah(ah, "unable to copy to user");
+			rxe_dbg_ah(ah, "unable to copy to user\n");
 			goto err_cleanup;
 		}
 	} else if (ah->is_user) {
@@ -328,9 +349,9 @@ static int rxe_create_ah(struct ib_ah *ibah,
 err_cleanup:
 	cleanup_err = rxe_cleanup(ah);
 	if (cleanup_err)
-		rxe_err_ah(ah, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_ah(ah, "cleanup failed, err = %d\n", cleanup_err);
 err_out:
-	rxe_err_ah(ah, "returned err = %d", err);
+	rxe_err_ah(ah, "returned err = %d\n", err);
 	return err;
 }
 
@@ -341,7 +362,7 @@ static int rxe_modify_ah(struct ib_ah *ibah, struct rdma_ah_attr *attr)
 
 	err = rxe_ah_chk_attr(ah, attr);
 	if (err) {
-		rxe_dbg_ah(ah, "bad attr");
+		rxe_dbg_ah(ah, "bad attr\n");
 		goto err_out;
 	}
 
@@ -350,7 +371,7 @@ static int rxe_modify_ah(struct ib_ah *ibah, struct rdma_ah_attr *attr)
 	return 0;
 
 err_out:
-	rxe_err_ah(ah, "returned err = %d", err);
+	rxe_err_ah(ah, "returned err = %d\n", err);
 	return err;
 }
 
@@ -372,7 +393,7 @@ static int rxe_destroy_ah(struct ib_ah *ibah, u32 flags)
 
 	err = rxe_cleanup_ah(ah, flags & RDMA_DESTROY_AH_SLEEPABLE);
 	if (err)
-		rxe_err_ah(ah, "cleanup failed, err = %d", err);
+		rxe_err_ah(ah, "cleanup failed, err = %d\n", err);
 
 	return 0;
 }
@@ -391,7 +412,7 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 	if (udata) {
 		if (udata->outlen < sizeof(*uresp)) {
 			err = -EINVAL;
-			rxe_err_dev(rxe, "malformed udata");
+			rxe_err_dev(rxe, "malformed udata\n");
 			goto err_out;
 		}
 		uresp = udata->outbuf;
@@ -399,21 +420,21 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 
 	if (init->srq_type != IB_SRQT_BASIC) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_dev(rxe, "srq type = %d, not supported",
+		rxe_dbg_dev(rxe, "srq type = %d, not supported\n",
 				init->srq_type);
 		goto err_out;
 	}
 
 	err = rxe_srq_chk_init(rxe, init);
 	if (err) {
-		rxe_dbg_dev(rxe, "invalid init attributes");
+		rxe_dbg_dev(rxe, "invalid init attributes\n");
 		goto err_out;
 	}
 
 	/*将srq加入到pool*/
 	err = rxe_add_to_pool(&rxe->srq_pool, srq);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to create srq, err = %d", err);
+		rxe_dbg_dev(rxe, "unable to create srq, err = %d\n", err);
 		goto err_out;
 	}
 
@@ -423,7 +444,7 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 	/*初始化srq*/
 	err = rxe_srq_from_init(rxe, srq, init, udata, uresp);
 	if (err) {
-		rxe_dbg_srq(srq, "create srq failed, err = %d", err);
+		rxe_dbg_srq(srq, "create srq failed, err = %d\n", err);
 		goto err_cleanup;
 	}
 
@@ -432,9 +453,9 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 err_cleanup:
 	cleanup_err = rxe_cleanup(srq);
 	if (cleanup_err)
-		rxe_err_srq(srq, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_srq(srq, "cleanup failed, err = %d\n", cleanup_err);
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -450,34 +471,34 @@ static int rxe_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 	if (udata) {
 		if (udata->inlen < sizeof(cmd)) {
 			err = -EINVAL;
-			rxe_dbg_srq(srq, "malformed udata");
+			rxe_dbg_srq(srq, "malformed udata\n");
 			goto err_out;
 		}
 
 		err = ib_copy_from_udata(&cmd, udata, sizeof(cmd));
 		if (err) {
 			err = -EFAULT;
-			rxe_dbg_srq(srq, "unable to read udata");
+			rxe_dbg_srq(srq, "unable to read udata\n");
 			goto err_out;
 		}
 	}
 
 	err = rxe_srq_chk_attr(rxe, srq, attr, mask);
 	if (err) {
-		rxe_dbg_srq(srq, "bad init attributes");
+		rxe_dbg_srq(srq, "bad init attributes\n");
 		goto err_out;
 	}
 
 	err = rxe_srq_from_attr(rxe, srq, attr, mask, &cmd, udata);
 	if (err) {
-		rxe_dbg_srq(srq, "bad attr");
+		rxe_dbg_srq(srq, "bad attr\n");
 		goto err_out;
 	}
 
 	return 0;
 
 err_out:
-	rxe_err_srq(srq, "returned err = %d", err);
+	rxe_err_srq(srq, "returned err = %d\n", err);
 	return err;
 }
 
@@ -488,7 +509,7 @@ static int rxe_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 
 	if (srq->error) {
 		err = -EINVAL;
-		rxe_dbg_srq(srq, "srq in error state");
+		rxe_dbg_srq(srq, "srq in error state\n");
 		goto err_out;
 	}
 
@@ -498,7 +519,7 @@ static int rxe_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 	return 0;
 
 err_out:
-	rxe_err_srq(srq, "returned err = %d", err);
+	rxe_err_srq(srq, "returned err = %d\n", err);
 	return err;
 }
 
@@ -522,7 +543,7 @@ static int rxe_post_srq_recv(struct ib_srq *ibsrq, const struct ib_recv_wr *wr,
 
 	if (err) {
 		*bad_wr = wr;
-		rxe_err_srq(srq, "returned err = %d", err);
+		rxe_err_srq(srq, "returned err = %d\n", err);
 	}
 
 	return err;
@@ -535,7 +556,7 @@ static int rxe_destroy_srq(struct ib_srq *ibsrq, struct ib_udata *udata)
 
 	err = rxe_cleanup(srq);
 	if (err)
-		rxe_err_srq(srq, "cleanup failed, err = %d", err);
+		rxe_err_srq(srq, "cleanup failed, err = %d\n", err);
 
 	return 0;
 }
@@ -554,13 +575,13 @@ static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_i
 	if (udata) {
 		if (udata->inlen) {
 			err = -EINVAL;
-			rxe_dbg_dev(rxe, "malformed udata, err = %d", err);
+			rxe_dbg_dev(rxe, "malformed udata, err = %d\n", err);
 			goto err_out;
 		}
 
 		if (udata->outlen < sizeof(*uresp)) {
 			err = -EINVAL;
-			rxe_dbg_dev(rxe, "malformed udata, err = %d", err);
+			rxe_dbg_dev(rxe, "malformed udata, err = %d\n", err);
 			goto err_out;
 		}
 
@@ -574,27 +595,27 @@ static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_i
 
 	if (init->create_flags) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_dev(rxe, "unsupported create_flags, err = %d", err);
+		rxe_dbg_dev(rxe, "unsupported create_flags, err = %d\n", err);
 		goto err_out;
 	}
 
 	err = rxe_qp_chk_init(rxe, init);
 	if (err) {
-		rxe_dbg_dev(rxe, "bad init attr, err = %d", err);
+		rxe_dbg_dev(rxe, "bad init attr, err = %d\n", err);
 		goto err_out;
 	}
 
 	/*将qp加入到pool*/
 	err = rxe_add_to_pool(&rxe->qp_pool, qp);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to create qp, err = %d", err);
+		rxe_dbg_dev(rxe, "unable to create qp, err = %d\n", err);
 		goto err_out;
 	}
 
 	/*初始化此qp*/
 	err = rxe_qp_from_init(rxe, qp, pd, init, uresp, ibqp->pd, udata);
 	if (err) {
-		rxe_dbg_qp(qp, "create qp failed, err = %d", err);
+		rxe_dbg_qp(qp, "create qp failed, err = %d\n", err);
 		goto err_cleanup;
 	}
 
@@ -604,9 +625,9 @@ static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_i
 err_cleanup:
 	cleanup_err = rxe_cleanup(qp);
 	if (cleanup_err)
-		rxe_err_qp(qp, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_qp(qp, "cleanup failed, err = %d\n", cleanup_err);
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -620,20 +641,20 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	if (mask & ~IB_QP_ATTR_STANDARD_BITS) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_qp(qp, "unsupported mask = 0x%x, err = %d",
+		rxe_dbg_qp(qp, "unsupported mask = 0x%x, err = %d\n",
 			   mask, err);
 		goto err_out;
 	}
 
 	err = rxe_qp_chk_attr(rxe, qp, attr, mask);
 	if (err) {
-		rxe_dbg_qp(qp, "bad mask/attr, err = %d", err);
+		rxe_dbg_qp(qp, "bad mask/attr, err = %d\n", err);
 		goto err_out;
 	}
 
 	err = rxe_qp_from_attr(qp, attr, mask, udata);
 	if (err) {
-		rxe_dbg_qp(qp, "modify qp failed, err = %d", err);
+		rxe_dbg_qp(qp, "modify qp failed, err = %d\n", err);
 		goto err_out;
 	}
 
@@ -646,7 +667,7 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	return 0;
 
 err_out:
-	rxe_err_qp(qp, "returned err = %d", err);
+	rxe_err_qp(qp, "returned err = %d\n", err);
 	return err;
 }
 
@@ -671,18 +692,18 @@ static int rxe_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 
 	err = rxe_qp_chk_destroy(qp);
 	if (err) {
-		rxe_dbg_qp(qp, "unable to destroy qp, err = %d", err);
+		rxe_dbg_qp(qp, "unable to destroy qp, err = %d\n", err);
 		goto err_out;
 	}
 
 	err = rxe_cleanup(qp);
 	if (err)
-		rxe_err_qp(qp, "cleanup failed, err = %d", err);
+		rxe_err_qp(qp, "cleanup failed, err = %d\n", err);
 
 	return 0;
 
 err_out:
-	rxe_err_qp(qp, "returned err = %d", err);
+	rxe_err_qp(qp, "returned err = %d\n", err);
 	return err;
 }
 
@@ -704,13 +725,13 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		mask = wr_opcode_mask(ibwr->opcode, qp);
 		if (!mask) {
 			/*无效操作*/
-			rxe_err_qp(qp, "bad wr opcode for qp type");
+			rxe_err_qp(qp, "bad wr opcode for qp type\n");
 			break;
 		}
 
 		if (num_sge > sq->max_sge) {
 			/*sge超限*/
-			rxe_err_qp(qp, "num_sge > max_sge");
+			rxe_err_qp(qp, "num_sge > max_sge\n");
 			break;
 		}
 
@@ -718,30 +739,30 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		for (i = 0; i < ibwr->num_sge; i++)
 			length += ibwr->sg_list[i].length;
 
-		if (length > (1UL << 31)) {
+		if (length > RXE_PORT_MAX_MSG_SZ) {
 			/*指明了inline,但提供的数据超过sq inline限制*/
-			rxe_err_qp(qp, "message length too long");
+			rxe_err_qp(qp, "message length too long\n");
 			break;
 		}
 
 		if (mask & WR_ATOMIC_MASK) {
 			if (length != 8) {
-				rxe_err_qp(qp, "atomic length != 8");
+				rxe_err_qp(qp, "atomic length != 8\n");
 				break;
 			}
 			if (atomic_wr(ibwr)->remote_addr & 0x7) {
-				rxe_err_qp(qp, "misaligned atomic address");
+				rxe_err_qp(qp, "misaligned atomic address\n");
 				break;
 			}
 		}
 		if (ibwr->send_flags & IB_SEND_INLINE) {
 			if (!(mask & WR_INLINE_MASK)) {
 				/*此操作不容许inline发送，但用户指定有inline发送标记*/
-				rxe_err_qp(qp, "opcode doesn't support inline data");
+				rxe_err_qp(qp, "opcode doesn't support inline data\n");
 				break;
 			}
 			if (length > sq->max_inline) {
-				rxe_err_qp(qp, "inline length too big");
+				rxe_err_qp(qp, "inline length too big\n");
 				break;
 			}
 		}
@@ -779,7 +800,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 		case IB_WR_SEND:
 			break;
 		default:
-			rxe_err_qp(qp, "bad wr opcode %d for UD/GSI QP",
+			rxe_err_qp(qp, "bad wr opcode %d for UD/GSI QP\n",
 					wr->opcode);
 			return -EINVAL;
 		}
@@ -828,7 +849,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 		case IB_WR_ATOMIC_WRITE:
 			break;
 		default:
-			rxe_err_qp(qp, "unsupported wr opcode %d",
+			rxe_err_qp(qp, "unsupported wr opcode %d\n",
 					wr->opcode);
 			return -EINVAL;
 		}
@@ -846,7 +867,7 @@ static void copy_inline_data_to_wqe(struct rxe_send_wqe *wqe,
 	int i;
 
 	for (i = 0; i < ibwr->num_sge; i++, sge++) {
-		memcpy(p, ib_virt_dma_to_page(sge->addr), sge->length);
+		memcpy(p, ib_virt_dma_to_ptr(sge->addr), sge->length);
 		p += sge->length;
 	}
 }
@@ -910,7 +931,7 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr)
 	/*检查队列是否已满*/
 	full = queue_full(sq->queue, QUEUE_TYPE_FROM_ULP);
 	if (unlikely(full)) {
-		rxe_err_qp(qp, "send queue full");
+		rxe_err_qp(qp, "send queue full\n");
 		return -ENOMEM;
 	}
 
@@ -931,6 +952,7 @@ static int rxe_post_send_kernel(struct rxe_qp *qp,
 {
 	int err = 0;
 	unsigned long flags;
+	int good = 0;
 
 	spin_lock_irqsave(&qp->sq.sq_lock, flags);
 	while (ibwr) {
@@ -939,20 +961,18 @@ static int rxe_post_send_kernel(struct rxe_qp *qp,
 		if (err) {
 			*bad_wr = ibwr;
 			break;
+		} else {
+			good++;
 		}
 		/*切换到下一个wr*/
 		ibwr = ibwr->next;
 	}
 	spin_unlock_irqrestore(&qp->sq.sq_lock, flags);
 
-	if (!err)
+	/* kickoff processing of any posted wqes */
+	if (good)
 		/*队列准备完成，调度task 向外发送*/
-		rxe_sched_task(&qp->req.task);
-
-	spin_lock_irqsave(&qp->state_lock, flags);
-	if (qp_state(qp) == IB_QPS_ERR)
-		rxe_sched_task(&qp->comp.task);
-	spin_unlock_irqrestore(&qp->state_lock, flags);
+		rxe_sched_task(&qp->send_task);
 
 	return err;
 }
@@ -970,7 +990,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 	if (WARN_ON_ONCE(!qp->valid)) {
 		/*qp状态有误，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
-		rxe_err_qp(qp, "qp has been destroyed");
+		rxe_err_qp(qp, "qp has been destroyed\n");
 		return -EINVAL;
 	}
 
@@ -978,14 +998,14 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 		/*qp状态还未准备好，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		*bad_wr = wr;
-		rxe_err_qp(qp, "qp not ready to send");
+		rxe_err_qp(qp, "qp not ready to send\n");
 		return -EINVAL;
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
 	if (qp->is_user) {
 		/* Utilize process context to do protocol processing */
-		rxe_run_task(&qp->req.task);
+		rxe_sched_task(&qp->send_task);
 	} else {
 		err = rxe_post_send_kernel(qp, wr, bad_wr);
 		if (err)
@@ -1009,14 +1029,14 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	full = queue_full(rq->queue, QUEUE_TYPE_FROM_ULP);
 	if (unlikely(full)) {
 		err = -ENOMEM;
-		rxe_dbg("queue full");
+		rxe_dbg("queue full\n");
 		goto err_out;
 	}
 
 	/*num_sge过大，接收失败*/
 	if (unlikely(num_sge > rq->max_sge)) {
 		err = -EINVAL;
-		rxe_dbg("bad num_sge > max_sge");
+		rxe_dbg("bad num_sge > max_sge\n");
 		goto err_out;
 	}
 
@@ -1025,11 +1045,10 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	for (i = 0; i < num_sge; i++)
 		length += ibwr->sg_list[i].length;
 
-	/* IBA max message size is 2^31 */
-	if (length >= (1UL<<31)) {
+	if (length > RXE_PORT_MAX_MSG_SZ) {
 		/*长度过大*/
 		err = -EINVAL;
-		rxe_dbg("message length too long");
+		rxe_dbg("message length too long\n");
 		goto err_out;
 	}
 
@@ -1053,7 +1072,7 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	return 0;
 
 err_out:
-	rxe_dbg("returned err = %d", err);
+	rxe_dbg("returned err = %d\n", err);
 	return err;
 }
 
@@ -1070,7 +1089,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 	/* caller has already called destroy_qp */
 	if (WARN_ON_ONCE(!qp->valid)) {
 		spin_unlock_irqrestore(&qp->state_lock, flags);
-		rxe_err_qp(qp, "qp has been destroyed");
+		rxe_err_qp(qp, "qp has been destroyed\n");
 		return -EINVAL;
 	}
 
@@ -1078,7 +1097,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 	if (unlikely((qp_state(qp) < IB_QPS_INIT))) {
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		*bad_wr = wr;
-		rxe_dbg_qp(qp, "qp not ready to post recv");
+		rxe_dbg_qp(qp, "qp not ready to post recv\n");
 		return -EINVAL;
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
@@ -1086,7 +1105,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 	/*srq不为空，报错*/
 	if (unlikely(qp->srq)) {
 		*bad_wr = wr;
-		rxe_dbg_qp(qp, "qp has srq, use post_srq_recv instead");
+		rxe_dbg_qp(qp, "qp has srq, use post_srq_recv instead\n");
 		return -EINVAL;
 	}
 
@@ -1106,7 +1125,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (qp_state(qp) == IB_QPS_ERR)
-		rxe_sched_task(&qp->resp.task);
+		rxe_sched_task(&qp->recv_task);
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
 	return err;
@@ -1115,8 +1134,9 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 /* cq */
 /*rxe 创建cq*/
 static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct ib_cq_init_attr *attr,
-			 struct ib_udata *udata)
+			 struct uverbs_attr_bundle *attrs)
 {
+	struct ib_udata *udata = &attrs->driver_udata;
 	struct ib_device *dev = ibcq->device;
 	struct rxe_dev *rxe = to_rdev(dev);/*cq对应的rxe设备*/
 	struct rxe_cq *cq = to_rcq(ibcq);/*结构体转为rxe_cq*/
@@ -1126,7 +1146,7 @@ static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct i
 	if (udata) {
 		if (udata->outlen < sizeof(*uresp)) {
 			err = -EINVAL;
-			rxe_dbg_dev(rxe, "malformed udata, err = %d", err);
+			rxe_dbg_dev(rxe, "malformed udata, err = %d\n", err);
 			goto err_out;
 		}
 		uresp = udata->outbuf;
@@ -1134,28 +1154,28 @@ static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct i
 
 	if (attr->flags) {
 		err = -EOPNOTSUPP;
-		rxe_dbg_dev(rxe, "bad attr->flags, err = %d", err);
+		rxe_dbg_dev(rxe, "bad attr->flags, err = %d\n", err);
 		goto err_out;
 	}
 
 	/*cqe数目检查*/
 	err = rxe_cq_chk_attr(rxe, NULL, attr->cqe, attr->comp_vector);
 	if (err) {
-		rxe_dbg_dev(rxe, "bad init attributes, err = %d", err);
+		rxe_dbg_dev(rxe, "bad init attributes, err = %d\n", err);
 		goto err_out;
 	}
 
 	/*将此cq加入到此rxe设备的cq_pool*/
 	err = rxe_add_to_pool(&rxe->cq_pool, cq);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to create cq, err = %d", err);
+		rxe_dbg_dev(rxe, "unable to create cq, err = %d\n", err);
 		goto err_out;
 	}
 
 	err = rxe_cq_from_init(rxe, cq, attr->cqe, attr->comp_vector, udata,
 			       uresp);
 	if (err) {
-		rxe_dbg_cq(cq, "create cq failed, err = %d", err);
+		rxe_dbg_cq(cq, "create cq failed, err = %d\n", err);
 		goto err_cleanup;
 	}
 
@@ -1164,9 +1184,9 @@ static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct i
 err_cleanup:
 	cleanup_err = rxe_cleanup(cq);
 	if (cleanup_err)
-		rxe_err_cq(cq, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_cq(cq, "cleanup failed, err = %d\n", cleanup_err);
 err_out:
-	rxe_err_dev(rxe, "returned err = %d", err);
+	rxe_err_dev(rxe, "returned err = %d\n", err);
 	return err;
 }
 
@@ -1180,7 +1200,7 @@ static int rxe_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	if (udata) {
 		if (udata->outlen < sizeof(*uresp)) {
 			err = -EINVAL;
-			rxe_dbg_cq(cq, "malformed udata");
+			rxe_dbg_cq(cq, "malformed udata\n");
 			goto err_out;
 		}
 		uresp = udata->outbuf;
@@ -1188,20 +1208,20 @@ static int rxe_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 
 	err = rxe_cq_chk_attr(rxe, cq, cqe, 0);
 	if (err) {
-		rxe_dbg_cq(cq, "bad attr, err = %d", err);
+		rxe_dbg_cq(cq, "bad attr, err = %d\n", err);
 		goto err_out;
 	}
 
 	err = rxe_cq_resize_queue(cq, cqe, uresp, udata);
 	if (err) {
-		rxe_dbg_cq(cq, "resize cq failed, err = %d", err);
+		rxe_dbg_cq(cq, "resize cq failed, err = %d\n", err);
 		goto err_out;
 	}
 
 	return 0;
 
 err_out:
-	rxe_err_cq(cq, "returned err = %d", err);
+	rxe_err_cq(cq, "returned err = %d\n", err);
 	return err;
 }
 
@@ -1268,18 +1288,18 @@ static int rxe_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 	 */
 	if (atomic_read(&cq->num_wq)) {
 		err = -EINVAL;
-		rxe_dbg_cq(cq, "still in use");
+		rxe_dbg_cq(cq, "still in use\n");
 		goto err_out;
 	}
 
 	err = rxe_cleanup(cq);
 	if (err)
-		rxe_err_cq(cq, "cleanup failed, err = %d", err);
+		rxe_err_cq(cq, "cleanup failed, err = %d\n", err);
 
 	return 0;
 
 err_out:
-	rxe_err_cq(cq, "returned err = %d", err);
+	rxe_err_cq(cq, "returned err = %d\n", err);
 	return err;
 }
 
@@ -1299,7 +1319,7 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	/*将此mr添加进mr_pool*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err) {
-		rxe_dbg_dev(rxe, "unable to create mr");
+		rxe_dbg_dev(rxe, "unable to create mr\n");
 		goto err_free;
 	}
 
@@ -1315,7 +1335,7 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 
 err_free:
 	kfree(mr);
-	rxe_err_pd(pd, "returned err = %d", err);
+	rxe_err_pd(pd, "returned err = %d\n", err);
 	return ERR_PTR(err);
 }
 
@@ -1330,7 +1350,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	int err, cleanup_err;
 
 	if (access & ~RXE_ACCESS_SUPPORTED_MR) {
-		rxe_err_pd(pd, "access = %#x not supported (%#x)", access,
+		rxe_err_pd(pd, "access = %#x not supported (%#x)\n", access,
 				RXE_ACCESS_SUPPORTED_MR);
 		return ERR_PTR(-EOPNOTSUPP);
 	}
@@ -1343,7 +1363,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	/*此mr信息添加进mr pool*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err) {
-		rxe_dbg_pd(pd, "unable to create mr");
+		rxe_dbg_pd(pd, "unable to create mr\n");
 		goto err_free;
 	}
 
@@ -1352,9 +1372,12 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	mr->ibmr.device = ibpd->device;
 
 	/*初始化mr，pin住相应的内存页*/
-	err = rxe_mr_init_user(rxe, start, length, iova, access, mr);
+	if (access & IB_ACCESS_ON_DEMAND)
+		err = rxe_odp_mr_init_user(rxe, start, length, iova, access, mr);
+	else
+		err = rxe_mr_init_user(rxe, start, length, access, mr);
 	if (err) {
-		rxe_dbg_mr(mr, "reg_user_mr failed, err = %d", err);
+		rxe_dbg_mr(mr, "reg_user_mr failed, err = %d\n", err);
 		goto err_cleanup;
 	}
 
@@ -1364,10 +1387,10 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 err_cleanup:
 	cleanup_err = rxe_cleanup(mr);
 	if (cleanup_err)
-		rxe_err_mr(mr, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_mr(mr, "cleanup failed, err = %d\n", cleanup_err);
 err_free:
 	kfree(mr);
-	rxe_err_pd(pd, "returned err = %d", err);
+	rxe_err_pd(pd, "returned err = %d\n", err);
 	return ERR_PTR(err);
 }
 
@@ -1380,13 +1403,13 @@ static struct ib_mr *rxe_rereg_user_mr(struct ib_mr *ibmr, int flags,
        struct rxe_pd *old_pd = to_rpd(ibmr->pd);
        struct rxe_pd *pd = to_rpd(ibpd);
 
-       /* for now only support the two easy cases:
-        * rereg_pd and rereg_access
-        */
-       if (flags & ~RXE_MR_REREG_SUPPORTED) {
-               rxe_err_mr(mr, "flags = %#x not supported", flags);
-               return ERR_PTR(-EOPNOTSUPP);
-       }
+	/* for now only support the two easy cases:
+	 * rereg_pd and rereg_access
+	 */
+	if (flags & ~RXE_MR_REREG_SUPPORTED) {
+		rxe_err_mr(mr, "flags = %#x not supported\n", flags);
+		return ERR_PTR(-EOPNOTSUPP);
+	}
 
        if (flags & IB_MR_REREG_PD) {
                rxe_put(old_pd);
@@ -1394,13 +1417,13 @@ static struct ib_mr *rxe_rereg_user_mr(struct ib_mr *ibmr, int flags,
                mr->ibmr.pd = ibpd;
        }
 
-       if (flags & IB_MR_REREG_ACCESS) {
-               if (access & ~RXE_ACCESS_SUPPORTED_MR) {
-                       rxe_err_mr(mr, "access = %#x not supported", access);
-                       return ERR_PTR(-EOPNOTSUPP);
-               }
-               mr->access = access;
-       }
+	if (flags & IB_MR_REREG_ACCESS) {
+		if (access & ~RXE_ACCESS_SUPPORTED_MR) {
+			rxe_err_mr(mr, "access = %#x not supported\n", access);
+			return ERR_PTR(-EOPNOTSUPP);
+		}
+		mr->access = access;
+	}
 
        return NULL;
 }
@@ -1417,7 +1440,7 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type/*m
 	/*当前仅支持ib_mr_type_mem_reg类型*/
 	if (mr_type != IB_MR_TYPE_MEM_REG) {
 		err = -EINVAL;
-		rxe_dbg_pd(pd, "mr type %d not supported, err = %d",
+		rxe_dbg_pd(pd, "mr type %d not supported, err = %d\n",
 			   mr_type, err);
 		goto err_out;
 	}
@@ -1440,7 +1463,7 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type/*m
 	/*初始化mr(并不真正的申请它）*/
 	err = rxe_mr_init_fast(max_num_sg, mr);
 	if (err) {
-		rxe_dbg_mr(mr, "alloc_mr failed, err = %d", err);
+		rxe_dbg_mr(mr, "alloc_mr failed, err = %d\n", err);
 		goto err_cleanup;
 	}
 
@@ -1450,11 +1473,11 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type/*m
 err_cleanup:
 	cleanup_err = rxe_cleanup(mr);
 	if (cleanup_err)
-		rxe_err_mr(mr, "cleanup failed, err = %d", err);
+		rxe_err_mr(mr, "cleanup failed, err = %d\n", err);
 err_free:
 	kfree(mr);
 err_out:
-	rxe_err_pd(pd, "returned err = %d", err);
+	rxe_err_pd(pd, "returned err = %d\n", err);
 	return ERR_PTR(err);
 }
 
@@ -1466,19 +1489,19 @@ static int rxe_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 	/* See IBA 10.6.7.2.6 */
 	if (atomic_read(&mr->num_mw) > 0) {
 		err = -EINVAL;
-		rxe_dbg_mr(mr, "mr has mw's bound");
+		rxe_dbg_mr(mr, "mr has mw's bound\n");
 		goto err_out;
 	}
 
 	cleanup_err = rxe_cleanup(mr);
 	if (cleanup_err)
-		rxe_err_mr(mr, "cleanup failed, err = %d", cleanup_err);
+		rxe_err_mr(mr, "cleanup failed, err = %d\n", cleanup_err);
 
 	kfree_rcu_mightsleep(mr);
 	return 0;
 
 err_out:
-	rxe_err_mr(mr, "returned err = %d", err);
+	rxe_err_mr(mr, "returned err = %d\n", err);
 	return err;
 }
 
@@ -1507,9 +1530,16 @@ static const struct attribute_group rxe_attr_group = {
 static int rxe_enable_driver(struct ib_device *ib_dev)
 {
 	struct rxe_dev *rxe = container_of(ib_dev, struct rxe_dev, ib_dev);
+	struct net_device *ndev;
+
+	ndev = rxe_ib_device_get_netdev(ib_dev);
+	if (!ndev)
+		return -ENODEV;
 
 	rxe_set_port_state(rxe);
-	dev_info(&rxe->ib_dev.dev, "added %s\n", netdev_name(rxe->ndev));
+	dev_info(&rxe->ib_dev.dev, "added %s\n", netdev_name(ndev));
+
+	dev_put(ndev);
 	return 0;
 }
 
@@ -1563,6 +1593,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.query_ah = rxe_query_ah,
 	.query_device = rxe_query_device,/*针对设备进行属性查询*/
 	.query_pkey = rxe_query_pkey,/*给定index查询pkey*/
+	.query_gid = rxe_query_gid,
 	.query_port = rxe_query_port,/*查询port属性*/
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
@@ -1581,7 +1612,8 @@ static const struct ib_device_ops rxe_dev_ops = {
 };
 
 /*rxe设备注册*/
-int rxe_register_device(struct rxe_dev *rxe/*要注册的rxe设备*/, const char *ibdev_name/*ib设备名称*/)
+int rxe_register_device(struct rxe_dev *rxe/*要注册的rxe设备*/, const char *ibdev_name/*ib设备名称*/,
+						struct net_device *ndev)
 {
 	int err;
 	struct ib_device *dev = &rxe->ib_dev;
@@ -1595,20 +1627,15 @@ int rxe_register_device(struct rxe_dev *rxe/*要注册的rxe设备*/, const char
 	dev->local_dma_lkey = 0;
 	/*利用底层设备的mac做node的全局唯一id*/
 	addrconf_addr_eui48((unsigned char *)&dev->node_guid,
-			    rxe->ndev->dev_addr);
+			    rxe->raw_gid);
 
 	dev->uverbs_cmd_mask |= BIT_ULL(IB_USER_VERBS_CMD_POST_SEND) |
 				BIT_ULL(IB_USER_VERBS_CMD_REQ_NOTIFY_CQ);
 
 	/*设置ib设备对应的操作集为rxe_dev_ops*/
 	ib_set_device_ops(dev, &rxe_dev_ops);
-
 	/*为rxe设备的1号port关联底层设备rxe->ndev*/
-	err = ib_device_set_netdev(&rxe->ib_dev, rxe->ndev, 1);
-	if (err)
-		return err;
-
-	err = rxe_icrc_init(rxe);
+	err = ib_device_set_netdev(&rxe->ib_dev, ndev, 1);
 	if (err)
 		return err;
 

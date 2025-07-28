@@ -3,57 +3,23 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <net/wext.h>
+#include <net/hotdata.h>
 
 #include "dev.h"
 
-#define BUCKET_SPACE (32 - NETDEV_HASHBITS - 1)
-
-#define get_bucket(x) ((x) >> BUCKET_SPACE)
-#define get_offset(x) ((x) & ((1 << BUCKET_SPACE) - 1))
-#define set_bucket_offset(b, o) ((b) << BUCKET_SPACE | (o))
-
-//pos是一个bucket_idx合上offset的结构，通过pos可以知道需要获取哪个桶的第几个元素
-static inline struct net_device *dev_from_same_bucket(struct seq_file *seq, loff_t *pos)
+static void *dev_seq_from_index(struct seq_file *seq, loff_t *pos)
 {
-	struct net *net = seq_file_net(seq);//取对应的net
+	unsigned long ifindex = *pos;
 	struct net_device *dev;
-	struct hlist_head *h;
-	unsigned int count = 0, offset = get_offset(*pos);
 
 	//遍历所有网络设备，自get_bucket(*pos)链上找出第offset个元素返回
-	h = &net->dev_index_head[get_bucket(*pos)];
-	hlist_for_each_entry_rcu(dev, h, index_hlist) {
-		if (++count == offset)
-			return dev;
+	for_each_netdev_dump(seq_file_net(seq), dev, ifindex) {
+		*pos = dev->ifindex;
+		return dev;
 	}
-
 	return NULL;
 }
 
-//返回seq对应的所有dev设备
-static inline struct net_device *dev_from_bucket(struct seq_file *seq, loff_t *pos)
-{
-	struct net_device *dev;
-	unsigned int bucket;
-
-	do {
-		//获取对应的dev
-		dev = dev_from_same_bucket(seq, pos);
-		if (dev)
-			return dev;
-
-		//这个桶上没有元素了，切换桶号
-		bucket = get_bucket(*pos) + 1;
-		*pos = set_bucket_offset(bucket, 1);//置offset为１，重新获取
-	} while (bucket < NETDEV_HASHENTRIES);
-
-	return NULL;//所有桶已完成遍历，返回
-}
-
-/*
- *	This is invoked by the /proc filesystem handler to display a device
- *	in detail.
- */
 static void *dev_seq_start(struct seq_file *seq, loff_t *pos)
 	__acquires(RCU)
 {
@@ -61,18 +27,14 @@ static void *dev_seq_start(struct seq_file *seq, loff_t *pos)
 	if (!*pos)
 		return SEQ_START_TOKEN;
 
-	if (get_bucket(*pos) >= NETDEV_HASHENTRIES)
-		return NULL;
-
-	//取pos对应的设备（pos为１）
-	return dev_from_bucket(seq, pos);
+	return dev_seq_from_index(seq, pos);
 }
 
 //增加pos位置，获取下一个dev元素
 static void *dev_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	++*pos;
-	return dev_from_bucket(seq, pos);
+	return dev_seq_from_index(seq, pos);
 }
 
 static void dev_seq_stop(struct seq_file *seq, void *v)
@@ -173,8 +135,9 @@ static int softnet_seq_show(struct seq_file *seq, void *v)
 
 	rcu_read_lock();
 	fl = rcu_dereference(sd->flow_limit);
+	/* Pairs with WRITE_ONCE() in skb_flow_limit() */
 	if (fl)
-		flow_limit_count = fl->count;
+		flow_limit_count = READ_ONCE(fl->count);
 	rcu_read_unlock();
 #endif
 
@@ -185,10 +148,11 @@ static int softnet_seq_show(struct seq_file *seq, void *v)
 	seq_printf(seq,
 		   "%08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x "
 		   "%08x %08x\n",
-		   sd->processed/*处理数*/, sd->dropped/*丢包数*/, sd->time_squeeze, 0,
+		   READ_ONCE(sd->processed)/*处理数*/, atomic_read(&sd->dropped)/*丢包数*/,
+		   READ_ONCE(sd->time_squeeze), 0,
 		   0, 0, 0, 0, /* was fastroute */
 		   0,	/* was cpu_collision */
-		   sd->received_rps, flow_limit_count,
+		   READ_ONCE(sd->received_rps), flow_limit_count,
 		   input_qlen + process_qlen, (int)seq->index,
 		   input_qlen, process_qlen);
 	return 0;
@@ -227,7 +191,13 @@ static void *ptype_get_idx(struct seq_file *seq, loff_t pos)
 	}
 
 	//每个ptype计一个数(先排ptype_all)
-	list_for_each_entry_rcu(pt, &ptype_all, list) {
+	list_for_each_entry_rcu(pt, &seq_file_net(seq)->ptype_all, list) {
+		if (i == pos)
+			return pt;
+		++i;
+	}
+
+	list_for_each_entry_rcu(pt, &seq_file_net(seq)->ptype_specific, list) {
 		if (i == pos)
 			return pt;
 		++i;
@@ -255,6 +225,7 @@ static void *ptype_seq_start(struct seq_file *seq, loff_t *pos)
 //返回v对应的下一个packet_type,出参pos,设置对应的偏移量
 static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
+	struct net *net = seq_file_net(seq);
 	struct net_device *dev;
 	struct packet_type *pt;
 	struct list_head *nxt;
@@ -278,15 +249,22 @@ static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 				goto found;
 			}
 		}
-
-		nxt = ptype_all.next;
-		goto ptype_all;
+		nxt = net->ptype_all.next;
+		goto net_ptype_all;
 	}
 
-	if (pt->type == htons(ETH_P_ALL)) {
-ptype_all:
-		if (nxt != &ptype_all)
+	if (pt->af_packet_net) {
+net_ptype_all:
+		if (nxt != &net->ptype_all && nxt != &net->ptype_specific)
 			goto found;//如果没有到达链表尾，则意味着找到了，跳found
+
+		if (nxt == &net->ptype_all) {
+			/* continue with ->ptype_specific if it's not empty */
+			nxt = net->ptype_specific.next;
+			if (nxt != &net->ptype_specific)
+				goto found;
+		}
+
 		//已到达ptype_all的链表尾，跳ptype_base的首个
 		hash = 0;
 		nxt = ptype_base[0].next;

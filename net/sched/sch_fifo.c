@@ -19,7 +19,8 @@
 static int bfifo_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			 struct sk_buff **to_free)
 {
-	if (likely(sch->qstats.backlog + qdisc_pkt_len(skb) <= sch->limit))
+	if (likely(sch->qstats.backlog + qdisc_pkt_len(skb) <=
+		   READ_ONCE(sch->limit)))
 		return qdisc_enqueue_tail(skb, sch);
 
 	return qdisc_drop(skb, sch, to_free);
@@ -29,7 +30,7 @@ static int bfifo_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 static int pfifo_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			 struct sk_buff **to_free)
 {
-	if (likely(sch->q.qlen < sch->limit))
+	if (likely(sch->q.qlen < READ_ONCE(sch->limit)))
 		return qdisc_enqueue_tail(skb, sch);
 
 	//存入队列中的报文长度超限时，报文将被丢弃
@@ -42,8 +43,11 @@ static int pfifo_tail_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 {
 	unsigned int prev_backlog;
 
-	if (likely(sch->q.qlen < sch->limit))
-	    //直接存入
+	if (unlikely(READ_ONCE(sch->limit) == 0))
+		return qdisc_drop(skb, sch, to_free);
+
+	if (likely(sch->q.qlen < READ_ONCE(sch->limit)))
+		//直接存入
 		return qdisc_enqueue_tail(skb, sch);
 
 	//报文不可存放，自sch队首出一个报文，并将skb加入到sch队列的结尾
@@ -113,7 +117,7 @@ static int __fifo_init(struct Qdisc *sch, struct nlattr *opt,
 		    /*以字节方式计算时，乘以（mtu+硬件头长度）*/
 			limit *= psched_mtu(qdisc_dev(sch));
 
-		sch->limit = limit;
+		WRITE_ONCE(sch->limit, limit);
 	} else {
 	    /*使用指定的limit*/
 		struct tc_fifo_qopt *ctl = nla_data(opt);
@@ -121,7 +125,7 @@ static int __fifo_init(struct Qdisc *sch, struct nlattr *opt,
 		if (nla_len(opt) < sizeof(*ctl))
 			return -EINVAL;
 
-		sch->limit = ctl->limit;
+		WRITE_ONCE(sch->limit, ctl->limit);
 	}
 
 	//limit大于 1时，定为bypass
@@ -165,7 +169,7 @@ static void fifo_destroy(struct Qdisc *sch)
 //返回当前队列对应的limit配置
 static int __fifo_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
-	struct tc_fifo_qopt opt = { .limit = sch->limit };
+	struct tc_fifo_qopt opt = { .limit = READ_ONCE(sch->limit) };
 
 	if (nla_put(skb, TCA_OPTIONS, sizeof(opt), &opt))
 		goto nla_put_failure;

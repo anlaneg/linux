@@ -280,35 +280,38 @@ bool vhost_vq_work_queue(struct vhost_virtqueue *vq, struct vhost_work *work)
 }
 EXPORT_SYMBOL_GPL(vhost_vq_work_queue);
 
-void vhost_vq_flush(struct vhost_virtqueue *vq)
-{
-	struct vhost_flush_struct flush;
-
-	init_completion(&flush.wait_event);
-	vhost_work_init(&flush.work, vhost_flush_work);
-
-	if (vhost_vq_work_queue(vq, &flush.work))
-		wait_for_completion(&flush.wait_event);
-}
-EXPORT_SYMBOL_GPL(vhost_vq_flush);
-
 /**
- * vhost_worker_flush - flush a worker
+ * __vhost_worker_flush - flush a worker
  * @worker: worker to flush
  *
- * This does not use RCU to protect the worker, so the device or worker
- * mutex must be held.
+ * The worker's flush_mutex must be held.
  */
-static void vhost_worker_flush(struct vhost_worker *worker)
+static void __vhost_worker_flush(struct vhost_worker *worker)
 {
 	struct vhost_flush_struct flush;
+
+	if (!worker->attachment_cnt || worker->killed)
+		return;
 
 	//初始化flush工作，并等待其完成（用于确保内核线程完成排在其之前的工作）
 	init_completion(&flush.wait_event);
 	vhost_work_init(&flush.work, vhost_flush_work);
 
 	vhost_worker_queue(worker, &flush.work);
+	/*
+	 * Drop mutex in case our worker is killed and it needs to take the
+	 * mutex to force cleanup.
+	 */
+	mutex_unlock(&worker->mutex);
 	wait_for_completion(&flush.wait_event);
+	mutex_lock(&worker->mutex);
+}
+
+static void vhost_worker_flush(struct vhost_worker *worker)
+{
+	mutex_lock(&worker->mutex);
+	__vhost_worker_flush(worker);
+	mutex_unlock(&worker->mutex);
 }
 
 //保证vhost完成所有排在此函数之前的工作
@@ -317,15 +320,8 @@ void vhost_dev_flush(struct vhost_dev *dev)
 	struct vhost_worker *worker;
 	unsigned long i;
 
-	xa_for_each(&dev->worker_xa, i, worker) {
-		mutex_lock(&worker->mutex);
-		if (!worker->attachment_cnt) {
-			mutex_unlock(&worker->mutex);
-			continue;
-		}
+	xa_for_each(&dev->worker_xa, i, worker)
 		vhost_worker_flush(worker);
-		mutex_unlock(&worker->mutex);
-	}
 }
 EXPORT_SYMBOL_GPL(vhost_dev_flush);
 
@@ -420,7 +416,7 @@ static void vhost_vq_reset(struct vhost_dev *dev,
  * 内核vhost-$(owner-pid)线程工作函数，
  * 用于执行vhost的worker（遍历dev->work_list的元素，针对各个work进行fn调用）
 */
-static bool vhost_worker(void *data)
+static bool vhost_run_work_list(void *data)
 {
     /*获得vhost设备*/
 	struct vhost_worker *worker = data;
@@ -448,6 +444,40 @@ static bool vhost_worker(void *data)
 	}
 
 	return !!node;
+}
+
+static void vhost_worker_killed(void *data)
+{
+	struct vhost_worker *worker = data;
+	struct vhost_dev *dev = worker->dev;
+	struct vhost_virtqueue *vq;
+	int i, attach_cnt = 0;
+
+	mutex_lock(&worker->mutex);
+	worker->killed = true;
+
+	for (i = 0; i < dev->nvqs; i++) {
+		vq = dev->vqs[i];
+
+		mutex_lock(&vq->mutex);
+		if (worker ==
+		    rcu_dereference_check(vq->worker,
+					  lockdep_is_held(&vq->mutex))) {
+			rcu_assign_pointer(vq->worker, NULL);
+			attach_cnt++;
+		}
+		mutex_unlock(&vq->mutex);
+	}
+
+	worker->attachment_cnt -= attach_cnt;
+	if (attach_cnt)
+		synchronize_rcu();
+	/*
+	 * Finish vhost_worker_flush calls and any other works that snuck in
+	 * before the synchronize_rcu.
+	 */
+	vhost_run_work_list(worker);
+	mutex_unlock(&worker->mutex);
 }
 
 static void vhost_vq_free_iovecs(struct vhost_virtqueue *vq)
@@ -674,11 +704,13 @@ static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 	if (!worker)
 		return NULL;
 
+	worker->dev = dev;
 	/*创建与此进程相对应的vhost-%d内核线程,处理dev->work_list上的vhost_work*/
 	snprintf(name, sizeof(name), "vhost-%d", current->pid);
 
-	vtsk = vhost_task_create(vhost_worker, worker, name);
-	if (!vtsk)
+	vtsk = vhost_task_create(vhost_run_work_list, vhost_worker_killed,
+				 worker, name);
+	if (IS_ERR(vtsk))
 		goto free_worker;
 
 	mutex_init(&worker->mutex);
@@ -708,22 +740,37 @@ static void __vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 {
 	struct vhost_worker *old_worker;
 
-	old_worker = rcu_dereference_check(vq->worker,
-					   lockdep_is_held(&vq->dev->mutex));
-
 	mutex_lock(&worker->mutex);
-	worker->attachment_cnt++;
-	mutex_unlock(&worker->mutex);
-	rcu_assign_pointer(vq->worker, worker);
-
-	if (!old_worker)
+	if (worker->killed) {
+		mutex_unlock(&worker->mutex);
 		return;
+	}
+
+	mutex_lock(&vq->mutex);
+
+	old_worker = rcu_dereference_check(vq->worker,
+					   lockdep_is_held(&vq->mutex));
+	rcu_assign_pointer(vq->worker, worker);
+	worker->attachment_cnt++;
+
+	if (!old_worker) {
+		mutex_unlock(&vq->mutex);
+		mutex_unlock(&worker->mutex);
+		return;
+	}
+	mutex_unlock(&vq->mutex);
+	mutex_unlock(&worker->mutex);
+
 	/*
 	 * Take the worker mutex to make sure we see the work queued from
 	 * device wide flushes which doesn't use RCU for execution.
 	 */
 	mutex_lock(&old_worker->mutex);
-	old_worker->attachment_cnt--;
+	if (old_worker->killed) {
+		mutex_unlock(&old_worker->mutex);
+		return;
+	}
+
 	/*
 	 * We don't want to call synchronize_rcu for every vq during setup
 	 * because it will slow down VM startup. If we haven't done
@@ -735,6 +782,8 @@ static void __vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 	if (!vhost_vq_get_backend(vq) && !vq->kick) {
 		/*后端socket未提定，vq对应的kick文件未指定*/
 		mutex_unlock(&vq->mutex);
+
+		old_worker->attachment_cnt--;
 		mutex_unlock(&old_worker->mutex);
 		/*
 		 * vsock can queue anytime after VHOST_VSOCK_SET_GUEST_CID.
@@ -750,7 +799,8 @@ static void __vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 	/* Make sure new vq queue/flush/poll calls see the new worker */
 	synchronize_rcu();
 	/* Make sure whatever was queued gets run */
-	vhost_worker_flush(old_worker);
+	__vhost_worker_flush(old_worker);
+	old_worker->attachment_cnt--;
 	mutex_unlock(&old_worker->mutex);
 }
 
@@ -799,10 +849,16 @@ static int vhost_free_worker(struct vhost_dev *dev,
 		return -ENODEV;
 
 	mutex_lock(&worker->mutex);
-	if (worker->attachment_cnt) {
+	if (worker->attachment_cnt || worker->killed) {
 		mutex_unlock(&worker->mutex);
 		return -EBUSY;
 	}
+	/*
+	 * A flush might have raced and snuck in before attachment_cnt was set
+	 * to zero. Make sure flushes are flushed from the queue before
+	 * freeing.
+	 */
+	__vhost_worker_flush(worker);
 	mutex_unlock(&worker->mutex);
 
 	vhost_worker_destroy(dev, worker);
@@ -1374,11 +1430,39 @@ static void vhost_dev_unlock_vqs(struct vhost_dev *d)
 }
 
 //取avail的索引位置
-static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq,
-				      __virtio16 *idx/*出参，索引位置*/)
+static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq)
 {
-    /*取vq->avail->idx*/
-	return vhost_get_avail(vq, *idx, &vq->avail->idx);
+	__virtio16 idx;
+	int r;
+
+	/*取vq->avail->idx*/
+	r = vhost_get_avail(vq, idx, &vq->avail->idx);
+	if (unlikely(r < 0)) {
+		vq_err(vq, "Failed to access available index at %p (%d)\n",
+		       &vq->avail->idx, r);
+		return r;
+	}
+
+	/* Check it isn't doing very strange thing with available indexes */
+	vq->avail_idx = vhost16_to_cpu(vq, idx);
+	/*两个索引相差不可能超过队列本身的长度（如超过，则报错）*/
+	if (unlikely((u16)(vq->avail_idx - vq->last_avail_idx) > vq->num)) {
+		vq_err(vq, "Invalid available index change from %u to %u",
+		       vq->last_avail_idx, vq->avail_idx);
+		return -EINVAL;
+	}
+
+	//与我们上次更新相比，没有更新，返回队列长度（即没有可用的描述符）
+	/* We're done if there is nothing new */
+	if (vq->avail_idx == vq->last_avail_idx)
+		return 0;
+
+	/*
+	 * We updated vq->avail_idx so we need a memory barrier between
+	 * the index read above and the caller reading avail ring entries.
+	 */
+	smp_rmb();
+	return 1;
 }
 
 static inline int vhost_get_avail_head(struct vhost_virtqueue *vq,
@@ -2423,6 +2507,19 @@ static int log_used(struct vhost_virtqueue *vq, u64 used_offset, u64 len)
 	return 0;
 }
 
+/*
+ * vhost_log_write() - Log in dirty page bitmap
+ * @vq:      vhost virtqueue.
+ * @log:     Array of dirty memory in GPA.
+ * @log_num: Size of vhost_log arrary.
+ * @len:     The total length of memory buffer to log in the dirty bitmap.
+ *	     Some drivers may only partially use pages shared via the last
+ *	     vring descriptor (i.e. vhost-net RX buffer).
+ *	     Use (len == U64_MAX) to indicate the driver would log all
+ *           pages of vring descriptors.
+ * @iov:     Array of dirty memory in HVA.
+ * @count:   Size of iovec array.
+ */
 int vhost_log_write(struct vhost_virtqueue *vq, struct vhost_log *log,
 		    unsigned int log_num, u64 len, struct iovec *iov, int count)
 {
@@ -2446,15 +2543,14 @@ int vhost_log_write(struct vhost_virtqueue *vq, struct vhost_log *log,
 		r = log_write(vq->log_base, log[i].addr, l);
 		if (r < 0)
 			return r;
-		len -= l;
-		if (!len) {
-			if (vq->log_ctx)
-				eventfd_signal(vq->log_ctx);
-			return 0;
-		}
+
+		if (len != U64_MAX)
+			len -= l;
 	}
-	/* Length written exceeds what we have stored. This is a bug. */
-	BUG();
+
+	if (vq->log_ctx)
+		eventfd_signal(vq->log_ctx);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vhost_log_write);
@@ -2708,44 +2804,20 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 {
 	struct vring_desc desc;
 	unsigned int i, head, found = 0;
-	u16 last_avail_idx;
-	__virtio16 avail_idx;
+	u16 last_avail_idx = vq->last_avail_idx;
 	__virtio16 ring_head;
 	int ret, access;
 
-	/* Check it isn't doing very strange things with descriptor numbers. */
-	last_avail_idx = vq->last_avail_idx;/*上次我们avail指向的位置*/
-
 	/*上次我们获取的avail_idx与last_avail_idx相等，则尝试更新vq->avail_idx*/
 	if (vq->avail_idx == vq->last_avail_idx) {
-
-	    /*我们和对端在共享这个vq,自vq->avail->idx中取对端（发送端）更新的avail_idx，
+    /*我们和对端在共享这个vq,自vq->avail->idx中取对端（发送端）更新的avail_idx，
 	     * 并更新（按协议要求将其值转换为cpu序）*/
-		if (unlikely(vhost_get_avail_idx(vq, &avail_idx))) {
-			vq_err(vq, "Failed to access avail idx at %p\n",
-				&vq->avail->idx);
-			return -EFAULT;
-		}
-		vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
+		ret = vhost_get_avail_idx(vq);
+		if (unlikely(ret < 0))
+			return ret;
 
-		/*两个索引相差不可能超过队列本身的长度（如超过，则报错）*/
-		if (unlikely((u16)(vq->avail_idx - last_avail_idx) > vq->num)) {
-			vq_err(vq, "Guest moved used index from %u to %u",
-				last_avail_idx, vq->avail_idx);
-			return -EFAULT;
-		}
-
-		/* If there's nothing new since last we looked, return
-		 * invalid.
-		 */
-		//与我们上次更新相比，没有更新，返回队列长度（即没有可用的描述符）
-		if (vq->avail_idx == last_avail_idx)
+		if (!ret)
 			return vq->num;
-
-		/* Only get avail ring entries after they have been
-		 * exposed by guest.
-		 */
-		smp_rmb();
 	}
 
 	/* Grab the next descriptor number they're advertising, and increment
@@ -3032,25 +3104,21 @@ EXPORT_SYMBOL_GPL(vhost_add_used_and_signal_n);
 /* return true if we're sure that avaiable ring is empty */
 bool vhost_vq_avail_empty(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
-	__virtio16 avail_idx;
 	int r;
 
 	if (vq->avail_idx != vq->last_avail_idx)
 		return false;
 
-	r = vhost_get_avail_idx(vq, &avail_idx);
-	if (unlikely(r))
-		return false;
-	vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
+	r = vhost_get_avail_idx(vq);
 
-	return vq->avail_idx == vq->last_avail_idx;
+	/* Note: we treat error as non-empty here */
+	return r == 0;
 }
 EXPORT_SYMBOL_GPL(vhost_vq_avail_empty);
 
 /* OK, now we need to know about added descriptors. */
 bool vhost_enable_notify(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
-	__virtio16 avail_idx;
 	int r;
 
 	if (!(vq->used_flags & VRING_USED_F_NO_NOTIFY))
@@ -3074,15 +3142,13 @@ bool vhost_enable_notify(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 	/* They could have slipped one in as we were doing that: make
 	 * sure it's written, then check again. */
 	smp_mb();
-	r = vhost_get_avail_idx(vq, &avail_idx);
-	if (r) {
-		vq_err(vq, "Failed to check avail idx at %p: %d\n",
-		       &vq->avail->idx, r);
-		return false;
-	}
-	vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
 
-	return vq->avail_idx != vq->last_avail_idx;
+	r = vhost_get_avail_idx(vq);
+	/* Note: we treat error as empty here */
+	if (unlikely(r < 0))
+		return false;
+
+	return r;
 }
 EXPORT_SYMBOL_GPL(vhost_enable_notify);
 

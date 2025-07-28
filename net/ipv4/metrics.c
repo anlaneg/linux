@@ -8,7 +8,7 @@
 #include <net/tcp.h>
 
 /*将fc_mx中的配置解析出来，校验后，填充到metrics中，对应的type进行了减一处理*/
-static int ip_metrics_convert(struct net *net, struct nlattr *fc_mx,
+static int ip_metrics_convert(struct nlattr *fc_mx,
 			      int fc_mx_len, u32 *metrics,
 			      struct netlink_ext_ack *extack)
 {
@@ -34,7 +34,7 @@ static int ip_metrics_convert(struct net *net, struct nlattr *fc_mx,
 			char tmp[TCP_CA_NAME_MAX];
 
 			nla_strscpy(tmp, nla, sizeof(tmp));
-			val = tcp_ca_get_key_by_name(net, tmp, &ecn_ca);
+			val = tcp_ca_get_key_by_name(tmp, &ecn_ca);
 			if (val == TCP_CA_UNSPEC) {
 			    /*遇到未注册的拥塞算法*/
 				NL_SET_ERR_MSG(extack, "Unknown tcp congestion algorithm");
@@ -73,7 +73,7 @@ static int ip_metrics_convert(struct net *net, struct nlattr *fc_mx,
 	return 0;
 }
 
-struct dst_metrics *ip_fib_metrics_init(struct net *net, struct nlattr *fc_mx,
+struct dst_metrics *ip_fib_metrics_init(struct nlattr *fc_mx,
 					int fc_mx_len,
 					struct netlink_ext_ack *extack)
 {
@@ -90,7 +90,7 @@ struct dst_metrics *ip_fib_metrics_init(struct net *net, struct nlattr *fc_mx,
 		return ERR_PTR(-ENOMEM);
 
 	/*利用fc_mx配置，填充fib_metrics->metrics*/
-	err = ip_metrics_convert(net, fc_mx, fc_mx_len, fib_metrics->metrics/*出参，填充此结构*/,
+	err = ip_metrics_convert(fc_mx, fc_mx_len, fib_metrics->metrics/*出参，填充此结构*/,
 				 extack);
 	if (!err) {
 		refcount_set(&fib_metrics->refcnt, 1);

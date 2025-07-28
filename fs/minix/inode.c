@@ -20,11 +20,11 @@
 #include <linux/mpage.h>
 #include <linux/vfs.h>
 #include <linux/writeback.h>
+#include <linux/fs_context.h>
 
 static int minix_write_inode(struct inode *inode,
 		struct writeback_control *wbc);
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf);
-static int minix_remount (struct super_block * sb, int * flags, char * data);
 
 static void minix_evict_inode(struct inode *inode)
 {
@@ -91,7 +91,7 @@ static int __init init_inodecache(void)
 	minix_inode_cachep = kmem_cache_create("minix_inode_cache",
 					     sizeof(struct minix_inode_info),
 					     0, (SLAB_RECLAIM_ACCOUNT|
-						SLAB_MEM_SPREAD|SLAB_ACCOUNT),
+						SLAB_ACCOUNT),
 					     init_once/*minix_inode_info初始化函数*/);
 	if (minix_inode_cachep == NULL)
 		return -ENOMEM;
@@ -116,19 +116,19 @@ static const struct super_operations minix_sops = {
 	.evict_inode	= minix_evict_inode,
 	.put_super	= minix_put_super,
 	.statfs		= minix_statfs,
-	.remount_fs	= minix_remount,
 };
 
-static int minix_remount (struct super_block * sb, int * flags, char * data)
+static int minix_reconfigure(struct fs_context *fc)
 {
-	struct minix_sb_info * sbi = minix_sb(sb);
 	struct minix_super_block * ms;
+	struct super_block *sb = fc->root->d_sb;
+	struct minix_sb_info * sbi = sb->s_fs_info;
 
 	sync_filesystem(sb);
 	ms = sbi->s_ms;
-	if ((bool)(*flags & SB_RDONLY) == sb_rdonly(sb))
+	if ((bool)(fc->sb_flags & SB_RDONLY) == sb_rdonly(sb))
 		return 0;
-	if (*flags & SB_RDONLY) {
+	if (fc->sb_flags & SB_RDONLY) {
 		if (ms->s_state & MINIX_VALID_FS ||
 		    !(sbi->s_mount_state & MINIX_VALID_FS))
 			return 0;
@@ -176,7 +176,7 @@ static bool minix_check_superblock(struct super_block *sb)
 }
 
 /*填充超级块*/
-static int minix_fill_super(struct super_block *s/*待填充的超级块*/, void *data/*挂载配置的参数*/, int silent)
+static int minix_fill_super(struct super_block *s/*待填充的超级块*/, struct fs_context *fc)
 {
 	struct buffer_head *bh;
 	struct buffer_head **map;
@@ -186,6 +186,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, void
 	struct inode *root_inode;
 	struct minix_sb_info *sbi;
 	int ret = -EINVAL;
+	int silent = fc->sb_flags & SB_SILENT;
 
 	/*申请minix_sb_info结构体*/
 	sbi = kzalloc(sizeof(struct minix_sb_info), GFP_KERNEL);
@@ -392,6 +393,23 @@ out:
 	return ret;
 }
 
+static int minix_get_tree(struct fs_context *fc)
+{
+	 return get_tree_bdev(fc, minix_fill_super);
+}
+
+static const struct fs_context_operations minix_context_ops = {
+	.get_tree	= minix_get_tree,
+	.reconfigure	= minix_reconfigure,
+};
+
+static int minix_init_fs_context(struct fs_context *fc)
+{
+	fc->ops = &minix_context_ops;
+
+	return 0;
+}
+
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -434,9 +452,9 @@ static int minix_read_folio(struct file *file, struct folio *folio)
 	return block_read_full_folio(folio, minix_get_block);
 }
 
-int minix_prepare_chunk(struct page *page, loff_t pos, unsigned len)
+int minix_prepare_chunk(struct folio *folio, loff_t pos, unsigned len)
 {
-	return __block_write_begin(page, pos, len, minix_get_block);
+	return __block_write_begin(folio, pos, len, minix_get_block);
 }
 
 static void minix_write_failed(struct address_space *mapping, loff_t to)
@@ -451,11 +469,11 @@ static void minix_write_failed(struct address_space *mapping, loff_t to)
 
 static int minix_write_begin(struct file *file/*要写的文件*/, struct address_space *mapping,
 			loff_t pos/*要写的位置*/, unsigned len/*要写的长度*/,
-			struct page **pagep, void **fsdata)
+			struct folio **foliop, void **fsdata)
 {
 	int ret;
 
-	ret = block_write_begin(mapping, pos, len, pagep, minix_get_block);
+	ret = block_write_begin(mapping, pos, len, foliop, minix_get_block);
 	if (unlikely(ret))
 		minix_write_failed(mapping, pos + len);
 
@@ -724,20 +742,13 @@ void minix_truncate(struct inode * inode)
 		V2_minix_truncate(inode);
 }
 
-/*minix文件系统挂载*/
-static struct dentry *minix_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
-{
-	return mount_bdev(fs_type, flags, dev_name/*要挂接的设备*/, data, minix_fill_super/*填充块填充函数*/);
-}
-
 /*minix文件系统对应的fs_type*/
 static struct file_system_type minix_fs_type = {
-	.owner		= THIS_MODULE,
-	.name		= "minix",
-	.mount		= minix_mount,
-	.kill_sb	= kill_block_super,
-	.fs_flags	= FS_REQUIRES_DEV,
+	.owner			= THIS_MODULE,
+	.name			= "minix",
+	.kill_sb		= kill_block_super,
+	.fs_flags		= FS_REQUIRES_DEV,
+	.init_fs_context	= minix_init_fs_context,
 };
 MODULE_ALIAS_FS("minix");
 
@@ -766,5 +777,6 @@ static void __exit exit_minix_fs(void)
 
 module_init(init_minix_fs)
 module_exit(exit_minix_fs)
+MODULE_DESCRIPTION("Minix file system");
 MODULE_LICENSE("GPL");
 

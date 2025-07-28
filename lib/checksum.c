@@ -34,16 +34,6 @@
 #include <asm/byteorder.h>
 
 #ifndef do_csum
-//将checksum由32bits拆叠后更新为16bits(见checksum计算第4步）
-static inline unsigned short from32to16(unsigned int x)
-{
-	/* add up 16-bit and 16-bit for 16+c bit */
-	x = (x & 0xffff) + (x >> 16);
-	/* add up carry.. */
-	x = (x & 0xffff) + (x >> 16);
-	return x;
-}
-
 //1、 先将需要计算checksum数据中的checksum设为0； 
 //2、 计算checksum的数据按2byte划分开来，每2byte组成一个16bit的值，如果最后有单个byte的数据，补一个byte的0组成2byte； 
 //3、 将所有的16bit值累加到一个32bit的值中； 
@@ -104,8 +94,8 @@ static unsigned int do_csum(const unsigned char *buff, int len)
 #else
 		result += (*buff << 8);
 #endif
-	result = from32to16(result);
-    //解决odd处理导致的问题
+	result = csum_from32to16(result);
+    	//解决odd处理导致的问题
 	if (odd)
 		result = ((result >> 8) & 0xff) | ((result & 0xff) << 8);
 out:

@@ -31,7 +31,7 @@ br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 }
 
 //二层转三层处理
-static int br_pass_frame_up(struct sk_buff *skb)
+static int br_pass_frame_up(struct sk_buff *skb, bool promisc)
 {
 	struct net_device *indev, *brdev = BR_INPUT_SKB_CB(skb)->brdev;
 	struct net_bridge *br = netdev_priv(brdev);
@@ -67,6 +67,8 @@ static int br_pass_frame_up(struct sk_buff *skb)
 	br_multicast_count(br, NULL, skb, br_multicast_igmp_type(skb),
 			   BR_MCAST_DIR_TX);
 
+	BR_INPUT_SKB_CB(skb)->promisc = promisc;
+
 	//送本机处理
 	return NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
 		       dev_net(indev), NULL, skb, indev, NULL,
@@ -77,6 +79,7 @@ static int br_pass_frame_up(struct sk_buff *skb)
 //pre routing钩子点执行完成后，此函数将被执行
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
 	enum br_pkt_type pkt_type = BR_PKT_UNICAST;
 	struct net_bridge_fdb_entry *dst = NULL;
@@ -86,6 +89,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge_mcast *brmctx;
 	struct net_bridge_vlan *vlan;
 	struct net_bridge *br;
+	bool promisc;
 	u16 vid = 0;
 	u8 state;
 
@@ -98,8 +102,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (br_mst_is_enabled(br)) {
 		state = BR_STATE_FORWARDING;
 	} else {
-		if (p->state == BR_STATE_DISABLED)
+		if (p->state == BR_STATE_DISABLED) {
+			reason = SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE;
 			goto drop;
+		}
 
 		state = p->state;
 	}
@@ -145,8 +151,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		//fdb学习
 		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, 0);
 
+	promisc = !!(br->dev->flags & IFF_PROMISC);
 	/*此设备是否开启混杂*/
-	local_rcv = !!(br->dev->flags & IFF_PROMISC);
+	local_rcv = promisc;
+
 	if (is_multicast_ether_addr(eth_hdr(skb)->h_dest)) {
 		//广播报文，组播报文标记处理
 		/* by definition the broadcast is also a multicast address */
@@ -162,9 +170,11 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 	}
 
-	if (state == BR_STATE_LEARNING)
-	    //当前不转发报文，但学习fdb
+	if (state == BR_STATE_LEARNING) {
+		reason = SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE;
+	    	//当前不转发报文，但学习fdb
 		goto drop;
+	}
 
 	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
 	BR_INPUT_SKB_CB(skb)->src_port_isolated = !!(p->flags & BR_ISOLATED);
@@ -195,7 +205,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
 		    br_multicast_querier_exists(brmctx, eth_hdr(skb), mdst)) {
 			if ((mdst && mdst->host_joined) ||
-			    br_multicast_is_router(brmctx, skb)) {
+			    br_multicast_is_router(brmctx, skb) ||
+			    br->dev->flags & IFF_ALLMULTI) {
 				local_rcv = true;
 				DEV_STATS_INC(br->dev, multicast);
 			}
@@ -218,7 +229,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 		if (test_bit(BR_FDB_LOCAL, &dst->flags))
 			//dst为local口，送三层处理
-			return br_pass_frame_up(skb);
+			return br_pass_frame_up(skb, false);
 
 		//fdb时间刷新
 		if (now != dst->used)
@@ -235,13 +246,13 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	}
 
 	if (local_rcv)
-	    /*送local*/
-		return br_pass_frame_up(skb);
+	    	/*送local*/
+		return br_pass_frame_up(skb, promisc);
 
 out:
 	return 0;
 drop:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 	goto out;
 }
 EXPORT_SYMBOL_GPL(br_handle_frame_finish);
@@ -352,6 +363,7 @@ static int br_process_frame_type(struct net_bridge_port *p,
 //桥接口收到报文时此接口将被调用（此接口被置为bridge的rx_handler回调）
 static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 {
+	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	struct net_bridge_port *p;
 	struct sk_buff *skb = *pskb;
 	const unsigned char *dest = eth_hdr(skb)->h_dest;//指向目的mac
@@ -360,8 +372,10 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		return RX_HANDLER_PASS;//桥放通此报文，使之不被桥可见
 
 	//进行源mac校验，srcmac必须为单播mac,且全0mac是无效的
-	if (!is_valid_ether_addr(eth_hdr(skb)->h_source))
+	if (!is_valid_ether_addr(eth_hdr(skb)->h_source)) {
+		reason = SKB_DROP_REASON_MAC_INVALID_SOURCE;
 		goto drop;
+	}
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
@@ -406,6 +420,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			return RX_HANDLER_PASS;
 
 		case 0x01:	/* IEEE MAC (Pause) */
+			reason = SKB_DROP_REASON_MAC_IEEE_MAC_CONTROL;
 			goto drop;
 
 		case 0x0E:	/* 802.1AB LLDP */
@@ -423,6 +438,8 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			if (fwd_mask & (1u << dest[5]))
 				goto forward;
 		}
+
+		BR_INPUT_SKB_CB(skb)->promisc = false;
 
 		/* The else clause should be hit when nf_hook():
 		 *   - returns < 0 (drop/error)
@@ -460,9 +477,10 @@ defer_stp_filtering:
 		//触发bridge路由前hook点
 		return nf_hook_bridge_pre(skb, pskb);
 	default:
+		reason = SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE;
 		//端口处于其它状态，丢包
 drop:
-		kfree_skb(skb);
+		kfree_skb_reason(skb, reason);
 	}
 	return RX_HANDLER_CONSUMED;
 }
