@@ -237,61 +237,6 @@ static void free_iova_mem(struct iova *iova)
 		kmem_cache_free(iova_cache, iova);
 }
 
-<<<<<<< HEAD
-int iova_cache_get(void)
-{
-	mutex_lock(&iova_cache_mutex);
-	if (!iova_cache_users) {
-		/*首次（未初始化），执行初始化*/
-		int ret;
-
-		ret = cpuhp_setup_state_multi(CPUHP_IOMMU_IOVA_DEAD, "iommu/iova:dead", NULL,
-					iova_cpuhp_dead);
-		if (ret) {
-			mutex_unlock(&iova_cache_mutex);
-			pr_err("Couldn't register cpuhp handler\n");
-			return ret;
-		}
-
-		/*申请iova_cache*/
-		iova_cache = kmem_cache_create(
-			"iommu_iova", sizeof(struct iova), 0,
-			SLAB_HWCACHE_ALIGN, NULL);
-		if (!iova_cache) {
-			cpuhp_remove_multi_state(CPUHP_IOMMU_IOVA_DEAD);
-			mutex_unlock(&iova_cache_mutex);
-			pr_err("Couldn't create iova cache\n");
-			return -ENOMEM;
-		}
-	}
-
-	iova_cache_users++;/*用户数增加*/
-	mutex_unlock(&iova_cache_mutex);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(iova_cache_get);
-
-void iova_cache_put(void)
-{
-	mutex_lock(&iova_cache_mutex);
-	if (WARN_ON(!iova_cache_users)) {
-		/*已减完零，仍在put,不具体执行（这里应考虑添加一个日志?)*/
-		mutex_unlock(&iova_cache_mutex);
-		return;
-	}
-	iova_cache_users--;
-	if (!iova_cache_users) {
-		/*减少为0，执行释放*/
-		cpuhp_remove_multi_state(CPUHP_IOMMU_IOVA_DEAD);
-		kmem_cache_destroy(iova_cache);
-	}
-	mutex_unlock(&iova_cache_mutex);
-}
-EXPORT_SYMBOL_GPL(iova_cache_put);
-
-=======
->>>>>>> upstream/master
 /**
  * alloc_iova - allocates an iova
  * @iovad: - iova domain in question

@@ -207,10 +207,8 @@ struct kernfs_node {
 	struct kernfs_node	__rcu *__parent;//指向父节点
 	const char		__rcu *name;//名称
 
-	struct rb_node		rb;
-
 	struct rb_node		rb;//用于将节点加入红黑树中
-	
+
 	//从属于那个namespace
 	const void		*ns;	/* namespace tag */
 	//节点对应的hashcode,用于查询

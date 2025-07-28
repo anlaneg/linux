@@ -498,13 +498,9 @@ struct tcf_proto {
 	spinlock_t		lock;
 	//标记此tp正在被删除
 	bool			deleting;
-<<<<<<< HEAD
-	refcount_t		refcnt;//引用计数
-=======
 	bool			counted;
 	bool			usesw;
-	refcount_t		refcnt;
->>>>>>> upstream/master
+	refcount_t		refcnt;//引用计数
 	struct rcu_head		rcu;
 	struct hlist_node	destroy_ht_node;
 };
@@ -1133,9 +1129,6 @@ static inline struct sk_buff *__qdisc_dequeue_head(struct qdisc_skb_head *qh)
 	return skb;
 }
 
-<<<<<<< HEAD
-//自先进先出队列的头部位置出队一个报文
-=======
 static inline struct sk_buff *qdisc_dequeue_internal(struct Qdisc *sch, bool direct)
 {
 	struct sk_buff *skb;
@@ -1151,7 +1144,7 @@ static inline struct sk_buff *qdisc_dequeue_internal(struct Qdisc *sch, bool dir
 		return sch->dequeue(sch);
 }
 
->>>>>>> upstream/master
+//自先进先出队列的头部位置出队一个报文
 static inline struct sk_buff *qdisc_dequeue_head(struct Qdisc *sch)
 {
 	struct sk_buff *skb = __qdisc_dequeue_head(&sch->q);

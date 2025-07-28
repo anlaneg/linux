@@ -306,27 +306,17 @@ struct vxlan_dev {
 	struct net	  *net;		/* netns for packet i/o */
 	struct vxlan_rdst default_dst;	/* default destination */
 
-<<<<<<< HEAD
 	struct timer_list age_timer;//用于老化fdb表项
-	spinlock_t	  hash_lock[FDB_HASH_SIZE];
-	unsigned int	  addrcnt;/*记录vxlan fdb表项最大值*/
-=======
-	struct timer_list age_timer;
 	spinlock_t	  hash_lock;
-	unsigned int	  addrcnt;
->>>>>>> upstream/master
+	unsigned int	  addrcnt;/*记录vxlan fdb表项最大值*/
 	struct gro_cells  gro_cells;
 
 	struct vxlan_config	cfg;//配置信息（如本端ip，vni等）
 
 	struct vxlan_vni_group  __rcu *vnigrp;
 
-<<<<<<< HEAD
 	//vxlan设备转发表(fdb表）
-	struct hlist_head fdb_head[FDB_HASH_SIZE];
-=======
 	struct rhashtable fdb_hash_tbl;
->>>>>>> upstream/master
 
 	struct rhashtable mdb_tbl;
 	struct hlist_head fdb_list;

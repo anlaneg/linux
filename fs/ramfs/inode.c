@@ -79,7 +79,7 @@ struct inode *ramfs_get_inode(struct super_block *sb,
 		case S_IFDIR:
 			/*目录文件*/
 			inode->i_op = &ramfs_dir_inode_operations;
-			inode->i_fop = &simple_d ir_operations;
+			inode->i_fop = &simple_dir_operations;
 
 			/* directory inodes start off with i_nlink == 2 (for "." entry) */
 			inc_nlink(inode);
