@@ -65,7 +65,7 @@ static ssize_t features_show(struct device *_d,
 	/* We actually represent this as a bitstring, as it could be
 	 * arbitrary length in future. */
 	//遍历所有features位，列出当前支持的features
-	for (i = 0; i < sizeof(dev->features)*8; i++)
+	for (i = 0; i < VIRTIO_FEATURES_MAX; i++)
 		len += sysfs_emit_at(buf, len, "%c",
 			       __virtio_test_bit(dev, i) ? '1' : '0');
 	len += sysfs_emit_at(buf, len, "\n");
@@ -304,8 +304,8 @@ static int virtio_dev_probe(struct device *_d)
 	struct virtio_device *dev = dev_to_virtio(_d);
 	//设备的驱动
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
-	u64 device_features;
-	u64 driver_features;
+	u64 device_features[VIRTIO_FEATURES_DWORDS];
+	u64 driver_features[VIRTIO_FEATURES_DWORDS];
 	u64 driver_features_legacy;
 
 	/* We have a driver! */
@@ -313,16 +313,16 @@ static int virtio_dev_probe(struct device *_d)
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
-    //获得当前设备支持的功能列表(Feature Bits)
-	device_features = dev->config->get_features(dev);
+	//获得当前设备支持的功能列表(Feature Bits)
+	virtio_get_features(dev, device_features);
 
 	/* Figure out what features the driver supports. */
 	//获得当前驱动支持的功能列表(Feature Bits)
-	driver_features = 0;
+	virtio_features_zero(driver_features);
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
-		BUG_ON(f >= 64);
-		driver_features |= (1ULL << f);
+		if (!WARN_ON_ONCE(f >= VIRTIO_FEATURES_MAX))
+			virtio_features_set_bit(driver_features, f);
 	}
 
 	/* Some drivers have a separate feature table for virtio v1.0 */
@@ -331,20 +331,25 @@ static int virtio_dev_probe(struct device *_d)
 		driver_features_legacy = 0;
 		for (i = 0; i < drv->feature_table_size_legacy; i++) {
 			unsigned int f = drv->feature_table_legacy[i];
-			BUG_ON(f >= 64);
-			driver_features_legacy |= (1ULL << f);
+			if (!WARN_ON_ONCE(f >= 64))
+				driver_features_legacy |= (1ULL << f);
 		}
 	} else {
-		driver_features_legacy = driver_features;
+		driver_features_legacy = driver_features[0];
 	}
 
 	//如果使能v1.0,则取与操作计算两者合并device与driver获得的features
 	/*V1.0要求,驱动不得使用设备未提供的功能*/
-	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
-		dev->features = driver_features & device_features;
-	else
+	if (virtio_features_test_bit(device_features, VIRTIO_F_VERSION_1)) {
+		for (i = 0; i < VIRTIO_FEATURES_DWORDS; ++i)
+			dev->features_array[i] = driver_features[i] &
+						 device_features[i];
+	} else {
 		//非1.0版本时，按v1.0要求,回退到legacy采用接口,legacy驱动功能号与上设备功能号
-		dev->features = driver_features_legacy & device_features;
+		virtio_features_from_u64(dev->features_array,
+					 driver_features_legacy &
+					 device_features[0]);
+	}
 
 	/* When debugging, user may filter some features by hand. */
 	virtio_debug_device_filter_features(dev);
@@ -352,7 +357,7 @@ static int virtio_dev_probe(struct device *_d)
 	/* Transport features always preserved to pass to finalize_features. */
 	//如果device_features有这些标记，则为dev加上此标记
 	for (i = VIRTIO_TRANSPORT_F_START; i < VIRTIO_TRANSPORT_F_END; i++)
-		if (device_features & (1ULL << i))
+		if (virtio_features_test_bit(device_features, i))
 			__virtio_set_bit(dev, i);
 
 	err = dev->config->finalize_features(dev);
@@ -361,14 +366,15 @@ static int virtio_dev_probe(struct device *_d)
 
 	//调用driver的validate函数，检查设备功能配置
 	if (drv->validate) {
-		u64 features = dev->features;
+		u64 features[VIRTIO_FEATURES_DWORDS];
 
+		virtio_features_copy(features, dev->features_array);
 		err = drv->validate(dev);
 		if (err)
 			goto err;
 
 		/* Did validation change any features? Then write them again. */
-		if (features != dev->features) {
+		if (!virtio_features_equal(features, dev->features_array)) {
 			err = dev->config->finalize_features(dev);
 			if (err)
 				goto err;
@@ -771,7 +777,10 @@ EXPORT_SYMBOL_GPL(virtio_device_reset_done);
 //注册virtio_bus
 static int virtio_init(void)
 {
-    /*为系统注册virtio bus*/
+	BUILD_BUG_ON(offsetof(struct virtio_device, features) !=
+		     offsetof(struct virtio_device, features_array[0]));
+
+	/*为系统注册virtio bus*/
 	if (bus_register(&virtio_bus) != 0)
 		panic("virtio bus registration failed");
 	virtio_debug_init();

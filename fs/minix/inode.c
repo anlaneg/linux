@@ -467,9 +467,10 @@ static void minix_write_failed(struct address_space *mapping, loff_t to)
 	}
 }
 
-static int minix_write_begin(struct file *file/*要写的文件*/, struct address_space *mapping,
-			loff_t pos/*要写的位置*/, unsigned len/*要写的长度*/,
-			struct folio **foliop, void **fsdata)
+static int minix_write_begin(const struct kiocb *iocb,
+			     struct address_space *mapping,
+			     loff_t pos/*要写的位置*/, unsigned len/*要写的长度*/,
+			     struct folio **foliop, void **fsdata)
 {
 	int ret;
 

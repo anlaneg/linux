@@ -635,7 +635,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			   hdrincl ? ipc.protocol : sk->sk_protocol,
 			   inet_sk_flowi_flags(sk) |
 			    (hdrincl ? FLOWI_FLAG_KNOWN_NH : 0),
-			   daddr/*目的地址*/, saddr/*源地址*/, 0/*目的port*/, 0/*源port*/, sk->sk_uid);
+			   daddr/*目的地址*/, saddr/*源地址*/, 0/*目的port*/, 0/*源port*/, sk_uid(sk));
 
 	fl4.fl4_icmp_type = 0;
 	fl4.fl4_icmp_code = 0;
@@ -1070,7 +1070,7 @@ static void raw_sock_seq_show(struct seq_file *seq, struct sock *sp, int i)
 		sk_wmem_alloc_get(sp),
 		sk_rmem_alloc_get(sp),
 		0, 0L, 0,
-		from_kuid_munged(seq_user_ns(seq), sock_i_uid(sp)),
+		from_kuid_munged(seq_user_ns(seq), sk_uid(sp)),
 		0, sock_i_ino(sp),
 		refcount_read(&sp->sk_refcnt), sp, atomic_read(&sp->sk_drops));
 }

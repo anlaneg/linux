@@ -1242,7 +1242,7 @@ long compat_arch_ptrace(struct task_struct *child, compat_long_t request,
 
 static struct user_regset x86_64_regsets[] __ro_after_init = {
 	[REGSET64_GENERAL] = {
-		.core_note_type	= NT_PRSTATUS,
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
 		.n		= sizeof(struct user_regs_struct) / sizeof(long),
 		.size		= sizeof(long),
 		.align		= sizeof(long),
@@ -1250,7 +1250,7 @@ static struct user_regset x86_64_regsets[] __ro_after_init = {
 		.set		= genregs_set
 	},
 	[REGSET64_FP] = {
-		.core_note_type	= NT_PRFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG),
 		.n		= sizeof(struct fxregs_state) / sizeof(long),
 		.size		= sizeof(long),
 		.align		= sizeof(long),
@@ -1259,7 +1259,7 @@ static struct user_regset x86_64_regsets[] __ro_after_init = {
 		.set		= xfpregs_set
 	},
 	[REGSET64_XSTATE] = {
-		.core_note_type	= NT_X86_XSTATE,
+		USER_REGSET_NOTE_TYPE(X86_XSTATE),
 		.size		= sizeof(u64),
 		.align		= sizeof(u64),
 		.active		= xstateregs_active,
@@ -1267,7 +1267,7 @@ static struct user_regset x86_64_regsets[] __ro_after_init = {
 		.set		= xstateregs_set
 	},
 	[REGSET64_IOPERM] = {
-		.core_note_type	= NT_386_IOPERM,
+		USER_REGSET_NOTE_TYPE(386_IOPERM),
 		.n		= IO_BITMAP_LONGS,
 		.size		= sizeof(long),
 		.align		= sizeof(long),
@@ -1276,7 +1276,7 @@ static struct user_regset x86_64_regsets[] __ro_after_init = {
 	},
 #ifdef CONFIG_X86_USER_SHADOW_STACK
 	[REGSET64_SSP] = {
-		.core_note_type	= NT_X86_SHSTK,
+		USER_REGSET_NOTE_TYPE(X86_SHSTK),
 		.n		= 1,
 		.size		= sizeof(u64),
 		.align		= sizeof(u64),
@@ -1303,7 +1303,7 @@ static const struct user_regset_view user_x86_64_view = {
 #if defined CONFIG_X86_32 || defined CONFIG_IA32_EMULATION
 static struct user_regset x86_32_regsets[] __ro_after_init = {
 	[REGSET32_GENERAL] = {
-		.core_note_type	= NT_PRSTATUS,
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
 		.n		= sizeof(struct user_regs_struct32) / sizeof(u32),
 		.size		= sizeof(u32),
 		.align		= sizeof(u32),
@@ -1311,7 +1311,7 @@ static struct user_regset x86_32_regsets[] __ro_after_init = {
 		.set		= genregs32_set
 	},
 	[REGSET32_FP] = {
-		.core_note_type	= NT_PRFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG),
 		.n		= sizeof(struct user_i387_ia32_struct) / sizeof(u32),
 		.size		= sizeof(u32),
 		.align		= sizeof(u32),
@@ -1320,7 +1320,7 @@ static struct user_regset x86_32_regsets[] __ro_after_init = {
 		.set		= fpregs_set
 	},
 	[REGSET32_XFP] = {
-		.core_note_type	= NT_PRXFPREG,
+		USER_REGSET_NOTE_TYPE(PRXFPREG),
 		.n		= sizeof(struct fxregs_state) / sizeof(u32),
 		.size		= sizeof(u32),
 		.align		= sizeof(u32),
@@ -1329,7 +1329,7 @@ static struct user_regset x86_32_regsets[] __ro_after_init = {
 		.set		= xfpregs_set
 	},
 	[REGSET32_XSTATE] = {
-		.core_note_type	= NT_X86_XSTATE,
+		USER_REGSET_NOTE_TYPE(X86_XSTATE),
 		.size		= sizeof(u64),
 		.align		= sizeof(u64),
 		.active		= xstateregs_active,
@@ -1337,7 +1337,7 @@ static struct user_regset x86_32_regsets[] __ro_after_init = {
 		.set		= xstateregs_set
 	},
 	[REGSET32_TLS] = {
-		.core_note_type	= NT_386_TLS,
+		USER_REGSET_NOTE_TYPE(386_TLS),
 		.n		= GDT_ENTRY_TLS_ENTRIES,
 		.bias		= GDT_ENTRY_TLS_MIN,
 		.size		= sizeof(struct user_desc),
@@ -1347,7 +1347,7 @@ static struct user_regset x86_32_regsets[] __ro_after_init = {
 		.set		= regset_tls_set
 	},
 	[REGSET32_IOPERM] = {
-		.core_note_type	= NT_386_IOPERM,
+		USER_REGSET_NOTE_TYPE(386_IOPERM),
 		.n		= IO_BITMAP_BYTES / sizeof(u32),
 		.size		= sizeof(u32),
 		.align		= sizeof(u32),

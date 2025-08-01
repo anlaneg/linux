@@ -800,6 +800,8 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	err = skb_array_produce(q, skb);
 
 	if (unlikely(err)) {
+		tcf_set_drop_reason(skb, SKB_DROP_REASON_QDISC_OVERLIMIT);
+
 	    /*存入q失败，确认统计方式并统计*/
 		if (qdisc_is_percpu_stats(qdisc))
 		    /*按percpu统计状态*/

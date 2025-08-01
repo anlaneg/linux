@@ -137,7 +137,7 @@ static inline bool arch_validate_flags(unsigned long flags)
 /*
  * Combine the mmap "prot" argument into "vm_flags" used internally.
  */
-static inline unsigned long
+static inline vm_flags_t
 calc_vm_prot_bits(unsigned long prot, unsigned long pkey)
 {
 	/*prot标记转换为VM*标记*/
@@ -150,7 +150,7 @@ calc_vm_prot_bits(unsigned long prot, unsigned long pkey)
 /*
  * Combine the mmap "flags" argument into "vm_flags" used internally.
  */
-static inline unsigned long
+static inline vm_flags_t
 calc_vm_flag_bits(struct file *file, unsigned long flags)
 {
 	/*MAP_*标记转换为VM_*标记*/

@@ -57,11 +57,15 @@ static inline int ib_umem_offset(struct ib_umem *umem)
 	return umem->address & ~PAGE_MASK;
 }
 
+static inline dma_addr_t ib_umem_start_dma_addr(struct ib_umem *umem)
+{
+	return sg_dma_address(umem->sgt_append.sgt.sgl) + ib_umem_offset(umem);
+}
+
 static inline unsigned long ib_umem_dma_offset(struct ib_umem *umem,
 					       unsigned long pgsz)
 {
-	return (sg_dma_address(umem->sgt_append.sgt.sgl) + ib_umem_offset(umem)) &
-	       (pgsz - 1);
+	return ib_umem_start_dma_addr(umem) & (pgsz - 1);
 }
 
 /*umem指定的范围(umem->iova,umem->iova+umem->length）上沿边界按页对齐后，共占用多少页*/
@@ -142,12 +146,25 @@ static inline unsigned long ib_umem_find_best_pgoff(struct ib_umem *umem,
 						    unsigned long pgsz_bitmap,
 						    u64 pgoff_bitmask)
 {
-	struct scatterlist *sg = umem->sgt_append.sgt.sgl;
 	dma_addr_t dma_addr;
 
-	dma_addr = sg_dma_address(sg) + (umem->address & ~PAGE_MASK);
+	dma_addr = ib_umem_start_dma_addr(umem);
 	return ib_umem_find_best_pgsz(umem, pgsz_bitmap,
 				      dma_addr & pgoff_bitmask);
+}
+
+static inline bool ib_umem_is_contiguous(struct ib_umem *umem)
+{
+	dma_addr_t dma_addr;
+	unsigned long pgsz;
+
+	/*
+	 * Select the smallest aligned page that can contain the whole umem if
+	 * it was contiguous.
+	 */
+	dma_addr = ib_umem_start_dma_addr(umem);
+	pgsz = roundup_pow_of_two((dma_addr ^ (umem->length - 1 + dma_addr)) + 1);
+	return !!ib_umem_find_best_pgoff(umem, pgsz, U64_MAX);
 }
 
 struct ib_umem_dmabuf *ib_umem_dmabuf_get(struct ib_device *device,

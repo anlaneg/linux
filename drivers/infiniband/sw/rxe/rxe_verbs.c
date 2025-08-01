@@ -70,7 +70,7 @@ static int rxe_query_port(struct ib_device *ibdev,
 	attr->state = ib_get_curr_port_state(ndev);
 	if (attr->state == IB_PORT_ACTIVE)
 		attr->phys_state = IB_PORT_PHYS_STATE_LINK_UP;
-	else if (dev_get_flags(ndev) & IFF_UP)
+	else if (netif_get_flags(ndev) & IFF_UP)
 	    /*如果底层网络设备为up,则变更为polling*/
 		attr->phys_state = IB_PORT_PHYS_STATE_POLLING;
 	else
@@ -1342,12 +1342,16 @@ err_free:
 /*rxe设备注册mr*/
 static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始地址*/,
 				     u64 length/*内存长度*/, u64 iova, int access/*访问标记*/,
+				     struct ib_dmah *dmah,
 				     struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
 	struct rxe_pd *pd = to_rpd(ibpd);
 	struct rxe_mr *mr;
 	int err, cleanup_err;
+
+	if (dmah)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	if (access & ~RXE_ACCESS_SUPPORTED_MR) {
 		rxe_err_pd(pd, "access = %#x not supported (%#x)\n", access,

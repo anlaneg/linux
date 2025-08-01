@@ -931,17 +931,17 @@ static int flow_type_to_traffic_type(u32 flow_type)
 	}
 }
 
-static int mlx5e_set_rss_hash_opt(struct mlx5e_priv *priv,
-				  struct ethtool_rxnfc *nfc)
+int mlx5e_ethtool_set_rxfh_fields(struct mlx5e_priv *priv,
+				  const struct ethtool_rxfh_fields *nfc,
+				  struct netlink_ext_ack *extack)
 {
 	u8 rx_hash_field = 0;
 	u32 flow_type = 0;
-	u32 rss_idx = 0;
+	u32 rss_idx;
 	int err;
 	int tt;
 
-	if (nfc->flow_type & FLOW_RSS)
-		rss_idx = nfc->rss_context;
+	rss_idx = nfc->rss_context;
 
 	flow_type = flow_type_mask(nfc->flow_type);
 	tt = flow_type_to_traffic_type(flow_type);
@@ -982,16 +982,15 @@ static int mlx5e_set_rss_hash_opt(struct mlx5e_priv *priv,
 	return err;
 }
 
-static int mlx5e_get_rss_hash_opt(struct mlx5e_priv *priv,
-				  struct ethtool_rxnfc *nfc)
+int mlx5e_ethtool_get_rxfh_fields(struct mlx5e_priv *priv,
+				  struct ethtool_rxfh_fields *nfc)
 {
 	int hash_field = 0;
 	u32 flow_type = 0;
-	u32 rss_idx = 0;
+	u32 rss_idx;
 	int tt;
 
-	if (nfc->flow_type & FLOW_RSS)
-		rss_idx = nfc->rss_context;
+	rss_idx = nfc->rss_context;
 
 	flow_type = flow_type_mask(nfc->flow_type);
 	/*通过flow type获得对应的traffic type*/
@@ -1031,10 +1030,6 @@ int mlx5e_ethtool_set_rxnfc(struct mlx5e_priv *priv, struct ethtool_rxnfc *cmd)
 	    /*移除指定索引的rx class rule*/
 		err = mlx5e_ethtool_flow_remove(priv, cmd->fs.location);
 		break;
-	case ETHTOOL_SRXFH:
-	    /*更新rss hash对应的字段*/
-		err = mlx5e_set_rss_hash_opt(priv, cmd);
-		break;
 	default:
 		err = -EOPNOTSUPP;
 		break;
@@ -1061,10 +1056,6 @@ int mlx5e_ethtool_get_rxnfc(struct mlx5e_priv *priv,
 	case ETHTOOL_GRXCLSRLALL:
 	    /*返回所有rx cls规则索引*/
 		err = mlx5e_ethtool_get_all_flows(priv, info, rule_locs);
-		break;
-	case ETHTOOL_GRXFH:
-	    /*显示rx flow type支持的字段*/
-		err =  mlx5e_get_rss_hash_opt(priv, info);
 		break;
 	default:
 		err = -EOPNOTSUPP;

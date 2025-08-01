@@ -9,8 +9,7 @@
 struct fs_struct {
     //此结构的引用计数
 	int users;
-	spinlock_t lock;
-	seqcount_spinlock_t seq;
+	seqlock_t seq;
 	int umask;
 	int in_exec;
 	struct path root/*当前进程root目录对应的路径*/, pwd/*当前进程工作目录对应的path*/;
@@ -28,19 +27,19 @@ extern int unshare_fs_struct(void);
 /*取fs的root路径*/
 static inline void get_fs_root(struct fs_struct *fs, struct path *root)
 {
-	spin_lock(&fs->lock);
+	read_seqlock_excl(&fs->seq);
 	*root = fs->root;
 	path_get(root);
-	spin_unlock(&fs->lock);
+	read_sequnlock_excl(&fs->seq);
 }
 
 //取当前进程工作路径
 static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd/*出参，当前工作路径*/)
 {
-	spin_lock(&fs->lock);
+	read_seqlock_excl(&fs->seq);
 	*pwd = fs->pwd;
 	path_get(pwd);
-	spin_unlock(&fs->lock);
+	read_sequnlock_excl(&fs->seq);
 }
 
 extern bool current_chrooted(void);

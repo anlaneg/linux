@@ -154,7 +154,7 @@ struct vhost_virtqueue {
 	/*vq的后端，例如vsock*/
 	void *private_data;
 	/*通过VHOST_SET_FEATURES开启的功能*/
-	u64 acked_features;
+	VIRTIO_DECLARE_FEATURES(acked_features);
 	/*通过VHOST_SET_BACKEND_FEATURES开启的backend功能*/
 	u64 acked_backend_features;
 	/* Log write descriptors */
@@ -328,7 +328,7 @@ static inline void *vhost_vq_get_backend(struct vhost_virtqueue *vq)
 
 static inline bool vhost_has_feature(struct vhost_virtqueue *vq, int bit)
 {
-	return vq->acked_features & (1ULL << bit);
+	return virtio_features_test_bit(vq->acked_features_array, bit);
 }
 
 static inline bool vhost_backend_has_feature(struct vhost_virtqueue *vq, int bit)

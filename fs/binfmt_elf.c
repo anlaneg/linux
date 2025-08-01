@@ -525,7 +525,7 @@ static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 	/* ...and their total size. */
 	//program header 长度不能过大
 	size = sizeof(struct elf_phdr) * elf_ex->e_phnum;
-	if (size == 0 || size > 65536 || size > ELF_MIN_ALIGN)
+	if (size == 0 || size > 65536)
 		goto out;
 
 	//申请program header entries需要的内存，并自文件中读取它
@@ -655,7 +655,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	if (!elf_check_arch(interp_elf_ex) ||
 	    elf_check_fdpic(interp_elf_ex))
 		goto out;
-	if (!interpreter->f_op->mmap)
+	if (!can_mmap_file(interpreter))
 	    /*必须支持mmap*/
 		goto out;
 
@@ -864,9 +864,8 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		goto out;
 	if (elf_check_fdpic(elf_ex))
 		goto out;
-
 	/*此文件必须支持mmap操作*/
-	if (!bprm->file->f_op->mmap)
+	if (!can_mmap_file(bprm->file))
 		goto out;
 
 	//自文件中装载所有program header,并返回
@@ -1487,14 +1486,17 @@ static void fill_elf_note_phdr(struct elf_phdr *phdr, int sz, loff_t offset)
 	phdr->p_align = 4;
 }
 
-static void fill_note(struct memelfnote *note, const char *name, int type,
-		unsigned int sz, void *data)
+static void __fill_note(struct memelfnote *note, const char *name, int type,
+			unsigned int sz, void *data)
 {
 	note->name = name;
 	note->type = type;
 	note->datasz = sz;
 	note->data = data;
 }
+
+#define fill_note(note, type, sz, data) \
+	__fill_note(note, NN_ ## type, NT_ ## type, sz, data)
 
 /*
  * fill up all the fields in prstatus from the given task struct, except
@@ -1586,14 +1588,14 @@ static void fill_auxv_note(struct memelfnote *note, struct mm_struct *mm)
 	do
 		i += 2;
 	while (auxv[i - 2] != AT_NULL);
-	fill_note(note, NN_AUXV, NT_AUXV, i * sizeof(elf_addr_t), auxv);
+	fill_note(note, AUXV, i * sizeof(elf_addr_t), auxv);
 }
 
 static void fill_siginfo_note(struct memelfnote *note, user_siginfo_t *csigdata,
 		const kernel_siginfo_t *siginfo)
 {
 	copy_siginfo_to_external(csigdata, siginfo);
-	fill_note(note, NN_SIGINFO, NT_SIGINFO, sizeof(*csigdata), csigdata);
+	fill_note(note, SIGINFO, sizeof(*csigdata), csigdata);
 }
 
 /*
@@ -1689,7 +1691,7 @@ static int fill_files_note(struct memelfnote *note, struct coredump_params *cprm
 	}
 
 	size = name_curpos - (char *)data;
-	fill_note(note, NN_FILE, NT_FILE, size, data);
+	fill_note(note, FILE, size, data);
 	return 0;
 }
 
@@ -1750,8 +1752,7 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	regset_get(t->task, &view->regsets[0],
 		   sizeof(t->prstatus.pr_reg), &t->prstatus.pr_reg);
 
-	fill_note(&t->notes[0], NN_PRSTATUS, NT_PRSTATUS,
-		  PRSTATUS_SIZE, &t->prstatus);
+	fill_note(&t->notes[0], PRSTATUS, PRSTATUS_SIZE, &t->prstatus);
 	info->size += notesize(&t->notes[0]);
 
 	do_thread_regset_writeback(t->task, &view->regsets[0]);
@@ -1764,6 +1765,7 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	for (view_iter = 1; view_iter < view->n; ++view_iter) {
 		const struct user_regset *regset = &view->regsets[view_iter];
 		int note_type = regset->core_note_type;
+		const char *note_name = regset->core_note_name;
 		bool is_fpreg = note_type == NT_PRFPREG;
 		void *data;
 		int ret;
@@ -1784,8 +1786,16 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 		if (is_fpreg)
 			SET_PR_FPVALID(&t->prstatus);
 
-		fill_note(&t->notes[note_iter], is_fpreg ? NN_PRFPREG : "LINUX",
-			  note_type, ret, data);
+		/* There should be a note name, but if not, guess: */
+		if (WARN_ON_ONCE(!note_name))
+			note_name = "LINUX";
+		else
+			/* Warn on non-legacy-compatible names, for now. */
+			WARN_ON_ONCE(strcmp(note_name,
+					    is_fpreg ? "CORE" : "LINUX"));
+
+		__fill_note(&t->notes[note_iter], note_name, note_type,
+			    ret, data);
 
 		info->size += notesize(&t->notes[note_iter]);
 		note_iter++;
@@ -1804,8 +1814,7 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	fill_prstatus(&t->prstatus.common, p, signr);
 	elf_core_copy_task_regs(p, &t->prstatus.pr_reg);
 
-	fill_note(&t->notes[0], NN_PRSTATUS, NT_PRSTATUS, sizeof(t->prstatus),
-		  &(t->prstatus));
+	fill_note(&t->notes[0], PRSTATUS, sizeof(t->prstatus), &t->prstatus);
 	info->size += notesize(&t->notes[0]);
 
 	fpu = kzalloc(sizeof(elf_fpregset_t), GFP_KERNEL);
@@ -1815,7 +1824,7 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	}
 
 	t->prstatus.pr_fpvalid = 1;
-	fill_note(&t->notes[1], NN_PRFPREG, NT_PRFPREG, sizeof(*fpu), fpu);
+	fill_note(&t->notes[1], PRFPREG, sizeof(*fpu), fpu);
 	info->size += notesize(&t->notes[1]);
 
 	return 1;
@@ -1835,7 +1844,7 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	psinfo = kmalloc(sizeof(*psinfo), GFP_KERNEL);
 	if (!psinfo)
 		return 0;
-	fill_note(&info->psinfo, NN_PRPSINFO, NT_PRPSINFO, sizeof(*psinfo), psinfo);
+	fill_note(&info->psinfo, PRPSINFO, sizeof(*psinfo), psinfo);
 
 #ifdef CORE_DUMP_USE_REGSET
 	view = task_user_regset_view(dump_task);

@@ -263,7 +263,6 @@ static struct vfsmount *debugfs_automount(struct path *path)
 }
 
 static const struct dentry_operations debugfs_dops = {
-	.d_delete = always_delete_dentry,
 	.d_release = debugfs_release_dentry,
 	.d_automount = debugfs_automount,
 };
@@ -278,7 +277,8 @@ static int debugfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		return err;
 
 	sb->s_op = &debugfs_super_operations;
-	sb->s_d_op = &debugfs_dops;
+	set_default_d_op(sb, &debugfs_dops);
+	sb->s_d_flags |= DCACHE_DONTCACHE;
 
 	debugfs_apply_options(sb);
 
@@ -395,30 +395,13 @@ static struct dentry *start_creating(const char *name/*目录名*/, struct dentr
 	    /*未指定parent,使用挂载点*/
 		parent = debugfs_mount->mnt_root;
 
-	inode_lock(d_inode(parent));
-	if (unlikely(IS_DEADDIR(d_inode(parent))))
-		dentry = ERR_PTR(-ENOENT);
-	else
-	    	/*检查parent下是否已存在$name的dentry*/
-		dentry = lookup_noperm(&QSTR(name), parent);
-	if (!IS_ERR(dentry) && d_really_is_positive(dentry)) {
-	    /*此名称的dentry已存在，区分是文件还是目录，进行告警*/
-		if (d_is_dir(dentry))
-			pr_err("Directory '%s' with parent '%s' already present!\n",
-			       name, parent->d_name.name);
-		else
-			pr_err("File '%s' in directory '%s' already present!\n",
-			       name, parent->d_name.name);
-		dput(dentry);
-		dentry = ERR_PTR(-EEXIST);
-	}
-
+	dentry = simple_start_creating(parent, name);
 	/*dentry有误，释放对debugfs mount的引用*/
 	if (IS_ERR(dentry)) {
-		inode_unlock(d_inode(parent));
+		if (dentry == ERR_PTR(-EEXIST))
+			pr_err("'%s' already exists in '%pd'\n", name, parent);
 		simple_release_fs(&debugfs_mount, &debugfs_mount_count);
 	}
-
 	return dentry;
 }
 
@@ -473,7 +456,7 @@ static struct dentry *__debugfs_create_file(const char *name, umode_t mode,
 		proxy_fops = &debugfs_noop_file_operations;
 	inode->i_fop = proxy_fops;
 	DEBUGFS_I(inode)->raw = real_fops;
-	DEBUGFS_I(inode)->aux = aux;
+	DEBUGFS_I(inode)->aux = (void *)aux;
 
 	d_instantiate(dentry, inode);
 	fsnotify_create(d_inode(dentry->d_parent), dentry);

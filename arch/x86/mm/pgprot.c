@@ -32,7 +32,7 @@ void add_encrypt_protection_map(void)
 		protection_map[i] = pgprot_encrypted(protection_map[i]);
 }
 
-pgprot_t vm_get_page_prot(unsigned long vm_flags)
+pgprot_t vm_get_page_prot(vm_flags_t vm_flags)
 {
 	/*利用protection_map表进行vm_flags到例如PAGE_READONLY进行映射*/
 	unsigned long val = pgprot_val(protection_map[vm_flags &

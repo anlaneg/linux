@@ -65,16 +65,22 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	struct ib_ucq_object *obj = container_of(
 		uverbs_attr_get_uobject(attrs, UVERBS_ATTR_CREATE_CQ_HANDLE),
 		typeof(*obj), uevent.uobject);
+	struct ib_uverbs_completion_event_file *ev_file = NULL;
 	struct ib_device *ib_dev = attrs->context->device;
-	int ret;
-	u64 user_handle;
+	struct ib_umem_dmabuf *umem_dmabuf;
 	struct ib_cq_init_attr attr = {};/*cq创建用初始化参数（后面填充）*/
-	struct ib_cq                   *cq;
-	struct ib_uverbs_completion_event_file    *ev_file = NULL;
 	struct ib_uobject *ev_file_uobj;
+	struct ib_umem *umem = NULL;
+	u64 buffer_length;
+	u64 buffer_offset;
+	struct ib_cq *cq;
+	u64 user_handle;
+	u64 buffer_va;
+	int buffer_fd;
+	int ret;
 
 	/*ib设备必须有create_cq,destroy_cq两个回调*/
-	if (!ib_dev->ops.create_cq || !ib_dev->ops.destroy_cq)
+	if ((!ib_dev->ops.create_cq && !ib_dev->ops.create_cq_umem) || !ib_dev->ops.destroy_cq)
 		return -EOPNOTSUPP;
 
 	/*填充参数.comp_vector,.cqe,user_handle,.flags*/
@@ -117,10 +123,67 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	INIT_LIST_HEAD(&obj->comp_list);
 	INIT_LIST_HEAD(&obj->uevent.event_list);
 
+	if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_VA)) {
+
+		ret = uverbs_copy_from(&buffer_va, attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_VA);
+		if (ret)
+			goto err_event_file;
+
+		ret = uverbs_copy_from(&buffer_length, attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_LENGTH);
+		if (ret)
+			goto err_event_file;
+
+		if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_FD) ||
+		    uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET) ||
+		    !ib_dev->ops.create_cq_umem) {
+			ret = -EINVAL;
+			goto err_event_file;
+		}
+
+		umem = ib_umem_get(ib_dev, buffer_va, buffer_length, IB_ACCESS_LOCAL_WRITE);
+		if (IS_ERR(umem)) {
+			ret = PTR_ERR(umem);
+			goto err_event_file;
+		}
+	} else if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_FD)) {
+
+		ret = uverbs_get_raw_fd(&buffer_fd, attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_FD);
+		if (ret)
+			goto err_event_file;
+
+		ret = uverbs_copy_from(&buffer_offset, attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET);
+		if (ret)
+			goto err_event_file;
+
+		ret = uverbs_copy_from(&buffer_length, attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_LENGTH);
+		if (ret)
+			goto err_event_file;
+
+		if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_VA) ||
+		    !ib_dev->ops.create_cq_umem) {
+			ret = -EINVAL;
+			goto err_event_file;
+		}
+
+		umem_dmabuf = ib_umem_dmabuf_get_pinned(ib_dev, buffer_offset, buffer_length,
+							buffer_fd, IB_ACCESS_LOCAL_WRITE);
+		if (IS_ERR(umem_dmabuf)) {
+			ret = PTR_ERR(umem_dmabuf);
+			goto err_event_file;
+		}
+		umem = &umem_dmabuf->umem;
+	} else if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET) ||
+		   uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUFFER_LENGTH) ||
+		   !ib_dev->ops.create_cq) {
+		ret = -EINVAL;
+		goto err_event_file;
+	}
+
 	/*创建cq对象*/
 	cq = rdma_zalloc_drv_obj(ib_dev, ib_cq);
 	if (!cq) {
 		ret = -ENOMEM;
+		ib_umem_release(umem);
 		goto err_event_file;
 	}
 
@@ -135,7 +198,8 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_set_name(&cq->res, NULL);
 
 	/*调用create_cq对cq进行初始化*/
-	ret = ib_dev->ops.create_cq(cq, &attr/*初始化参数*/, attrs);
+	ret = umem ? ib_dev->ops.create_cq_umem(cq, &attr/*初始化参数*/, umem, attrs) :
+		ib_dev->ops.create_cq(cq, &attr, attrs);
 	if (ret)
 		goto err_free;
 
@@ -187,6 +251,17 @@ DECLARE_UVERBS_NAMED_METHOD(
 		       UVERBS_OBJECT_ASYNC_EVENT,
 		       UVERBS_ACCESS_READ,
 		       UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_BUFFER_VA,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_BUFFER_LENGTH,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
+	UVERBS_ATTR_RAW_FD(UVERBS_ATTR_CREATE_CQ_BUFFER_FD,
+			   UA_OPTIONAL),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_CREATE_CQ_BUFFER_OFFSET,
+			   UVERBS_ATTR_TYPE(u64),
+			   UA_OPTIONAL),
 	UVERBS_ATTR_UHW());
 
 static int UVERBS_HANDLER(UVERBS_METHOD_CQ_DESTROY)(

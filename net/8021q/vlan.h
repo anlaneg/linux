@@ -37,6 +37,7 @@ struct vlan_info {
 	struct vlan_group	grp;
 	struct list_head	vid_list;//用于串连vlan_vid_info
 	unsigned int		nr_vids;//vlan数（即vid_list链上有多少个vlan_vid_info)
+	bool			auto_vid0;
 	struct rcu_head		rcu;
 };
 

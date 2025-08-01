@@ -935,9 +935,8 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 			     arp_fwd_pvlan(in_dev, dev, rt, sip, tip) ||
 			     (rt->dst.dev != dev &&
 			      /*执行代理邻居表项查询*/
-			      pneigh_lookup(&arp_tbl, net, &tip, dev, 0)))) {
-
-			    //tip当前被我们代理，现在收到针对tip的请求，我们更新（创建）发送方ip及发送方mac地址
+			      pneigh_lookup(&arp_tbl, net, &tip, dev)))) {
+				//tip当前被我们代理，现在收到针对tip的请求，我们更新（创建）发送方ip及发送方mac地址
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n)
 					neigh_release(n);
@@ -1045,6 +1044,7 @@ static int arp_is_multicast(const void *pkey)
 static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *pt, struct net_device *orig_dev)
 {
+	enum skb_drop_reason drop_reason;
 	const struct arphdr *arp;
 
 	/* do not tweak dropwatch on an ARP we will ignore */
@@ -1062,15 +1062,17 @@ static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	/* ARP header, plus 2 device addresses, plus 2 IP addresses.  */
 	//不足arp协议头部所需字段，丢包
-	if (!pskb_may_pull(skb, arp_hdr_len(dev)))
+	drop_reason = pskb_may_pull_reason(skb, arp_hdr_len(dev));
+	if (drop_reason != SKB_NOT_DROPPED_YET)
 		goto freeskb;
 
 	//偏移到arp头部
 	arp = arp_hdr(skb);
-
 	//丢弃掉设备不支持的arp报文（例如以太网只支持硬件长度为6，协议地址长度为4的arp)
-	if (arp->ar_hln != dev->addr_len || arp->ar_pln != 4)
+	if (arp->ar_hln != dev->addr_len || arp->ar_pln != 4) {
+		drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 		goto freeskb;
+	}
 
 	//将skb的cb置为空
 	memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
@@ -1084,7 +1086,7 @@ consumeskb:
 	consume_skb(skb);
 	return NET_RX_SUCCESS;
 freeskb:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, drop_reason);
 out_of_mem:
 	return NET_RX_DROP;
 }
@@ -1173,9 +1175,7 @@ static int arp_req_set_public(struct net *net, struct arpreq *r,
 	if (mask) {
 		__be32 ip = ((struct sockaddr_in *)&r->arp_pa)->sin_addr.s_addr;
 
-		if (!pneigh_lookup(&arp_tbl, net, &ip, dev, 1))
-			return -ENOBUFS;
-		return 0;
+		return pneigh_create(&arp_tbl, net, &ip, dev, 0, 0, false);
 	}
 
 	return arp_req_set_proxy(net, dev, 1);

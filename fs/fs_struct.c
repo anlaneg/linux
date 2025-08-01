@@ -18,12 +18,10 @@ void set_fs_root(struct fs_struct *fs, const struct path *path)
 	struct path old_root;
 
 	path_get(path);
-	spin_lock(&fs->lock);
-	write_seqcount_begin(&fs->seq);
+	write_seqlock(&fs->seq);
 	old_root = fs->root;
 	fs->root = *path;
-	write_seqcount_end(&fs->seq);
-	spin_unlock(&fs->lock);
+	write_sequnlock(&fs->seq);
 	if (old_root.dentry)
 		path_put(&old_root);
 }
@@ -37,14 +35,12 @@ void set_fs_pwd(struct fs_struct *fs, const struct path *path)
 	struct path old_pwd;
 
 	path_get(path);
-	spin_lock(&fs->lock);
 	//将seq执行加1
-	write_seqcount_begin(&fs->seq);
+	write_seqlock(&fs->seq);
 	//执行fs->pwd修改,记录旧的值
 	old_pwd = fs->pwd;
 	fs->pwd = *path;
-	write_seqcount_end(&fs->seq);
-	spin_unlock(&fs->lock);
+	write_sequnlock(&fs->seq);
 
 	if (old_pwd.dentry)
 		path_put(&old_pwd);
@@ -74,17 +70,15 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 		fs = p->fs;
 		if (fs) {
 			int hits = 0;
-			spin_lock(&fs->lock);
-			write_seqcount_begin(&fs->seq);
+			write_seqlock(&fs->seq);
 			hits += replace_path(&fs->root, old_root, new_root);
 			hits += replace_path(&fs->pwd, old_root, new_root);
-			write_seqcount_end(&fs->seq);
 			while (hits--) {
 			    /*hists不为0，即new root被引用，增加其引用*/
 				count++;
 				path_get(new_root);
 			}
-			spin_unlock(&fs->lock);
+			write_sequnlock(&fs->seq);
 		}
 		task_unlock(p);
 	}
@@ -109,10 +103,10 @@ void exit_fs(struct task_struct *tsk)
 	if (fs) {
 		int kill;
 		task_lock(tsk);
-		spin_lock(&fs->lock);
+		read_seqlock_excl(&fs->seq);
 		tsk->fs = NULL;
 		kill = !--fs->users;
-		spin_unlock(&fs->lock);
+		read_sequnlock_excl(&fs->seq);
 		task_unlock(tsk);
 		if (kill)
 			free_fs_struct(fs);
@@ -127,16 +121,15 @@ struct fs_struct *copy_fs_struct(struct fs_struct *old)
 	if (fs) {
 		fs->users = 1;
 		fs->in_exec = 0;
-		spin_lock_init(&fs->lock);
-		seqcount_spinlock_init(&fs->seq, &fs->lock);
+		seqlock_init(&fs->seq);
 		fs->umask = old->umask;
 
-		spin_lock(&old->lock);
+		read_seqlock_excl(&old->seq);
 		fs->root = old->root;
 		path_get(&fs->root);
 		fs->pwd = old->pwd;
 		path_get(&fs->pwd);
-		spin_unlock(&old->lock);
+		read_sequnlock_excl(&old->seq);
 	}
 	return fs;
 }
@@ -151,10 +144,10 @@ int unshare_fs_struct(void)
 		return -ENOMEM;
 
 	task_lock(current);
-	spin_lock(&fs->lock);
+	read_seqlock_excl(&fs->seq);
 	kill = !--fs->users;
 	current->fs = new_fs;
-	spin_unlock(&fs->lock);
+	read_sequnlock_excl(&fs->seq);
 	task_unlock(current);
 
 	if (kill)
@@ -173,7 +166,6 @@ EXPORT_SYMBOL(current_umask);
 /* to be mentioned only in INIT_TASK */
 struct fs_struct init_fs = {
 	.users		= 1,
-	.lock		= __SPIN_LOCK_UNLOCKED(init_fs.lock),
-	.seq		= SEQCNT_SPINLOCK_ZERO(init_fs.seq, &init_fs.lock),
+	.seq		= __SEQLOCK_UNLOCKED(init_fs.seq),
 	.umask		= 0022,
 };
