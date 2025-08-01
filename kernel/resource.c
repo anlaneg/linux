@@ -1214,7 +1214,7 @@ resource_size_t resource_alignment(struct resource *res)
 
 static DECLARE_WAIT_QUEUE_HEAD(muxed_resource_wait);
 
-static struct inode *iomem_inode;
+static struct inode *iomem_inode;/*iomem对应的inode*/
 
 #ifdef CONFIG_IO_STRICT_DEVMEM
 static void revoke_iomem(struct resource *res)
@@ -1246,7 +1246,7 @@ static void revoke_iomem(struct resource *res)
 		return;
 	}
 
-	unmap_mapping_range(inode->i_mapping, res->start, resource_size(res), 1);
+	unmap_mapping_range(inode->i_mapping, res->start/*资源起始地址*/, resource_size(res)/*资源长度*/, 1);
 }
 #else
 static void revoke_iomem(struct resource *res) {}
@@ -1344,12 +1344,13 @@ struct resource *__request_region(struct resource *parent,
 	write_unlock(&resource_lock);
 
 	if (ret) {
+		/*加入失败，释放resource，返回NULL*/
 		free_resource(res);
 		return NULL;
 	}
 
 	if (parent == &iomem_resource)
-	    /*针对内存资源，需要revoke*/
+	    /*针对io内存资源，需要revoke,占用虚地址？*/
 		revoke_iomem(res);
 
 	return res;

@@ -55,11 +55,11 @@ struct iommu_group {
 	struct kobject *devices_kobj;
 	struct list_head devices;//哪些设备关联到此group下（即group下所有设备链表，类型为struct group_device)
 	struct xarray pasid_array;
-	struct mutex mutex;
+	struct mutex mutex;/*保护devices链表*/
 	void *iommu_data;
 	void (*iommu_data_release)(void *iommu_data);
 	char *name;
-	int id;/*编号，由iommu_group_ida申请而来*/
+	int id;/*唯一编号，由iommu_group_ida申请而来*/
 	struct iommu_domain *default_domain;
 	struct iommu_domain *blocking_domain;
 	struct iommu_domain *domain;
@@ -1054,10 +1054,10 @@ struct iommu_group *iommu_group_alloc(void)
 		kfree(group);
 		return ERR_PTR(ret);
 	}
-	group->id = ret;
+	group->id = ret;/*设置group id*/
 
 	ret = kobject_init_and_add(&group->kobj, &iommu_group_ktype,
-				   NULL, "%d", group->id);
+				   NULL, "%d", group->id);/*group名称为group编号（纯数字）*/
 	if (ret) {
 		kobject_put(&group->kobj);
 		return ERR_PTR(ret);
@@ -1233,6 +1233,7 @@ static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 	int ret, i = 0;
 	struct group_device *device;
 
+	/*申请group_device*/
 	device = kzalloc(sizeof(*device), GFP_KERNEL);
 	if (!device)
 		return ERR_PTR(-ENOMEM);
@@ -1244,6 +1245,7 @@ static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 	if (ret)
 		goto err_free_device;
 
+	/*设置设备名称*/
 	device->name = kasprintf(GFP_KERNEL, "%s", kobject_name(&dev->kobj));
 rename:
 	if (!device->name) {
@@ -1322,6 +1324,7 @@ EXPORT_SYMBOL_GPL(iommu_group_add_device);
  */
 void iommu_group_remove_device(struct device *dev)
 {
+	/*将dev自其所属的iommu-group中移除*/
 	struct iommu_group *group = dev->iommu_group;
 
 	if (!group)
@@ -1352,6 +1355,7 @@ void iommu_group_mutex_assert(struct device *dev)
 EXPORT_SYMBOL_GPL(iommu_group_mutex_assert);
 #endif
 
+/*group->devices链表包含有一组group_device对象，返回首个group_device->dev*/
 static struct device *iommu_group_first_dev(struct iommu_group *group)
 {
 	lockdep_assert_held(&group->mutex);
@@ -2186,7 +2190,7 @@ int iommu_attach_device(struct iommu_domain *domain, struct device *dev)
 	mutex_lock(&group->mutex);
 	ret = -EINVAL;
 	if (list_count_nodes(&group->devices) != 1)
-		goto out_unlock;
+		goto out_unlock;/*包含的设备数不为1，报错*/
 
 	ret = __iommu_attach_group(domain, group);
 
@@ -2277,7 +2281,7 @@ static int __iommu_attach_group(struct iommu_domain *domain,
 	    group->domain != group->blocking_domain)
 		return -EBUSY;
 
-	dev = iommu_group_first_dev(group);
+	dev = iommu_group_first_dev(group);/*取个首个设备*/
 	if (!dev_has_iommu(dev) ||
 	    !domain_iommu_ops_compatible(dev_iommu_ops(dev), domain))
 		return -EINVAL;

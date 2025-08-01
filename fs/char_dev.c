@@ -620,7 +620,7 @@ void cdev_set_parent(struct cdev *p, struct kobject *kobj)
  * NOTE: Callers must assume that userspace was able to open the cdev and
  * can call cdev fops callbacks at any time, even if this function fails.
  */
-int cdev_device_add(struct cdev *cdev, struct device *dev)
+int cdev_device_add(struct cdev *cdev/*字符设备*/, struct device *dev)
 {
 	int rc = 0;
 

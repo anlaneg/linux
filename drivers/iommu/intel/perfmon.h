@@ -22,9 +22,27 @@
 #define IOMMU_PMU_CFG_FILTERS_OFFSET		0x4
 
 #define IOMMU_PMU_CAP_REGS_STEP			8
-
+/*Performance Monitoring Counter Capability Register
+ * PCC: Per-Counter Capabilities
+ * 占用1bit
+ * 0: This counter supports the capabilities reported by PERFCAP_REG and PERFEVNTCAP_REG.
+ * 1: This counter supports the capabilities described in this register and in the Counter Event Capability Registers.
+ * */
 #define iommu_cntrcap_pcc(p)			((p) & 0x1)
+/*Performance Monitoring Counter Capability Register
+ * CW: Counter Width
+ * 占用8-15bit，共8位
+ * The value of this field represents the number of bits supported for this counter. If the value of this field is N,
+ *  then the counter is an N-bit counter and the maximum value it can count is 2N-1.
+ * */
 #define iommu_cntrcap_cw(p)			(((p) >> 8) & 0xff)
+/**Performance Monitoring Counter Capability Register
+ * IOS: Interrupt on Overflow Support
+ * 占用1个bit
+ * Indicates whether the interrupt capability is supported when an overflow condition occurs.
+ * 0: Interrupt Capability is not supported.
+ * 1: Interrupt Capability is supported.
+ */
 #define iommu_cntrcap_ios(p)			(((p) >> 16) & 0x1)
 #define iommu_cntrcap_egcnt(p)			(((p) >> 28) & 0xf)
 

@@ -3,6 +3,7 @@
 
 #include <linux/fs_context.h>
 
+/*pseudo-fs对应的context*/
 struct pseudo_fs_context {
 	/*用于指明super block的ops*/
 	const struct super_operations *ops;

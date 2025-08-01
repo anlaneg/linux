@@ -761,7 +761,7 @@ static inline size_t list_count_nodes(struct list_head *head)
 	list_for_each(pos, head)
 		count++;
 
-	return count;
+	return count;/*返回列表长度*/
 }
 
 /**

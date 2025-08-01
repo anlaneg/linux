@@ -66,7 +66,9 @@
  ******************************************************************************/
 
 struct acpi_table_header {
+	// 表签名，DMAR 固定为 "DMAR"
 	char signature[ACPI_NAMESEG_SIZE] ACPI_NONSTRING;	/* ASCII table signature */
+	// 整个表的总长度（字节）
 	u32 length;		/* Length of table in bytes, including this header */
 	u8 revision;		/* ACPI Specification minor version number */
 	u8 checksum;		/* To make sum of entire table == 0 */

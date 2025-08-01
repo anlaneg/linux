@@ -2160,7 +2160,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 * Just reject these PFs and let the user sort it out.
 	 */
 	if (pci_num_vf(pdev)) {
-		/*此设备已有vf的,报错*/
+		/*此设备已有vf的（已开启sriov),报错*/
 		pci_warn(pdev, "Cannot bind to PF with SR-IOV enabled\n");
 		return -EBUSY;
 	}
@@ -2271,10 +2271,10 @@ int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
 		 * pci_disable_sriov()
 		 */
 		if (!list_empty(&vdev->sriov_pfs_item)) {
-			ret = -EINVAL;
+			ret = -EINVAL;/*不为空，之前已设置*/
 			goto out_unlock;
 		}
-		list_add_tail(&vdev->sriov_pfs_item, &vfio_pci_sriov_pfs);/*添加*/
+		list_add_tail(&vdev->sriov_pfs_item, &vfio_pci_sriov_pfs);/*添加进list*/
 		mutex_unlock(&vfio_pci_sriov_pfs_mutex);
 
 		/*
@@ -2293,7 +2293,7 @@ int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
 
 		down_write(&vdev->memory_lock);
 		vfio_pci_set_power_state(vdev, PCI_D0);
-		ret = pci_enable_sriov(pdev, nr_virtfn);
+		ret = pci_enable_sriov(pdev, nr_virtfn);/*pci设备开启sriov*/
 		up_write(&vdev->memory_lock);
 		if (ret) {
 			pm_runtime_put(&pdev->dev);

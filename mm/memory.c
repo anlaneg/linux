@@ -2041,8 +2041,8 @@ void zap_page_range_single_batched(struct mmu_gather *tlb,
  *
  * The range must fit into one VMA.
  */
-void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
-		unsigned long size, struct zap_details *details)
+void zap_page_range_single(struct vm_area_struct *vma, unsigned long address/*起始地址*/,
+		unsigned long size/*长度*/, struct zap_details *details)
 {
 	struct mmu_gather tlb;
 
@@ -4052,8 +4052,8 @@ static inline void unmap_mapping_range_tree(struct rb_root_cached *root,
 		zea = min(last_index, vea);
 
 		unmap_mapping_range_vma(vma,
-			((zba - vba) << PAGE_SHIFT) + vma->vm_start,
-			((zea - vba + 1) << PAGE_SHIFT) + vma->vm_start,
+			((zba - vba) << PAGE_SHIFT) + vma->vm_start/*起始地址*/,
+			((zea - vba + 1) << PAGE_SHIFT) + vma->vm_start/*终止地址*/,
 				details);
 	}
 }
@@ -4104,8 +4104,8 @@ void unmap_mapping_folio(struct folio *folio)
  * a file is being truncated, but not when invalidating pages from the page
  * cache.
  */
-void unmap_mapping_pages(struct address_space *mapping, pgoff_t start,
-		pgoff_t nr, bool even_cows)
+void unmap_mapping_pages(struct address_space *mapping, pgoff_t start/*起始页号*/,
+		pgoff_t nr/*页数*/, bool even_cows)
 {
 	struct zap_details details = { };
 	pgoff_t	first_index = start;
@@ -4141,10 +4141,10 @@ EXPORT_SYMBOL_GPL(unmap_mapping_pages);
  * but 0 when invalidating pagecache, don't throw away private data.
  */
 void unmap_mapping_range(struct address_space *mapping,
-		loff_t const holebegin, loff_t const holelen, int even_cows)
+		loff_t const holebegin/*起始地址*/, loff_t const holelen/*长度*/, int even_cows)
 {
-	pgoff_t hba = (pgoff_t)(holebegin) >> PAGE_SHIFT;
-	pgoff_t hlen = ((pgoff_t)(holelen) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	pgoff_t hba = (pgoff_t)(holebegin) >> PAGE_SHIFT;/*起始页号*/
+	pgoff_t hlen = ((pgoff_t)(holelen) + PAGE_SIZE - 1) >> PAGE_SHIFT;/*总页数*/
 
 	/* Check for overflow. */
 	if (sizeof(holelen) > sizeof(hlen)) {

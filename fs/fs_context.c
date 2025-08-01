@@ -82,7 +82,7 @@ static int vfs_parse_sb_flag(struct fs_context *fc, const char *key)
 		return 0;
 	}
 
-	return -ENOPARAM;
+	return -ENOPARAM;/*非以上参数*/
 }
 
 /**
@@ -156,7 +156,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 		 */
 		return ret;
 
-	//如果fs指定了参数解析函数，则调用
+	//如果fs指定了参数解析函数，则调用它来解析参数
 	if (fc->ops->parse_param) {
 		ret = fc->ops->parse_param(fc, param);
 		if (ret != -ENOPARAM)
@@ -196,15 +196,15 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 		.size	= v_size,
 	};
 
-	/*复制value字符串*/
+	/*复制value字符串，填充param*/
 	if (value) {
 		param.string = kmemdup_nul(value, v_size, GFP_KERNEL);
 		if (!param.string)
 			return -ENOMEM;
-		param.type = fs_value_is_string;
+		param.type = fs_value_is_string;/*变更为string类型*/
 	}
 
-	//解析fs参数key
+	//解析param,fs参数key
 	ret = vfs_parse_fs_param(fc, &param);
 	kfree(param.string);
 	return ret;
@@ -362,7 +362,7 @@ err_fc:
 struct fs_context *fs_context_for_mount(struct file_system_type *fs_type,
 					unsigned int sb_flags)
 {
-	/*为指定文件系统创建fs_context(目的是mount用）*/
+	/*为指定文件系统创建fs_context结构体(目的是mount用），并进行初始化*/
 	return alloc_fs_context(fs_type, NULL, sb_flags, 0,
 					FS_CONTEXT_FOR_MOUNT);
 }

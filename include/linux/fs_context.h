@@ -27,7 +27,7 @@ struct vfsmount;
 struct path;
 
 enum fs_context_purpose {
-    /*申请fs_context为mount*/
+    /*申请fs_context为mount操作*/
 	FS_CONTEXT_FOR_MOUNT,		/* New superblock for explicit mount */
 	FS_CONTEXT_FOR_SUBMOUNT,	/* New superblock for automatic submount */
 	FS_CONTEXT_FOR_RECONFIGURE,	/* Superblock reconfiguration (remount) */
@@ -108,7 +108,7 @@ struct fs_context {
 	const struct cred	*cred;		/* The mounter's credentials */
 	/*输出buffer，用于log*/
 	struct p_log		log;		/* Logging buffer */
-	/*source提供的数值*/
+	/*source参数提供的字符串，例如可能是fs_type名称*/
 	const char		*source;	/* The source name (eg. dev path) */
 	void			*security;	/* LSM options */
 	void			*s_fs_info;	/* Proposed s_fs_info */

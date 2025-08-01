@@ -552,6 +552,7 @@ static int __iommu_pmu_register(struct intel_iommu *iommu)
 	return perf_pmu_register(&iommu_pmu->pmu, iommu_pmu->pmu.name, -1);
 }
 
+/*通过offset取对应的寄存器*/
 static inline void __iomem *
 get_perf_reg_address(struct intel_iommu *iommu, u32 offset)
 {
@@ -568,27 +569,33 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 	u32 cap;
 
 	if (!ecap_pms(iommu->ecap))
+		/*不支持Performance Monitoring.*/
 		return 0;
 
 	/* The IOMMU PMU requires the ECMD support as well */
 	if (!cap_ecmds(iommu->cap))
+		/*不支持ecmd*/
 		return -ENODEV;
 
 	perfcap = dmar_readq(iommu->reg + DMAR_PERFCAP_REG);
 	/* The performance monitoring is not supported. */
 	if (!perfcap)
+		/*11.4.13.2描述，此值不得为0*/
 		return -ENODEV;
 
 	/* Sanity check for the number of the counters and event groups */
 	if (!pcap_num_cntr(perfcap) || !pcap_num_event_group(perfcap))
+		/*counter数为0或者event group数目为0*/
 		return -ENODEV;
 
 	/* The interrupt on overflow is required */
 	if (!pcap_interrupt(perfcap))
+		/*overflow时不支持生成中断*/
 		return -ENODEV;
 
 	/* Check required Enhanced Command Capability */
 	if (!ecmd_has_pmu_essential(iommu))
+		/*针对性能监控计数器不支持部分操作*/
 		return -ENODEV;
 
 	iommu_pmu = kzalloc(sizeof(*iommu_pmu), GFP_KERNEL);
@@ -597,6 +604,7 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 
 	iommu_pmu->num_cntr = pcap_num_cntr(perfcap);
 	if (iommu_pmu->num_cntr > IOMMU_PMU_IDX_MAX) {
+		/*如果过大，告警*/
 		pr_warn_once("The number of IOMMU counters %d > max(%d), clipping!",
 			     iommu_pmu->num_cntr, IOMMU_PMU_IDX_MAX);
 		iommu_pmu->num_cntr = IOMMU_PMU_IDX_MAX;
@@ -607,6 +615,7 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 	iommu_pmu->cntr_stride = pcap_cntr_stride(perfcap);
 	iommu_pmu->num_eg = pcap_num_event_group(perfcap);
 
+	/*每个event group一个计数器*/
 	iommu_pmu->evcap = kcalloc(iommu_pmu->num_eg, sizeof(u64), GFP_KERNEL);
 	if (!iommu_pmu->evcap) {
 		ret = -ENOMEM;
@@ -622,11 +631,13 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 		iommu_pmu->evcap[i] = pecap_es(pcap);
 	}
 
+	/*每个counter一个u32指针*/
 	iommu_pmu->cntr_evcap = kcalloc(iommu_pmu->num_cntr, sizeof(u32 *), GFP_KERNEL);
 	if (!iommu_pmu->cntr_evcap) {
 		ret = -ENOMEM;
 		goto free_pmu_evcap;
 	}
+	/*有num_ctr个计数器，有num_eg个event group,创建成两维数组*/
 	for (i = 0; i < iommu_pmu->num_cntr; i++) {
 		iommu_pmu->cntr_evcap[i] = kcalloc(iommu_pmu->num_eg, sizeof(u32), GFP_KERNEL);
 		if (!iommu_pmu->cntr_evcap[i]) {
@@ -641,8 +652,11 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 			iommu_pmu->cntr_evcap[i][j] = (u32)iommu_pmu->evcap[j];
 	}
 
+	/*取Hardware reporting of Configuration offset*/
 	iommu_pmu->cfg_reg = get_perf_reg_address(iommu, DMAR_PERFCFGOFF_REG);
+	/*取Hardware reporting of Counter Offset*/
 	iommu_pmu->cntr_reg = get_perf_reg_address(iommu, DMAR_PERFCNTROFF_REG);
+	/*取Hardware reporting of Overflow Offset*/
 	iommu_pmu->overflow = get_perf_reg_address(iommu, DMAR_PERFOVFOFF_REG);
 
 	/*
@@ -651,6 +665,7 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 	 * Width.
 	 */
 	for (i = 0; i < iommu_pmu->num_cntr; i++) {
+		/*逐个取i号计数器的Performance Monitoring Counter Capability Register*/
 		cap = dmar_readl(iommu_pmu->cfg_reg +
 				 i * IOMMU_PMU_CFG_OFFSET +
 				 IOMMU_PMU_CFG_CNTRCAP_OFFSET);
@@ -662,9 +677,9 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 		 * capability because of e.g., HW bug. Check the corner
 		 * case here and simply drop those counters.
 		 */
-		if ((iommu_cntrcap_cw(cap) != iommu_pmu->cntr_width) ||
-		    !iommu_cntrcap_ios(cap)) {
-			iommu_pmu->num_cntr = i;
+		if ((iommu_cntrcap_cw(cap) != iommu_pmu->cntr_width)/*位宽不一致*/ ||
+		    !iommu_cntrcap_ios(cap)/*不支持overflow中断*/) {
+			iommu_pmu->num_cntr = i;/*计数器被截短*/
 			pr_warn("PMU counter capability inconsistent, counter number reduced to %d\n",
 				iommu_pmu->num_cntr);
 		}

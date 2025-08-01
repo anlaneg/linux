@@ -50,7 +50,7 @@ module_param(disable_idle_d3, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_idle_d3,
 		 "Disable using the PCI D3 low power state for idle, unused devices");
 
-static bool enable_sriov;
+static bool enable_sriov;/*是否开启sriov*/
 #ifdef CONFIG_PCI_IOV
 module_param(enable_sriov, bool, 0644);
 MODULE_PARM_DESC(enable_sriov, "Enable support for SR-IOV configuration.  Enabling SR-IOV on a PF typically requires support of the userspace PF driver, enabling VFs without such support may result in non-functional VFs or PF.");
@@ -188,11 +188,12 @@ static void vfio_pci_remove(struct pci_dev *pdev)
 	vfio_put_device(&vdev->vdev);
 }
 
-static int vfio_pci_sriov_configure(struct pci_dev *pdev, int nr_virtfn)
+static int vfio_pci_sriov_configure(struct pci_dev *pdev, int nr_virtfn/*vf数*/)
 {
 	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
 
 	if (!enable_sriov)
+		/*模块参数未开启sriov,报错*/
 		return -ENOENT;
 
 	return vfio_pci_core_sriov_configure(vdev, nr_virtfn);
@@ -209,10 +210,10 @@ MODULE_DEVICE_TABLE(pci, vfio_pci_table);
 /*VFIO相关的pci设备驱动*/
 static struct pci_driver vfio_pci_driver = {
 	.name			= "vfio-pci",
-	.id_table		= vfio_pci_table,
+	.id_table		= vfio_pci_table,/*默认所有vendor设备可支持*/
 	.probe			= vfio_pci_probe,
 	.remove			= vfio_pci_remove,
-	.sriov_configure	= vfio_pci_sriov_configure,/*sriov配置*/
+	.sriov_configure	= vfio_pci_sriov_configure,/*vfio-pci支持sriov配置*/
 	.err_handler		= &vfio_pci_core_err_handlers,
 	.driver_managed_dma	= true,
 };
@@ -263,7 +264,7 @@ static void __init vfio_pci_fill_ids(void)
 static int __init vfio_pci_init(void)
 {
 	int ret;
-	bool is_disable_vga = true;
+	bool is_disable_vga = true;/*默认禁用vga设备*/
 
 #ifdef CONFIG_VFIO_PCI_VGA
 	is_disable_vga = disable_vga;

@@ -201,6 +201,7 @@ static LIST_HEAD(dmar_satc_units);
 
 static void intel_iommu_domain_free(struct iommu_domain *domain);
 
+/*intel_iommu参数控制此变量（这里设置默认值）*/
 int dmar_disabled = !IS_ENABLED(CONFIG_INTEL_IOMMU_DEFAULT_ON);
 int intel_iommu_sm = IS_ENABLED(CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON);
 
@@ -243,7 +244,7 @@ static int __init intel_iommu_setup(char *str)
 
 	while (*str) {
 		if (!strncmp(str, "on", 2)) {
-			dmar_disabled = 0;
+			dmar_disabled = 0;/*配置为on*/
 			pr_info("IOMMU enabled\n");
 		} else if (!strncmp(str, "off", 3)) {
 			dmar_disabled = 1;
@@ -299,12 +300,12 @@ static unsigned long __iommu_calculate_sagaw(struct intel_iommu *iommu)
 {
 	unsigned long fl_sagaw, sl_sagaw;
 
-	fl_sagaw = BIT(2) | (cap_fl5lp_support(iommu->cap) ? BIT(3) : 0);
+	fl_sagaw = BIT(2)/*48bit宽度*/ | (cap_fl5lp_support(iommu->cap) ? BIT(3)/*57bit宽度*/ : 0);
 	sl_sagaw = cap_sagaw(iommu->cap);
 
 	/* Second level only. */
 	if (!sm_supported(iommu) || !ecap_flts(iommu->ecap))
-		return sl_sagaw;
+		return sl_sagaw;/*为什么使用second level?*/
 
 	/* First level only. */
 	if (!ecap_slts(iommu->ecap))
@@ -318,13 +319,13 @@ static int __iommu_calculate_agaw(struct intel_iommu *iommu, int max_gaw)
 	unsigned long sagaw;
 	int agaw;
 
-	sagaw = __iommu_calculate_sagaw(iommu);
+	sagaw = __iommu_calculate_sagaw(iommu);/*取Supported Adjusted Guest Address Widths*/
 	for (agaw = width_to_agaw(max_gaw); agaw >= 0; agaw--) {
 		if (test_bit(agaw, &sagaw))
-			break;
+			break;/*确定此bit有值，返回有效的bit位*/
 	}
 
-	return agaw;
+	return agaw;/*决定Adjusted Guest Address Widths*/
 }
 
 /*
@@ -1023,7 +1024,7 @@ static void iommu_set_root_entry(struct intel_iommu *iommu)
 	 * caches as part of SRTP flow.
 	 */
 	if (cap_esrtps(iommu->cap))
-		return;
+		return;/*硬件负责，直接返回*/
 
 	iommu->flush.flush_context(iommu, 0, 0, 0, DMA_CCMD_GLOBAL_INVL);
 	if (sm_supported(iommu))
@@ -1269,6 +1270,7 @@ static void iommu_enable_translation(struct intel_iommu *iommu)
 	raw_spin_unlock_irqrestore(&iommu->register_lock, flags);
 }
 
+/*禁止翻译*/
 static void iommu_disable_translation(struct intel_iommu *iommu)
 {
 	u32 sts;
@@ -2104,6 +2106,7 @@ static int __init init_dmars(void)
 
 	for_each_iommu(iommu, drhd) {
 		if (drhd->ignored) {
+			/*此设备需要被忽略*/
 			iommu_disable_translation(iommu);
 			continue;
 		}
@@ -2875,9 +2878,9 @@ static ssize_t version_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
 	struct intel_iommu *iommu = dev_to_intel_iommu(dev);
-	u32 ver = readl(iommu->reg + DMAR_VER_REG);
+	u32 ver = readl(iommu->reg + DMAR_VER_REG);/*读取版本寄存器*/
 	return sysfs_emit(buf, "%d:%d\n",
-			  DMAR_VER_MAJOR(ver), DMAR_VER_MINOR(ver));
+			  DMAR_VER_MAJOR(ver), DMAR_VER_MINOR(ver));/*显示主次版本号*/
 }
 static DEVICE_ATTR_RO(version);
 
@@ -2885,7 +2888,7 @@ static ssize_t address_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
 	struct intel_iommu *iommu = dev_to_intel_iommu(dev);
-	return sysfs_emit(buf, "%llx\n", iommu->reg_phys);
+	return sysfs_emit(buf, "%llx\n", iommu->reg_phys);/*显示寄存器物理地址*/
 }
 static DEVICE_ATTR_RO(address);
 
@@ -2893,7 +2896,7 @@ static ssize_t cap_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct intel_iommu *iommu = dev_to_intel_iommu(dev);
-	return sysfs_emit(buf, "%llx\n", iommu->cap);
+	return sysfs_emit(buf, "%llx\n", iommu->cap);/*显示cap寄存器*/
 }
 static DEVICE_ATTR_RO(cap);
 
@@ -2901,7 +2904,7 @@ static ssize_t ecap_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
 	struct intel_iommu *iommu = dev_to_intel_iommu(dev);
-	return sysfs_emit(buf, "%llx\n", iommu->ecap);
+	return sysfs_emit(buf, "%llx\n", iommu->ecap);/*显示增强cap寄存器*/
 }
 static DEVICE_ATTR_RO(ecap);
 
@@ -2928,6 +2931,7 @@ static ssize_t domains_used_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(domains_used);
 
+/*iommu属性*/
 static struct attribute *intel_iommu_attrs[] = {
 	&dev_attr_version.attr,
 	&dev_attr_address.attr,
@@ -2940,7 +2944,7 @@ static struct attribute *intel_iommu_attrs[] = {
 
 static struct attribute_group intel_iommu_group = {
 	.name = "intel-iommu",
-	.attrs = intel_iommu_attrs,
+	.attrs = intel_iommu_attrs,/*intel-iommu组属性*/
 };
 
 const struct attribute_group *intel_iommu_groups[] = {
@@ -3047,6 +3051,7 @@ int __init intel_iommu_init(void)
 		    platform_optin_force_iommu();
 
 	down_write(&dmar_global_lock);
+	/*初始化DMAR table(DMA Remapping Table）*/
 	if (dmar_table_init()) {
 		if (force_on)
 			panic("tboot: Failed to initialize DMAR table\n");
@@ -3160,7 +3165,7 @@ int __init intel_iommu_init(void)
 
 	pr_info("Intel(R) Virtualization Technology for Directed I/O\n");
 
-	intel_iommu_enabled = 1;
+	intel_iommu_enabled = 1;/*intel iommu被开启*/
 
 	return 0;
 

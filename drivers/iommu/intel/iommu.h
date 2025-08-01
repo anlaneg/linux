@@ -65,6 +65,8 @@
 /*
  * Intel IOMMU register specification per version 1.0 public spec.
  */
+//Intel® Virtualization Technology for Directed I/O
+//Architecture Specification, Rev. 5.0文件11.4节描述了这些寄存器的偏移量
 #define	DMAR_VER_REG	0x0	/* Arch version supported by this IOMMU */
 #define	DMAR_CAP_REG	0x8	/* Hardware supported capabilities */
 #define	DMAR_ECAP_REG	0x10	/* Extended capabilities supported */
@@ -131,16 +133,20 @@
 #define DMAR_MTRR_PHYSMASK8_REG 0x208
 #define DMAR_MTRR_PHYSBASE9_REG 0x210
 #define DMAR_MTRR_PHYSMASK9_REG 0x218
+/*Performance Monitoring Capability Register对应的偏移量*/
 #define DMAR_PERFCAP_REG	0x300
+/*Performance Monitoring Configuration Offset Register对应的偏移量*/
 #define DMAR_PERFCFGOFF_REG	0x310
 #define DMAR_PERFOVFOFF_REG	0x318
 #define DMAR_PERFCNTROFF_REG	0x31c
 #define DMAR_PERFINTRSTS_REG	0x324
 #define DMAR_PERFINTRCTL_REG	0x328
+/*Performance Monitoring Event Capability Register(s)对应的偏移量*/
 #define DMAR_PERFEVNTCAP_REG	0x380
 #define DMAR_ECMD_REG		0x400
 #define DMAR_ECEO_REG		0x408
 #define DMAR_ECRSP_REG		0x410
+/*Enhanced Command Capability Register 0对应的位置*/
 #define DMAR_ECCAP_REG		0x430
 
 #define DMAR_IQER_REG_IQEI(reg)		FIELD_GET(GENMASK_ULL(3, 0), reg)
@@ -154,7 +160,9 @@
 #define dmar_readl(a) readl(a)
 #define dmar_writel(a, v) writel(v, a)
 
+/*major占用4-7bit*/
 #define DMAR_VER_MAJOR(v)		(((v) & 0xf0) >> 4)
+/*minor占用0-3bit*/
 #define DMAR_VER_MINOR(v)		((v) & 0x0f)
 
 /*
@@ -162,7 +170,13 @@
  */
 #define cap_esrtps(c)		(((c) >> 63) & 1)
 #define cap_esirtps(c)		(((c) >> 62) & 1)
+/*Enhanced Command Support,是否支持ecmds接口*/
 #define cap_ecmds(c)		(((c) >> 61) & 1)
+/*FS5LP: First Stage 5- level Paging Support
+ * 占用1个bit
+ * 0: Hardware does not support 5-level paging for first-stage translation.
+ * 1: Hardware supports 5-level paging for first-stage translation.
+ * */
 #define cap_fl5lp_support(c)	(((c) >> 60) & 1)
 #define cap_pi_support(c)	(((c) >> 59) & 1)
 #define cap_fl1gp_support(c)	(((c) >> 56) & 1)
@@ -175,7 +189,11 @@
 #define cap_super_page_val(c)	(((c) >> 34) & 0xf)
 #define cap_super_offset(c)	(((find_first_bit(&cap_super_page_val(c), 4)) \
 					* OFFSET_STRIDE) + 21)
-
+/**
+ * If the register base address is X, and the value reported in this field is Y,
+ * the address for the first fault recording register is calculated as X+(16*Y).
+ * 这里只计算Y，而c为cap寄存器其24-32bit为fault reg的offset，按规定乘16计算。
+ */
 #define cap_fault_reg_offset(c)	((((c) >> 24) & 0x3ff) * 16)
 #define cap_max_fault_reg_offset(c) \
 	(cap_fault_reg_offset(c) + cap_num_fault_regs(c) * 16)
@@ -183,6 +201,12 @@
 #define cap_zlr(c)		(((c) >> 22) & 1)
 #define cap_isoch(c)		(((c) >> 23) & 1)
 #define cap_mgaw(c)		((((c) >> 16) & 0x3f) + 1)
+/*SAGAW: Supported Adjusted Guest Address Widths
+ * 共5个bit,当前0，4bit被预留；
+ * 1: 39-bit AGAW (3-level page-table)
+ * 2: 48-bit AGAW (4-level page-table)
+ * 3: 57-bit AGAW (5-level page-table)
+ * */
 #define cap_sagaw(c)		(((c) >> 8) & 0x1f)
 #define cap_caching_mode(c)	(((c) >> 7) & 1)
 #define cap_phmr(c)		(((c) >> 6) & 1)
@@ -194,12 +218,36 @@
  * Extended Capability Register
  */
 
+/*PMS: Performance Monitoring Support
+ * 占用1个bit
+ * 0: Hardware does not support Performance Monitoring.
+ * 1: Hardware supports Performance Monitoring.
+ * */
 #define ecap_pms(e)		(((e) >> 51) & 0x1)
 #define ecap_rps(e)		(((e) >> 49) & 0x1)
 #define ecap_smpwc(e)		(((e) >> 48) & 0x1)
+/*FSTS: First-stage Translation Support
+ * 占用一个bit
+ * 0: Hardware does not support PASID Granular Translation Type of first-stage (PGTT=001b)
+ *  in scalable-mode PASID- Table entry.
+ * 1: Hardware supports PASID Granular Translation Type of first-stage (PGTT=001b)
+ *  in scalable-mode PASID-Table entry.
+ * */
 #define ecap_flts(e)		(((e) >> 47) & 0x1)
+/*SSTS: Second-stage Translation Support
+ * 占用一个bit
+ * 0: Hardware does not support PASID Granular Translation Type of second-stage (PGTT=010b)
+ *  in scalable-mode PASID-Table entry.
+ *  1: Hardware supports PASID Granular Translation Type of second-stage (PGTT=010b)
+ *  in scalable-mode PASID-Table entry.
+ * */
 #define ecap_slts(e)		(((e) >> 46) & 0x1)
 #define ecap_slads(e)		(((e) >> 45) & 0x1)
+/*SMTS: Scalable Mode Translation Support
+ * 占用一个bit
+ * 0: Hardware does not support Scalable Mode DMA Remapping.
+ * 1: Hardware supports Scalable Mode DMA Remapping through scalable-mode context-table and PASID-table structures.
+ * */
 #define ecap_smts(e)		(((e) >> 43) & 0x1)
 #define ecap_dit(e)		(((e) >> 41) & 0x1)
 #define ecap_pds(e)		(((e) >> 42) & 0x1)
@@ -214,7 +262,14 @@
 #define ecap_dis(e)		(((e) >> 27) & 0x1)
 #define ecap_nest(e)		(((e) >> 26) & 0x1)
 #define ecap_mts(e)		(((e) >> 25) & 0x1)
+/**
+ * If the register base address is X,
+ * and the value reported in this field is Y,
+ * the address for the IOTLB registers is calculated as X+(16*Y).
+ * 这里只计算Y，而e为ecap寄存器其8-17bit为iotlb的offset，按规定乘16计算。
+ */
 #define ecap_iotlb_offset(e) 	((((e) >> 8) & 0x3ff) * 16)
+/*为什么要加16？*/
 #define ecap_max_iotlb_offset(e) (ecap_iotlb_offset(e) + 16)
 #define ecap_coherent(e)	((e) & 0x1)
 #define ecap_qis(e)		((e) & 0x2)
@@ -228,17 +283,33 @@
 /*
  * Decoding Perf Capability Register
  */
+/*Performance Monitoring Capability Register寄存器的低16位为NCNTR: Number of Counters*/
 #define pcap_num_cntr(p)	((p) & 0xffff)
+/*Performance Monitoring Capability Register寄存器的16-22表示计数器位宽，
+ * 当位宽为N，则可以表示最大数2^N-1*/
 #define pcap_cntr_width(p)	(((p) >> 16) & 0x7f)
+/*Performance Monitoring Capability Register寄存器的24-28位为EGCNT: Event Group Count*/
 #define pcap_num_event_group(p)	(((p) >> 24) & 0x1f)
+/*这里指明了5位（即32-36位）这段是一组flags，分别为
+ * 32：RIDFS: Requester ID Filter Support
+ * 33：DIDFS: Domain ID Filter Support
+ * 34：PASIDFS: PASID Filter Support
+ * 35：ATFS: Address Type Filter Support
+ * 36：PTLFS: Page Table Level Filter Support
+ */
 #define pcap_filters_mask(p)	(((p) >> 32) & 0x1f)
+/*设备是否支持在计数器溢出时生成中断（0为不支持；1为支持，但需要配置）。*/
 #define pcap_interrupt(p)	(((p) >> 50) & 0x1)
 /* The counter stride is calculated as 2 ^ (x+10) bytes */
+/*CS: Counter Stride,每个计数器寄存器的间隔相等，
+ * 间隔大小由该字段的值决定。若此字段的值为 X，则表示计数器的步长为 2^(X+10) 字节。*/
 #define pcap_cntr_stride(p)	(1ULL << ((((p) >> 52) & 0x7) + 10))
 
 /*
  * Decoding Perf Event Capability Register
  */
+/*ES: Events Supported
+ * 占用28bit*/
 #define pecap_es(p)		((p) & 0xfffffff)
 
 /* Virtual command interface capability */
@@ -286,13 +357,31 @@
 #define DMA_GCMD_CFI (((u32) 1) << 23)
 
 /* GSTS_REG */
+/*TES: Translation Enable Status
+ * 占用1个bit
+ * This field indicates the status of DMA-remapping hardware.
+ *  0: DMA remapping is not enabled
+ *  1: DMA remapping is enabled
+ * */
 #define DMA_GSTS_TES (((u32)1) << 31)
 #define DMA_GSTS_RTPS (((u32)1) << 30)
 #define DMA_GSTS_FLS (((u32)1) << 29)
 #define DMA_GSTS_AFLS (((u32)1) << 28)
 #define DMA_GSTS_WBFS (((u32)1) << 27)
+/*QIES: Queued Invalidation Enable Status
+ * 占用1个bit
+ * This field indicates queued invalidation enable status.
+ * 0: queued invalidation is not enabled
+ * 1: queued invalidation is enabled
+ * */
 #define DMA_GSTS_QIES (((u32)1) << 26)
 #define DMA_GSTS_IRTPS (((u32)1) << 24)
+/*IRES: Interrupt Remapping Enable Status
+ * 占用1个bit
+ * This field indicates the status of Interrupt-remapping hardware.
+ *  0: Interrupt-remapping hardware is not enabled
+ *  1: Interrupt-remapping hardware is enabled
+ * */
 #define DMA_GSTS_IRES (((u32)1) << 25)
 #define DMA_GSTS_CFIS (((u32)1) << 23)
 
@@ -314,6 +403,7 @@
 
 /* ECMD_REG */
 #define DMA_MAX_NUM_ECMD		256
+/*当前共有4个ecmd寄存器*/
 #define DMA_MAX_NUM_ECMDCAP		(DMA_MAX_NUM_ECMD / 64)
 #define DMA_ECMD_REG_STEP		8
 #define DMA_ECMD_ENABLE			0xf0
@@ -323,9 +413,29 @@
 #define DMA_ECMD_OA_SHIFT		16
 #define DMA_ECMD_ECRSP_IP		0x1
 #define DMA_ECMD_ECCAP3			3
+/*ECNTS: Enable Perfmon Counter Support
+ * 占1bit（只读）用于检查是否可开启
+ * 0: Enable Perfmon Counter Command not supported
+ * 1: Enable Perfmon Counter Command supported
+ * */
 #define DMA_ECMD_ECCAP3_ECNTS		BIT_ULL(48)
+/*DCNTS: Disable Perfmon Counter Support
+ * 占1bit(只读）用于检查是否可禁用
+ * 0: Disable Perfmon Counter Command not supported
+ * 1: Disable Perfmon Counter Command supported
+ * */
 #define DMA_ECMD_ECCAP3_DCNTS		BIT_ULL(49)
+/*FCNTS: Freeze All Perfmon Counters Support
+ * 占1bit(只读）用于检查是否可冻结
+ * 0: Freeze All Perfmon Counters Command not supported
+ * 1: Freeze All Perfmon Counters Command supported
+ * */
 #define DMA_ECMD_ECCAP3_FCNTS		BIT_ULL(52)
+/*UFCNTS: Unfreeze All Perfmon Counters Support
+ * 占1bit(只读）用于检查是否可解冻
+ * 0: Unfreeze All Perfmon Counters Command not supported
+ * 1: Unfreeze All Perfmon Counters Command supported
+ * */
 #define DMA_ECMD_ECCAP3_UFCNTS		BIT_ULL(53)
 #define DMA_ECMD_ECCAP3_ESSENTIAL	(DMA_ECMD_ECCAP3_ECNTS |	\
 					 DMA_ECMD_ECCAP3_DCNTS |	\
@@ -681,16 +791,28 @@ struct dmar_domain {
 
 struct iommu_pmu {
 	struct intel_iommu	*iommu;
+	/*Performance Monitoring计数器总数目*/
 	u32			num_cntr;	/* Number of counters */
 	u32			num_eg;		/* Number of event group */
+	/*计数器的位宽，当位宽为N，则可以表示最大数2^N-1*/
 	u32			cntr_width;	/* Counter width */
+	/*计数器步长*/
 	u32			cntr_stride;	/* Counter Stride */
+	/*这里实际上仅指明了5位（即Performance Monitoring Capability Register的32-36位）
+	 * 这段是一组flags（赋值是向下移位了对应0,1,2,3,5)，分别为
+	 * 32：RIDFS: Requester ID Filter Support
+	 * 33：DIDFS: Domain ID Filter Support
+	 * 34：PASIDFS: PASID Filter Support
+	 * 35：ATFS: Address Type Filter Support
+	 * 36：PTLFS: Page Table Level Filter Support
+	 */
 	u32			filter;		/* Bitmask of filter support */
 	void __iomem		*base;		/* the PerfMon base address */
 	void __iomem		*cfg_reg;	/* counter configuration base address */
 	void __iomem		*cntr_reg;	/* counter 0 address*/
 	void __iomem		*overflow;	/* overflow status register */
 
+	//????
 	u64			*evcap;		/* Indicates all supported events */
 	u32			**cntr_evcap;	/* Supported events of each counter. */
 
@@ -704,19 +826,25 @@ struct iommu_pmu {
 #define IOMMU_IRQ_ID_OFFSET_PERF	(2 * DMAR_UNITS_SUPPORTED)
 
 struct intel_iommu {
+	/*reg_phys,reg_size表示的一块内存，reg映射这段内存（虚拟地址）VT-d文档5.0版本11.4节描述了寄存器的布局*/
 	void __iomem	*reg; /* Pointer to hardware regs, virtual addr */
+	/*寄存器地址（来源于dmar_drhd_unit）*/
 	u64 		reg_phys; /* physical address of hw register set */
+	/*寄存器指向的内存大小*/
 	u64		reg_size; /* size of hw register set */
-	u64		cap;
-	u64		ecap;
+	u64		cap;//描述硬件支持的核心功能（如地址宽度、中断重映射、PASID 支持5.0版本11.4.2描述此寄存器值布局）
+	u64		ecap;//描述扩展功能（如嵌套页表、ATS、Posted Interrupts）
 	u64		vccap;
+	/*Enhanced Command Capability Register0-4寄存器内容*/
 	u64		ecmdcap[DMA_MAX_NUM_ECMDCAP];
 	u32		gcmd; /* Holds TE, EAFL. Don't need SRTP, SFL, WBF */
 	raw_spinlock_t	register_lock; /* protect register handling */
+	/*设备序号*/
 	int		seq_id;	/* sequence id of the iommu */
 	int		agaw; /* agaw of this iommu */
 	int		msagaw; /* max sagaw of this iommu */
 	unsigned int	irq, pr_irq, perf_irq;
+	// PCI 段号（系统中可能有多个 PCI 段）
 	u16		segment;     /* PCI segment# */
 	unsigned char	name[16];    /* Device Name */
 
@@ -754,7 +882,7 @@ struct intel_iommu {
 	int		node;
 	u32		flags;      /* Software defined flags */
 
-	struct dmar_drhd_unit *drhd;
+	struct dmar_drhd_unit *drhd;/*对应的drhd*/
 	void *perf_statistic;
 
 	struct iommu_pmu *pmu;
@@ -918,6 +1046,7 @@ static inline bool context_present(struct context_entry *context)
 }
 
 #define LEVEL_STRIDE		(9)
+/*当level_stride为9时，此值取511*/
 #define LEVEL_MASK		(((u64)1 << LEVEL_STRIDE) - 1)
 #define MAX_AGAW_WIDTH		(64)
 #define MAX_AGAW_PFN_WIDTH	(MAX_AGAW_WIDTH - VTD_PAGE_SHIFT)
@@ -1387,6 +1516,7 @@ int ecmd_submit_sync(struct intel_iommu *iommu, u8 ecmd, u64 oa, u64 ob);
 
 static inline bool ecmd_has_pmu_essential(struct intel_iommu *iommu)
 {
+	/*是否容许针对性能监控计数器“使能”，“禁用”，“冻结”，“解冻”*/
 	return (iommu->ecmdcap[DMA_ECMD_ECCAP3] & DMA_ECMD_ECCAP3_ESSENTIAL) ==
 		DMA_ECMD_ECCAP3_ESSENTIAL;
 }

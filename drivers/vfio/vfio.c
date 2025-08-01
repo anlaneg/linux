@@ -83,7 +83,7 @@ struct vfio_group {
 	//每个vfio_group与一个iommu_group一一对应
 	struct iommu_group		*iommu_group;
 	struct vfio_container		*container;
-	//串连从属于同一group的vfio_device
+	//指明从属于此group的所有vfio_device（链表）
 	struct list_head		device_list;
 	//保护device_list
 	struct mutex			device_lock;
@@ -546,6 +546,7 @@ static struct vfio_device *vfio_group_get_device(struct vfio_group *group,
 	struct vfio_device *device;
 
 	mutex_lock(&group->device_lock);
+	/*遍历此group下所有vfio-device*/
 	list_for_each_entry(device, &group->device_list, group_next) {
 		if (device->dev == dev && vfio_device_try_get(device)) {
 			mutex_unlock(&group->device_lock);

@@ -813,8 +813,8 @@ struct acpi_table_dmar {
 /* DMAR subtable header */
 
 struct acpi_dmar_header {
-	u16 type;
-	u16 length;
+	u16 type;/*当前条目的类型（类型由acpi_dmar_type定义）*/
+	u16 length;//当前条目的长度
 };
 
 /* Values for subtable type in struct acpi_dmar_header */
@@ -833,8 +833,8 @@ enum acpi_dmar_type {
 /* DMAR Device Scope structure */
 
 struct acpi_dmar_device_scope {
-	u8 entry_type;
-	u8 length;
+	u8 entry_type;// 设备类型（决定后续字段的解析方式）
+	u8 length;// 本条目的总长度（字节）
 	u8 flags;
 	u8 reserved;
 	u8 enumeration_id;
@@ -868,7 +868,7 @@ struct acpi_dmar_hardware_unit {
 	struct acpi_dmar_header header;
 	u8 flags;
 	u8 size;		/* Size of the register set */
-	u16 segment;
+	u16 segment; //PCI 段号（系统中可能有多个 PCI 段）
 	u64 address;		/* Register Base Address */
 };
 

@@ -38,15 +38,19 @@ extern struct acpi_table_header *dmar_tbl;
 struct dmar_drhd_unit {
 	struct list_head list;		/* list of drhd units	*/
 	struct  acpi_dmar_header *hdr;	/* ACPI header		*/
+	//控制器的物理基地址
 	u64	reg_base_addr;		/* register base address*/
 	unsigned long reg_size;		/* size of register set */
 	struct	dmar_dev_scope *devices;/* target device array	*/
 	int	devices_cnt;		/* target device count	*/
+	// PCI 段号（系统中可能有多个 PCI 段）
 	u16	segment;		/* PCI domain		*/
+	/*为1时，此drhd将被忽略（不支持强需特性）*/
 	u8	ignored:1; 		/* ignore drhd		*/
+	/*是否此dmaru管理所有PCI 设备*/
 	u8	include_all:1;
 	u8	gfx_dedicated:1;	/* graphic dedicated	*/
-	struct intel_iommu *iommu;
+	struct intel_iommu *iommu;/*对应的iommu设备*/
 };
 
 struct dmar_pci_path {
@@ -81,7 +85,7 @@ extern struct list_head dmar_drhd_units;
 				dmar_rcu_check())			\
 		if (i=drhd->iommu, drhd->ignored) {} else
 
-/*遍历dmar_drhd_units*/
+/*遍历dmar_drhd_units,针对每一个drhd，如果其设置了iommu，则遍历*/
 #define for_each_iommu(i, drhd)						\
 	list_for_each_entry_rcu(drhd, &dmar_drhd_units, list,		\
 				dmar_rcu_check())			\

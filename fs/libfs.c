@@ -1081,14 +1081,14 @@ EXPORT_SYMBOL(simple_fill_super);
 
 static DEFINE_SPINLOCK(pin_fs_lock);
 
-int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount/*入出参，此fs的挂载点*/, int *count/*此挂载点引用数*/)
+int simple_pin_fs(struct file_system_type *type/*文件系统*/, struct vfsmount **mount/*入出参，此fs的挂载点*/, int *count/*此挂载点引用数*/)
 {
 	struct vfsmount *mnt = NULL;
 	spin_lock(&pin_fs_lock);
 	if (unlikely(!*mount)) {
 	    /*此文件系统未mount,执行mount*/
 		spin_unlock(&pin_fs_lock);
-		mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, NULL);
+		mnt = vfs_kern_mount(type, SB_KERNMOUNT/*kernel挂载*/, type->name, NULL);
 		if (IS_ERR(mnt))
 			return PTR_ERR(mnt);
 		spin_lock(&pin_fs_lock);
@@ -1661,7 +1661,7 @@ struct inode *alloc_anon_inode(struct super_block *s)
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 
-	inode->i_ino = get_next_ino();
+	inode->i_ino = get_next_ino();/*分配编号*/
 	inode->i_mapping->a_ops = &anon_aops;
 
 	/*

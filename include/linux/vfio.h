@@ -35,7 +35,7 @@ struct vfio_device_set {
 };
 
 struct vfio_device {
-	struct device *dev;/*关联的设备*/
+	struct device *dev;/*关联的设备(device)*/
 	const struct vfio_device_ops *ops;/*为virtio-device关联的操作集*/
 	/*
 	 * mig_ops/log_ops is a static property of the vfio_device which must
@@ -45,7 +45,7 @@ struct vfio_device {
 	const struct vfio_log_ops *log_ops;
 #if IS_ENABLED(CONFIG_VFIO_GROUP)
 	struct vfio_group *group;/*此设备归属的vfio-group*/
-	struct list_head group_next;
+	struct list_head group_next;/*用于挂载到其从属的vfio-group*/
 	struct list_head iommu_entry;
 #endif
 	struct vfio_device_set *dev_set;
@@ -131,6 +131,10 @@ struct vfio_device_ops {
 			 unsigned long arg);
 	int	(*mmap)(struct vfio_device *vdev, struct vm_area_struct *vma);
 	void	(*request)(struct vfio_device *vdev, unsigned int count);
+	/*利用名称匹配此vfio_device,如果匹配，返回>0,
+	 * 如果匹配时函数执行失败返回<0,
+	 * 如果不匹配返回0,
+	 * 如果此回调不提供，则与vdev->name进行字符串匹配*/
 	int	(*match)(struct vfio_device *vdev, char *buf);
 	void	(*dma_unmap)(struct vfio_device *vdev, u64 iova, u64 length);
 	int	(*device_feature)(struct vfio_device *device, u32 flags,

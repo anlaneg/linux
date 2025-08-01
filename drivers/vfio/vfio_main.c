@@ -50,7 +50,7 @@
 static struct vfio {
 	struct class			*device_class;
 	struct ida			device_ida;/*为每个vfio-device分配唯一的索引*/
-	struct vfsmount			*vfs_mount;
+	struct vfsmount			*vfs_mount;/*挂载点*/
 	int				fs_count;
 } vfio;
 
@@ -242,13 +242,14 @@ EXPORT_SYMBOL_GPL(_vfio_alloc_device);
 
 static int vfio_fs_init_fs_context(struct fs_context *fc)
 {
+	/*利用pseudo-fs初始化函数*/
 	return init_pseudo(fc, VFIO_MAGIC) ? 0 : -ENOMEM;
 }
 
 static struct file_system_type vfio_fs_type = {
 	.name = "vfio",
 	.owner = THIS_MODULE,
-	.init_fs_context = vfio_fs_init_fs_context,
+	.init_fs_context = vfio_fs_init_fs_context,/*初始化函数*/
 	.kill_sb = kill_anon_super,
 };
 
@@ -257,10 +258,12 @@ static struct inode *vfio_fs_inode_new(void)
 	struct inode *inode;
 	int ret;
 
+	/*挂载此fs*/
 	ret = simple_pin_fs(&vfio_fs_type, &vfio.vfs_mount, &vfio.fs_count);
 	if (ret)
 		return ERR_PTR(ret);
 
+	/*申请inode*/
 	inode = alloc_anon_inode(vfio.vfs_mount->mnt_sb);
 	if (IS_ERR(inode))
 		simple_release_fs(&vfio.vfs_mount, &vfio.fs_count);
@@ -286,7 +289,7 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
 	init_completion(&device->comp);
 	device->dev = dev;
 	device->ops = ops;
-	device->inode = vfio_fs_inode_new();
+	device->inode = vfio_fs_inode_new();/*为此设备申请vfio-fs对应的inode*/
 	if (IS_ERR(device->inode)) {
 		ret = PTR_ERR(device->inode);
 		goto out_inode;
@@ -316,7 +319,7 @@ out_inode:
 
 /*注册指定group类型的vfio-device*/
 static int __vfio_register_dev(struct vfio_device *device,
-			       enum vfio_group_type type)
+			       enum vfio_group_type type/*设备类型*/)
 {
 	int ret;
 
@@ -375,7 +378,7 @@ err_out:
 int vfio_register_group_dev(struct vfio_device *device)
 {
 	/*注册vfio_iommu类型的vfio-device*/
-	return __vfio_register_dev(device, VFIO_IOMMU);
+	return __vfio_register_dev(device, VFIO_IOMMU/*物理iommu设备*/);
 }
 EXPORT_SYMBOL_GPL(vfio_register_group_dev);
 
@@ -386,7 +389,7 @@ EXPORT_SYMBOL_GPL(vfio_register_group_dev);
 int vfio_register_emulated_iommu_dev(struct vfio_device *device)
 {
 	/*注册emulated_iommu类型的vfio-device*/
-	return __vfio_register_dev(device, VFIO_EMULATED_IOMMU);
+	return __vfio_register_dev(device, VFIO_EMULATED_IOMMU/*模拟的iommu设备*/);
 }
 EXPORT_SYMBOL_GPL(vfio_register_emulated_iommu_dev);
 

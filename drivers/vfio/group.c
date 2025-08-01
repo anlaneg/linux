@@ -17,7 +17,7 @@
 
 static struct vfio {
 	struct class			*class;
-	struct list_head		group_list;/*用于串连系统所有vfio-group*/
+	struct list_head		group_list;/*链表指明系统所有vfio-group*/
 	struct mutex			group_lock; /* locks group_list */
 	struct ida			group_ida;
 	dev_t				group_devt;
@@ -30,7 +30,7 @@ static struct vfio_device *vfio_device_get_from_name(struct vfio_group *group,
 	struct vfio_device *it, *device = ERR_PTR(-ENODEV);
 
 	mutex_lock(&group->device_lock);
-	/*遍历group下挂接的所有device*/
+	/*遍历group下挂接的所有vfio-device*/
 	list_for_each_entry(it, &group->device_list, group_next) {
 		int ret;
 
@@ -551,12 +551,14 @@ static void vfio_group_release(struct device *dev)
 	kfree(group);
 }
 
+/*创建vfio-group*/
 static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
 					   enum vfio_group_type type)
 {
 	struct vfio_group *group;
 	int minor;
 
+	/*申请vfio-group*/
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		return ERR_PTR(-ENOMEM);
@@ -569,17 +571,17 @@ static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
 	}
 
 	device_initialize(&group->dev);
-	group->dev.devt = MKDEV(MAJOR(vfio.group_devt), minor);
+	group->dev.devt = MKDEV(MAJOR(vfio.group_devt), minor);/*设置vfio-group对应的devt*/
 	group->dev.class = vfio.class;
 	group->dev.release = vfio_group_release;
-	/*为vfio-group关联的字符设备设置fops*/
+	/*为vfio-group对应的字符设备设置fops*/
 	cdev_init(&group->cdev, &vfio_group_fops);
 	group->cdev.owner = THIS_MODULE;
 
 	refcount_set(&group->drivers, 1);
 	mutex_init(&group->group_lock);
 	spin_lock_init(&group->kvm_ref_lock);
-	INIT_LIST_HEAD(&group->device_list);
+	INIT_LIST_HEAD(&group->device_list);/*初始化链表*/
 	mutex_init(&group->device_lock);
 	group->iommu_group = iommu_group;/*设置vfio-group关联的iommu-group*/
 	/* put in vfio_group_release() */
@@ -590,6 +592,7 @@ static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
 	return group;
 }
 
+/*申请并创建vfio_group,创建其对应的字符设备*/
 static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
 		enum vfio_group_type type)
 {
@@ -604,7 +607,7 @@ static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
 	if (IS_ERR(group))
 		return group;
 
-	/*noiommu有特别前缀，其它均使用iommu group id(纯数字）*/
+	/*noiommu有特别前缀，其它类型均使用iommu group id(纯数字）*/
 	err = dev_set_name(&group->dev, "%s%d",
 			   group->type == VFIO_NO_IOMMU ? "noiommu-" : "",
 			   iommu_group_id(iommu_group));
@@ -613,7 +616,7 @@ static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
 		goto err_put;
 	}
 
-	/*添加vfio-group对应的cdev*/
+	/*添加vfio-group对应的cdev到kernel,创建/dev设备*/
 	err = cdev_device_add(&group->cdev, &group->dev);
 	if (err) {
 		ret = ERR_PTR(err);
@@ -630,6 +633,7 @@ err_put:
 	return ret;
 }
 
+/*创建非vfio_iommu类型的vfio-group*/
 static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 		enum vfio_group_type type)
 {
@@ -637,23 +641,23 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	struct vfio_group *group;
 	int ret;
 
-	/*申请iommu_group结构体*/
+	/*申请iommu_group结构体并初始化*/
 	iommu_group = iommu_group_alloc();
 	if (IS_ERR(iommu_group))
 		return ERR_CAST(iommu_group);
 
-	/*设置iommu group名称*/
+	/*设置iommu group名称为noiommu*/
 	ret = iommu_group_set_name(iommu_group, "vfio-noiommu");
 	if (ret)
 		goto out_put_group;
 
-	/*将dev添加进iommu_group*/
-	ret = iommu_group_add_device(iommu_group, dev);
+	/*将dev添加进此iommu_group*/
+	ret = iommu_group_add_device(iommu_group, dev);/*为设备关联noiommu group*/
 	if (ret)
 		goto out_put_group;
 
 	mutex_lock(&vfio.group_lock);
-	/*创建vfio-group*/
+	/*利用iommu_group创建其对应的vfio-group*/
 	group = vfio_create_group(iommu_group, type);
 	mutex_unlock(&vfio.group_lock);
 	if (IS_ERR(group)) {
@@ -675,6 +679,7 @@ static bool vfio_group_has_device(struct vfio_group *group, struct device *dev)
 	struct vfio_device *device;
 
 	mutex_lock(&group->device_lock);
+	/*遍历此group中所有vfio_device*/
 	list_for_each_entry(device, &group->device_list, group_next) {
 		if (device->dev == dev) {
 			mutex_unlock(&group->device_lock);
@@ -691,7 +696,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	struct vfio_group *group;
 
 	iommu_group = iommu_group_get(dev);
-	if (!iommu_group/*设备没有iommu_group*/ && vfio_noiommu/*noiommu也开启了*/) {
+	if (!iommu_group/*设备还没有iommu_group*/ && vfio_noiommu/*noiommu也开启了*/) {
 		/*
 		 * With noiommu enabled, create an IOMMU group for devices that
 		 * don't already have one, implying no IOMMU hardware/driver
@@ -703,17 +708,19 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 			add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 			dev_warn(dev, "Adding kernel taint for vfio-noiommu group on device\n");
 		}
-		return group;
+		return group;/*此设备无iommu_group且开启了noiommu,创建noiommu设备对应的vfio_group*/
 	}
 
 	if (!iommu_group)
+		/*设备没有iommu_group,返回参数无效*/
 		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&vfio.group_lock);
-	/*通过iommu-group获取vfio-group*/
+	/*已知设备的iommu-group,通过iommu-group获取其对应的vfio-group*/
 	group = vfio_group_find_from_iommu(iommu_group);
 	if (group) {
 		if (WARN_ON(vfio_group_has_device(group, dev)))
+			/*找到了此group,但此group中没有此设备*/
 			group = ERR_PTR(-EINVAL);
 		else
 			refcount_inc(&group->drivers);
@@ -737,7 +744,7 @@ int vfio_device_set_group(struct vfio_device *device,
 		/*创建iommu类型的vfio-group(如果）*/
 		group = vfio_group_find_or_alloc(device->dev);
 	else
-		/*创建noiommu类型的vfio-group*/
+		/*创建非vfio_iommu类型的vfio-group*/
 		group = vfio_noiommu_group_alloc(device->dev, type);
 
 	if (IS_ERR(group))
@@ -798,7 +805,7 @@ void vfio_device_remove_group(struct vfio_device *device)
 void vfio_device_group_register(struct vfio_device *device)
 {
 	mutex_lock(&device->group->device_lock);
-	list_add(&device->group_next, &device->group->device_list);
+	list_add(&device->group_next, &device->group->device_list);/*添加进其所属的group*/
 	mutex_unlock(&device->group->device_lock);
 }
 

@@ -37,12 +37,15 @@
 #include "trace.h"
 #include "perfmon.h"
 
-typedef int (*dmar_res_handler_t)(struct acpi_dmar_header *, void *);
+/*返回0表示成功，否则表示失败，处理会停止*/
+typedef int (*dmar_res_handler_t)(struct acpi_dmar_header */*此类型结构体起始地址*/, void */*callback给定的参数*/);
 struct dmar_res_callback {
+	/*指明dmar对应类型的回调*/
 	dmar_res_handler_t	cb[ACPI_DMAR_TYPE_RESERVED];
+	/*指明dmar对应类型的回调参数*/
 	void			*arg[ACPI_DMAR_TYPE_RESERVED];
-	bool			ignore_unhandled;
-	bool			print_entry;
+	bool			ignore_unhandled;/*如果存在未设置cb的type,则此值需要设置为true,否则报错并退出*/
+	bool			print_entry;/*是否显示entry*/
 };
 
 /*
@@ -58,7 +61,7 @@ struct dmar_res_callback {
  * 2) Use RCU in interrupt context
  */
 DECLARE_RWSEM(dmar_global_lock);
-LIST_HEAD(dmar_drhd_units);
+LIST_HEAD(dmar_drhd_units);/*用于串连系统中所有dmar_drhd_unit*/
 
 struct acpi_table_header * __initdata dmar_tbl;
 static int dmar_dev_scope_status = 1;
@@ -74,12 +77,14 @@ static void dmar_register_drhd_unit(struct dmar_drhd_unit *drhd)
 	 * the very end.
 	 */
 	if (drhd->include_all)
+		/*管理所有设备（加到尾部）*/
 		list_add_tail_rcu(&drhd->list, &dmar_drhd_units);
 	else
+		/*加到头部*/
 		list_add_rcu(&drhd->list, &dmar_drhd_units);
 }
 
-void *dmar_alloc_dev_scope(void *start, void *end, int *cnt)
+void *dmar_alloc_dev_scope(void *start/*起始位置*/, void *end/*终止位置*/, int *cnt/*出参，设备总数*/)
 {
 	struct acpi_dmar_device_scope *scope;
 
@@ -89,16 +94,17 @@ void *dmar_alloc_dev_scope(void *start, void *end, int *cnt)
 		if (scope->entry_type == ACPI_DMAR_SCOPE_TYPE_NAMESPACE ||
 		    scope->entry_type == ACPI_DMAR_SCOPE_TYPE_ENDPOINT ||
 		    scope->entry_type == ACPI_DMAR_SCOPE_TYPE_BRIDGE)
-			(*cnt)++;
+			(*cnt)++;/*计数增加*/
 		else if (scope->entry_type != ACPI_DMAR_SCOPE_TYPE_IOAPIC &&
 			scope->entry_type != ACPI_DMAR_SCOPE_TYPE_HPET) {
-			pr_warn("Unsupported device scope\n");
+			pr_warn("Unsupported device scope\n");/*遇到不支持的device scope,告警但忽略*/
 		}
 		start += scope->length;
 	}
 	if (*cnt == 0)
-		return NULL;
+		return NULL;/*没有发现设备*/
 
+	/*返回cnt个dmar_dev_scope对应的内存*/
 	return kcalloc(*cnt, sizeof(struct dmar_dev_scope), GFP_KERNEL);
 }
 
@@ -391,6 +397,7 @@ dmar_find_dmaru(struct acpi_dmar_hardware_unit *drhd)
 {
 	struct dmar_drhd_unit *dmaru;
 
+	/*遍历所有dmar_drhd_unit结构体*/
 	list_for_each_entry_rcu(dmaru, &dmar_drhd_units, list,
 				dmar_rcu_check())
 		if (dmaru->segment == drhd->segment &&
@@ -411,12 +418,14 @@ static int dmar_parse_one_drhd(struct acpi_dmar_header *header, void *arg)
 	struct dmar_drhd_unit *dmaru;
 	int ret;
 
-	drhd = (struct acpi_dmar_hardware_unit *)header;
+	//描述系统中一个 IOMMU 硬件控制器的基本信息，包括其物理地址、管辖的设备范围等，是最核心的条目类型。
+	drhd = (struct acpi_dmar_hardware_unit *)header;/*解析的结构体实为acpi_dmar_hardware_unit*/
 	dmaru = dmar_find_dmaru(drhd);
 	if (dmaru)
+		/*此drhd信息已存在*/
 		goto out;
 
-	dmaru = kzalloc(sizeof(*dmaru) + header->length, GFP_KERNEL);
+	dmaru = kzalloc(sizeof(*dmaru) + header->length/*用于保存此条目*/, GFP_KERNEL);
 	if (!dmaru)
 		return -ENOMEM;
 
@@ -425,20 +434,24 @@ static int dmar_parse_one_drhd(struct acpi_dmar_header *header, void *arg)
 	 * copy the content because the memory buffer will be freed on return.
 	 */
 	dmaru->hdr = (void *)(dmaru + 1);
-	memcpy(dmaru->hdr, header, header->length);
+	memcpy(dmaru->hdr, header, header->length);/*填充此条目内容*/
 	dmaru->reg_base_addr = drhd->address;
 	dmaru->segment = drhd->segment;
 	/* The size of the register set is 2 ^ N 4 KB pages. */
 	dmaru->reg_size = 1UL << (drhd->size + 12);
+	/*是否此dmaru管理所有PCI 设备*/
 	dmaru->include_all = drhd->flags & 0x1; /* BIT0: INCLUDE_ALL */
+	/*drhd后续可能包含设备范围（Device Scope）列表,这里解析这些设备*/
 	dmaru->devices = dmar_alloc_dev_scope((void *)(drhd + 1),
 					      ((void *)drhd) + drhd->header.length,
 					      &dmaru->devices_cnt);
 	if (dmaru->devices_cnt && dmaru->devices == NULL) {
+		/*有设备，但申请内存失败，报错*/
 		kfree(dmaru);
 		return -ENOMEM;
 	}
 
+	/*利用此dmaru信息创建iommu，并添加至系统*/
 	ret = alloc_iommu(dmaru);
 	if (ret) {
 		dmar_free_dev_scope(&dmaru->devices,
@@ -531,18 +544,21 @@ dmar_table_print_dmar_entry(struct acpi_dmar_header *header)
 	case ACPI_DMAR_TYPE_HARDWARE_UNIT:
 		drhd = container_of(header, struct acpi_dmar_hardware_unit,
 				    header);
+		/*显示寄存器起始地址及控制器标记*/
 		pr_info("DRHD base: %#016Lx flags: %#x\n",
 			(unsigned long long)drhd->address, drhd->flags);
 		break;
 	case ACPI_DMAR_TYPE_RESERVED_MEMORY:
 		rmrr = container_of(header, struct acpi_dmar_reserved_memory,
 				    header);
+		/*显示预留内存区域的起始物理地址，预留内存区域的结束物理地址（含）*/
 		pr_info("RMRR base: %#016Lx end: %#016Lx\n",
 			(unsigned long long)rmrr->base_address,
 			(unsigned long long)rmrr->end_address);
 		break;
 	case ACPI_DMAR_TYPE_ROOT_ATS:
 		atsr = container_of(header, struct acpi_dmar_atsr, header);
+		/*显示地址转换服务标记*/
 		pr_info("ATSR flags: %#x\n", atsr->flags);
 		break;
 	case ACPI_DMAR_TYPE_HARDWARE_AFFINITY:
@@ -570,7 +586,7 @@ static int __init dmar_table_detect(void)
 	acpi_status status = AE_OK;
 
 	/* if we could find DMAR table, then there are DMAR devices */
-	status = acpi_get_table(ACPI_SIG_DMAR, 0, &dmar_tbl);
+	status = acpi_get_table(ACPI_SIG_DMAR, 0, &dmar_tbl);/*设置dmar_tbl*/
 
 	if (ACPI_SUCCESS(status) && !dmar_tbl) {
 		pr_warn("Unable to map DMAR\n");
@@ -584,34 +600,38 @@ static int dmar_walk_remapping_entries(struct acpi_dmar_header *start,
 				       size_t len, struct dmar_res_callback *cb)
 {
 	struct acpi_dmar_header *iter, *next;
-	struct acpi_dmar_header *end = ((void *)start) + len;
+	struct acpi_dmar_header *end = ((void *)start) + len;/*结束位置首指针*/
 
 	for (iter = start; iter < end; iter = next) {
-		next = (void *)iter + iter->length;
+		next = (void *)iter + iter->length;/*下一条DMAR Structures起始位置*/
 		if (iter->length == 0) {
 			/* Avoid looping forever on bad ACPI tables */
 			pr_debug(FW_BUG "Invalid 0-length structure\n");
-			break;
+			break;/*长度有误*/
 		} else if (next > end) {
 			/* Avoid passing table end */
 			pr_warn(FW_BUG "Record passes table end\n");
-			return -EINVAL;
+			return -EINVAL;/*长度有误且超了表结尾*/
 		}
 
 		if (cb->print_entry)
+			/*指明需要显示entry，显示此DMAR结构体*/
 			dmar_table_print_dmar_entry(iter);
 
 		if (iter->type >= ACPI_DMAR_TYPE_RESERVED) {
 			/* continue for forward compatibility */
 			pr_debug("Unknown DMAR structure type %d\n",
-				 iter->type);
-		} else if (cb->cb[iter->type]) {
+				 iter->type);/*结构体type有误，报错*/
+		} else if (cb->cb[iter->type]/*指明了此类型的回调*/) {
 			int ret;
 
+			/*调用此类型的回调*/
 			ret = cb->cb[iter->type](iter, cb->arg[iter->type]);
 			if (ret)
+				/*返回非零，直接退出*/
 				return ret;
 		} else if (!cb->ignore_unhandled) {
+			/*没有指明此类型的回调，但没有设置ignore_unhandled，告警并报错*/
 			pr_warn("No handler for DMAR structure type %d\n",
 				iter->type);
 			return -EINVAL;
@@ -621,11 +641,15 @@ static int dmar_walk_remapping_entries(struct acpi_dmar_header *start,
 	return 0;
 }
 
+/*利用cb遍历dmar结构体“可变条目”*/
 static inline int dmar_walk_dmar_table(struct acpi_table_dmar *dmar,
 				       struct dmar_res_callback *cb)
 {
-	return dmar_walk_remapping_entries((void *)(dmar + 1),
-			dmar->header.length - sizeof(*dmar), cb);
+	/**
+	 * dmar table的格式：【acpi_table_dmar｜[acpi_dmar_header|...]|[acpi_dmar_header|...]|...】
+	 */
+	return dmar_walk_remapping_entries((void *)(dmar + 1)/*跳到dmar结构后面*/,
+			dmar->header.length - sizeof(*dmar)/*由于起始位置在dmar结构体后面，故更新为剩余长度*/, cb/*利用此回调函数解析dmar*/);
 }
 
 /**
@@ -638,10 +662,10 @@ parse_dmar_table(void)
 	int drhd_count = 0;
 	int ret;
 	struct dmar_res_callback cb = {
-		.print_entry = true,
+		.print_entry = true,/*要求显示entry*/
 		.ignore_unhandled = true,
 		.arg[ACPI_DMAR_TYPE_HARDWARE_UNIT] = &drhd_count,
-		.cb[ACPI_DMAR_TYPE_HARDWARE_UNIT] = &dmar_parse_one_drhd,
+		.cb[ACPI_DMAR_TYPE_HARDWARE_UNIT] = &dmar_parse_one_drhd,/*解析并添加iommu设备*/
 		.cb[ACPI_DMAR_TYPE_RESERVED_MEMORY] = &dmar_parse_one_rmrr,
 		.cb[ACPI_DMAR_TYPE_ROOT_ATS] = &dmar_parse_one_atsr,
 		.cb[ACPI_DMAR_TYPE_HARDWARE_AFFINITY] = &dmar_parse_one_rhsa,
@@ -671,7 +695,7 @@ parse_dmar_table(void)
 	}
 
 	pr_info("Host address width %d\n", dmar->width + 1);
-	ret = dmar_walk_dmar_table(dmar, &cb);
+	ret = dmar_walk_dmar_table(dmar, &cb);/*利用cb遍历dmar table（创建iommu设备）*/
 	if (ret == 0 && drhd_count == 0)
 		pr_warn(FW_BUG "No DRHD structure found in DMAR table\n");
 
@@ -847,13 +871,14 @@ int __init dmar_table_init(void)
 	int ret;
 
 	if (dmar_table_initialized == 0) {
+		/*未执行初始化，解析dmar table，注册iommu设备*/
 		ret = parse_dmar_table();
 		if (ret < 0) {
 			if (ret != -ENODEV)
 				pr_info("Parse DMAR table failure.\n");
 		} else  if (list_empty(&dmar_drhd_units)) {
 			pr_info("No DMAR devices found\n");
-			ret = -ENODEV;
+			ret = -ENODEV;/*没有发现DMAR设备*/
 		}
 
 		if (ret < 0)
@@ -886,10 +911,12 @@ dmar_validate_one_drhd(struct acpi_dmar_header *entry, void *arg)
 
 	drhd = (void *)entry;
 	if (!drhd->address) {
+		/*必须提供地址*/
 		warn_invalid_dmar(0, "");
 		return -EINVAL;
 	}
 
+	/*临时取寄存器用，先关联一页*/
 	if (arg)
 		addr = ioremap(drhd->address, VTD_PAGE_SIZE);
 	else
@@ -899,15 +926,18 @@ dmar_validate_one_drhd(struct acpi_dmar_header *entry, void *arg)
 		return -EINVAL;
 	}
 
+	/*取cap,ecap寄存器*/
 	cap = dmar_readq(addr + DMAR_CAP_REG);
 	ecap = dmar_readq(addr + DMAR_ECAP_REG);
 
+	/*用完了，还回去*/
 	if (arg)
 		iounmap(addr);
 	else
 		early_iounmap(addr, VTD_PAGE_SIZE);
 
 	if (cap == (uint64_t)-1 && ecap == (uint64_t)-1) {
+		/*检查两个寄存器值是否异常*/
 		warn_invalid_dmar(drhd->address, " returns all ones");
 		return -EINVAL;
 	}
@@ -919,25 +949,26 @@ void __init detect_intel_iommu(void)
 {
 	int ret;
 	struct dmar_res_callback validate_drhd_cb = {
-		.cb[ACPI_DMAR_TYPE_HARDWARE_UNIT] = &dmar_validate_one_drhd,
+		.cb[ACPI_DMAR_TYPE_HARDWARE_UNIT] = &dmar_validate_one_drhd,/*简单校验iommu寄存器*/
 		.ignore_unhandled = true,
 	};
 
 	down_write(&dmar_global_lock);
 	ret = dmar_table_detect();
 	if (!ret)
+		/*dmar_tbl设置成功，遍历此表*/
 		ret = dmar_walk_dmar_table((struct acpi_table_dmar *)dmar_tbl,
 					   &validate_drhd_cb);
-	if (!ret && !no_iommu && !iommu_detected &&
-	    (!dmar_disabled || dmar_platform_optin())) {
-		iommu_detected = 1;
+	if (!ret/*校验通过*/ && !no_iommu/*未关闭iommu*/ && !iommu_detected/*还未执行检测*/ &&
+	    (!dmar_disabled/*intel_iommu被置为on*/ || dmar_platform_optin())) {
+		iommu_detected = 1;/*指明iommu已被检测*/
 		/* Make sure ACS will be enabled */
 		pci_request_acs();
 	}
 
 #ifdef CONFIG_X86
 	if (!ret) {
-		x86_init.iommu.iommu_init = intel_iommu_init;
+		x86_init.iommu.iommu_init = intel_iommu_init;/*设置初始化函数(创建iommu设备）*/
 		x86_platform.iommu_shutdown = intel_iommu_shutdown;
 	}
 
@@ -973,11 +1004,13 @@ static int map_iommu(struct intel_iommu *iommu, struct dmar_drhd_unit *drhd)
 	iommu->reg_size = drhd->reg_size;
 
 	if (!request_mem_region(iommu->reg_phys, iommu->reg_size, iommu->name)) {
+		/*预留iommu地址失败*/
 		pr_err("Can't reserve memory\n");
 		err = -EBUSY;
 		goto out;
 	}
 
+	/*映射iommu设备的寄存器指向的这段内存*/
 	iommu->reg = ioremap(iommu->reg_phys, iommu->reg_size);
 	if (!iommu->reg) {
 		pr_err("Can't map the region\n");
@@ -985,20 +1018,24 @@ static int map_iommu(struct intel_iommu *iommu, struct dmar_drhd_unit *drhd)
 		goto release;
 	}
 
+	/*读取MMIO 寄存器空间整体布局表相应内容*/
+	//描述硬件支持的核心功能（如地址宽度、中断重映射、PASID 支持）
 	iommu->cap = dmar_readq(iommu->reg + DMAR_CAP_REG);
+	//描述扩展功能（如嵌套页表、ATS、Posted Interrupts）
 	iommu->ecap = dmar_readq(iommu->reg + DMAR_ECAP_REG);
 
 	if (iommu->cap == (uint64_t)-1 && iommu->ecap == (uint64_t)-1) {
 		err = -EINVAL;
 		warn_invalid_dmar(phys_addr, " returns all ones");
-		goto unmap;
+		goto unmap;/*不得为全1*/
 	}
 
 	/* the registers might be more than one page */
-	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap),
+	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap)/*iotlb offset*/,
 			 cap_max_fault_reg_offset(iommu->cap));
 	map_size = VTD_PAGE_ALIGN(map_size);
 	if (map_size > iommu->reg_size) {
+		/*重新map*/
 		iounmap(iommu->reg);
 		release_mem_region(iommu->reg_phys, iommu->reg_size);
 		iommu->reg_size = map_size;
@@ -1016,9 +1053,11 @@ static int map_iommu(struct intel_iommu *iommu, struct dmar_drhd_unit *drhd)
 		}
 	}
 
+	/*检查硬件是否支持enhanced command interface.*/
 	if (cap_ecmds(iommu->cap)) {
 		int i;
 
+		/*遍历这些寄存器*/
 		for (i = 0; i < DMA_MAX_NUM_ECMDCAP; i++) {
 			iommu->ecmdcap[i] = dmar_readq(iommu->reg + DMAR_ECCAP_REG +
 						       i * DMA_ECMD_REG_STEP);
@@ -1045,14 +1084,17 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	int err;
 
 	if (!drhd->reg_base_addr) {
+		/*未设置寄存器基地址*/
 		warn_invalid_dmar(0, "");
 		return -EINVAL;
 	}
 
+	/*创建intel_iommu*/
 	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
 	if (!iommu)
 		return -ENOMEM;
 
+	/*分配id*/
 	iommu->seq_id = ida_alloc_range(&dmar_seq_ids, 0,
 					DMAR_UNITS_SUPPORTED - 1, GFP_KERNEL);
 	if (iommu->seq_id < 0) {
@@ -1060,9 +1102,9 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 		err = iommu->seq_id;
 		goto error;
 	}
-	snprintf(iommu->name, sizeof(iommu->name), "dmar%d", iommu->seq_id);
+	snprintf(iommu->name, sizeof(iommu->name), "dmar%d", iommu->seq_id);/*设置设备名称*/
 
-	err = map_iommu(iommu, drhd);
+	err = map_iommu(iommu, drhd);/*映射iommp寄存器内存*/
 	if (err) {
 		pr_err("Failed to map %s\n", iommu->name);
 		goto error_free_seq_id;
@@ -1072,7 +1114,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	    (!ecap_smts(iommu->ecap) || ecap_slts(iommu->ecap))) {
 		pr_info("%s: No supported address widths. Not attempting DMA translation.\n",
 			iommu->name);
-		drhd->ignored = 1;
+		drhd->ignored = 1;/*不支持调整guest地址宽度，此设备忽略*/
 	}
 
 	if (!drhd->ignored) {
@@ -1080,7 +1122,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 		if (agaw < 0) {
 			pr_err("Cannot get a valid agaw for iommu (seq_id = %d)\n",
 			       iommu->seq_id);
-			drhd->ignored = 1;
+			drhd->ignored = 1;/*不能获得一个有效的agaw,忽略此设备*/
 		}
 	}
 	if (!drhd->ignored) {
@@ -1103,24 +1145,32 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	ida_init(&iommu->domain_ida);
 	mutex_init(&iommu->did_lock);
 
+	/*读取版本,显示此设备寄存器地址版本等信息
+	 * 例如：
+	 * [    2.288425] DMAR: dmar0: reg_base_addr d37fc000 ver 1:0 cap 8d2078c106f0466 ecap f020df
+	 * */
 	ver = readl(iommu->reg + DMAR_VER_REG);
 	pr_info("%s: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
 		iommu->name,
 		(unsigned long long)drhd->reg_base_addr,
 		DMAR_VER_MAJOR(ver), DMAR_VER_MINOR(ver),
 		(unsigned long long)iommu->cap,
-		(unsigned long long)iommu->ecap);
+		(unsigned long long)iommu->ecap);/*显示版本*/
 
 	/* Reflect status in gcmd */
-	sts = readl(iommu->reg + DMAR_GSTS_REG);
+	sts = readl(iommu->reg + DMAR_GSTS_REG);/*读取GSTS寄存器（Register reporting general status.）*/
 	if (sts & DMA_GSTS_IRES)
+		/*中断remapping硬件开启*/
 		iommu->gcmd |= DMA_GCMD_IRE;
 	if (sts & DMA_GSTS_TES)
+		/*DMA remapping硬件开启*/
 		iommu->gcmd |= DMA_GCMD_TE;
 	if (sts & DMA_GSTS_QIES)
+		/*队列无效被开启*/
 		iommu->gcmd |= DMA_GCMD_QIE;
 
 	if (alloc_iommu_pmu(iommu))
+		/*Performance Monitoring处理失败*/
 		pr_debug("Cannot alloc PMU for iommu (seq_id = %d)\n", iommu->seq_id);
 
 	raw_spin_lock_init(&iommu->register_lock);
@@ -1138,17 +1188,18 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	 * present at boot time, then sets intel_iommu_enabled.
 	 */
 	if (intel_iommu_enabled && !drhd->ignored) {
-		err = iommu_device_sysfs_add(&iommu->iommu, NULL,
+		/*仅在intel_iommu_enabled已被置1，且此设备不需要忽略，则添加iommu设备*/
+		err = iommu_device_sysfs_add(&iommu->iommu, NULL/*父节点为空*/,
 					     intel_iommu_groups,
 					     "%s", iommu->name);
 		if (err)
 			goto err_unmap;
 
-		err = iommu_device_register(&iommu->iommu, &intel_iommu_ops, NULL);
+		err = iommu_device_register(&iommu->iommu, &intel_iommu_ops, NULL);/*注册iommu设备*/
 		if (err)
 			goto err_sysfs;
 
-		iommu_pmu_register(iommu);
+		iommu_pmu_register(iommu);/*Performance Monitoring注册*/
 	}
 
 	drhd->iommu = iommu;

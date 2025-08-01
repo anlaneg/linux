@@ -1336,6 +1336,7 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type/*要挂载的文�
 	int ret = 0;
 
 	if (!type)
+		/*必须提供文件系统*/
 		return ERR_PTR(-EINVAL);
 
 	/*申请并初始化fs_context*/

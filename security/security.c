@@ -1388,7 +1388,7 @@ int security_fs_context_parse_param(struct fs_context *fc,
 	int trc;
 	int rc = -ENOPARAM;
 
-	/*遍历security_hook_heads列表*/
+	/*遍历security_hook_heads列表，触发fs_context_parse_param回调*/
 	lsm_for_each_hook(scall, fs_context_parse_param) {
 		trc = scall->hl->hook.fs_context_parse_param(fc, param);
 		if (trc == 0)

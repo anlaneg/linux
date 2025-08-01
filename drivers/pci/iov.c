@@ -654,7 +654,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量
 	if (iov->num_VFs)
 		return -EINVAL;
 
-	//当前有多少个虚设备
+	//获取当前设备有多少个虚设备
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_INITIAL_VF, &initial);
 	if (initial > iov->total_VFs ||
 	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs)))
@@ -1126,7 +1126,7 @@ int pci_enable_sriov(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量*/)
 	might_sleep();
 
 	if (!dev->is_physfn)
-		return -ENOSYS;
+		return -ENOSYS;/*设备必须为pf*/
 
 	return sriov_enable(dev, nr_virtfn);
 }

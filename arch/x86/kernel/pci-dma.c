@@ -103,8 +103,8 @@ void __init pci_iommu_alloc(void)
 	}
 	pci_swiotlb_detect();
 	gart_iommu_hole_init();
-	amd_iommu_detect();
-	detect_intel_iommu();
+	amd_iommu_detect();/*amd iommu检测*/
+	detect_intel_iommu();/*intel iommu检测*/
 	swiotlb_init(x86_swiotlb_enable, x86_swiotlb_flags);
 }
 
@@ -118,7 +118,7 @@ static __init int iommu_setup(char *p)
 
 	while (*p) {
 		if (!strncmp(p, "off", 3))
-			/*参数指明off*/
+			/*参数指明不使能iommu*/
 			no_iommu = 1;
 		/* gart_parse_options has more force support */
 		if (!strncmp(p, "force", 5))
@@ -175,7 +175,7 @@ early_param("iommu", iommu_setup);
 
 static int __init pci_iommu_init(void)
 {
-	x86_init.iommu.iommu_init();
+	x86_init.iommu.iommu_init();/*初始化iommu,例如：intel_iommu_init*/
 
 #ifdef CONFIG_SWIOTLB
 	/* An IOMMU turned us off. */
