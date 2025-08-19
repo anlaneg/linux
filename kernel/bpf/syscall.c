@@ -63,9 +63,10 @@ static DEFINE_SPINLOCK(link_idr_lock);
 int sysctl_unprivileged_bpf_disabled __read_mostly =
 	IS_BUILTIN(CONFIG_BPF_UNPRIV_DEFAULT_OFF) ? 2 : 0;
 
-/*定义各种bpf map对应的ops*/
+/*定义所有bpf map对应的ops*/
 static const struct bpf_map_ops * const bpf_map_types[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type)
+		/*针对每种map type指明其对应的bpf_map_ops*/
 #define BPF_MAP_TYPE(_id, _ops) \
 	[_id] = &_ops,
 #define BPF_LINK_TYPE(_id, _name)
@@ -107,6 +108,7 @@ int bpf_check_uarg_tail_zero(bpfptr_t uaddr,
 	return res ? 0 : -E2BIG;
 }
 
+/*用于offload map操作*/
 const struct bpf_map_ops bpf_map_offload_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc = bpf_map_offload_map_alloc,
@@ -455,7 +457,7 @@ static int bpf_map_alloc_id(struct bpf_map *map)
 	spin_lock_bh(&map_idr_lock);
 	id = idr_alloc_cyclic(&map_idr, map, 1, INT_MAX, GFP_ATOMIC);
 	if (id > 0)
-		map->id = id;
+		map->id = id;/*设置申请到的编号*/
 	spin_unlock_bh(&map_idr_lock);
 	idr_preload_end();
 
@@ -1399,7 +1401,7 @@ static int map_create(union bpf_attr *attr, bool kernel)
 		return -EINVAL;
 
 	/* find map type and init map: hashtable vs rbtree vs bloom vs ... */
-	//type类型检查
+	//type类型有效性检查
 	map_type = attr->map_type;
 	if (map_type >= ARRAY_SIZE(bpf_map_types))
 		return -EINVAL;
@@ -1864,8 +1866,8 @@ err_put:
 
 static int map_get_next_key(union bpf_attr *attr)
 {
-	void __user *ukey = u64_to_user_ptr(attr->key);
-	void __user *unext_key = u64_to_user_ptr(attr->next_key);
+	void __user *ukey = u64_to_user_ptr(attr->key);/*前一个key(用户态指针）*/
+	void __user *unext_key = u64_to_user_ptr(attr->next_key);/*用于填充下一个key*/
 	struct bpf_map *map;
 	void *key, *next_key;
 	int err;
@@ -1881,6 +1883,7 @@ static int map_get_next_key(union bpf_attr *attr)
 		return -EPERM;
 
 	if (ukey) {
+		/*前一个key有值情况*/
 		key = __bpf_copy_key(ukey, map->key_size);
 		if (IS_ERR(key))
 			return PTR_ERR(key);
@@ -1894,6 +1897,7 @@ static int map_get_next_key(union bpf_attr *attr)
 		goto free_key;
 
 	if (bpf_map_is_offloaded(map)) {
+		/*支持offload的map*/
 		err = bpf_map_offload_get_next_key(map, key, next_key);
 		goto out;
 	}
@@ -2258,8 +2262,9 @@ err_put:
 	return err;
 }
 
-//各bpf程序类型对应的prog ops
+//定义所有bpf程序类型对应的prog ops（struct bpf_prog_ops类型）
 static const struct bpf_prog_ops * const bpf_prog_types[] = {
+		/*针对每种prog type填充其对应的struct bpf_prog_ops结构体*/
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	[_id] = & _name ## _prog_ops,
 #define BPF_MAP_TYPE(_id, _ops)
@@ -2270,23 +2275,25 @@ static const struct bpf_prog_ops * const bpf_prog_types[] = {
 #undef BPF_LINK_TYPE
 };
 
-//通过bpf_prog type查找对应的ops,并记录此ops
+//通过bpf_prog type查找对应的ops,并填充prog
 static int find_prog_type(enum bpf_prog_type type, struct bpf_prog *prog)
 {
 	const struct bpf_prog_ops *ops;
 
 	if (type >= ARRAY_SIZE(bpf_prog_types))
+		/*无效type*/
 		return -EINVAL;
 	type = array_index_nospec(type, ARRAY_SIZE(bpf_prog_types));
-	ops = bpf_prog_types[type];
+	ops = bpf_prog_types[type];/*取此type对应的ops*/
 	if (!ops)
 		return -EINVAL;
 
+	/*设置ops*/
 	if (!bpf_prog_is_offloaded(prog->aux))
 		prog->aux->ops = ops;
 	else
 		prog->aux->ops = &bpf_offload_prog_ops;
-	prog->type = type;
+	prog->type = type;/*指明程序类型*/
 	return 0;
 }
 
@@ -3013,7 +3020,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 	}
 
 	/* find program type: socket_filter vs tracing_filter */
-	err = find_prog_type(type, prog);
+	err = find_prog_type(type, prog);/*通过type确定prog->aux->ops*/
 	if (err < 0)
 		goto free_prog;
 
@@ -3278,6 +3285,7 @@ static int bpf_link_release(struct inode *inode, struct file *filp)
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type)
 #define BPF_MAP_TYPE(_id, _ops)
 #define BPF_LINK_TYPE(_id, _name) [_id] = #_name,
+/*定义所有bpf link类型对应的类型名称*/
 static const char *bpf_link_type_strs[] = {
 	[BPF_LINK_TYPE_UNSPEC] = "<invalid>",
 #include <linux/bpf_types.h>
@@ -6103,7 +6111,7 @@ static int __sys_bpf(enum bpf_cmd cmd, bpfptr_t uattr, unsigned int size)
 		err = map_delete_elem(&attr, uattr);
 		break;
 	case BPF_MAP_GET_NEXT_KEY:
-	    /*提供一个key,取此key对应的next key*/
+	    /*提供一个key(为NULL时为首个key),取此key对应的next key*/
 		err = map_get_next_key(&attr);
 		break;
 	case BPF_MAP_FREEZE:

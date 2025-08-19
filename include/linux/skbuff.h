@@ -1107,7 +1107,7 @@ struct sk_buff {
 
 #ifdef CONFIG_SKB_EXTENSIONS
 	/* only usable after checking ->active_extensions != 0 */
-	struct skb_ext		*extensions;
+	struct skb_ext		*extensions;/*扩展内存*/
 #endif
 };
 
@@ -5011,7 +5011,7 @@ static inline void *skb_ext_find(const struct sk_buff *skb, enum skb_ext_id id)
 	if (skb_ext_exist(skb, id)) {
 		struct skb_ext *ext = skb->extensions;
 
-		return (void *)ext + (ext->offset[id] << 3);
+		return (void *)ext + (ext->offset[id] << 3);/*id对应的值*/
 	}
 
 	return NULL;

@@ -773,7 +773,7 @@ void inet_csk_init_xmit_timers(struct sock *sk,
     /*初始化发送相关的三个timer（未启动）,重传timer,delay ack，keepalive timer*/
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
-	timer_setup(&icsk->icsk_retransmit_timer, retransmit_handler, 0);
+	timer_setup(&icsk->icsk_retransmit_timer, retransmit_handler, 0);/*设置重传定时器*/
 	timer_setup(&icsk->icsk_delack_timer, delack_handler, 0);
 	timer_setup(&sk->sk_timer, keepalive_handler, 0);
 	icsk->icsk_pending = icsk->icsk_ack.pending = 0;

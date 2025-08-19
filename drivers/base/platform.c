@@ -1285,18 +1285,19 @@ static ssize_t driver_override_store(struct device *dev,
 	struct platform_device *pdev = to_platform_device(dev);
 	int ret;
 
+	/*设置设备的override驱动*/
 	ret = driver_set_override(dev, &pdev->driver_override, buf, count);
 	if (ret)
 		return ret;
 
 	return count;
 }
-static DEVICE_ATTR_RW(driver_override);
+static DEVICE_ATTR_RW(driver_override);/*添加driver_override属性*/
 
 static struct attribute *platform_dev_attrs[] = {
-	&dev_attr_modalias.attr,
-	&dev_attr_numa_node.attr,
-	&dev_attr_driver_override.attr,
+	&dev_attr_modalias.attr,/*modalias属性*/
+	&dev_attr_numa_node.attr,/*numa_node属性*/
+	&dev_attr_driver_override.attr,/*driver_override属性*/
 	NULL,
 };
 
@@ -1316,7 +1317,7 @@ static const struct attribute_group platform_dev_group = {
 	.attrs = platform_dev_attrs,
 	.is_visible = platform_dev_attrs_visible,
 };
-__ATTRIBUTE_GROUPS(platform_dev);
+__ATTRIBUTE_GROUPS(platform_dev);/*定义platform设备对应的一组attribute group*/
 
 
 /**
@@ -1474,7 +1475,7 @@ static const struct dev_pm_ops platform_dev_pm_ops = {
 
 const struct bus_type platform_bus_type = {
 	.name		= "platform",
-	.dev_groups	= platform_dev_groups,
+	.dev_groups	= platform_dev_groups,/*对应的dev-groups*/
 	.match		= platform_match,
 	.uevent		= platform_uevent,
 	.probe		= platform_probe,

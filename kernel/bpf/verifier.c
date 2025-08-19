@@ -23972,7 +23972,7 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 		 * inherit env->ops and expected_attach_type for the rest of the
 		 * verification
 		 */
-		env->ops = bpf_verifier_ops[tgt_prog->type];
+		env->ops = bpf_verifier_ops[tgt_prog->type];/*依据程序类型查找其对应的verifier ops*/
 		prog->expected_attach_type = tgt_prog->expected_attach_type;
 	}
 
@@ -24615,7 +24615,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 		env->insn_aux_data[i].orig_idx = i;
 	//记录evn对应的prog及其对应的verifier_ops
 	env->prog = *prog;
-	env->ops = bpf_verifier_ops[env->prog->type];
+	env->ops = bpf_verifier_ops[env->prog->type];/*通过prog类型查找其对应的verifier ops*/
 
 	env->allow_ptr_leaks = bpf_allow_ptr_leaks(env->prog->aux->token);
 	env->allow_uninit_stack = bpf_allow_uninit_stack(env->prog->aux->token);

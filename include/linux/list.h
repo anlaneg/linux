@@ -632,6 +632,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * Note, that list is expected to be not empty.
  */
 #define list_last_entry(ptr, type, member) \
+	/*ptr是list_head，取其prev对应的结构体type(最后一项）*/\
 	list_entry((ptr)->prev, type, member)
 
 /**

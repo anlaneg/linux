@@ -1111,7 +1111,7 @@ static enum mapping_status get_mapping_status(struct sock *ssk,
 
 	skb = skb_peek(&ssk->sk_receive_queue);
 	if (!skb)
-		return MAPPING_EMPTY;
+		return MAPPING_EMPTY;/*收队列为空*/
 
 	if (mptcp_check_fallback(ssk))
 		return MAPPING_DUMMY;
@@ -1348,11 +1348,12 @@ static bool subflow_check_data_avail(struct sock *ssk)
 	struct sk_buff *skb;
 
 	if (!skb_peek(&ssk->sk_receive_queue))
+		/*队列为空，无数据*/
 		WRITE_ONCE(subflow->data_avail, false);
 	if (subflow->data_avail)
-		return true;
+		return true;/*数据有效*/
 
-	msk = mptcp_sk(subflow->conn);
+	msk = mptcp_sk(subflow->conn);/*取得mptcp socket*/
 	for (;;) {
 		u64 ack_seq;
 		u64 old_ack;
@@ -1427,7 +1428,7 @@ reset:
 		}
 	}
 
-	skb = skb_peek(&ssk->sk_receive_queue);
+	skb = skb_peek(&ssk->sk_receive_queue);/*取得报文*/
 	subflow->map_valid = 1;
 	subflow->map_seq = READ_ONCE(msk->ack_seq);
 	subflow->map_data_len = skb->len;
@@ -1491,16 +1492,17 @@ static void subflow_error_report(struct sock *ssk)
 	mptcp_data_unlock(sk);
 }
 
+/*指明subflow（tcp socket)数据ready,执行mptcp数据合并*/
 static void subflow_data_ready(struct sock *sk)
 {
-	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(sk);
+	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(sk);/*取得sk对应的subflow*/
 	u16 state = 1 << inet_sk_state_load(sk);
 	struct sock *parent = subflow->conn;
 	struct mptcp_sock *msk;
 
 	trace_sk_data_ready(sk);
 
-	msk = mptcp_sk(parent);
+	msk = mptcp_sk(parent);/*取得parent对应的mptcp socket*/
 	if (state & TCPF_LISTEN) {
 		/* MPJ subflow are removed from accept queue before reaching here,
 		 * avoid stray wakeups
@@ -1516,6 +1518,7 @@ static void subflow_data_ready(struct sock *sk)
 		     !subflow->mp_join && !(state & TCPF_CLOSE));
 
 	if (mptcp_subflow_data_available(sk)) {
+		/*数据有效*/
 		mptcp_data_ready(parent, sk);
 
 		/* subflow-level lowat test are not relevant.
@@ -1598,6 +1601,7 @@ void mptcp_info2sockaddr(const struct mptcp_addr_info *info,
 #endif
 }
 
+/*与remote地址建立连接*/
 int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 			    const struct mptcp_addr_info *remote)
 {
@@ -1656,7 +1660,7 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 		addrlen = sizeof(struct sockaddr_in6);
 #endif
 	ssk->sk_bound_dev_if = local->ifindex;
-	err = kernel_bind(sf, (struct sockaddr *)&addr, addrlen);
+	err = kernel_bind(sf, (struct sockaddr *)&addr, addrlen);/*绑定到地址*/
 	if (err) {
 		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_JOINSYNTXBINDERR);
 		pr_debug("msk=%p local=%d remote=%d bind error: %d\n",
@@ -1676,6 +1680,7 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 
 	sock_hold(ssk);
 	list_add_tail(&subflow->node, &msk->conn_list);
+	/*连接到远端地址*/
 	err = kernel_connect(sf, (struct sockaddr *)&addr, addrlen, O_NONBLOCK);
 	if (err && err != -EINPROGRESS) {
 		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_JOINSYNTXCONNECTERR);
@@ -1766,6 +1771,7 @@ int mptcp_subflow_create_socket(struct sock *sk, unsigned short family,
 	if (unlikely(!sk->sk_socket))
 		return -EINVAL;
 
+	/*创建tcp socket*/
 	err = sock_create_kern(net, family, SOCK_STREAM, IPPROTO_TCP, &sf);
 	if (err)
 		return err;
@@ -1784,7 +1790,7 @@ int mptcp_subflow_create_socket(struct sock *sk, unsigned short family,
 	 * Update ns_tracker to current stack trace and refcounted tracker.
 	 */
 	sk_net_refcnt_upgrade(sf->sk);
-	err = tcp_set_ulp(sf->sk, "mptcp");/*将socket更新为mptcp*/
+	err = tcp_set_ulp(sf->sk, "mptcp");/*将socket的上层协议更新为mptcp*/
 	if (err)
 		goto err_free;
 
@@ -1801,12 +1807,12 @@ int mptcp_subflow_create_socket(struct sock *sk, unsigned short family,
 	SOCK_INODE(sf)->i_uid = SOCK_INODE(sk->sk_socket)->i_uid;
 	SOCK_INODE(sf)->i_gid = SOCK_INODE(sk->sk_socket)->i_gid;
 
-	subflow = mptcp_subflow_ctx(sf->sk);
+	subflow = mptcp_subflow_ctx(sf->sk);/*取subflow*/
 	pr_debug("subflow=%p\n", subflow);
 
 	*new_sock = sf;
 	sock_hold(sk);
-	subflow->conn = sk;
+	subflow->conn = sk;/*指明其对应的连接为mptcp socket*/
 	mptcp_subflow_ops_override(sf->sk);
 
 	return 0;
@@ -1817,6 +1823,7 @@ err_free:
 	return err;
 }
 
+/*创建subflow context*/
 static struct mptcp_subflow_context *subflow_create_ctx(struct sock *sk,
 							gfp_t priority)
 {
@@ -1979,7 +1986,9 @@ static int subflow_ulp_init(struct sock *sk)
 	WARN_ON_ONCE(sk->sk_data_ready != sock_def_readable);
 	WARN_ON_ONCE(sk->sk_write_space != sk_stream_write_space);
 
-	sk->sk_data_ready = subflow_data_ready;/*设置数据ready通知*/
+	/*设置数据ready通知为subflow data ready，
+	 * 当subflow对应的tcp socket按序收到数据后，会通过此函数触发mptcp进行数据重组*/
+	sk->sk_data_ready = subflow_data_ready;
 	sk->sk_write_space = subflow_write_space;
 	sk->sk_state_change = subflow_state_change;
 	sk->sk_error_report = subflow_error_report;
@@ -2032,7 +2041,7 @@ static void subflow_ulp_clone(const struct request_sock *req,
 		return;
 	}
 
-	new_ctx = subflow_create_ctx(newsk, priority);
+	new_ctx = subflow_create_ctx(newsk, priority);/*创建新的context*/
 	if (!new_ctx) {
 		subflow_ulp_fallback(newsk, old_ctx);
 		return;
@@ -2101,6 +2110,7 @@ static int tcp_abort_override(struct sock *ssk, int err)
 	return tcp_abort(ssk, err);
 }
 
+/*mptcp依赖的subflow*/
 static struct tcp_ulp_ops subflow_ulp_ops __read_mostly = {
 	.name		= "mptcp",
 	.owner		= THIS_MODULE,
@@ -2186,6 +2196,7 @@ void __init mptcp_subflow_init(void)
 
 	mptcp_diag_subflow_init(&subflow_ulp_ops);
 
+	/*注册tcp上层协议subflow*/
 	if (tcp_register_ulp(&subflow_ulp_ops) != 0)
 		panic("MPTCP: failed to register subflows to ULP\n");
 }

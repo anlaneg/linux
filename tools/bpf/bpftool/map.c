@@ -23,6 +23,7 @@
 
 static struct hashmap *map_table;
 
+/*是否为percpu类型的map*/
 static bool map_is_per_cpu(__u32 type)
 {
 	return type == BPF_MAP_TYPE_PERCPU_HASH ||
@@ -59,6 +60,7 @@ static int map_type_from_str(const char *type)
 	return -1;
 }
 
+/*申请value所需内存空间*/
 static void *alloc_value(struct bpf_map_info *info)
 {
 	if (map_is_per_cpu(info->type))
@@ -256,7 +258,7 @@ static void print_entry_plain(struct bpf_map_info *info, unsigned char *key,
 
 		if (info->key_size) {
 			printf("key:%c", break_names ? '\n' : ' ');
-			fprint_hex(stdout, key, info->key_size, " ");
+			fprint_hex(stdout, key, info->key_size, " ");/*以16进制显示key*/
 
 			printf(single_line ? "  " : "\n");
 		}
@@ -267,7 +269,7 @@ static void print_entry_plain(struct bpf_map_info *info, unsigned char *key,
 				printf("%u ", *(unsigned int *)value);
 			} else {
 				printf("value:%c", break_names ? '\n' : ' ');
-				fprint_hex(stdout, value, info->value_size, " ");
+				fprint_hex(stdout, value, info->value_size, " ");/*以16进制显示value*/
 			}
 		}
 
@@ -280,7 +282,7 @@ static void print_entry_plain(struct bpf_map_info *info, unsigned char *key,
 
 		if (info->key_size) {
 			printf("key:\n");
-			fprint_hex(stdout, key, info->key_size, " ");
+			fprint_hex(stdout, key, info->key_size, " ");/*以16进制显示key*/
 			printf("\n");
 		}
 		if (info->value_size) {
@@ -288,7 +290,7 @@ static void print_entry_plain(struct bpf_map_info *info, unsigned char *key,
 				printf("value (CPU %02u):%c",
 				       i, info->value_size > 16 ? '\n' : ' ');
 				fprint_hex(stdout, value + i * step,
-					   info->value_size, " ");
+					   info->value_size, " ");/*以16进制显示value*/
 				printf("\n");
 			}
 		}
@@ -542,6 +544,7 @@ static int show_map_close_json(int fd, struct bpf_map_info *info)
 	return 0;
 }
 
+/*显示bpf map header*/
 static void show_map_header_plain(struct bpf_map_info *info)
 {
 	const char *map_type_str;
@@ -751,6 +754,7 @@ static int dump_map_elem(int fd, void *key, void *value,
 			 json_writer_t *btf_wtr)
 {
 	if (bpf_map_lookup_elem(fd, key, value)) {
+		/*查询value失败*/
 		print_entry_error(map_info, key, errno);
 		return -1;
 	}
@@ -766,7 +770,7 @@ static int dump_map_elem(int fd, void *key, void *value,
 
 		do_dump_btf(&d, map_info, key, value);
 	} else {
-		print_entry_plain(map_info, key, value);
+		print_entry_plain(map_info, key, value);/*采用16进制显示*/
 	}
 
 	return 0;
@@ -840,15 +844,15 @@ map_dump(int fd, struct bpf_map_info *info, json_writer_t *wtr,
 	struct btf *btf = NULL;
 	int err;
 
-	key = malloc(info->key_size);
-	value = alloc_value(info);
+	key = malloc(info->key_size);/*申请key空间*/
+	value = alloc_value(info);/*申请value空间*/
 	if (!key || !value) {
 		p_err("mem alloc failed");
 		err = -1;
 		goto exit_free;
 	}
 
-	prev_key = NULL;
+	prev_key = NULL;/*首个key初始为NULL*/
 
 	if (wtr) {
 		err = get_map_kv_btf(info, &btf);
@@ -877,13 +881,13 @@ map_dump(int fd, struct bpf_map_info *info, json_writer_t *wtr,
 
 	/*遍历此fd对应的key*/
 	while (true) {
-		err = bpf_map_get_next_key(fd, prev_key, key);
+		err = bpf_map_get_next_key(fd, prev_key, key);/*取下一个key*/
 		if (err) {
 			if (errno == ENOENT)
 				err = 0;
 			break;
 		}
-		if (!dump_map_elem(fd, key, value, info, btf, wtr))
+		if (!dump_map_elem(fd, key, value, info, btf, wtr))/*显示此elem*/
 			num_elems++;
 		prev_key = key;
 	}

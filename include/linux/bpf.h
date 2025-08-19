@@ -81,7 +81,7 @@ struct bpf_iter_seq_info {
 /* map is generic key/value storage optionally accessible by eBPF programs */
 struct bpf_map_ops {
 	/* funcs callable from userspace (via syscall) */
-    //map alloc申请前check，参数attr校验
+    //如果此回调不为空，则map alloc申请前调用，用于对参数attr校验
 	int (*map_alloc_check)(union bpf_attr *attr);
 	//map空间申请，初始化
 	struct bpf_map *(*map_alloc)(union bpf_attr *attr);
@@ -188,6 +188,7 @@ struct bpf_map_ops {
 				     bpf_callback_t callback_fn,
 				     void *callback_ctx, u64 flags);
 
+	/*此回调必须提供，*/
 	u64 (*map_mem_usage)(const struct bpf_map *map);
 
 	/* BTF id of struct allocated by map_alloc */
@@ -305,8 +306,8 @@ struct bpf_map {
 	//map名称
 	char name[BPF_OBJ_NAME_LEN];
 	struct mutex freeze_mutex;
-	atomic64_t refcnt;
-	atomic64_t usercnt;
+	atomic64_t refcnt;/*引用计数*/
+	atomic64_t usercnt;/*用户态引用计数*/
 	/* rcu is used before freeing and work is only used during freeing */
 	union {
 		struct work_struct work;
@@ -1726,6 +1727,7 @@ struct bpf_prog {
 				call_get_func_ip:1, /* Do we call get_func_ip() */
 				tstamp_type_access:1, /* Accessed __sk_buff->tstamp_type */
 				sleepable:1;	/* BPF program is sleepable */
+	/*程序类型*/
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	enum bpf_attach_type	expected_attach_type; /* For some prog types */
 	//insns数组的大小
@@ -2388,10 +2390,11 @@ extern const struct file_operations bpf_prog_fops;
 extern const struct file_operations bpf_iter_fops;
 extern const struct file_operations bpf_token_fops;
 
-//对外申明 bpf程序类型操作集，bpf程序类型verifier操作集，map操作集
-#define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
+//对外申明 bpf程序类型操作集(存放在bpf_prog_types中），bpf程序类型verifier操作集（存放在bpf_verifier_ops中）
+#define BPF_PROG_TYPE(_id, _name/*变量名前缀*/, prog_ctx_type, kern_ctx_type) \
 	extern const struct bpf_prog_ops _name ## _prog_ops; \
 	extern const struct bpf_verifier_ops _name ## _verifier_ops;
+/*对外申明map操作集（存放在bpf_map_types中）*/
 #define BPF_MAP_TYPE(_id, _ops) \
 	extern const struct bpf_map_ops _ops;
 #define BPF_LINK_TYPE(_id, _name)

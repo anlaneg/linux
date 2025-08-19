@@ -111,7 +111,7 @@ static void mptcp_pernet_set_defaults(struct mptcp_pernet *pernet)
 	pernet->stale_loss_cnt = 4;
 	pernet->pm_type = MPTCP_PM_TYPE_KERNEL;
 	strscpy(pernet->scheduler, "default", sizeof(pernet->scheduler));
-	strscpy(pernet->path_manager, "kernel", sizeof(pernet->path_manager));
+	strscpy(pernet->path_manager, "kernel", sizeof(pernet->path_manager));/*path管理方式*/
 }
 
 #ifdef CONFIG_SYSCTL

@@ -5929,6 +5929,7 @@ extern struct btf *btf_vmlinux;
 #define BPF_LINK_TYPE(_id, _name)
 static union {
 	struct bpf_ctx_convert {
+		/*针对每种prog type生成结构体bpf_ctx_convert的成员*/
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	prog_ctx_type _id##_prog; \
 	kern_ctx_type _id##_kern;
@@ -5937,8 +5938,9 @@ static union {
 	} *__t;
 	/* 't' is written once under lock. Read many times. */
 	const struct btf_type *t;
-} bpf_ctx_convert;
+} bpf_ctx_convert;/*定义所有bpf prog type对应的convert*/
 enum {
+	/*针对每种prog type生成每种type的convert_id枚举类型*/
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	__ctx_convert##_id,
 #include <linux/bpf_types.h>
@@ -5946,6 +5948,7 @@ enum {
 	__ctx_convert_unused, /* to avoid empty enum in extreme .config */
 };
 static u8 bpf_ctx_convert_map[] = {
+		/*针对每种prog type填充其对应的convert_id*/
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	[_id] = __ctx_convert##_id,
 #include <linux/bpf_types.h>

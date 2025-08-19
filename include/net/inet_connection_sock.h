@@ -95,7 +95,7 @@ struct inet_connection_sock {
 	/*拥塞算法*/
 	const struct tcp_congestion_ops *icsk_ca_ops;
 	const struct inet_connection_sock_af_ops *icsk_af_ops;
-	const struct tcp_ulp_ops  *icsk_ulp_ops;
+	const struct tcp_ulp_ops  *icsk_ulp_ops;/*tcp socket上层ops*/
 	void __rcu		  *icsk_ulp_data;
 	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
 	/*记录拥塞状态*/

@@ -683,7 +683,7 @@ struct iommu_ops {
 		struct device *dev, struct iommu_domain *parent, u32 flags,
 		const struct iommu_user_data *user_data);
 
-	struct iommu_device *(*probe_device)(struct device *dev);/*iommu设备probe device*/
+	struct iommu_device *(*probe_device)(struct device *dev);/*probe device,返回负责此设备的iommu*/
 	void (*release_device)(struct device *dev);
 	void (*probe_finalize)(struct device *dev);
 	struct iommu_group *(*device_group)(struct device *dev);

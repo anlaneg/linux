@@ -687,7 +687,7 @@ void tcp_skb_entail(struct sock *sk, struct sk_buff *skb)
 	tcb->seq     = tcb->end_seq = tp->write_seq;
 	tcb->tcp_flags = TCPHDR_ACK;
 	__skb_header_release(skb);
-	tcp_add_write_queue_tail(sk, skb);
+	tcp_add_write_queue_tail(sk, skb);/*将skb添加进queue*/
 	sk_wmem_queued_add(sk, skb->truesize);
 	sk_mem_charge(sk, skb->truesize);
 	if (tp->nonagle & TCP_NAGLE_PUSH)
@@ -1033,7 +1033,7 @@ int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg, int *copied,
 	tp->fastopen_req->uarg = uarg;
 
 	if (inet_test_bit(DEFER_CONNECT, sk)) {
-		err = tcp_connect(sk);
+		err = tcp_connect(sk);/*发送连接*/
 		/* Same failure procedure as in tcp_v4/6_connect */
 		if (err) {
 			tcp_set_state(sk, TCP_CLOSE);
@@ -1473,6 +1473,7 @@ static int tcp_peek_sndq(struct sock *sk, struct msghdr *msg, int len)
 	struct sk_buff *skb;
 	int copied = 0, err = 0;
 
+	/*遍历已发送队列*/
 	skb_rbtree_walk(skb, &sk->tcp_rtx_queue) {
 		err = skb_copy_datagram_msg(skb, 0, msg, skb->len);
 		if (err)
@@ -3312,6 +3313,7 @@ static inline bool tcp_need_reset(int state)
 		TCPF_FIN_WAIT2 | TCPF_SYN_RECV);
 }
 
+/*放空整个tcp_rtx_queue队列*/
 static void tcp_rtx_queue_purge(struct sock *sk)
 {
 	struct rb_node *p = rb_first(&sk->tcp_rtx_queue);

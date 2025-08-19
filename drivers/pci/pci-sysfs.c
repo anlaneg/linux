@@ -599,6 +599,7 @@ static ssize_t devspec_show(struct device *dev,
 static DEVICE_ATTR_RO(devspec);
 #endif
 
+/*pci driver_override属性设置*/
 static ssize_t driver_override_store(struct device *dev,
 				     struct device_attribute *attr,
 				     const char *buf, size_t count)
@@ -606,6 +607,7 @@ static ssize_t driver_override_store(struct device *dev,
 	struct pci_dev *pdev = to_pci_dev(dev);
 	int ret;
 
+	/*设置指定的文件*/
 	ret = driver_set_override(dev, &pdev->driver_override, buf, count);
 	if (ret)
 		return ret;
@@ -624,12 +626,12 @@ static ssize_t driver_override_show(struct device *dev,
 	device_unlock(dev);
 	return len;
 }
-static DEVICE_ATTR_RW(driver_override);
+static DEVICE_ATTR_RW(driver_override);/*pci设备支持的driver_override属性*/
 
 static struct attribute *pci_dev_attrs[] = {
 	&dev_attr_power_state.attr,
 	&dev_attr_resource.attr,
-	&dev_attr_vendor.attr,
+	&dev_attr_vendor.attr,/*pci设备支持vendorn属性*/
 	&dev_attr_device.attr,
 	&dev_attr_subsystem_vendor.attr,
 	&dev_attr_subsystem_device.attr,
@@ -640,7 +642,7 @@ static struct attribute *pci_dev_attrs[] = {
 	&dev_attr_local_cpulist.attr,
 	&dev_attr_modalias.attr,
 #ifdef CONFIG_NUMA
-	&dev_attr_numa_node.attr,
+	&dev_attr_numa_node.attr,/*pci设备支持numa_node属性*/
 #endif
 	&dev_attr_dma_mask_bits.attr,
 	&dev_attr_consistent_dma_mask_bits.attr,
@@ -653,7 +655,7 @@ static struct attribute *pci_dev_attrs[] = {
 #ifdef CONFIG_OF
 	&dev_attr_devspec.attr,
 #endif
-	&dev_attr_driver_override.attr,
+	&dev_attr_driver_override.attr,/*pci设备支持driver_override属性*/
 	&dev_attr_ari_enabled.attr,
 	NULL,
 };
@@ -1770,11 +1772,11 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 
 //定义pci设备的属性组（这一组属性很多）
 static const struct attribute_group pci_dev_group = {
-	.attrs = pci_dev_attrs,
+	.attrs = pci_dev_attrs,/*pci设备支持的属性*/
 };
 
 const struct attribute_group *pci_dev_groups[] = {
-	&pci_dev_group,
+	&pci_dev_group,/*pci设备属性文件*/
 	&pci_dev_config_attr_group,
 	&pci_dev_rom_attr_group,
 	&pci_dev_reset_attr_group,

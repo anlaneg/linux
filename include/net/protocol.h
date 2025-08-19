@@ -88,8 +88,9 @@ struct inet_protosw {
 	//4层协议号，0时为通配
 	unsigned short	 protocol; /* This is the L4 protocol number.  */
 
+	/*具体定义此协议的实现*/
 	struct proto	 *prot;
-	/*协议的操作函数*/
+	/*协议的操作函数（socket层首先利用此ops,然后由prot->ops具体完成）*/
 	const struct proto_ops *ops;
   
 	unsigned char	 flags;      /* See INET_PROTOSW_* below.  */

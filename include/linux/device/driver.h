@@ -101,6 +101,7 @@ struct device_driver {
 	//提供驱动的模块名称
 	const char		*mod_name;	/* used for built-in modules */
 
+	/*驱动是否禁止了sysfs的bind/unbind接口*/
 	bool suppress_bind_attrs;	/* disables bind/unbind via sysfs */
 	enum probe_type probe_type;//设备的probe类型
 

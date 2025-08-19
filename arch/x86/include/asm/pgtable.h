@@ -1116,6 +1116,7 @@ static inline unsigned long p4d_index(unsigned long address)
 }
 
 #if CONFIG_PGTABLE_LEVELS > 4
+/*大于4级情况*/
 static inline int pgd_present(pgd_t pgd)
 {
 	if (!pgtable_l5_enabled())
@@ -1138,7 +1139,7 @@ static inline unsigned long pgd_page_vaddr(pgd_t pgd)
 static inline p4d_t *p4d_offset(pgd_t *pgd, unsigned long address)
 {
 	if (!pgtable_l5_enabled())
-		return (p4d_t *)pgd;
+		return (p4d_t *)pgd;/*5级未开启，返回pgd*/
 	return (p4d_t *)pgd_page_vaddr(*pgd) + p4d_index(address);
 }
 
@@ -1158,7 +1159,7 @@ static inline int pgd_bad(pgd_t pgd)
 static inline int pgd_none(pgd_t pgd)
 {
 	if (!pgtable_l5_enabled())
-		return 0;
+		return 0;/*5级未开启，返回0*/
 	/*
 	 * There is no need to do a workaround for the KNL stray
 	 * A/D bit erratum here.  PGDs only point to page tables

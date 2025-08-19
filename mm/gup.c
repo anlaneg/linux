@@ -964,9 +964,10 @@ static struct page *follow_pud_mask(struct vm_area_struct *vma,
 	struct page *page;
 	struct mm_struct *mm = vma->vm_mm;
 
-	pudp = pud_offset(p4dp, address);
+	pudp = pud_offset(p4dp, address);/*取地址对应的pud*/
 	pud = READ_ONCE(*pudp);
 	if (!pud_present(pud))
+		/*pud不存在情况*/
 		return no_page_table(vma, flags, address);
 	if (pud_leaf(pud)) {
 		ptl = pud_lock(mm, pudp);
@@ -989,11 +990,12 @@ static struct page *follow_p4d_mask(struct vm_area_struct *vma,
 {
 	p4d_t *p4dp, p4d;
 
-	p4dp = p4d_offset(pgdp, address);
+	p4dp = p4d_offset(pgdp, address);/*取p4d*/
 	p4d = READ_ONCE(*p4dp);
 	BUILD_BUG_ON(p4d_leaf(p4d));
 
 	if (!p4d_present(p4d) || p4d_bad(p4d))
+		/*p4d不存在或者p4d bad*/
 		return no_page_table(vma, flags, address);
 
 	return follow_pud_mask(vma, address, p4dp, flags, ctx);
@@ -1034,9 +1036,10 @@ static struct page *follow_page_mask(struct vm_area_struct *vma,
 	vma_pgtable_walk_begin(vma);
 
 	ctx->page_mask = 0;
-	pgd = pgd_offset(mm, address);
+	pgd = pgd_offset(mm, address);/*取此地址对应的Page Global Directory*/
 
 	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd)))
+		/*pgd不存在或者pgd bad情况下进入*/
 		page = no_page_table(vma, flags, address);
 	else
 		page = follow_p4d_mask(vma, address, pgd, flags, ctx);
@@ -1402,10 +1405,10 @@ static long __get_user_pages(struct mm_struct *mm,
 			 * lookups+error reporting differently.
 			 */
 			if (gup_flags & FOLL_MADV_POPULATE) {
-				vma = vma_lookup(mm, start);
+				vma = vma_lookup(mm, start);/*由start地址获取其对应的vma*/
 				if (!vma) {
 					ret = -ENOMEM;
-					goto out;
+					goto out;/*没有找到此地址对应的vma*/
 				}
 				if (check_vma_flags(vma, gup_flags)) {
 					ret = -EINVAL;
@@ -1673,10 +1676,10 @@ static bool gup_signal_pending(unsigned int flags)
  * for nr_pages > 0, unless FOLL_NOWAIT is used.
  */
 static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
-						unsigned long start,
+						unsigned long start/*起始地址*/,
 						unsigned long nr_pages/*总页数*/,
 						struct page **pages,
-						int *locked,
+						int *locked/*是否已加锁*/,
 						unsigned int flags)
 {
 	long ret, pages_done;
@@ -2487,7 +2490,7 @@ static long __gup_longterm_locked(struct mm_struct *mm,
 				  unsigned long start,
 				  unsigned long nr_pages,
 				  struct page **pages,
-				  int *locked,
+				  int *locked/*是否已加锁*/,
 				  unsigned int gup_flags)
 {
 	unsigned int flags;
@@ -3375,7 +3378,7 @@ EXPORT_SYMBOL_GPL(pin_user_pages_fast);
  * pins in it and unpin_user_page*() will not remove pins from it.
  */
 long pin_user_pages_remote(struct mm_struct *mm,
-			   unsigned long start, unsigned long nr_pages,
+			   unsigned long start/*起始地址*/, unsigned long nr_pages/*总页数*/,
 			   unsigned int gup_flags, struct page **pages,
 			   int *locked)
 {

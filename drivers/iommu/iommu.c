@@ -58,7 +58,7 @@ struct iommu_group {
 	struct mutex mutex;/*保护devices链表*/
 	void *iommu_data;
 	void (*iommu_data_release)(void *iommu_data);
-	char *name;
+	char *name;/*iommu-group名称*/
 	int id;/*唯一编号，由iommu_group_ida申请而来*/
 	struct iommu_domain *default_domain;
 	struct iommu_domain *blocking_domain;
@@ -286,7 +286,7 @@ int iommu_device_register(struct iommu_device *iommu/*iommu设备*/,
 	list_add_tail(&iommu->list, &iommu_device_list);
 	spin_unlock(&iommu_device_lock);
 
-	/*新iommu设备加入所有bus均尝试probe*/
+	/*新iommu设备加入时所有bus均尝试probe*/
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses) && !err; i++)
 		err = bus_iommu_probe(iommu_buses[i]/*bus类型*/);
 	if (err)
@@ -446,7 +446,7 @@ static int iommu_init_device(struct device *dev)
 	 * already having a driver bound means dma_configure has already run and
 	 * found no IOMMU to wait for, so there's no point calling it again.
 	 */
-	if (!dev->iommu->fwspec && !dev->driver && dev->bus->dma_configure) {
+	if (!dev->iommu->fwspec && !dev->driver/*设备无驱动*/ && dev->bus->dma_configure) {
 		mutex_unlock(&iommu_probe_device_lock);
 		dev->bus->dma_configure(dev);
 		mutex_lock(&iommu_probe_device_lock);
@@ -472,7 +472,7 @@ static int iommu_init_device(struct device *dev)
 		goto err_free;
 	}
 
-	/*产生相应的iommu设备*/
+	/*利用iommu ops尝试probe设备dev,检查哪个iommu设备处理此dev*/
 	iommu_dev = ops->probe_device(dev);
 	if (IS_ERR(iommu_dev)) {
 		ret = PTR_ERR(iommu_dev);
@@ -1936,6 +1936,7 @@ static int bus_iommu_probe(const struct bus_type *bus)
 	LIST_HEAD(group_list);
 	int ret;
 
+	/*遍历此bus上所有设备*/
 	ret = bus_for_each_dev(bus, NULL, &group_list, probe_iommu_group);
 	if (ret)
 		return ret;

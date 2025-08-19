@@ -402,6 +402,7 @@ struct sock {
 #define sk_bound_dev_if		__sk_common.skc_bound_dev_if
 #define sk_bind_node		__sk_common.skc_bind_node
 //设置socket对应的struct proto,例如udp_prot
+//（具体完成socket api函数针对某个协议处理）
 #define sk_prot			__sk_common.skc_prot
 //设置socket对应的namespace
 #define sk_net			__sk_common.skc_net
@@ -498,9 +499,9 @@ struct sock {
 	unsigned long		sk_tsq_flags;
 	union {
 		struct sk_buff	*sk_send_head;
-		struct rb_root	tcp_rtx_queue;
+		struct rb_root	tcp_rtx_queue;/*tcp重传队列*/
 	};
-	//socket待写入下层的buffer队列（tun_napi_receive会读取此队列上内容，并上送协议栈）
+	//socket待写入下层的buffer队列
 	struct sk_buff_head	sk_write_queue;
 	u32			sk_dst_pending_confirm;
 	u32			sk_pacing_status; /* see enum sk_pacing */

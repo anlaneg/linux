@@ -18,7 +18,7 @@ struct vfio_container;
 
 struct vfio_device_file {
 	struct vfio_device *device;/*文件关联的vfio-device*/
-	struct vfio_group *group;
+	struct vfio_group *group;/*此vfio-device所属的vfio-group*/
 
 	u8 access_granted;
 	u32 devid; /* only valid when iommufd is valid */
@@ -78,18 +78,18 @@ struct vfio_group {
 	 */
 	refcount_t			drivers;
 	unsigned int			container_users;
-	struct iommu_group		*iommu_group;
-	struct vfio_container		*container;
-	struct list_head		device_list;
+	struct iommu_group		*iommu_group;/*指向其关联的iommu-group(一一映射）*/
+	struct vfio_container		*container;/*指向其关联的container(vfio设备）*/
+	struct list_head		device_list;/*group下挂接的所有vfio-device*/
 	struct mutex			device_lock;
 	struct list_head		vfio_next;
 #if IS_ENABLED(CONFIG_VFIO_CONTAINER)
 	struct list_head		container_next;
 #endif
 	enum vfio_group_type		type;
-	struct mutex			group_lock;
+	struct mutex			group_lock;/*保护锁*/
 	struct kvm			*kvm;
-	struct file			*opened_file;
+	struct file			*opened_file;/*此group关联的file*/
 	struct blocking_notifier_head	notifier;
 	struct iommufd_ctx		*iommufd;
 	spinlock_t			kvm_ref_lock;

@@ -1567,14 +1567,16 @@ struct vfio_iommu_type1_info_dma_avail {
  * changed, and the READ & WRITE flags must be 0.
  */
 struct vfio_iommu_type1_dma_map {
-	__u32	argsz;//内存大小
+	__u32	argsz;//结构体内存大小
 	__u32	flags;//读写标记等（如下示，当前有三个）
 #define VFIO_DMA_MAP_FLAG_READ (1 << 0)		/* readable from device */
 #define VFIO_DMA_MAP_FLAG_WRITE (1 << 1)	/* writable from device */
 #define VFIO_DMA_MAP_FLAG_VADDR (1 << 2)
 	//进程使用的虚地址
 	__u64	vaddr;				/* Process virtual address */
+	//对应的iova地址
 	__u64	iova;				/* IO virtual address */
+	/*内存长度*/
 	__u64	size;				/* Size of mapping (bytes) */
 };
 

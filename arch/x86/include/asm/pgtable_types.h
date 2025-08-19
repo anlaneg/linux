@@ -335,7 +335,7 @@ static inline pgdval_t native_pgd_val(pgd_t pgd)
 
 static inline pgdval_t pgd_flags(pgd_t pgd)
 {
-	return native_pgd_val(pgd) & PTE_FLAGS_MASK;
+	return native_pgd_val(pgd) & PTE_FLAGS_MASK;/*取除掉page以内的数字*/
 }
 
 #if CONFIG_PGTABLE_LEVELS > 4
@@ -425,6 +425,7 @@ static inline p4dval_t p4d_flags_mask(p4d_t p4d)
 	return ~p4d_pfn_mask(p4d);
 }
 
+/*取p4d上的flags*/
 static inline p4dval_t p4d_flags(p4d_t p4d)
 {
 	return native_p4d_val(p4d) & p4d_flags_mask(p4d);/*取P4D中包含的flags(即不需存储地址有有效位置,比如低11位)*/

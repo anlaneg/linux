@@ -224,7 +224,7 @@ out_ret:
 	return fd;
 }
 
-int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type,
+int open_obj_pinned_any(const char *path/*绑定的路径*/, enum bpf_obj_type exp_type,
 			const struct bpf_obj_get_opts *opts)
 {
 	enum bpf_obj_type type;

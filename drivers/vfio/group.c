@@ -19,8 +19,8 @@ static struct vfio {
 	struct class			*class;
 	struct list_head		group_list;/*链表指明系统所有vfio-group*/
 	struct mutex			group_lock; /* locks group_list */
-	struct ida			group_ida;
-	dev_t				group_devt;
+	struct ida			group_ida;/*为vfio-group分配minor*/
+	dev_t				group_devt;/*申请vfio-group对应的devt*/
 } vfio;
 
 /*通过name查找vfio-group下的某一个vfio-device*/
@@ -133,11 +133,12 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 	/*取得container*/
 	container = vfio_container_from_file(fd_file(f));
 	if (container) {
+		/*将此container设置到group中*/
 		ret = vfio_container_attach_group(container, group);
 		goto out_unlock;
 	}
 
-	/*非vfio container情况*/
+	/*非vfio container情况（文件为iommufd_fops情况）*/
 	iommufd = iommufd_ctx_from_file(fd_file(f));
 	if (!IS_ERR(iommufd)) {
 		if (IS_ENABLED(CONFIG_VFIO_NOIOMMU) &&
@@ -334,7 +335,7 @@ static int vfio_group_ioctl_get_device_fd(struct vfio_group *group,
 		goto err_put_device;
 	}
 
-	/*创建vfio-device相关联的file结构*/
+	/*创建与vfio-device相关联的file结构*/
 	filep = vfio_device_open_file(device);
 	if (IS_ERR(filep)) {
 		ret = PTR_ERR(filep);
@@ -352,6 +353,7 @@ err_put_device:
 	return ret;
 }
 
+/*取得vfio-group状态*/
 static int vfio_group_ioctl_get_status(struct vfio_group *group,
 				       struct vfio_group_status __user *arg)
 {
@@ -395,7 +397,7 @@ static int vfio_group_ioctl_get_status(struct vfio_group *group,
 static long vfio_group_fops_unl_ioctl(struct file *filep,
 				      unsigned int cmd, unsigned long arg)
 {
-	struct vfio_group *group = filep->private_data;
+	struct vfio_group *group = filep->private_data;/*取得file关联的vfio-group*/
 	void __user *uarg = (void __user *)arg;
 
 	switch (cmd) {
@@ -478,7 +480,7 @@ static int vfio_group_fops_open(struct inode *inode, struct file *filep)
 		goto out_unlock;
 	}
 	group->opened_file = filep;
-	filep->private_data = group;
+	filep->private_data = group;/*此file关联的vfio-group*/
 	ret = 0;
 out_unlock:
 	mutex_unlock(&group->group_lock);
@@ -508,12 +510,13 @@ static int vfio_group_fops_release(struct inode *inode, struct file *filep)
 	return 0;
 }
 
+/*负责处理vfio-group fd对应的操作*/
 static const struct file_operations vfio_group_fops = {
 	.owner		= THIS_MODULE,
 	/*vfio-group对外提供的ioctl*/
 	.unlocked_ioctl	= vfio_group_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
-	.open		= vfio_group_fops_open,
+	.open		= vfio_group_fops_open,/*vfio-group文件对应的open函数*/
 	.release	= vfio_group_fops_release,
 };
 
@@ -534,7 +537,7 @@ vfio_group_find_from_iommu(struct iommu_group *iommu_group)
 	 */
 	list_for_each_entry(group, &vfio.group_list, vfio_next) {
 		if (group->iommu_group == iommu_group)
-			return group;
+			return group;/*查找成功*/
 	}
 	return NULL;
 }
@@ -551,9 +554,9 @@ static void vfio_group_release(struct device *dev)
 	kfree(group);
 }
 
-/*创建vfio-group*/
+/*为iommu_group创建对应的vfio-group*/
 static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
-					   enum vfio_group_type type)
+					   enum vfio_group_type type/*group类型*/)
 {
 	struct vfio_group *group;
 	int minor;
@@ -652,7 +655,7 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 		goto out_put_group;
 
 	/*将dev添加进此iommu_group*/
-	ret = iommu_group_add_device(iommu_group, dev);/*为设备关联noiommu group*/
+	ret = iommu_group_add_device(iommu_group, dev);
 	if (ret)
 		goto out_put_group;
 
@@ -725,7 +728,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 		else
 			refcount_inc(&group->drivers);
 	} else {
-		/*利用iommu_group创建对应的vfio-group*/
+		/*利用iommu_group创建对应的vfio-group（物理iommu设备）*/
 		group = vfio_create_group(iommu_group, VFIO_IOMMU);
 	}
 	mutex_unlock(&vfio.group_lock);
@@ -735,13 +738,14 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	return group;
 }
 
+/*为vfio-device关联vfio-group*/
 int vfio_device_set_group(struct vfio_device *device,
 			  enum vfio_group_type type)
 {
 	struct vfio_group *group;
 
 	if (type == VFIO_IOMMU)
-		/*创建iommu类型的vfio-group(如果）*/
+		/*物理iommu设备是有iommu-group的，利用iommu-group创建iommu类型的vfio-group*/
 		group = vfio_group_find_or_alloc(device->dev);
 	else
 		/*创建非vfio_iommu类型的vfio-group*/
@@ -976,7 +980,7 @@ int __init vfio_group_init(void)
 	/*这类设备统一创建/dev/vfio/$group,对应的fops为vfio_group_fops*/
 	vfio.class->devnode = vfio_devnode;
 
-	ret = alloc_chrdev_region(&vfio.group_devt, 0, MINORMASK + 1, "vfio");
+	ret = alloc_chrdev_region(&vfio.group_devt, 0, MINORMASK + 1, "vfio");/*申请vfio-group对应的devt*/
 	if (ret)
 		goto err_alloc_chrdev;
 	return 0;

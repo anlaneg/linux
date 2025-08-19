@@ -150,7 +150,7 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.pasid_detach_ioas	= vfio_iommufd_physical_pasid_detach_ioas,
 };
 
-/*vfio_pci探测设备*/
+/*vfio_pci探测设备,通过probe创建此pci设备关联的vfio-device*/
 static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct vfio_pci_core_device *vdev;
@@ -160,7 +160,8 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		/*pdev在denylist中，故报错*/
 		return -EINVAL;
 
-	/*申请struct vfio_pci_core_device,并调用vfio_pci_ops.init(),初始化vfio dev*/
+	/*vfio-pci驱动尝试probe此设备，针对此设备创建vfio-pci-core-device对象
+	 * 申请struct vfio_pci_core_device,并调用vfio_pci_ops.init(),初始化vfio dev*/
 	vdev = vfio_alloc_device(vfio_pci_core_device, vdev, &pdev->dev,
 				 &vfio_pci_ops);
 	if (IS_ERR(vdev))
@@ -169,7 +170,7 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/*将此pci设备的私有数据指定为vfio_pci_core_device*/
 	dev_set_drvdata(&pdev->dev, vdev);
 
-	//vfio引用计数为0，开始vfio-pci设备
+	//启动真实的pci设备，创建vfio-pci设备，关联vfio-group
 	ret = vfio_pci_core_register_device(vdev);
 	if (ret)
 		goto out_put_vdev;
@@ -211,7 +212,7 @@ MODULE_DEVICE_TABLE(pci, vfio_pci_table);
 static struct pci_driver vfio_pci_driver = {
 	.name			= "vfio-pci",
 	.id_table		= vfio_pci_table,/*默认所有vendor设备可支持*/
-	.probe			= vfio_pci_probe,
+	.probe			= vfio_pci_probe,/*例如/sys/bus/pci/drivers/vfio-pci/bind文件被写入此函数触发*/
 	.remove			= vfio_pci_remove,
 	.sriov_configure	= vfio_pci_sriov_configure,/*vfio-pci支持sriov配置*/
 	.err_handler		= &vfio_pci_core_err_handlers,

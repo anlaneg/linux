@@ -102,6 +102,7 @@ struct mptcp_out_options {
 #define MPTCP_SCHED_BUF_MAX	(MPTCP_SCHED_NAME_MAX * MPTCP_SCHED_MAX)
 
 struct mptcp_sched_ops {
+	/*取得可发送的socket*/
 	int (*get_send)(struct mptcp_sock *msk);
 	int (*get_retrans)(struct mptcp_sock *msk);
 
@@ -131,7 +132,7 @@ void mptcp_init(void);
 
 static inline bool sk_is_mptcp(const struct sock *sk)
 {
-	/*检查此socket是否开启MPTCP*/
+	/*检查此socket是否为MPTCP socket*/
 	return tcp_sk(sk)->is_mptcp;
 }
 

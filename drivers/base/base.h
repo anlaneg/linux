@@ -165,7 +165,7 @@ void device_release_driver_internal(struct device *dev, const struct device_driv
 void driver_detach(const struct device_driver *drv);
 void driver_deferred_probe_del(struct device *dev);
 void device_set_deferred_probe_reason(const struct device *dev, struct va_format *vaf);
-//通过bus的匹配函数检查驱动是否可以与device匹配
+//如果有，则通过bus的匹配函数检查驱动是否可以与device匹配；如果没有，则总匹配
 static inline int driver_match_device(const struct device_driver *drv,
 				      struct device *dev)
 {

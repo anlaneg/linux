@@ -102,14 +102,14 @@ static int __mptcp_socket_create(struct mptcp_sock *msk)
 	msk->scaling_ratio = tcp_sk(ssock->sk)->scaling_ratio;
 	WRITE_ONCE(msk->first, ssock->sk);
 	subflow = mptcp_subflow_ctx(ssock->sk);
-	list_add(&subflow->node, &msk->conn_list);
+	list_add(&subflow->node, &msk->conn_list);/*添加subflow*/
 	sock_hold(ssock->sk);
 	subflow->request_mptcp = 1;
-	subflow->subflow_id = msk->subflow_id++;
+	subflow->subflow_id = msk->subflow_id++;/*分配subflow id*/
 
 	/* This is the first subflow, always with id 0 */
 	WRITE_ONCE(subflow->local_id, 0);
-	mptcp_sock_graft(msk->first, sk->sk_socket);
+	mptcp_sock_graft(msk->first, sk->sk_socket);/*设置msk->first*/
 	iput(SOCK_INODE(ssock));
 
 	return 0;
@@ -302,7 +302,7 @@ static bool __mptcp_move_skb(struct mptcp_sock *msk, struct sock *ssk,
 	struct sk_buff *tail;
 	bool has_rxtstamp;
 
-	__skb_unlink(skb, &ssk->sk_receive_queue);
+	__skb_unlink(skb, &ssk->sk_receive_queue);/*自send socket接收队列上取一个skb*/
 
 	skb_ext_reset(skb);
 	skb_orphan(skb);
@@ -334,10 +334,10 @@ static bool __mptcp_move_skb(struct mptcp_sock *msk, struct sock *ssk,
 			return true;
 
 		skb_set_owner_r(skb, sk);
-		__skb_queue_tail(&sk->sk_receive_queue, skb);
+		__skb_queue_tail(&sk->sk_receive_queue, skb);/*报文直接入接收队列*/
 		return true;
 	} else if (after64(MPTCP_SKB_CB(skb)->map_seq, msk->ack_seq)) {
-		mptcp_data_queue_ofo(msk, skb);
+		mptcp_data_queue_ofo(msk, skb);/*乱序到达，入乱序队列*/
 		return false;
 	}
 
@@ -587,10 +587,11 @@ static void mptcp_dss_corruption(struct mptcp_sock *msk, struct sock *ssk)
 	}
 }
 
+/*负责将ssk上按序收到的内容合并到mptcp socket接收队列上*/
 static bool __mptcp_move_skbs_from_subflow(struct mptcp_sock *msk,
 					   struct sock *ssk)
 {
-	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(ssk);
+	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(ssk);/*取得ssk对应的subflow*/
 	struct sock *sk = (struct sock *)msk;
 	bool more_data_avail;
 	struct tcp_sock *tp;
@@ -613,7 +614,7 @@ static bool __mptcp_move_skbs_from_subflow(struct mptcp_sock *msk,
 
 		skb = skb_peek(&ssk->sk_receive_queue);
 		if (unlikely(!skb))
-			break;
+			break;/*没有更多报文了，跳出*/
 
 		if (__mptcp_check_fallback(msk)) {
 			/* Under fallback skbs have no MPTCP extension and TCP could
@@ -783,8 +784,8 @@ static void __mptcp_data_ready(struct sock *sk, struct sock *ssk)
 	__mptcp_rcvbuf_update(sk, ssk);
 
 	/* Wake-up the reader only for in-sequence data */
-	if (move_skbs_to_msk(msk, ssk) && mptcp_epollin_ready(sk))
-		sk->sk_data_ready(sk);
+	if (move_skbs_to_msk(msk, ssk)/*移动ssk skb到mptcp socket*/ && mptcp_epollin_ready(sk))
+		sk->sk_data_ready(sk);/*触发mptcp socket读者*/
 }
 
 void mptcp_data_ready(struct sock *sk, struct sock *ssk)
@@ -1085,6 +1086,7 @@ static int mptcp_check_allowed_size(const struct mptcp_sock *msk, struct sock *s
 	return avail_size;
 }
 
+/*申请mptcp skb扩展，并设置*/
 static bool __mptcp_add_ext(struct sk_buff *skb, gfp_t gfp)
 {
 	struct skb_ext *mpext = __skb_ext_alloc(gfp);
@@ -1105,7 +1107,7 @@ static struct sk_buff *__mptcp_do_alloc_tx_skb(struct sock *sk, gfp_t gfp)
 			skb_reserve(skb, MAX_TCP_HEADER);
 			skb->ip_summed = CHECKSUM_PARTIAL;
 			INIT_LIST_HEAD(&skb->tcp_tsorted_anchor);
-			return skb;
+			return skb;/*返回申请的skb*/
 		}
 		__kfree_skb(skb);
 	} else {
@@ -1194,7 +1196,7 @@ static int mptcp_sendmsg_frag(struct sock *sk, struct sock *ssk,
 		return 0;
 
 	if (unlikely(!__tcp_can_send(ssk)))
-		return -EAGAIN;
+		return -EAGAIN;/*此socket不可发送*/
 
 	/* compute send limit */
 	if (unlikely(ssk->sk_gso_max_size > MPTCP_MAX_GSO_SIZE))
@@ -1202,7 +1204,7 @@ static int mptcp_sendmsg_frag(struct sock *sk, struct sock *ssk,
 	info->mss_now = tcp_send_mss(ssk, &info->size_goal, info->flags);
 	copy = info->size_goal;
 
-	skb = tcp_write_queue_tail(ssk);
+	skb = tcp_write_queue_tail(ssk);/*取得尾部的skb*/
 	if (skb && copy > skb->len) {
 		/* Limit the write to the size available in the
 		 * current skb, if any, so that we create at most a new skb.
@@ -1224,9 +1226,10 @@ static int mptcp_sendmsg_frag(struct sock *sk, struct sock *ssk,
 			goto alloc_skb;
 		}
 
-		copy -= skb->len;
+		copy -= skb->len;/*减去本身copy的长度*/
 	} else {
 alloc_skb:
+		/*申请一个skb*/
 		skb = mptcp_alloc_tx_skb(sk, ssk, info->data_lock_held);
 		if (!skb)
 			return -ENOMEM;
@@ -1257,6 +1260,7 @@ alloc_skb:
 		return -ENOMEM;
 	}
 
+	/*填充skb数据*/
 	if (can_coalesce) {
 		skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
 	} else {
@@ -1270,7 +1274,7 @@ alloc_skb:
 	sk_wmem_queued_add(ssk, copy);
 	sk_mem_charge(ssk, copy);
 	WRITE_ONCE(tcp_sk(ssk)->write_seq, tcp_sk(ssk)->write_seq + copy);
-	TCP_SKB_CB(skb)->end_seq += copy;
+	TCP_SKB_CB(skb)->end_seq += copy;/*记录end_seq*/
 	tcp_skb_pcount_set(skb, 0);
 
 	/* on skb reuse we just need to update the DSS len */
@@ -1296,7 +1300,7 @@ alloc_skb:
 		mpext->frozen = 1;
 		if (READ_ONCE(msk->csum_enabled))
 			mptcp_update_data_checksum(skb, copy);
-		tcp_push_pending_frames(ssk);
+		tcp_push_pending_frames(ssk);/*发送frames*/
 		return 0;
 	}
 out:
@@ -1367,13 +1371,14 @@ struct sock *mptcp_subflow_get_send(struct mptcp_sock *msk)
 		send_info[i].linger_time = -1;
 	}
 
+	/*遍历subflow*/
 	mptcp_for_each_subflow(msk, subflow) {
 		bool backup = subflow->backup || subflow->request_bkup;
 
 		trace_mptcp_subflow_get_send(subflow);
 		ssk =  mptcp_subflow_tcp_sock(subflow);
 		if (!mptcp_subflow_active(subflow))
-			continue;
+			continue;/*此subflow不可用，跳过*/
 
 		tout = max(tout, mptcp_timeout_from_subflow(subflow));
 		nr_active += !backup;
@@ -1388,7 +1393,7 @@ struct sock *mptcp_subflow_get_send(struct mptcp_sock *msk)
 
 		linger_time = div_u64((u64)READ_ONCE(ssk->sk_wmem_queued) << 32, pace);
 		if (linger_time < send_info[backup].linger_time) {
-			send_info[backup].ssk = ssk;
+			send_info[backup].ssk = ssk;/*收集socket*/
 			send_info[backup].linger_time = linger_time;
 		}
 	}
@@ -1409,7 +1414,7 @@ struct sock *mptcp_subflow_get_send(struct mptcp_sock *msk)
 	 * the queued mem, which basically ensure the above. We just need
 	 * to check that subflow has a non empty cwin.
 	 */
-	ssk = send_info[SSK_MODE_ACTIVE].ssk;
+	ssk = send_info[SSK_MODE_ACTIVE].ssk;/*取active socket*/
 	if (!ssk || !sk_stream_memory_free(ssk))
 		return NULL;
 
@@ -1423,7 +1428,7 @@ struct sock *mptcp_subflow_get_send(struct mptcp_sock *msk)
 					   READ_ONCE(ssk->sk_pacing_rate) * burst,
 					   burst + wmem);
 	msk->snd_burst = burst;
-	return ssk;
+	return ssk;/*返回选出的发送用socket*/
 }
 
 static void mptcp_push_release(struct sock *ssk, struct mptcp_sendmsg_info *info)
@@ -1482,7 +1487,7 @@ static int __subflow_push_pending(struct sock *sk, struct sock *ssk,
 		while (len > 0) {
 			int ret = 0;
 
-			ret = mptcp_sendmsg_frag(sk, ssk, dfrag, info);
+			ret = mptcp_sendmsg_frag(sk, ssk, dfrag, info);/*发送分片*/
 			if (ret <= 0) {
 				err = copied ? : ret;
 				goto out;
@@ -1527,16 +1532,17 @@ void __mptcp_push_pending(struct sock *sk, unsigned int flags)
 		int ret = 0;
 
 		if (mptcp_sched_get_send(msk))
-			break;
+			break;/*选择失败*/
 
 		push_count = 0;
 
 		mptcp_for_each_subflow(msk, subflow) {
 			if (READ_ONCE(subflow->scheduled)) {
+				/*此subflow被选择，再将其置为false(为什么要这么折腾，直接返回不好吗?)*/
 				mptcp_subflow_set_scheduled(subflow, false);
 
-				prev_ssk = ssk;
-				ssk = mptcp_subflow_tcp_sock(subflow);
+				prev_ssk = ssk;/*记录上一次用的发送socket*/
+				ssk = mptcp_subflow_tcp_sock(subflow);/*取得本次发送用的socket*/
 				if (ssk != prev_ssk) {
 					/* First check. If the ssk has changed since
 					 * the last round, release prev_ssk
@@ -1553,7 +1559,7 @@ void __mptcp_push_pending(struct sock *sk, unsigned int flags)
 
 				push_count++;
 
-				ret = __subflow_push_pending(sk, ssk, &info);
+				ret = __subflow_push_pending(sk, ssk, &info);/*添加内容到pending*/
 				if (ret <= 0) {
 					if (ret != -EAGAIN ||
 					    (1 << ssk->sk_state) &
@@ -1740,6 +1746,7 @@ static u32 mptcp_send_limit(const struct sock *sk)
 	return limit - not_sent;
 }
 
+/*实现mptcp协议发送报文*/
 static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct mptcp_sock *msk = mptcp_sk(sk);
@@ -1749,7 +1756,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	long timeo;
 
 	/* silently ignore everything else */
-	msg->msg_flags &= MSG_MORE | MSG_DONTWAIT | MSG_NOSIGNAL | MSG_FASTOPEN;
+	msg->msg_flags &= MSG_MORE | MSG_DONTWAIT | MSG_NOSIGNAL | MSG_FASTOPEN;/*忽略掉不认识的flags*/
 
 	lock_sock(sk);
 
@@ -1757,7 +1764,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		     msg->msg_flags & MSG_FASTOPEN)) {
 		int copied_syn = 0;
 
-		ret = mptcp_sendmsg_fastopen(sk, msg, len, &copied_syn);
+		ret = mptcp_sendmsg_fastopen(sk, msg, len/*要发送的长度*/, &copied_syn);
 		copied += copied_syn;
 		if (ret == -EINPROGRESS && copied_syn > 0)
 			goto out;
@@ -1765,7 +1772,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			goto do_error;
 	}
 
-	timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+	timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);/*超时时间*/
 
 	if ((1 << sk->sk_state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT)) {
 		ret = sk_stream_wait_connect(sk, &timeo);
@@ -1775,7 +1782,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 
 	ret = -EPIPE;
 	if (unlikely(sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN)))
-		goto do_error;
+		goto do_error;/*socket出错*/
 
 	pfrag = sk_page_frag(sk);
 
@@ -1789,6 +1796,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		/* ensure fitting the notsent_lowat() constraint */
 		copy_limit = mptcp_send_limit(sk);
 		if (!copy_limit)
+			/*limit不足*/
 			goto wait_for_memory;
 
 		/* reuse tail pfrag, if possible, or carve a new one from the
@@ -1808,7 +1816,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		 * memory accounting will prevent execessive memory usage
 		 * anyway
 		 */
-		offset = dfrag->offset + dfrag->data_len;
+		offset = dfrag->offset + dfrag->data_len;/*偏移量*/
 		psize = pfrag->size - offset;
 		psize = min_t(size_t, psize, msg_data_left(msg));
 		psize = min_t(size_t, psize, copy_limit);
@@ -1817,8 +1825,8 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		if (!sk_wmem_schedule(sk, total_ts))
 			goto wait_for_memory;
 
-		ret = do_copy_data_nocache(sk, psize, &msg->msg_iter,
-					   page_address(dfrag->page) + offset);
+		ret = do_copy_data_nocache(sk, psize, &msg->msg_iter/*数据来源*/,
+					   page_address(dfrag->page) + offset/*数据目标*/);
 		if (ret)
 			goto do_error;
 
@@ -1836,7 +1844,7 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		sk_wmem_queued_add(sk, frag_truesize);
 		if (!dfrag_collapsed) {
 			get_page(dfrag->page);
-			list_add_tail(&dfrag->list, &msk->rtx_queue);
+			list_add_tail(&dfrag->list, &msk->rtx_queue);/*添加进msk->rtx_queue*/
 			if (!msk->first_pending)
 				WRITE_ONCE(msk->first_pending, dfrag);
 		}
@@ -1848,14 +1856,14 @@ static int mptcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 
 wait_for_memory:
 		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
-		__mptcp_push_pending(sk, msg->msg_flags);
+		__mptcp_push_pending(sk, msg->msg_flags);/*添加发送内容*/
 		ret = sk_stream_wait_memory(sk, &timeo);
 		if (ret)
 			goto do_error;
 	}
 
 	if (copied)
-		__mptcp_push_pending(sk, msg->msg_flags);
+		__mptcp_push_pending(sk, msg->msg_flags);/*添加发送内容*/
 
 out:
 	release_sock(sk);
@@ -1873,7 +1881,7 @@ static void mptcp_rcv_space_adjust(struct mptcp_sock *msk, int copied);
 
 static int __mptcp_recvmsg_mskq(struct sock *sk,
 				struct msghdr *msg,
-				size_t len, int flags,
+				size_t len/*期待获取的总长度*/, int flags,
 				struct scm_timestamping_internal *tss,
 				int *cmsg_flags)
 {
@@ -1881,14 +1889,15 @@ static int __mptcp_recvmsg_mskq(struct sock *sk,
 	struct sk_buff *skb, *tmp;
 	int copied = 0;
 
-	skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
+	/*取sk_receive_queue队列上的内容*/
+	skb_queue_walk_safe(&sk->sk_receive_queue, skb/*当前待处理*/, tmp/*下一个*/) {
 		u32 offset = MPTCP_SKB_CB(skb)->offset;
-		u32 data_len = skb->len - offset;
+		u32 data_len = skb->len - offset;/*本段内容长度*/
 		u32 count = min_t(size_t, len - copied, data_len);
 		int err;
 
 		if (!(flags & MSG_TRUNC)) {
-			err = skb_copy_datagram_msg(skb, offset, msg, count);
+			err = skb_copy_datagram_msg(skb, offset, msg, count);/*填充到msg*/
 			if (unlikely(err < 0)) {
 				if (!copied)
 					return err;
@@ -1923,7 +1932,7 @@ static int __mptcp_recvmsg_mskq(struct sock *sk,
 		}
 
 		if (copied >= len)
-			break;
+			break;/*复制完成*/
 	}
 
 	mptcp_rcv_space_adjust(msk, copied);
@@ -2131,7 +2140,7 @@ static int mptcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		goto out_err;
 	}
 
-	timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
+	timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);/*取超时时间*/
 
 	len = min_t(size_t, len, INT_MAX);
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
@@ -2139,7 +2148,7 @@ static int mptcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	if (unlikely(msk->recvmsg_inq))
 		cmsg_flags = MPTCP_CMSG_INQ;
 
-	while (copied < len) {
+	while (copied/*已复制内容*/ < len/*期待获取的总长度*/) {
 		int err, bytes_read;
 
 		bytes_read = __mptcp_recvmsg_mskq(sk, msg, len - copied, flags, &tss, &cmsg_flags);
@@ -2228,6 +2237,7 @@ out_err:
 	return copied;
 }
 
+/*mptcp重传定时器回调*/
 static void mptcp_retransmit_timer(struct timer_list *t)
 {
 	struct inet_connection_sock *icsk = timer_container_of(icsk, t,
@@ -2630,7 +2640,7 @@ static void __mptcp_retrans(struct sock *sk)
 			}
 
 			while (info.sent < info.limit) {
-				ret = mptcp_sendmsg_frag(sk, ssk, dfrag, &info);
+				ret = mptcp_sendmsg_frag(sk, ssk, dfrag, &info);/*发送分片*/
 				if (ret <= 0)
 					break;
 
@@ -2723,7 +2733,7 @@ static void mptcp_worker(struct work_struct *work)
 
 	mptcp_check_fastclose(msk);
 
-	mptcp_pm_worker(msk);
+	mptcp_pm_worker(msk);/*路径管理*/
 
 	mptcp_check_send_data_fin(sk);
 	mptcp_check_data_fin_ack(sk);
@@ -2782,7 +2792,7 @@ static void __mptcp_init_sock(struct sock *sk)
 	spin_lock_init(&msk->fallback_lock);
 
 	/* re-use the csk retrans timer for MPTCP-level retrans */
-	timer_setup(&msk->sk.icsk_retransmit_timer, mptcp_retransmit_timer, 0);
+	timer_setup(&msk->sk.icsk_retransmit_timer, mptcp_retransmit_timer, 0);/*设置mptcp重传定时器*/
 	timer_setup(&sk->sk_timer, mptcp_tout_timer, 0);
 }
 
@@ -2876,7 +2886,7 @@ void mptcp_subflow_shutdown(struct sock *sk, struct sock *ssk, int how)
 			mptcp_schedule_work(sk);
 		} else {
 			pr_debug("Sending DATA_FIN on subflow %p\n", ssk);
-			tcp_send_ack(ssk);
+			tcp_send_ack(ssk);/*发送ack*/
 			if (!mptcp_rtx_timer_pending(sk))
 				mptcp_reset_rtx_timer(sk);
 		}
@@ -2954,6 +2964,7 @@ static void mptcp_check_send_data_fin(struct sock *sk)
 
 	WRITE_ONCE(msk->snd_nxt, msk->write_seq);
 
+	/*遍历每个subflow*/
 	mptcp_for_each_subflow(msk, subflow) {
 		struct sock *tcp_sk = mptcp_subflow_tcp_sock(subflow);
 
@@ -3775,9 +3786,9 @@ static struct proto mptcp_prot = {
 	.getsockopt	= mptcp_getsockopt,
 	.shutdown	= mptcp_shutdown,
 	.destroy	= mptcp_destroy,
-	.sendmsg	= mptcp_sendmsg,
+	.sendmsg	= mptcp_sendmsg,/*mptcp消息发送*/
 	.ioctl		= mptcp_ioctl,
-	.recvmsg	= mptcp_recvmsg,
+	.recvmsg	= mptcp_recvmsg,/*mptcp消息收取*/
 	.release_cb	= mptcp_release_cb,
 	//注册socket
 	.hash		= mptcp_hash,
@@ -4030,7 +4041,7 @@ static const struct proto_ops mptcp_stream_ops = {
 	.shutdown	   = inet_shutdown,
 	.setsockopt	   = sock_common_setsockopt,
 	.getsockopt	   = sock_common_getsockopt,
-	.sendmsg	   = inet_sendmsg,
+	.sendmsg	   = inet_sendmsg,/*mptcp v6 stream报文发送*/
 	.recvmsg	   = inet_recvmsg,
 	.mmap		   = sock_no_mmap,
 	.set_rcvlowat	   = mptcp_set_rcvlowat,
@@ -4133,8 +4144,8 @@ static const struct proto_ops mptcp_v6_stream_ops = {
 	.shutdown	   = inet_shutdown,
 	.setsockopt	   = sock_common_setsockopt,
 	.getsockopt	   = sock_common_getsockopt,
-	.sendmsg	   = inet6_sendmsg,
-	.recvmsg	   = inet6_recvmsg,
+	.sendmsg	   = inet6_sendmsg,/*报文发送（过门函数）*/
+	.recvmsg	   = inet6_recvmsg,/*报文发送（过门函数，调用prot->recvmsg完成）*/
 	.mmap		   = sock_no_mmap,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	   = inet6_compat_ioctl,
@@ -4145,10 +4156,10 @@ static const struct proto_ops mptcp_v6_stream_ops = {
 static struct proto mptcp_v6_prot;
 
 static struct inet_protosw mptcp_v6_protosw = {
-	.type		= SOCK_STREAM,
-	.protocol	= IPPROTO_MPTCP,
-	.prot		= &mptcp_v6_prot,
-	.ops		= &mptcp_v6_stream_ops,
+	.type		= SOCK_STREAM,/*流式类型*/
+	.protocol	= IPPROTO_MPTCP,/*指明协议号mptcp*/
+	.prot		= &mptcp_v6_prot,/*具体实现mptcp支持的api函数*/
+	.ops		= &mptcp_v6_stream_ops,/*定义socket api函数*/
 	.flags		= INET_PROTOSW_ICSK,
 };
 
@@ -4156,17 +4167,17 @@ int __init mptcp_proto_v6_init(void)
 {
 	int err;
 
-	mptcp_v6_prot = mptcp_prot;
+	mptcp_v6_prot = mptcp_prot;/*设置mptcpv6*/
 	strscpy(mptcp_v6_prot.name, "MPTCPv6", sizeof(mptcp_v6_prot.name));
 	mptcp_v6_prot.slab = NULL;
 	mptcp_v6_prot.obj_size = sizeof(struct mptcp6_sock);
 	mptcp_v6_prot.ipv6_pinfo_offset = offsetof(struct mptcp6_sock, np);
 
-	err = proto_register(&mptcp_v6_prot, 1);
+	err = proto_register(&mptcp_v6_prot, 1);/*注册mptcp v6协议*/
 	if (err)
 		return err;
 
-	err = inet6_register_protosw(&mptcp_v6_protosw);
+	err = inet6_register_protosw(&mptcp_v6_protosw);/*注册mptcp raw协议*/
 	if (err)
 		proto_unregister(&mptcp_v6_prot);
 

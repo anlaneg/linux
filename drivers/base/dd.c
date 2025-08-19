@@ -1161,6 +1161,7 @@ int device_driver_attach(const struct device_driver *drv, struct device *dev)
 	int ret;
 
 	__device_driver_lock(dev, dev->parent);
+	/*驱动尝试probe设备*/
 	ret = __driver_probe_device(drv/*设备驱动*/, dev/*设备*/);
 	__device_driver_unlock(dev, dev->parent);
 

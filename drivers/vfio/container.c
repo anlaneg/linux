@@ -17,7 +17,7 @@
 
 struct vfio_container {
 	struct kref			kref;
-	struct list_head		group_list;/*用于串连多个group,一个container可以有多个group*/
+	struct list_head		group_list;/*用于串连多个group,一个container可以关联到多个group*/
 	struct rw_semaphore		group_lock;
 	struct vfio_iommu_driver	*iommu_driver;/*此container关联的iommu_driver*/
 	void				*iommu_data;
@@ -86,7 +86,7 @@ static bool vfio_iommu_driver_allowed(struct vfio_container *container,
 				      const struct vfio_iommu_driver *driver)
 {
 	if (!IS_ENABLED(CONFIG_VFIO_NOIOMMU))
-		return true;
+		return true;/*没有开启noiommu,则容许*/
 	return container->noiommu == (driver->ops == &vfio_noiommu_ops);
 }
 
@@ -119,7 +119,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 		}
 	}
 
-	list_add(&driver->vfio_next, &vfio.iommu_drivers_list);
+	list_add(&driver->vfio_next, &vfio.iommu_drivers_list);/*注册iommu driver*/
 
 	mutex_unlock(&vfio.iommu_drivers_lock);
 
@@ -215,7 +215,6 @@ vfio_container_ioctl_check_extension(struct vfio_container *container,
 			mutex_lock(&vfio.iommu_drivers_lock);
 			list_for_each_entry(driver, &vfio.iommu_drivers_list,
 					    vfio_next) {
-
 				if (!list_empty(&container->group_list) &&
 				    !vfio_iommu_driver_allowed(container,
 							       driver))
@@ -251,7 +250,7 @@ static int __vfio_container_attach_groups(struct vfio_container *container,
 	struct vfio_group *group;
 	int ret = -ENODEV;
 
-	/*遍历每一个group，调用attach_group*/
+	/*此container被多个vfio-group引用，遍历每一个group，调用attach_group*/
 	list_for_each_entry(group, &container->group_list, container_next) {
 		ret = driver->ops->attach_group(data, group->iommu_group,
 						group->type);
@@ -288,7 +287,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 	 */
 	if (list_empty(&container->group_list) || container->iommu_driver) {
 		up_write(&container->group_lock);
-		return -EINVAL;
+		return -EINVAL;/*未设置container fd或者iommu_driver已设置*/
 	}
 
 	mutex_lock(&vfio.iommu_drivers_lock);
@@ -296,7 +295,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 		void *data;
 
 		if (!vfio_iommu_driver_allowed(container, driver))
-			continue;
+			continue;/*不容许，忽略*/
 		if (!try_module_get(driver->ops->owner))
 			continue;
 
@@ -313,7 +312,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 			continue;
 		}
 
-		/*调用open回调*/
+		/*调用open回调,创建vfio-iommu*/
 		data = driver->ops->open(arg);
 		if (IS_ERR(data)) {
 			ret = PTR_ERR(data);
@@ -343,6 +342,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 static long vfio_fops_unl_ioctl(struct file *filep,
 				unsigned int cmd, unsigned long arg)
 {
+	/*取得此文件对应的vfio-container*/
 	struct vfio_container *container = filep->private_data;
 	struct vfio_iommu_driver *driver;
 	void *data;
@@ -357,11 +357,11 @@ static long vfio_fops_unl_ioctl(struct file *filep,
 		ret = VFIO_API_VERSION;
 		break;
 	case VFIO_CHECK_EXTENSION:
-		/*检查是否支持指定扩展*/
+		/*检查container是否支持指定扩展*/
 		ret = vfio_container_ioctl_check_extension(container, arg);
 		break;
 	case VFIO_SET_IOMMU:
-		/*设置iommu driver*/
+		/*为container设置iommu driver*/
 		ret = vfio_ioctl_set_iommu(container, arg);
 		break;
 	default:
@@ -419,9 +419,9 @@ struct vfio_container *vfio_container_from_file(struct file *file)
 
 	/* Sanity check, is this really our fd? */
 	if (file->f_op != &vfio_fops)
-		return NULL;
+		return NULL;/*file必须为vfio文件*/
 
-	container = file->private_data;
+	container = file->private_data;/*取得container*/
 	WARN_ON(!container); /* fget ensures we don't race vfio_release */
 	return container;
 }
@@ -430,11 +430,12 @@ struct vfio_container *vfio_container_from_file(struct file *file)
 static struct miscdevice vfio_dev = {
 	.minor = VFIO_MINOR,
 	.name = "vfio",
-	.fops = &vfio_fops,
+	.fops = &vfio_fops,/*vfio文件对应的fops*/
 	.nodename = "vfio/vfio",
 	.mode = S_IRUGO | S_IWUGO,
 };
 
+/*设置group关联的container(一个group可以有一个container,但一个container可以有多个group)*/
 int vfio_container_attach_group(struct vfio_container *container,
 				struct vfio_group *group)
 {
@@ -456,6 +457,7 @@ int vfio_container_attach_group(struct vfio_container *container,
 	}
 
 	if (group->type == VFIO_IOMMU) {
+		/*此group为物理iommu*/
 		ret = iommu_group_claim_dma_owner(group->iommu_group, group);
 		if (ret)
 			goto out_unlock_container;

@@ -1318,6 +1318,7 @@ static int mptcp_getsockopt_full_info(struct mptcp_sock *msk, char __user *optva
 	tcpinfoptr = u64_to_user_ptr(mfi.tcp_info);
 
 	lock_sock(sk);
+	/*遍历subflow*/
 	mptcp_for_each_subflow(msk, subflow) {
 		struct sock *ssk = mptcp_subflow_tcp_sock(subflow);
 		struct mptcp_subflow_info sfinfo;
@@ -1330,7 +1331,7 @@ static int mptcp_getsockopt_full_info(struct mptcp_sock *msk, char __user *optva
 		 * are wide enough
 		 */
 		memset(&sfinfo, 0, sizeof(sfinfo));
-		sfinfo.id = subflow->subflow_id;
+		sfinfo.id = subflow->subflow_id;/*取subflow id*/
 		if (mfi.size_sfinfo_user >
 		    offsetof(struct mptcp_subflow_info, addrs))
 			mptcp_get_sub_addrs(ssk, &sfinfo.addrs);

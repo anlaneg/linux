@@ -114,6 +114,7 @@ found_get_ref:
 }
 EXPORT_SYMBOL_GPL(vfio_assign_device_set);
 
+//iommu_group的put函数，用于释放引用
 static void vfio_release_device_set(struct vfio_device *device)
 {
 	struct vfio_device_set *dev_set = device->dev_set;
@@ -213,7 +214,7 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
  *
  * Use vfio_put_device() to release the structure after success return.
  */
-struct vfio_device *_vfio_alloc_device(size_t size/*私有结构大小*/, struct device *dev,
+struct vfio_device *_vfio_alloc_device(size_t size/*私有结构大小*/, struct device *dev/*目标设备*/,
 				       const struct vfio_device_ops *ops/*设备的ops*/)
 {
 	struct vfio_device *device;
@@ -285,7 +286,7 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
 		return ret;
 	}
 
-	device->index = ret;/*设置设备编号*/
+	device->index = ret;/*设置vfio-device编号*/
 	init_completion(&device->comp);
 	device->dev = dev;
 	device->ops = ops;
@@ -1372,7 +1373,7 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	return device->ops->mmap(device, vma);
 }
 
-/*vfio-device关联的字符设备(/dev/vfio/device/ *)对应的fops*/
+/*vfio-device关联的字符设备(/dev/vfio/device/*)对应的fops*/
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,

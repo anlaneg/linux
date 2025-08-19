@@ -3925,7 +3925,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	/* See if we can take anything off of the retransmit queue. */
 	flag |= tcp_clean_rtx_queue(sk, skb, prior_fack, prior_snd_una,
-				    &sack_state, flag & FLAG_ECE);
+				    &sack_state, flag & FLAG_ECE);/*收到ack,清理重传队列*/
 
 	tcp_rack_update_reo_wnd(sk, &rs);
 
@@ -4495,6 +4495,7 @@ void tcp_reset(struct sock *sk, struct sk_buff *skb)
 	 * so just ignore the return value of mptcp_incoming_options().
 	 */
 	if (sk_is_mptcp(sk))
+		/*针对mptcp socket,解析mptcp选项*/
 		mptcp_incoming_options(sk, skb);
 
 	/* We want the right error as BSD sees it (and indeed as we do). */
@@ -5211,6 +5212,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	 * to be processed, drop the packet.
 	 */
 	if (sk_is_mptcp(sk) && !mptcp_incoming_options(sk, skb)) {
+		/*针对mptcp socket解析mptcp选项失败*/
 		__kfree_skb(skb);
 		return;
 	}
@@ -5220,7 +5222,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		return;
 	}
 	tcp_cleanup_skb(skb);
-	__skb_pull(skb, tcp_hdr(skb)->doff * 4);
+	__skb_pull(skb, tcp_hdr(skb)->doff * 4);/*剥掉tcp header*/
 
 	reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	tp->rx_opt.dsack = 0;
@@ -5263,10 +5265,11 @@ queue_and_out:
 			sk_forced_mem_schedule(sk, skb->truesize);
 		}
 
-		eaten = tcp_queue_rcv(sk, skb, &fragstolen);
+		eaten = tcp_queue_rcv(sk, skb, &fragstolen);/*报文入队*/
 		if (skb->len)
 			tcp_event_data_recv(sk, skb);
 		if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+			/*报文中包含fin标记*/
 			tcp_fin(sk);
 
 		if (!RB_EMPTY_ROOT(&tp->out_of_order_queue)) {
@@ -5287,7 +5290,7 @@ queue_and_out:
 		if (eaten > 0)
 			kfree_skb_partial(skb, fragstolen);
 		if (!sock_flag(sk, SOCK_DEAD))
-			tcp_data_ready(sk);
+			tcp_data_ready(sk);/*触发sk_data_ready通知socket有数据*/
 		return;
 	}
 
@@ -6986,6 +6989,7 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			 * continue to be processed, drop the packet.
 			 */
 			if (sk_is_mptcp(sk) && !mptcp_incoming_options(sk, skb))
+				/*针对mptcp socket，解析mptcp选项失败，丢包*/
 				goto discard;
 			break;
 		}

@@ -304,7 +304,7 @@ static int dmar_pci_bus_add_dev(struct dmar_pci_notify_info *info)
 
 	for_each_drhd_unit(dmaru) {
 		if (dmaru->include_all)
-			continue;
+			continue;/*包含所有设备，就不必加了*/
 
 		drhd = container_of(dmaru->hdr,
 				    struct acpi_dmar_hardware_unit, header);
@@ -871,7 +871,7 @@ int __init dmar_table_init(void)
 	int ret;
 
 	if (dmar_table_initialized == 0) {
-		/*未执行初始化，解析dmar table，注册iommu设备*/
+		/*未执行初始化，解析dmar table，申请iommu设备,构建dmar_drhd_units链表*/
 		ret = parse_dmar_table();
 		if (ret < 0) {
 			if (ret != -ENODEV)

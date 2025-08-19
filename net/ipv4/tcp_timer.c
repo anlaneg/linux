@@ -554,7 +554,7 @@ void tcp_retransmit_timer(struct sock *sk)
 	if (!tp->packets_out)
 		return;
 
-	skb = tcp_rtx_queue_head(sk);
+	skb = tcp_rtx_queue_head(sk);/*取得重传header*/
 	if (WARN_ON_ONCE(!skb))
 		return;
 

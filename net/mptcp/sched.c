@@ -22,8 +22,10 @@ static int mptcp_sched_default_get_send(struct mptcp_sock *msk)
 
 	ssk = mptcp_subflow_get_send(msk);
 	if (!ssk)
+		/*未选择出send socket*/
 		return -EINVAL;
 
+	/*指明此socket已被调度*/
 	mptcp_subflow_set_scheduled(mptcp_subflow_ctx(ssk), true);
 	return 0;
 }
@@ -159,6 +161,7 @@ void mptcp_release_sched(struct mptcp_sock *msk)
 	bpf_module_put(sched, sched->owner);
 }
 
+/*指明此subflow已被调度*/
 void mptcp_subflow_set_scheduled(struct mptcp_subflow_context *subflow,
 				 bool scheduled)
 {
@@ -189,7 +192,7 @@ int mptcp_sched_get_send(struct mptcp_sock *msk)
 
 	if (msk->sched == &mptcp_sched_default || !msk->sched)
 		return mptcp_sched_default_get_send(msk);
-	return msk->sched->get_send(msk);
+	return msk->sched->get_send(msk);/*取得可发送的socket(遍历subflow选择）*/
 }
 
 int mptcp_sched_get_retrans(struct mptcp_sock *msk)

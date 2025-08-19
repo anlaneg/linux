@@ -498,6 +498,7 @@ int bpf_map_delete_elem_flags(int fd, const void *key, __u64 flags)
 	return libbpf_err_errno(ret);
 }
 
+/*取下一个key(用于key遍历）*/
 int bpf_map_get_next_key(int fd, const void *key, void *next_key)
 {
 	const size_t attr_sz = offsetofend(union bpf_attr, next_key);
@@ -506,10 +507,10 @@ int bpf_map_get_next_key(int fd, const void *key, void *next_key)
 
 	memset(&attr, 0, attr_sz);
 	attr.map_fd = fd;
-	attr.key = ptr_to_u64(key);
-	attr.next_key = ptr_to_u64(next_key);
+	attr.key = ptr_to_u64(key);/*当前key指针*/
+	attr.next_key = ptr_to_u64(next_key);/*下一个key指针*/
 
-	ret = sys_bpf(BPF_MAP_GET_NEXT_KEY, &attr, attr_sz);
+	ret = sys_bpf(BPF_MAP_GET_NEXT_KEY, &attr, attr_sz);/*要求获取下一个key*/
 	return libbpf_err_errno(ret);
 }
 

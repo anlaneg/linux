@@ -259,7 +259,7 @@ static ssize_t unbind_store(struct device_driver *drv, const char *buf,
 	return err;
 }
 
-/*创建名称为unbind的dirver attribute*/
+/*创建名称为unbind的driver attribute*/
 static DRIVER_ATTR_IGNORE_LOCKDEP(unbind, 0200, NULL/*不支持show*/, unbind_store);
 
 /*
@@ -277,7 +277,7 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 	/*通过名称在bus上查找设备*/
 	dev = bus_find_device_by_name(bus, NULL, buf);
 	if (dev && driver_match_device(drv, dev)/*设备不为空，且驱动可以匹配此设备*/) {
-		err = device_driver_attach(drv, dev);/*尝试匹配此设备*/
+		err = device_driver_attach(drv, dev);/*尝试probe此设备*/
 		if (!err) {
 			/* success */
 			err = count;
@@ -288,7 +288,7 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 	return err;
 }
 
-/*创建名称为bind的dirver attribute,支持手动绑定驱动*/
+/*创建名称为bind的driver attribute,支持手动绑定驱动*/
 static DRIVER_ATTR_IGNORE_LOCKDEP(bind, 0200, NULL, bind_store);
 
 static ssize_t drivers_autoprobe_show(const struct bus_type *bus, char *buf)
@@ -372,7 +372,7 @@ static struct device *next_device(struct klist_iter *i)
  */
 //遍历bus中所有device,执行回调fn
 int bus_for_each_dev(const struct bus_type *bus, struct device *start,
-		     void *data, device_iter_t fn)
+		     void *data/*遍历函数参数*/, device_iter_t fn/*遍历函数*/)
 {
 	struct subsys_private *sp = bus_to_subsys(bus);
 	struct klist_iter i;
@@ -615,6 +615,7 @@ void bus_remove_device(struct device *dev)
 	subsys_put(sp);
 }
 
+//驱动没有禁止通过sysfs绑定设备，创建对应的unbind,bind文件
 static int __must_check add_bind_files(struct device_driver *drv)
 {
 	int ret;
@@ -728,12 +729,13 @@ int bus_add_driver(struct device_driver *drv)
 		goto out_detach;
 	}
 
-	//创建driver对应的文件
+	//创建driver uevent属性对应的文件
 	error = driver_create_file(drv, &driver_attr_uevent);
 	if (error) {
 		printk(KERN_ERR "%s: uevent attr (%s) failed\n",
 			__func__, drv->name);
 	}
+
 	//为driver添加bus规定的一组属性
 	error = driver_add_groups(drv, sp->bus->drv_groups);
 	if (error) {

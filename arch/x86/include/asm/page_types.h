@@ -49,6 +49,7 @@
 extern phys_addr_t physical_mask;
 #define __PHYSICAL_MASK		physical_mask
 #else
+/*物理地址mask*/
 #define __PHYSICAL_MASK		((phys_addr_t)((1ULL << __PHYSICAL_MASK_SHIFT) - 1))
 #endif
 

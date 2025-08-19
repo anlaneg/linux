@@ -2445,6 +2445,7 @@ int __init tcpv6_init(void)
 	if (ret)
 		goto out_tcpv6_protosw;
 
+	/*mptcp v6初始化*/
 	ret = mptcpv6_init();
 	if (ret)
 		goto out_tcpv6_pernet_subsys;

@@ -738,7 +738,7 @@ static inline void tcp_add_receive_queue(struct sock *sk, struct sk_buff *skb)
 {
 	DEBUG_NET_WARN_ON_ONCE(skb_dst(skb));
 	DEBUG_NET_WARN_ON_ONCE(secpath_exists(skb));
-	__skb_queue_tail(&sk->sk_receive_queue, skb);
+	__skb_queue_tail(&sk->sk_receive_queue, skb);/*报文添加到receive queue*/
 }
 
 /* tcp_timer.c */
@@ -1511,7 +1511,7 @@ static inline unsigned long tcp_pacing_delay(const struct sock *sk)
 }
 
 static inline void tcp_reset_xmit_timer(struct sock *sk,
-					const int what,
+					const int what/*哪种timer*/,
 					unsigned long when,
 					bool pace_delay)
 {
@@ -2088,7 +2088,7 @@ void tcp_write_queue_purge(struct sock *sk);
 
 static inline struct sk_buff *tcp_rtx_queue_head(const struct sock *sk)
 {
-	return skb_rb_first(&sk->tcp_rtx_queue);
+	return skb_rb_first(&sk->tcp_rtx_queue);/*取得重传header*/
 }
 
 static inline struct sk_buff *tcp_rtx_queue_tail(const struct sock *sk)
@@ -2105,6 +2105,7 @@ static inline struct sk_buff *tcp_write_queue_tail(const struct sock *sk)
 #define tcp_for_write_queue_from_safe(skb, tmp, sk)			\
 	skb_queue_walk_from_safe(&(sk)->sk_write_queue, skb, tmp)
 
+/*取待发送的buffer*/
 static inline struct sk_buff *tcp_send_head(const struct sock *sk)
 {
 	return skb_peek(&sk->sk_write_queue);
@@ -2142,7 +2143,7 @@ static inline bool tcp_rtx_and_write_queues_empty(const struct sock *sk)
 
 static inline void tcp_add_write_queue_tail(struct sock *sk, struct sk_buff *skb)
 {
-	__skb_queue_tail(&sk->sk_write_queue, skb);
+	__skb_queue_tail(&sk->sk_write_queue, skb);/*将skb写入到queue*/
 
 	/* Queue it, remembering where we must start sending. */
 	if (sk->sk_write_queue.next == skb)

@@ -499,10 +499,10 @@ static bool mptcp_pm_schedule_work(struct mptcp_sock *msk,
 	pr_debug("msk=%p status=%x new=%lx\n", msk, msk->pm.status,
 		 BIT(new_status));
 	if (msk->pm.status & BIT(new_status))
-		return false;
+		return false;/*无需更新*/
 
-	msk->pm.status |= BIT(new_status);
-	mptcp_schedule_work((struct sock *)msk);
+	msk->pm.status |= BIT(new_status);/*变更状态*/
+	mptcp_schedule_work((struct sock *)msk);/*促使worker运行*/
 	return true;
 }
 
@@ -605,6 +605,7 @@ void mptcp_pm_add_addr_received(const struct sock *ssk,
 	spin_lock_bh(&pm->lock);
 
 	if (mptcp_pm_is_userspace(msk)) {
+		/*用户态管理path*/
 		if (mptcp_userspace_pm_active(msk)) {
 			mptcp_pm_announce_addr(msk, addr, true);
 			mptcp_pm_add_addr_send_ack(msk);
@@ -788,7 +789,7 @@ void mptcp_pm_mp_fail_received(struct sock *sk, u64 fail_seq)
 
 bool mptcp_pm_add_addr_signal(struct mptcp_sock *msk, const struct sk_buff *skb,
 			      unsigned int opt_size, unsigned int remaining,
-			      struct mptcp_addr_info *addr, bool *echo,
+			      struct mptcp_addr_info *addr/*出参，地址信息*/, bool *echo,
 			      bool *drop_other_suboptions)
 {
 	int ret = false;
@@ -819,10 +820,10 @@ bool mptcp_pm_add_addr_signal(struct mptcp_sock *msk, const struct sk_buff *skb,
 		goto out_unlock;
 
 	if (*echo) {
-		*addr = msk->pm.remote;
+		*addr = msk->pm.remote;/*填写源端地址及port*/
 		add_addr = msk->pm.addr_signal & ~BIT(MPTCP_ADD_ADDR_ECHO);
 	} else {
-		*addr = msk->pm.local;
+		*addr = msk->pm.local;/*填写本端地址及port*/
 		add_addr = msk->pm.addr_signal & ~BIT(MPTCP_ADD_ADDR_SIGNAL);
 	}
 	WRITE_ONCE(msk->pm.addr_signal, add_addr);
@@ -955,6 +956,7 @@ void mptcp_pm_subflow_chk_stale(const struct mptcp_sock *msk, struct sock *ssk)
 	}
 }
 
+/*路径管理worker*/
 void mptcp_pm_worker(struct mptcp_sock *msk)
 {
 	struct mptcp_pm_data *pm = &msk->pm;

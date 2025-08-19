@@ -78,7 +78,7 @@ MODULE_LICENSE("GPL");
 /* The inetsw6 table contains everything that inet6_create needs to
  * build a new socket.
  */
-static struct list_head inetsw6[SOCK_MAX];
+static struct list_head inetsw6[SOCK_MAX];/*记录v6所有协议，按type进行分类*/
 static DEFINE_SPINLOCK(inetsw6_lock);
 
 struct ipv6_params ipv6_defaults = {
@@ -117,8 +117,9 @@ void inet6_sock_destruct(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet6_sock_destruct);
 
+/*创建socket*/
 static int inet6_create(struct net *net, struct socket *sock, int protocol,
-			int kern)
+			int kern/*是否kernel 调用*/)
 {
 	struct inet_sock *inet;
 	struct ipv6_pinfo *np;
@@ -130,19 +131,21 @@ static int inet6_create(struct net *net, struct socket *sock, int protocol,
 	int err;
 
 	if (protocol < 0 || protocol >= IPPROTO_MAX)
+		/*协议有误*/
 		return -EINVAL;
 
 	/* Look for the requested type/protocol pair. */
 lookup_protocol:
 	err = -ESOCKTNOSUPPORT;
 	rcu_read_lock();
+	/*查找answer*/
 	list_for_each_entry_rcu(answer, &inetsw6[sock->type], list) {
 
 		err = 0;
 		/* Check the non-wild match. */
 		if (protocol == answer->protocol) {
 			if (protocol != IPPROTO_IP)
-				break;
+				break;/*协议相同，且协议非IPPROTO_IP*/
 		} else {
 			/* Check for the two wild cases. */
 			if (IPPROTO_IP == protocol) {
@@ -152,10 +155,11 @@ lookup_protocol:
 			if (IPPROTO_IP == answer->protocol)
 				break;
 		}
-		err = -EPROTONOSUPPORT;
+		err = -EPROTONOSUPPORT;/*协议不支持备选*/
 	}
 
 	if (err) {
+		/*没有找到对应的协议，加载ko再尝试*/
 		if (try_loading_module < 2) {
 			rcu_read_unlock();
 			/*
@@ -182,13 +186,14 @@ lookup_protocol:
 	    !ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out_rcu_unlock;
 
-	sock->ops = answer->ops;
+	sock->ops = answer->ops;/*设置命中的协议ops*/
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
 	rcu_read_unlock();
 
 	WARN_ON(!answer_prot->slab);
 
+	/*利用命中的prot申请创建socket*/
 	err = -ENOBUFS;
 	sk = sk_alloc(net, PF_INET6, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
@@ -660,6 +665,7 @@ EXPORT_SYMBOL_GPL(inet6_compat_ioctl);
 
 INDIRECT_CALLABLE_DECLARE(int udpv6_sendmsg(struct sock *, struct msghdr *,
 					    size_t));
+/*此函数实现为通过sk->sk_prot中指定的sendmsg进行调用*/
 int inet6_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
 	struct sock *sk = sock->sk;
@@ -676,6 +682,7 @@ int inet6_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 INDIRECT_CALLABLE_DECLARE(int udpv6_recvmsg(struct sock *, struct msghdr *,
 					    size_t, int, int *));
+/*inet6报文收取，过门函数，具体通过prot->recvmsg完成*/
 int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 		  int flags)
 {
@@ -781,19 +788,21 @@ int inet6_register_protosw(struct inet_protosw *p)
 	answer = NULL;
 	ret = -EPERM;
 	last_perm = &inetsw6[p->type];
+	/*遍历此协议类型指明的type*/
 	list_for_each(lh, &inetsw6[p->type]) {
 		answer = list_entry(lh, struct inet_protosw, list);
 
 		/* Check only the non-wild match. */
 		if (INET_PROTOSW_PERMANENT & answer->flags) {
 			if (protocol == answer->protocol)
-				break;
+				break;/*type及protocol均与answer相匹配*/
 			last_perm = lh;
 		}
 
 		answer = NULL;
 	}
 	if (answer)
+		/*已存在*/
 		goto out_permanent;
 
 	/* Add the new entry after the last permanent entry if any, so that
@@ -802,7 +811,7 @@ int inet6_register_protosw(struct inet_protosw *p)
 	 * non-permanent entry.  This means that when we remove this entry, the
 	 * system automatically returns to the old behavior.
 	 */
-	list_add_rcu(&p->list, last_perm);
+	list_add_rcu(&p->list, last_perm);/*添加协议*/
 	ret = 0;
 out:
 	spin_unlock_bh(&inetsw6_lock);

@@ -40,12 +40,19 @@
 
 /* MPTCP option subtypes */
 #define MPTCPOPT_MP_CAPABLE	0
+/*用于在已建立的 MPTCP 连接上添加新子流（物理路径），将新的 TCP 连接关联到原有 MPTCP 连接。*/
 #define MPTCPOPT_MP_JOIN	1
+/*标识子流传输的数据在 MPTCP 逻辑连接中的全局位置，确保接收端按顺序重组数据。*/
 #define MPTCPOPT_DSS		2
+/*向对端通告本地可用的额外 IP 地址（如设备的多网卡 IP），帮助对方发现新路径以建立子流。*/
 #define MPTCPOPT_ADD_ADDR	3
+/*通知对端某本地 IP 地址已不可用（如网卡禁用、网络断开），请求对方停止使用该地址建立子流。*/
 #define MPTCPOPT_RM_ADDR	4
+/*标记子流的优先级（如 “高”“中”“低”），用于发送方分配数据时优先选择优质路径。*/
 #define MPTCPOPT_MP_PRIO	5
+/*向对端声明某条子流已故障（如检测到超时、严重丢包），请求双方关闭该子流。*/
 #define MPTCPOPT_MP_FAIL	6
+/*用于快速关闭整个 MPTCP 连接（而非单条子流），同时终止所有子流，避免传统 TCP 四次挥手的延迟。*/
 #define MPTCPOPT_MP_FASTCLOSE	7
 #define MPTCPOPT_RST		8
 
@@ -146,18 +153,18 @@ static inline bool before64(__u64 seq1, __u64 seq2)
 struct mptcp_options_received {
 	u64	sndr_key;
 	u64	rcvr_key;
-	u64	data_ack;
-	u64	data_seq;
-	u32	subflow_seq;
-	u16	data_len;
+	u64	data_ack;/*dsn ack编号*/
+	u64	data_seq;/*dsn 编号*/
+	u32	subflow_seq;/*数据在当前子流中的本地序列号（类似 TCP 的 SEQ），用于子流自身的重传和确认。*/
+	u16	data_len;/*当前数据块的长度（单位：字节），用于接收端确认数据完整性。*/
 	__sum16	csum;
 	struct_group(status,
 		u16 suboptions;
 		u16 use_map:1,
-		    dsn64:1,
+		    dsn64:1,/*是否使用64位dsn*/
 		    data_fin:1,
-		    use_ack:1,
-		    ack64:1,
+		    use_ack:1,/*若置 1，表示携带对端数据的确认信息（接收端已收到的最大 DSN）。*/
+		    ack64:1,/*是否使用64位dsn ack*/
 		    mpc_map:1,
 		    reset_reason:4,
 		    reset_transient:1,
@@ -171,7 +178,7 @@ struct mptcp_options_received {
 	u32	nonce;
 	u64	thmac;
 	u8	hmac[MPTCPOPT_HMAC_LEN];
-	struct mptcp_addr_info addr;
+	struct mptcp_addr_info addr;/*地址信息(ip&port)*/
 	struct mptcp_rm_list rm_list;
 	u64	ahmac;
 	u64	fail_seq;
@@ -217,7 +224,7 @@ enum mptcp_addr_signal_status {
 
 struct mptcp_pm_data {
 	struct mptcp_addr_info local;
-	struct mptcp_addr_info remote;
+	struct mptcp_addr_info remote;/*对端地址*/
 	struct list_head anno_list;
 	struct list_head userspace_pm_local_addr_list;
 
@@ -235,7 +242,7 @@ struct mptcp_pm_data {
 	u8		add_addr_accepted;
 	u8		local_addr_used;
 	u8		pm_type;
-	u8		subflows;
+	u8		subflows;/*subflow总数*/
 	u8		status;
 
 	);
@@ -329,8 +336,8 @@ struct mptcp_sock {
 	int		maxseg;
 	struct work_struct work;
 	struct sk_buff  *ooo_last_skb;
-	struct rb_root  out_of_order_queue;
-	struct list_head conn_list;
+	struct rb_root  out_of_order_queue;/*乱序队列（保存乱序到过的内容）*/
+	struct list_head conn_list;/*用于串连subflow*/
 	struct list_head rtx_queue;
 	struct mptcp_data_frag *first_pending;
 	struct list_head join_list;
@@ -429,14 +436,15 @@ static inline struct mptcp_data_frag *mptcp_send_next(struct sock *sk)
 
 static inline struct mptcp_data_frag *mptcp_pending_tail(const struct sock *sk)
 {
-	const struct mptcp_sock *msk = mptcp_sk(sk);
+	const struct mptcp_sock *msk = mptcp_sk(sk);/*获得mptcp_sock*/
 
 	if (!msk->first_pending)
 		return NULL;
 
 	if (WARN_ON_ONCE(list_empty(&msk->rtx_queue)))
-		return NULL;
+		return NULL;/*链表为空*/
 
+	/*取最后一项*/
 	return list_last_entry(&msk->rtx_queue, struct mptcp_data_frag, list);
 }
 
@@ -575,7 +583,9 @@ struct mptcp_subflow_context {
 				     * protected by the msk socket lock
 				     */
 
+	/*后端tcp socket*/
 	struct	sock *tcp_sock;	    /* tcp sk backpointer */
+	/*从属于具体哪个mptcp socket(connect概念)*/
 	struct	sock *conn;	    /* parent mptcp_sock */
 	const	struct inet_connection_sock_af_ops *icsk_af_ops;
 	void	(*tcp_state_change)(struct sock *sk);
@@ -584,18 +594,20 @@ struct mptcp_subflow_context {
 	struct	rcu_head rcu;
 };
 
+/*由socket获取其对应的subflow*/
 static inline struct mptcp_subflow_context *
 mptcp_subflow_ctx(const struct sock *sk)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 
 	/* Use RCU on icsk_ulp_data only for sock diag code */
-	return (__force struct mptcp_subflow_context *)icsk->icsk_ulp_data;
+	return (__force struct mptcp_subflow_context *)icsk->icsk_ulp_data;/*取私有数据*/
 }
 
 static inline struct sock *
 mptcp_subflow_tcp_sock(const struct mptcp_subflow_context *subflow)
 {
+	/*取subflow对应的后端tcp socket*/
 	return subflow->tcp_sock;
 }
 
@@ -795,6 +807,7 @@ static inline bool mptcp_epollin_ready(const struct sock *sk)
 
 int mptcp_set_rcvlowat(struct sock *sk, int val);
 
+/*检查是否可发送*/
 static inline bool __tcp_can_send(const struct sock *ssk)
 {
 	/* only send if our side has not closed yet */
@@ -883,8 +896,10 @@ u64 __mptcp_expand_seq(u64 old_seq, u64 cur_seq);
 static inline u64 mptcp_expand_seq(u64 old_seq, u64 cur_seq, bool use_64bit)
 {
 	if (use_64bit)
+		/*使用64bit,直接返回当前seq*/
 		return cur_seq;
 
+	/*否则构造当前seq*/
 	return __mptcp_expand_seq(old_seq, cur_seq);
 }
 void __mptcp_check_push(struct sock *sk, struct sock *ssk);
@@ -1203,6 +1218,7 @@ static inline void mptcp_pm_close_subflow(struct mptcp_sock *msk)
 
 void mptcp_sockopt_sync_locked(struct mptcp_sock *msk, struct sock *ssk);
 
+/*取mptcp扩展数据*/
 static inline struct mptcp_ext *mptcp_get_ext(const struct sk_buff *skb)
 {
 	return (struct mptcp_ext *)skb_ext_find(skb, SKB_EXT_MPTCP);

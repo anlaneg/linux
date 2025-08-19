@@ -61,7 +61,7 @@ enum socket_flags {
  * overrides this enum for binary compat reasons.
  */
 enum sock_type {
-	SOCK_STREAM	= 1,
+	SOCK_STREAM	= 1,/*流式*/
 	SOCK_DGRAM	= 2,
 	SOCK_RAW	= 3,
 	SOCK_RDM	= 4,
@@ -122,9 +122,9 @@ struct socket {
 	unsigned long		flags;
 	//socket对应的struct file*结构
 	struct file		*file;
-	//指向它对应的sk
+	//指向它对应的sk(依据type,protocol定制的socket部分）
 	struct sock		*sk;
-	//定义socket相关的函数，例如bind,accept
+	//定义socket api相关的函数，例如bind,accept
 	const struct proto_ops	*ops; /* Might change with IPV6_ADDRFORM or MPTCP. */
 
 	struct socket_wq	wq;

@@ -35,7 +35,7 @@ struct vfio_device_set {
 };
 
 struct vfio_device {
-	struct device *dev;/*关联的设备(device)*/
+	struct device *dev;/*关联的真实设备(device),例如一个pci设备*/
 	const struct vfio_device_ops *ops;/*为virtio-device关联的操作集*/
 	/*
 	 * mig_ops/log_ops is a static property of the vfio_device which must
@@ -64,7 +64,7 @@ struct vfio_device {
 	struct completion comp;
 	struct iommufd_access *iommufd_access;
 	void (*put_kvm)(struct kvm *kvm);
-	struct inode *inode;
+	struct inode *inode;/*为此设备关联的inode*/
 #if IS_ENABLED(CONFIG_IOMMUFD)
 	struct iommufd_device *iommufd_device;
 	struct ida pasids;

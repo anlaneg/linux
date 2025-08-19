@@ -146,6 +146,7 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 
 	/* When driver_override is set, only bind to the matching driver */
 	if (dev->driver_override && strcmp(dev->driver_override, drv->name))
+		/*如果设备被指明了driver_override,则通过检查驱动名称进行匹配*/
 		return NULL;
 
 	/* Look at the dynamic ids first, before the static ones */

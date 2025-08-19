@@ -2120,7 +2120,7 @@ EXPORT_SYMBOL_GPL(vfio_pci_core_release_dev);
 
 int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 {
-	struct pci_dev *pdev = vdev->pdev;
+	struct pci_dev *pdev = vdev->pdev;/*对应的真实pci设备*/
 	struct device *dev = &pdev->dev;
 	int ret;
 
@@ -2157,13 +2157,13 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 * Just reject these PFs and let the user sort it out.
 	 */
 	if (pci_num_vf(pdev)) {
-		/*此设备已有vf的（已开启sriov),报错*/
+		/*此PCI设备已有vf的（已开启sriov),报错*/
 		pci_warn(pdev, "Cannot bind to PF with SR-IOV enabled\n");
 		return -EBUSY;
 	}
 
 	if (pci_is_root_bus(pdev->bus)) {
-		/*pci设备位于root bus*/
+		/*此pci设备位于root bus*/
 		ret = vfio_assign_device_set(&vdev->vdev, vdev);
 	} else if (!pci_probe_reset_slot(pdev->slot)) {
 		ret = vfio_assign_device_set(&vdev->vdev, pdev->slot);
@@ -2202,7 +2202,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	if (!disable_idle_d3)
 		pm_runtime_put(dev);
 
-	/*将设备注册给对应的virtio-group*/
+	/*将vfio-device设备注册给对应的virtio-group*/
 	ret = vfio_register_group_dev(&vdev->vdev);
 	if (ret)
 		goto out_power;

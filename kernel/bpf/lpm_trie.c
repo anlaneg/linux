@@ -24,7 +24,7 @@
 struct lpm_trie_node;
 
 struct lpm_trie_node {
-	struct lpm_trie_node __rcu	*child[2];
+	struct lpm_trie_node __rcu	*child[2];/*匹配不成功时，bit位按0,1分左右树*/
 	u32				prefixlen;
 	u32				flags;
 	u8				data[];
@@ -35,7 +35,7 @@ struct lpm_trie {
 	struct lpm_trie_node __rcu	*root;
 	struct bpf_mem_alloc		ma;
 	size_t				n_entries;
-	size_t				max_prefixlen;
+	size_t				max_prefixlen;/*最长前缀*/
 	size_t				data_size;
 	rqspinlock_t			lock;
 };
@@ -169,10 +169,10 @@ size_t __longest_prefix_match(const struct lpm_trie *trie,
 			      const struct lpm_trie_node *node,
 			      const struct bpf_lpm_trie_key_u8 *key)
 {
-	u32 limit = min(node->prefixlen, key->prefixlen);
+	u32 limit = min(node->prefixlen, key->prefixlen);/*取可匹配前缀长度*/
 	u32 prefixlen = 0, i = 0;
 
-	BUILD_BUG_ON(offsetof(struct lpm_trie_node, data) % sizeof(u32));
+	BUILD_BUG_ON(offsetof(struct lpm_trie_node, data) % sizeof(u32));/*u32对齐*/
 	BUILD_BUG_ON(offsetof(struct bpf_lpm_trie_key_u8, data) % sizeof(u32));
 
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) && defined(CONFIG_64BIT)
@@ -181,18 +181,20 @@ size_t __longest_prefix_match(const struct lpm_trie *trie,
 	 * We do not use a loop for optimal code generation.
 	 */
 	if (trie->data_size >= 8) {
+		/*数组长度大于8字节，采用大端uint64比对*/
 		u64 diff = be64_to_cpu(*(__be64 *)node->data ^
 				       *(__be64 *)key->data);
 
-		prefixlen = 64 - fls64(diff);
+		prefixlen = 64 - fls64(diff);/*前缀长度*/
 		if (prefixlen >= limit)
-			return limit;
+			return limit;/*prefixlen之前均相等，返回limit*/
 		if (diff)
-			return prefixlen;
-		i = 8;
+			return prefixlen;/*返回匹配的前缀长度*/
+		i = 8;/*前8个字节已比对*/
 	}
 #endif
 
+	/*4字节方式比对*/
 	while (trie->data_size >= i + 4) {
 		u32 diff = be32_to_cpu(*(__be32 *)&node->data[i] ^
 				       *(__be32 *)&key->data[i]);
@@ -205,6 +207,7 @@ size_t __longest_prefix_match(const struct lpm_trie *trie,
 		i += 4;
 	}
 
+	/*2字节方式比对*/
 	if (trie->data_size >= i + 2) {
 		u16 diff = be16_to_cpu(*(__be16 *)&node->data[i] ^
 				       *(__be16 *)&key->data[i]);
@@ -217,6 +220,7 @@ size_t __longest_prefix_match(const struct lpm_trie *trie,
 		i += 2;
 	}
 
+	/*1字节方式比对*/
 	if (trie->data_size >= i + 1) {
 		prefixlen += 8 - fls(node->data[i] ^ key->data[i]);
 
@@ -237,12 +241,12 @@ static size_t longest_prefix_match(const struct lpm_trie *trie,
 /* Called from syscall or from eBPF program */
 static void *trie_lookup_elem(struct bpf_map *map, void *_key)
 {
-	struct lpm_trie *trie = container_of(map, struct lpm_trie, map);
+	struct lpm_trie *trie = container_of(map, struct lpm_trie, map);/*取lpm_trie*/
 	struct lpm_trie_node *node, *found = NULL;
 	struct bpf_lpm_trie_key_u8 *key = _key;
 
 	if (key->prefixlen > trie->max_prefixlen)
-		return NULL;
+		return NULL;/*key中指明的前缀长度超过了trie约定的最大前缀长度要长，报错*/
 
 	/* Start walking the trie from the root node ... */
 
@@ -257,7 +261,7 @@ static void *trie_lookup_elem(struct bpf_map *map, void *_key)
 		 */
 		matchlen = __longest_prefix_match(trie, node, key);
 		if (matchlen == trie->max_prefixlen) {
-			found = node;
+			found = node;/*达到前缀最大值，命中*/
 			break;
 		}
 
@@ -266,13 +270,13 @@ static void *trie_lookup_elem(struct bpf_map *map, void *_key)
 		 * last in the traversal (ie, the parent).
 		 */
 		if (matchlen < node->prefixlen)
-			break;
+			break;/*匹配的长度比当前node的前缀要小，未命中*/
 
 		/* Consider this node as return candidate unless it is an
 		 * artificially added intermediate one.
 		 */
 		if (!(node->flags & LPM_TREE_NODE_FLAG_IM))
-			found = node;
+			found = node;/*非中间节点，候选*/
 
 		/* If the node match is fully satisfied, let's see if we can
 		 * become more specific. Determine the next bit in the key and
@@ -284,9 +288,9 @@ static void *trie_lookup_elem(struct bpf_map *map, void *_key)
 	}
 
 	if (!found)
-		return NULL;
+		return NULL;/*查找失败*/
 
-	return found->data + trie->data_size;
+	return found->data + trie->data_size;/*跳过匹配的key*/
 }
 
 static struct lpm_trie_node *lpm_trie_node_alloc(struct lpm_trie *trie,
@@ -777,7 +781,7 @@ const struct bpf_map_ops trie_map_ops = {
 	.map_alloc = trie_alloc,
 	.map_free = trie_free,
 	.map_get_next_key = trie_get_next_key,
-	.map_lookup_elem = trie_lookup_elem,
+	.map_lookup_elem = trie_lookup_elem,/*lpm式查询*/
 	.map_update_elem = trie_update_elem,
 	.map_delete_elem = trie_delete_elem,
 	.map_lookup_batch = generic_map_lookup_batch,

@@ -87,7 +87,7 @@ static const struct cmd commands[] = {
 	{ "btf",	do_btf },
 	{ "gen",	do_gen },/*bpf gen相关命令处理*/
 	{ "struct_ops",	do_struct_ops },
-	{ "iter",	do_iter },
+	{ "iter",	do_iter },/**/
 	{ "version",	do_version },/*显示版本*/
 	{ 0 }
 };

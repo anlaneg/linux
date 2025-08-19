@@ -41,7 +41,7 @@ static inline void p4d_clear(p4d_t *p4d)	{ }
 
 static inline pud_t *pud_offset(p4d_t *p4d, unsigned long address)
 {
-	return (pud_t *)p4d;
+	return (pud_t *)p4d;/*pud与p4d相同*/
 }
 #define pud_offset pud_offset
 

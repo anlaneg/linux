@@ -298,7 +298,7 @@ struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
 #endif
 	if (vsyscall_mode == NONE)
 		return NULL;
-	return &gate_vma;
+	return &gate_vma;/*返回gate vma*/
 }
 
 int in_gate_area(struct mm_struct *mm, unsigned long addr)

@@ -62,10 +62,10 @@ MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
 
 struct vfio_iommu {
-	struct list_head	domain_list;/*指向首个domain（链表）*/
-	struct list_head	iova_list;/*用于串连所有vfio_iova*/
+	struct list_head	domain_list;/*指向首个domain（链表），目的？*/
+	struct list_head	iova_list;/*用于串连所有可用vfio_iova，用于检查哪些iova地址是有效的*/
 	struct mutex		lock;
-	struct rb_root		dma_list;/*dma region（采用红黑树）*/
+	struct rb_root		dma_list;/*dma region（采用红黑树）,所以map的内存挂接在此树上*/
 	struct list_head	device_list;
 	struct mutex		device_list_lock;
 	unsigned int		dma_avail;
@@ -94,7 +94,7 @@ struct vfio_dma {
 	bool			iommu_mapped;
 	bool			lock_cap;	/* capable(CAP_IPC_LOCK) */
 	bool			vaddr_invalid;/*指出此dma地址vaddr地址是否无效*/
-	struct task_struct	*task;
+	struct task_struct	*task;/*指向进程组组长*/
 	struct rb_root		pfn_list;	/* Ex-user pinned pfn list */
 	unsigned long		*bitmap;
 	struct mm_struct	*mm;/*指向所属进程对应的mm（此dma对应的mm)*/
@@ -102,12 +102,14 @@ struct vfio_dma {
 };
 
 struct vfio_batch {
+	/*指向物理页（存放page*指针）*/
 	struct page		**pages;	/* for pin_user_pages_remote */
 	struct page		*fallback_page; /* if pages alloc fails */
-	/*可容纳的总量*/
+	/*可容纳page*指针的总量*/
 	unsigned int		capacity;	/* length of pages array */
-	/*当前位置*/
+	/*pages数组长度*/
 	unsigned int		size;		/* of batch currently */
+	/*下一个可存放的位置*/
 	unsigned int		offset;		/* of next entry in pages */
 };
 
@@ -174,11 +176,11 @@ static struct vfio_dma *vfio_find_dma(struct vfio_iommu *iommu,
 		struct vfio_dma *dma = rb_entry(node, struct vfio_dma, node);
 
 		if (start + size <= dma->iova)
-			node = node->rb_left;/*走左树*/
+			node = node->rb_left;/*终点小于dma->iova,走左树*/
 		else if (start >= dma->iova + dma->size)
-			node = node->rb_right;/*走右树*/
+			node = node->rb_right;/*起点大于此dma的终点，走右树*/
 		else
-			return dma;/*重合，返回此dma*/
+			return dma;/*重合（或部分重合），返回此dma*/
 	}
 
 	return NULL;
@@ -332,11 +334,11 @@ static struct vfio_pfn *vfio_find_vpfn(struct vfio_dma *dma, dma_addr_t iova)
 		vpfn = rb_entry(node, struct vfio_pfn, node);
 
 		if (iova < vpfn->iova)
-			node = node->rb_left;
+			node = node->rb_left;/*iova地址小于vpfn->iova，走左侧*/
 		else if (iova > vpfn->iova)
-			node = node->rb_right;
+			node = node->rb_right;/*iova地址大于vpfn->iova，走右侧*/
 		else
-			return vpfn;
+			return vpfn;/*两者匹配，直接返回*/
 	}
 	return NULL;
 }
@@ -477,8 +479,8 @@ static int put_pfn(unsigned long pfn, int prot)
 
 static void __vfio_batch_init(struct vfio_batch *batch, bool single)
 {
-	batch->size = 0;
-	batch->offset = 0;
+	batch->size = 0;/*当前总数为0*/
+	batch->offset = 0;/*当前填充位置为0*/
 
 	if (single || unlikely(disable_hugepages))
 		/*禁用大页，则直接初始化并返回*/
@@ -489,11 +491,12 @@ static void __vfio_batch_init(struct vfio_batch *batch, bool single)
 	if (!batch->pages)
 		goto fallback;
 
-	/*一页可以存放最多多少page*指针（4096/8=512个）*/
+	/*一页最多可以存放多少page*指针（4096/8=512个）*/
 	batch->capacity = VFIO_BATCH_MAX_CAPACITY;
 	return;
 
 fallback:
+	/*指向fallback_page,且容量仅一个*/
 	batch->pages = &batch->fallback_page;
 	batch->capacity = 1;
 }
@@ -505,7 +508,7 @@ static void vfio_batch_init(struct vfio_batch *batch)
 
 static void vfio_batch_init_single(struct vfio_batch *batch)
 {
-	__vfio_batch_init(batch, true);
+	__vfio_batch_init(batch, true);/*初始化为单项*/
 }
 
 static void vfio_batch_unpin(struct vfio_batch *batch, struct vfio_dma *dma)
@@ -570,10 +573,10 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
  * returned initial pfn are provided; subsequent pfns are contiguous.
  */
 static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
-			   unsigned long npages/*页数*/, int prot/*要求的权限*/, unsigned long *pfn/*出参*/,
+			   unsigned long npages/*要pin的页数*/, int prot/*要求的权限*/, unsigned long *pfn/*出参，首页页帧编号*/,
 			   struct vfio_batch *batch)
 {
-	unsigned long pin_pages = min_t(unsigned long, npages, batch->capacity);
+	unsigned long pin_pages = min_t(unsigned long, npages, batch->capacity);/*两者权衡，取小者*/
 	struct vm_area_struct *vma;
 	unsigned int flags = 0;
 	long ret;
@@ -586,8 +589,8 @@ static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 	ret = pin_user_pages_remote(mm, vaddr, pin_pages, flags | FOLL_LONGTERM,
 				    batch->pages, NULL);
 	if (ret > 0) {
-		*pfn = page_to_pfn(batch->pages[0]);/*首页编号*/
-		batch->size = ret;
+		*pfn = page_to_pfn(batch->pages[0]);/*首页页帧编号*/
+		batch->size = ret;/*页数*/
 		batch->offset = 0;
 		goto done;
 	} else if (!ret) {
@@ -628,9 +631,9 @@ done:
  * the iommu can only map chunks of consecutive pfns anyway, so get the
  * first page and all consecutive pages with the same locking.
  */
-static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
-				  unsigned long npage/*总页数*/, unsigned long *pfn_base,
-				  unsigned long limit, struct vfio_batch *batch)
+static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr/*虚拟地址*/,
+				  unsigned long npage/*总页数*/, unsigned long *pfn_base/*出参，*/,
+				  unsigned long limit, struct vfio_batch *batch/*出参，*/)
 {
 	unsigned long pfn;
 	struct mm_struct *mm = current->mm;
@@ -654,7 +657,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 	}
 
 	if (unlikely(disable_hugepages))
-		npage = 1;
+		npage = 1;/*大页被禁用，仅1页*/
 
 	while (npage) {
 		if (!batch->size) {
@@ -711,10 +714,10 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 				lock_acct++;
 			}
 
-			pinned++;
+			pinned++;/*pin的页数增加*/
 			npage--;
-			vaddr += PAGE_SIZE;
-			iova += PAGE_SIZE;
+			vaddr += PAGE_SIZE;/*跳过一页*/
+			iova += PAGE_SIZE;/*跳过一页*/
 			batch->offset++;
 			batch->size--;
 
@@ -1492,9 +1495,9 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 	while (size) {
 		/* Pin a contiguous chunk of memory */
-		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*结束地址*/,
-					      size >> PAGE_SHIFT/*要map的页数*/, &pfn, limit,
-					      &batch);/*pin这一组内存*/
+		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*结束虚拟地址*/,
+					      size >> PAGE_SHIFT/*要map的页数*/, &pfn/*出参，首页页帧号*/, limit/*内存占用上限*/,
+					      &batch);/*pin这一段内存*/
 		if (npage <= 0) {
 			WARN_ON(!npage);
 			ret = (int)npage;
@@ -1605,9 +1608,9 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 
 	mutex_lock(&iommu->lock);
 
-	pgsize = (size_t)1 << __ffs(iommu->pgsize_bitmap);
+	pgsize = (size_t)1 << __ffs(iommu->pgsize_bitmap);/*取页大小*/
 
-	WARN_ON((pgsize - 1) & PAGE_MASK);
+	WARN_ON((pgsize - 1) & PAGE_MASK);/*页大小有误*/
 
 	if (!size || (size | iova | vaddr) & (pgsize - 1)) {
 		/*size,iova,vaddr均需要按页对齐*/
@@ -1625,12 +1628,13 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	/*利用iova,size查找vfio-dma结构体,检查是否已map*/
 	dma = vfio_find_dma(iommu, iova, size);
 	if (set_vaddr) {
+		/*要求返回vaddr*/
 		if (!dma) {
-			/*指明了vaddr标记，但没有对应的dma*/
+			/*这种情况必须能找到vfio-dma*/
 			ret = -ENOENT;
 		} else if (!dma->vaddr_invalid || dma->iova != iova ||
 			   dma->size != size) {
-			/*dma与查找的内容不完全匹配*/
+			/*dma与查找的内容不完全匹配,无法设置vaddr*/
 			ret = -EINVAL;
 		} else {
 			ret = vfio_change_dma_owner(dma);
@@ -1648,7 +1652,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	}
 
 	if (!iommu->dma_avail) {
-		/*空间不足，报错*/
+		/*有效数量为0，空间不足，报错*/
 		ret = -ENOSPC;
 		goto out_unlock;
 	}
@@ -1666,7 +1670,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		goto out_unlock;
 	}
 
-	iommu->dma_avail--;/*有效数目占用一个*/
+	iommu->dma_avail--;/*有效数目减少，占用一个*/
 	dma->iova = iova;/*设备地址*/
 	dma->vaddr = vaddr;/*进程虚地址*/
 	dma->prot = prot;/*要求的权限*/
@@ -1680,11 +1684,11 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	 * the same task, to make debugging easier.  VM locked pages requires
 	 * an mm_struct, so grab the mm in case the task dies.
 	 */
-	get_task_struct(current->group_leader);
+	get_task_struct(current->group_leader);/*取当前进程组组长*/
 	dma->task = current->group_leader;
 	dma->lock_cap = capable(CAP_IPC_LOCK);
 	dma->mm = current->mm;
-	mmgrab(dma->mm);
+	mmgrab(dma->mm);/*增加mm引用*/
 
 	dma->pfn_list = RB_ROOT;
 
@@ -1695,7 +1699,8 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	if (list_empty(&iommu->domain_list))
 		dma->size = size;
 	else
-		ret = vfio_pin_map_dma(iommu, dma, size);/*pin此段地址，并填充映射表项到iommu*/
+		/*pin此段地址，并填充映射表项到iommu*/
+		ret = vfio_pin_map_dma(iommu, dma, size);
 
 	if (!ret && iommu->dirty_page_tracking) {
 		ret = vfio_dma_bitmap_alloc(dma, pgsize);
@@ -1867,6 +1872,7 @@ static struct vfio_iommu_group *find_iommu_group(struct vfio_domain *domain,
 	return NULL;
 }
 
+/*在iommu中检查iommu_group是否已存在*/
 static struct vfio_iommu_group*
 vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
 			    struct iommu_group *iommu_group)
@@ -2163,7 +2169,7 @@ static int vfio_iommu_domain_alloc(struct device *dev, void *data)
 }
 
 static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回的vfio_iommu*/,
-		struct iommu_group *iommu_group, enum vfio_group_type type/*group类型*/)
+		struct iommu_group *iommu_group/*引用的group*/, enum vfio_group_type type/*group类型*/)
 {
 	struct vfio_iommu *iommu = iommu_data;
 	struct vfio_iommu_group *group;
@@ -2558,11 +2564,12 @@ detach_group_done:
 	mutex_unlock(&iommu->lock);
 }
 
-/*创建并初始化vfio_iommu*/
+/*利用扩展id,创建并初始化vfio_iommu*/
 static void *vfio_iommu_type1_open(unsigned long arg)
 {
 	struct vfio_iommu *iommu;
 
+	/*创建vfio-iommu*/
 	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
 	if (!iommu)
 		return ERR_PTR(-ENOMEM);
@@ -2667,7 +2674,7 @@ static int vfio_iommu_type1_check_extension(struct vfio_iommu *iommu,
 	case VFIO_TYPE1_IOMMU:
 	case VFIO_TYPE1v2_IOMMU:
 	case VFIO_UNMAP_ALL:
-		return 1;
+		return 1;/*支持以上三种扩展*/
 	case VFIO_UPDATE_VADDR:
 		/*
 		 * Disable this feature if mdevs are present.  They cannot
@@ -2855,7 +2862,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 		return -EFAULT;
 
 	if (map.argsz < minsz || map.flags & ~mask)
-		return -EINVAL;/*参数长度有误或者flag标记不正确*/
+		return -EINVAL;/*参数长度有误或者flag标记不匹配*/
 
 	/*pin地址，并完成dma地址映射*/
 	return vfio_dma_do_map(iommu, &map);
@@ -3025,6 +3032,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 
 	switch (cmd) {
 	case VFIO_CHECK_EXTENSION:
+		/*检查是否支持指明的扩展*/
 		return vfio_iommu_type1_check_extension(iommu, arg);
 	case VFIO_IOMMU_GET_INFO:
 		/*获取iommu信息*/
@@ -3197,8 +3205,8 @@ static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.owner			= THIS_MODULE,
 	.open			= vfio_iommu_type1_open,/*创建并初始化vfio_iommu*/
 	.release		= vfio_iommu_type1_release,
-	.ioctl			= vfio_iommu_type1_ioctl,
-	.attach_group		= vfio_iommu_type1_attach_group,
+	.ioctl			= vfio_iommu_type1_ioctl,/*vfio-iommu-type1支持的ioctl*/
+	.attach_group		= vfio_iommu_type1_attach_group,/*container附加*/
 	.detach_group		= vfio_iommu_type1_detach_group,
 	.pin_pages		= vfio_iommu_type1_pin_pages,
 	.unpin_pages		= vfio_iommu_type1_unpin_pages,

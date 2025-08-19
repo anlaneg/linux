@@ -502,7 +502,7 @@ struct tcp_sock {
 			   * while socket was owned by user.
 			   */
 #if IS_ENABLED(CONFIG_MPTCP)
-	bool	is_mptcp;
+	bool	is_mptcp;/*是否mptcp*/
 #endif
 #if IS_ENABLED(CONFIG_SMC)
 	bool	syn_smc;	/* SYN includes SMC */

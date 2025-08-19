@@ -20,11 +20,12 @@ static bool mptcp_cap_flag_sha256(u8 flags)
 	return (flags & MPTCP_CAP_FLAG_MASK) == MPTCP_CAP_HMAC_SHA256;
 }
 
+/*解析mptcp在tcp中的选项*/
 static void mptcp_parse_option(const struct sk_buff *skb,
-			       const unsigned char *ptr, int opsize,
-			       struct mptcp_options_received *mp_opt)
+			       const unsigned char *ptr/*选项起始位置*/, int opsize/*选项长度*/,
+			       struct mptcp_options_received *mp_opt/*出参*/)
 {
-	u8 subtype = *ptr >> 4;
+	u8 subtype = *ptr >> 4;/*取子类型*/
 	int expected_opsize;
 	u16 subopt;
 	u8 version;
@@ -32,6 +33,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 	u8 i;
 
 	switch (subtype) {
+	/*握手阶段使用，标识双方支持 MPTCP，交换加密密钥（用于验证后续子流）和连接令牌。*/
 	case MPTCPOPT_MP_CAPABLE:
 		/* strict size checking */
 		if (!(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
@@ -121,7 +123,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 			 mp_opt->rcvr_key, mp_opt->data_len, mp_opt->csum);
 		break;
 
-	case MPTCPOPT_MP_JOIN:
+	case MPTCPOPT_MP_JOIN:/*用于添加新子流*/
 		if (opsize == TCPOLEN_MPTCP_MPJ_SYN) {
 			mp_opt->suboptions |= OPTION_MPTCP_MPJ_SYN;
 			mp_opt->backup = *ptr++ & MPTCPOPT_BACKUP;
@@ -152,16 +154,17 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 		}
 		break;
 
-	case MPTCPOPT_DSS:
+	case MPTCPOPT_DSS:/*每个子流传输数据时携带，
+	标识该数据在 MPTCP 逻辑连接中的全局序列号（确保数据有序重组）*/
 		pr_debug("DSS\n");
 		ptr++;
 
-		flags = (*ptr++) & MPTCP_DSS_FLAG_MASK;
-		mp_opt->data_fin = (flags & MPTCP_DSS_DATA_FIN) != 0;
-		mp_opt->dsn64 = (flags & MPTCP_DSS_DSN64) != 0;
-		mp_opt->use_map = (flags & MPTCP_DSS_HAS_MAP) != 0;
-		mp_opt->ack64 = (flags & MPTCP_DSS_ACK64) != 0;
-		mp_opt->use_ack = (flags & MPTCP_DSS_HAS_ACK);
+		flags = (*ptr++) & MPTCP_DSS_FLAG_MASK;/*取得dss flags*/
+		mp_opt->data_fin = (flags & MPTCP_DSS_DATA_FIN) != 0;/*若置 1，表示当前数据包是 MPTCP 连接的最后一个数据*/
+		mp_opt->dsn64 = (flags & MPTCP_DSS_DSN64) != 0;/*64位dsn*/
+		mp_opt->use_map = (flags & MPTCP_DSS_HAS_MAP) != 0;/*若置 1，表示携带数据块的映射信息（用于大数据块分片传输）。*/
+		mp_opt->ack64 = (flags & MPTCP_DSS_ACK64) != 0;/*64位dsn_ack*/
+		mp_opt->use_ack = (flags & MPTCP_DSS_HAS_ACK);/*若置 1，表示携带对端数据的确认信息（接收端已收到的最大 DSN）。*/
 
 		pr_debug("data_fin=%d dsn64=%d use_map=%d ack64=%d use_ack=%d\n",
 			 mp_opt->data_fin, mp_opt->dsn64,
@@ -193,6 +196,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 
 		mp_opt->suboptions |= OPTION_MPTCP_DSS;
 		if (mp_opt->use_ack) {
+			/*取dsn ack编号*/
 			if (mp_opt->ack64) {
 				mp_opt->data_ack = get_unaligned_be64(ptr);
 				ptr += 8;
@@ -205,6 +209,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 		}
 
 		if (mp_opt->use_map) {
+			/*取dsn编号*/
 			if (mp_opt->dsn64) {
 				mp_opt->data_seq = get_unaligned_be64(ptr);
 				ptr += 8;
@@ -213,14 +218,16 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 				ptr += 4;
 			}
 
+			/*数据在当前子流中的本地序列号（类似 TCP 的 SEQ），用于子流自身的重传和确认。*/
 			mp_opt->subflow_seq = get_unaligned_be32(ptr);
 			ptr += 4;
 
+			/*当前数据块的长度（单位：字节），用于接收端确认数据完整性。*/
 			mp_opt->data_len = get_unaligned_be16(ptr);
 			ptr += 2;
 
 			if (opsize == expected_opsize + TCPOLEN_MPTCP_DSS_CHECKSUM) {
-				mp_opt->suboptions |= OPTION_MPTCP_CSUMREQD;
+				mp_opt->suboptions |= OPTION_MPTCP_CSUMREQD;/*包含有check sum*/
 				mp_opt->csum = get_unaligned((__force __sum16 *)ptr);
 				ptr += 2;
 			}
@@ -238,7 +245,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 		if (!mp_opt->echo) {
 			if (opsize == TCPOLEN_MPTCP_ADD_ADDR ||
 			    opsize == TCPOLEN_MPTCP_ADD_ADDR_PORT)
-				mp_opt->addr.family = AF_INET;
+				mp_opt->addr.family = AF_INET;/*v4地址*/
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
 			else if (opsize == TCPOLEN_MPTCP_ADD_ADDR6 ||
 				 opsize == TCPOLEN_MPTCP_ADD_ADDR6_PORT)
@@ -259,16 +266,16 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 				break;
 		}
 
-		mp_opt->suboptions |= OPTION_MPTCP_ADD_ADDR;
-		mp_opt->addr.id = *ptr++;
+		mp_opt->suboptions |= OPTION_MPTCP_ADD_ADDR;/*添加地址*/
+		mp_opt->addr.id = *ptr++;/*编号*/
 		mp_opt->addr.port = 0;
 		mp_opt->ahmac = 0;
 		if (mp_opt->addr.family == AF_INET) {
-			memcpy((u8 *)&mp_opt->addr.addr.s_addr, (u8 *)ptr, 4);
+			memcpy((u8 *)&mp_opt->addr.addr.s_addr, (u8 *)ptr, 4);/*设置v4地址*/
 			ptr += 4;
 			if (opsize == TCPOLEN_MPTCP_ADD_ADDR_PORT ||
 			    opsize == TCPOLEN_MPTCP_ADD_ADDR_BASE_PORT) {
-				mp_opt->addr.port = htons(get_unaligned_be16(ptr));
+				mp_opt->addr.port = htons(get_unaligned_be16(ptr));/*设置port*/
 				ptr += 2;
 			}
 		}
@@ -357,7 +364,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 }
 
 void mptcp_get_options(const struct sk_buff *skb,
-		       struct mptcp_options_received *mp_opt)
+		       struct mptcp_options_received *mp_opt/*出参*/)
 {
 	const struct tcphdr *th = tcp_hdr(skb);
 	const unsigned char *ptr;
@@ -391,6 +398,7 @@ void mptcp_get_options(const struct sk_buff *skb,
 			if (opsize > length)
 				return;	/* don't parse partial options */
 			if (opcode == TCPOPT_MPTCP)
+				/*mptcp协议在tcp协议中占用了一个MPTCP选项，解析此选项*/
 				mptcp_parse_option(skb, ptr, opsize, mp_opt);
 			ptr += opsize - 2;
 			length -= opsize;
@@ -660,7 +668,7 @@ static bool mptcp_established_options_add_addr(struct sock *sk, struct sk_buff *
 	if (!mptcp_pm_should_add_signal(msk) ||
 	    (opts->suboptions & (OPTION_MPTCP_MPJ_ACK | OPTION_MPTCP_MPC_ACK)) ||
 	    !mptcp_pm_add_addr_signal(msk, skb, opt_size, remaining, &addr,
-		    &echo, &drop_other_suboptions))
+		    &echo, &drop_other_suboptions))/*添加地址信息*/
 		return false;
 
 	/*
@@ -690,7 +698,7 @@ static bool mptcp_established_options_add_addr(struct sock *sk, struct sk_buff *
 		*size -= opt_size;
 	}
 	opts->addr = addr;
-	opts->suboptions |= OPTION_MPTCP_ADD_ADDR;
+	opts->suboptions |= OPTION_MPTCP_ADD_ADDR;/*指明需要add addr选项*/
 	if (!echo) {
 		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_ADDADDRTX);
 		opts->ahmac = add_addr_generate_hmac(READ_ONCE(msk->local_key),
@@ -878,6 +886,7 @@ bool mptcp_established_options(struct sock *sk, struct sk_buff *skb,
 
 	*size += opt_size;
 	remaining -= opt_size;
+	/*增加add addr子选项处理*/
 	if (mptcp_established_options_add_addr(sk, skb, &opt_size, remaining, opts)) {
 		*size += opt_size;
 		remaining -= opt_size;
@@ -1146,7 +1155,7 @@ bool mptcp_incoming_options(struct sock *sk, struct sk_buff *skb)
 		return true;
 	}
 
-	mptcp_get_options(skb, &mp_opt);
+	mptcp_get_options(skb, &mp_opt);/*解析报文中带的选项*/
 
 	/* The subflow can be in close state only if check_fully_established()
 	 * just sent a reset. If so, tell the caller to ignore the current packet.
@@ -1165,6 +1174,7 @@ bool mptcp_incoming_options(struct sock *sk, struct sk_buff *skb)
 		if ((mp_opt.suboptions & OPTION_MPTCP_ADD_ADDR) &&
 		    add_addr_hmac_valid(msk, &mp_opt)) {
 			if (!mp_opt.echo) {
+				/*处理add addr received事件*/
 				mptcp_pm_add_addr_received(sk, &mp_opt.addr);
 				MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_ADDADDR);
 			} else {
@@ -1220,6 +1230,7 @@ bool mptcp_incoming_options(struct sock *sk, struct sk_buff *skb)
 		return true;
 	}
 
+	/*申请skb扩展，用于将option结果记录到mptcp扩展信息*/
 	mpext = skb_ext_add(skb, SKB_EXT_MPTCP);
 	if (!mpext)
 		return true;
@@ -1352,6 +1363,7 @@ static void put_len_csum(u16 len, __sum16 csum, void *data)
 	put_unaligned(csum, sumptr);
 }
 
+/*mptcp选项设置*/
 void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 			 struct mptcp_out_options *opts)
 {
@@ -1537,6 +1549,7 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 			echo = 0;
 		}
 
+		/*写入add addr选项*/
 		*ptr++ = mptcp_option(MPTCPOPT_ADD_ADDR,
 				      len, echo, opts->addr.id);
 		if (opts->addr.family == AF_INET) {

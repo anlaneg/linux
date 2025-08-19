@@ -427,7 +427,7 @@ is_downstream_to_pci_bridge(struct device *dev, struct device *bridge)
 	struct pci_dev *pdev, *pbridge;
 
 	if (!dev_is_pci(dev) || !dev_is_pci(bridge))
-		return false;
+		return false;/*非pci设备，直接返回*/
 
 	pdev = to_pci_dev(dev);
 	pbridge = to_pci_dev(bridge);
@@ -473,7 +473,7 @@ static bool quirk_ioat_snb_local_iommu(struct pci_dev *pdev)
 static bool iommu_is_dummy(struct intel_iommu *iommu, struct device *dev)
 {
 	if (!iommu || iommu->drhd->ignored)
-		return true;
+		return true;/*iommu不存在或者iommu需要忽略，认为dummy*/
 
 	if (dev_is_pci(dev)) {
 		struct pci_dev *pdev = to_pci_dev(dev);
@@ -487,7 +487,8 @@ static bool iommu_is_dummy(struct intel_iommu *iommu, struct device *dev)
 	return false;
 }
 
-static struct intel_iommu *device_lookup_iommu(struct device *dev, u8 *bus, u8 *devfn)
+/*查找管理此设备的iommu*/
+static struct intel_iommu *device_lookup_iommu(struct device *dev, u8 *bus/*出参，设备bus*/, u8 *devfn)
 {
 	struct dmar_drhd_unit *drhd = NULL;
 	struct pci_dev *pdev = NULL;
@@ -506,16 +507,16 @@ static struct intel_iommu *device_lookup_iommu(struct device *dev, u8 *bus, u8 *
 
 		/* VFs aren't listed in scope tables; we need to look up
 		 * the PF instead to find the IOMMU. */
-		pf_pdev = pci_physfn(pdev);
+		pf_pdev = pci_physfn(pdev);/*如果是vf,则切到pf*/
 		dev = &pf_pdev->dev;
-		segment = pci_domain_nr(pdev->bus);
+		segment = pci_domain_nr(pdev->bus);/*取domain*/
 	} else if (has_acpi_companion(dev))
 		dev = &ACPI_COMPANION(dev)->dev;
 
 	rcu_read_lock();
 	for_each_iommu(iommu, drhd) {
 		if (pdev && segment != drhd->segment)
-			continue;
+			continue;/*segment不匹配，跳过此drhd*/
 
 		for_each_active_dev_scope(drhd->devices,
 					  drhd->devices_cnt, i, tmp) {
@@ -524,33 +525,35 @@ static struct intel_iommu *device_lookup_iommu(struct device *dev, u8 *bus, u8 *
 				 * which we used for the IOMMU lookup. Strictly speaking
 				 * we could do this for all PCI devices; we only need to
 				 * get the BDF# from the scope table for ACPI matches. */
-				if (pdev && pdev->is_virtfn)
-					goto got_pdev;
+				if (pdev/*是pci设备*/ && pdev->is_virtfn)
+					goto got_pdev;/*针对vf,bus及devfn采用pdev自身的*/
 
 				if (bus && devfn) {
+					/*找到此设备，填写此设备的bus,devfn*/
 					*bus = drhd->devices[i].bus;
 					*devfn = drhd->devices[i].devfn;
 				}
-				goto out;
+				goto out;/*查找成功*/
 			}
 
 			if (is_downstream_to_pci_bridge(dev, tmp))
-				goto got_pdev;
+				goto got_pdev;/*dev位于tmp之下（tmp是pci桥），也匹配*/
 		}
 
 		if (pdev && drhd->include_all) {
 got_pdev:
 			if (bus && devfn) {
+				/*bus及devfn采用pdev自身的*/
 				*bus = pdev->bus->number;
 				*devfn = pdev->devfn;
 			}
 			goto out;
 		}
 	}
-	iommu = NULL;
+	iommu = NULL;/*未有命中的iommu*/
 out:
 	if (iommu_is_dummy(iommu, dev))
-		iommu = NULL;
+		iommu = NULL;/*针对dummy设备认为未匹配*/
 
 	rcu_read_unlock();
 
@@ -3039,7 +3042,7 @@ int __init intel_iommu_init(void)
 		    platform_optin_force_iommu();
 
 	down_write(&dmar_global_lock);
-	/*初始化DMAR table(DMA Remapping Table）*/
+	/*初始化DMAR table(DMA Remapping Table），构建dmar_drhd_units链表*/
 	if (dmar_table_init()) {
 		if (force_on)
 			panic("tboot: Failed to initialize DMAR table\n");
@@ -3111,6 +3114,7 @@ int __init intel_iommu_init(void)
 	init_iommu_pm_ops();
 
 	down_read(&dmar_global_lock);
+	/*遍历挂接在dmar_drhd_units上的所有iommu*/
 	for_each_active_iommu(iommu, drhd) {
 		/*
 		 * The flush queue implementation does not perform
@@ -3126,13 +3130,14 @@ int __init intel_iommu_init(void)
 		}
 		iommu_device_sysfs_add(&iommu->iommu, NULL,
 				       intel_iommu_groups,
-				       "%s", iommu->name);
+				       "%s", iommu->name);/*创建sysfs文件*/
 		/*
 		 * The iommu device probe is protected by the iommu_probe_device_lock.
 		 * Release the dmar_global_lock before entering the device probe path
 		 * to avoid unnecessary lock order splat.
 		 */
 		up_read(&dmar_global_lock);
+		/*注册iommu设备*/
 		iommu_device_register(&iommu->iommu, &intel_iommu_ops, NULL);
 		down_read(&dmar_global_lock);
 
@@ -3770,7 +3775,7 @@ static struct iommu_device *intel_iommu_probe_device(struct device *dev)
 	u8 bus, devfn;
 	int ret;
 
-	iommu = device_lookup_iommu(dev, &bus, &devfn);
+	iommu = device_lookup_iommu(dev, &bus, &devfn);/*获得处理此设备的iommu*/
 	if (!iommu || !iommu->iommu.ops)
 		return ERR_PTR(-ENODEV);
 
@@ -3846,7 +3851,7 @@ static struct iommu_device *intel_iommu_probe_device(struct device *dev)
 
 	intel_iommu_debugfs_create_dev(info);
 
-	return &iommu->iommu;
+	return &iommu->iommu;/*返回设备映射的iommu*/
 free_table:
 	intel_pasid_free_table(dev);
 clear_rbtree:

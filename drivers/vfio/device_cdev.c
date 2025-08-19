@@ -12,7 +12,7 @@ static dev_t device_devt;/*负责为每个vfio-device关联一个字符设备*/
 void vfio_init_device_cdev(struct vfio_device *device)
 {
 	device->device.devt = MKDEV(MAJOR(device_devt), device->index);/*为vfio-device分配devt*/
-	cdev_init(&device->cdev, &vfio_device_fops);
+	cdev_init(&device->cdev, &vfio_device_fops);/*设置此字符设备对应的fops*/
 	device->cdev.owner = THIS_MODULE;
 }
 

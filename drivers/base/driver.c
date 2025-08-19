@@ -46,7 +46,7 @@ static struct device *next_device(struct klist_iter *i)
  * Returns: 0 on success or a negative error code on failure.
  */
 int driver_set_override(struct device *dev, const char **override,
-			const char *s, size_t len)
+			const char *s/*明确指定的driver*/, size_t len)
 {
 	const char *new, *old;
 	char *cp;
@@ -70,6 +70,7 @@ int driver_set_override(struct device *dev, const char **override,
 	len = strlen(s);
 
 	if (!len) {
+		/*指定为空串情况*/
 		/* Empty string passed - clear override */
 		device_lock(dev);
 		old = *override;
@@ -91,11 +92,11 @@ int driver_set_override(struct device *dev, const char **override,
 	device_lock(dev);
 	old = *override;
 	if (cp != s) {
-		*override = new;
+		*override = new;/*设置override属性*/
 	} else {
 		/* "\n" passed - clear override */
 		kfree(new);
-		*override = NULL;
+		*override = NULL;/*收到'\n'认为指定为空串*/
 	}
 	device_unlock(dev);
 
@@ -257,7 +258,7 @@ int driver_register(struct device_driver *drv/*设备驱动*/)
 	if (ret)
 		return ret;
 
-	//为驱动添加其要求的groups
+	//为驱动添加driver要求的groups
 	ret = driver_add_groups(drv, drv->groups);
 	if (ret) {
 		bus_remove_driver(drv);

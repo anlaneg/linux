@@ -74,7 +74,7 @@ static void tcp_event_new_data_sent(struct sock *sk, struct sk_buff *skb)
 
 	WRITE_ONCE(tp->snd_nxt, TCP_SKB_CB(skb)->end_seq);
 
-	__skb_unlink(skb, &sk->sk_write_queue);
+	__skb_unlink(skb, &sk->sk_write_queue);/*移除掉已发送的skb*/
 	tcp_rbtree_insert(&sk->tcp_rtx_queue, skb);
 
 	if (tp->highest_sack == NULL)
@@ -464,15 +464,17 @@ struct tcp_out_options {
 	__u8 *hash_location;	/* temporary pointer, overloaded */
 	__u32 tsval, tsecr;	/* need to include OPTION_TS */
 	struct tcp_fastopen_cookie *fastopen_cookie;	/* Fast open cookie */
-	struct mptcp_out_options mptcp;
+	struct mptcp_out_options mptcp;/*mptcp对应的选项*/
 };
 
+/*写入mptcp option*/
 static void mptcp_options_write(struct tcphdr *th, __be32 *ptr,
 				struct tcp_sock *tp,
 				struct tcp_out_options *opts)
 {
 #if IS_ENABLED(CONFIG_MPTCP)
 	if (unlikely(OPTION_MPTCP & opts->options))
+		/*mptcp选项写入*/
 		mptcp_write_options(th, ptr, tp, &opts->mptcp);
 #endif
 }
@@ -671,7 +673,7 @@ static __be32 *process_tcp_ao_options(struct tcp_sock *tp,
  */
 static void tcp_options_write(struct tcphdr *th, struct tcp_sock *tp,
 			      const struct tcp_request_sock *tcprsk,
-			      struct tcp_out_options *opts,
+			      struct tcp_out_options *opts/*待填充tcp选项*/,
 			      struct tcp_key *key)
 {
 	__be32 *ptr = (__be32 *)(th + 1);
@@ -769,7 +771,7 @@ static void tcp_options_write(struct tcphdr *th, struct tcp_sock *tp,
 
 	smc_options_write(ptr, &options);
 
-	mptcp_options_write(th, ptr, tp, opts);
+	mptcp_options_write(th, ptr, tp, opts);/*针对mptcp完成选项写入*/
 }
 
 static void smc_set_option(const struct tcp_sock *tp,
@@ -1035,6 +1037,7 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 	 * left.
 	 */
 	if (sk_is_mptcp(sk)) {
+		/*mptcp socket处理,填充需要的options*/
 		unsigned int remaining = MAX_TCP_OPTION_SPACE - size;
 		unsigned int opt_size = 0;
 
@@ -1358,10 +1361,10 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_get_current_key(sk, &key);
 	if (unlikely(tcb->tcp_flags & TCPHDR_SYN)) {
-		/*发送的报文将带有syn标记，填充opts,并返回选项长度*/
+		/*发送的报文将带有syn标记，收集待填充opts,并返回选项长度*/
 		tcp_options_size = tcp_syn_options(sk, skb, &opts, &key);
 	} else {
-		/*发送的报文带有其它非syn标记，填充opts*/
+		/*发送的报文带有其它非syn标记，收集待填充的opts*/
 		tcp_options_size = tcp_established_options(sk, skb, &opts, &key);
 		/* Force a PSH flag on all (GSO) packets to expedite GRO flush
 		 * at receiver : This slightly improve GRO performance.
@@ -1448,7 +1451,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 		th->window	= htons(min(tp->rcv_wnd, 65535U));
 	}
 
-	/*填充tcp选项*/
+	/*填充tcp选项到报文*/
 	tcp_options_write(th, tp, NULL, &opts, &key);
 
 	if (tcp_key_is_md5(&key)) {
@@ -2579,6 +2582,7 @@ static int tcp_mtu_probe(struct sock *sk)
 	/* We're ready to send.  If this fails, the probe will
 	 * be resegmented into mss-sized pieces by tcp_write_xmit().
 	 */
+	/*tcp层向下发送*/
 	if (!tcp_transmit_skb(sk, nskb, 1, GFP_ATOMIC)) {
 		/* Decrement cwnd here because we are sending
 		 * effectively two packets. */
@@ -2792,6 +2796,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 	}
 
 	max_segs = tcp_tso_segs(sk, mss_now);
+	/*遍历待发送的tcp报文*/
 	while ((skb = tcp_send_head(sk))) {
 		unsigned int limit;
 		int missing_bytes;
@@ -2861,6 +2866,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq)
 			break;
 
+		/*构造tcp头部，并将数据传输给ip层*/
 		if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
 			break;
 
@@ -3468,6 +3474,7 @@ start:
 			tcp_rate_skb_sent(sk, skb);
 		}
 	} else {
+		/*构造tcp头部，并将数据传输给ip层*/
 		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
 	}
 
@@ -3530,7 +3537,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	if (!tp->packets_out)
 		return;
 
-	rtx_head = tcp_rtx_queue_head(sk);
+	rtx_head = tcp_rtx_queue_head(sk);/*取得重传header*/
 	skb = tp->retransmit_skb_hint ?: rtx_head;
 	max_segs = tcp_tso_segs(sk, tcp_current_mss(sk));
 	skb_rbtree_walk_from(skb) {
@@ -3575,6 +3582,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 		if (tcp_small_queue_check(sk, skb, 1))
 			break;
 
+		/*发送此报文*/
 		if (tcp_retransmit_skb(sk, skb, segs))
 			break;
 
@@ -4108,7 +4116,7 @@ fallback:
 	/* Send a regular SYN with Fast Open cookie request option */
 	if (fo->cookie.len > 0)
 		fo->cookie.len = 0;
-	err = tcp_transmit_skb(sk, syn, 1, sk->sk_allocation);
+	err = tcp_transmit_skb(sk, syn, 1, sk->sk_allocation);/*发送*/
 	if (err)
 		tp->syn_fastopen = 0;
 done:
@@ -4182,6 +4190,7 @@ int tcp_connect(struct sock *sk)
 		return 0;
 	}
 
+	/*申请报文*/
 	buff = tcp_stream_alloc_skb(sk, sk->sk_allocation, true);
 	if (unlikely(!buff))
 		return -ENOBUFS;
@@ -4195,11 +4204,11 @@ int tcp_connect(struct sock *sk)
 	tp->retrans_stamp = tcp_time_stamp_ts(tp);
 	tcp_connect_queue_skb(sk, buff);
 	tcp_ecn_send_syn(sk, buff);
-	tcp_rbtree_insert(&sk->tcp_rtx_queue, buff);
+	tcp_rbtree_insert(&sk->tcp_rtx_queue, buff);/*存入此报文，以便后续重传*/
 
 	/* Send off SYN; include data in Fast Open. */
 	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
-	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
+	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation)/*tcp层向下发送报文*/;
 	if (err == -ECONNREFUSED)
 		return err;
 
@@ -4326,7 +4335,7 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt/*收方向下次期待的序号
 	skb_set_tcp_pure_ack(buff);
 
 	/* Send it off, this clears delayed acks for us. */
-	__tcp_transmit_skb(sk, buff, 0, (__force gfp_t)0, rcv_nxt);
+	__tcp_transmit_skb(sk, buff, 0, (__force gfp_t)0, rcv_nxt);/*填充tcp header送ip层*/
 }
 EXPORT_SYMBOL_GPL(__tcp_send_ack);
 
@@ -4366,7 +4375,7 @@ static int tcp_xmit_probe_skb(struct sock *sk, int urgent, int mib)
 	 */
 	tcp_init_nondata_skb(skb, tp->snd_una - !urgent, TCPHDR_ACK);
 	NET_INC_STATS(sock_net(sk), mib);
-	return tcp_transmit_skb(sk, skb, 0, (__force gfp_t)0);
+	return tcp_transmit_skb(sk, skb, 0, (__force gfp_t)0);/*tcp向下发送探测报文*/
 }
 
 /* Called from setsockopt( ... TCP_REPAIR ) */
@@ -4412,7 +4421,7 @@ int tcp_write_wakeup(struct sock *sk, int mib)
 			tcp_set_skb_tso_segs(skb, mss);
 
 		TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_PSH;
-		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
+		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);/*tcp层向下发送push标记报文*/
 		if (!err)
 			tcp_event_new_data_sent(sk, skb);
 		return err;

@@ -1359,6 +1359,7 @@ static const struct vfio_iommu_driver_ops tce_iommu_driver_ops = {
 	.detach_group	= tce_iommu_detach_group,
 };
 
+/*注册power rpc vfio iommu驱动*/
 static int __init tce_iommu_init(void)
 {
 	return vfio_register_iommu_driver(&tce_iommu_driver_ops);
