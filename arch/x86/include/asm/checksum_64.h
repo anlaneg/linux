@@ -21,12 +21,12 @@
  */
 static inline __sum16 csum_fold(__wsum sum)
 {
-	asm("  addl %1,%0\n"
-	    "  adcl $0xffff,%0"
+	asm("  addl %1,%0\n"/*先两者相加*/
+	    "  adcl $0xffff,%0"/*再考虑进位后与0xffff相加*/
 	    : "=r" (sum)
-	    : "r" ((__force u32)sum << 16),
-	      "0" ((__force u32)sum & 0xffff0000));
-	return (__force __sum16)(~(__force u32)sum >> 16);
+	    : "r" ((__force u32)sum << 16),/*取sum的低16位，将其放在u32的高16位上*/
+	      "0" ((__force u32)sum & 0xffff0000));/*取sum的高16位*/
+	return (__force __sum16)(~(__force u32)sum >> 16);/*结果向右移16，变更为u16的结果，并取反*/
 }
 
 /*
@@ -87,14 +87,14 @@ static inline __wsum
 csum_tcpudp_nofold(__be32 saddr, __be32 daddr, __u32 len,
 		   __u8 proto, __wsum sum)
 {
-	asm("  addl %1, %0\n"
-	    "  adcl %2, %0\n"
-	    "  adcl %3, %0\n"
-	    "  adcl $0, %0\n"
-	    : "=r" (sum)
+	asm("  addl %1, %0\n"/*sum=sum+daddr*/
+	    "  adcl %2, %0\n"/*sum=sum+saddr+(上一次的进位）*/
+	    "  adcl %3, %0\n"/*sum=sum+protolen+(上一次的进位）*/
+	    "  adcl $0, %0\n"/*这里为什么要加0？因为上一次的进位没有加*/
+	    : "=r" (sum)/*输出sum*/
 	    : "g" (daddr), "g" (saddr),
-	      "g" ((len + proto)<<8), "0" (sum));
-	return sum;
+	      "g" ((len + proto)<<8), "0" (sum));/*输入*/
+	return sum;/*未折叠成u16*/
 }
 
 
@@ -165,6 +165,7 @@ extern __sum16
 csum_ipv6_magic(const struct in6_addr *saddr, const struct in6_addr *daddr,
 		__u32 len, __u8 proto, __wsum sum);
 
+/*带计算进位的add(32位结果）*/
 static inline unsigned add32_with_carry(unsigned a, unsigned b)
 {
 	asm("addl %2,%0\n\t"

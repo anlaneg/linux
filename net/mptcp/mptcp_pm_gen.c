@@ -92,7 +92,7 @@ const struct genl_ops mptcp_pm_nl_ops[11] = {
 	{
 		.cmd		= MPTCP_PM_CMD_ADD_ADDR,
 		.validate	= GENL_DONT_VALIDATE_STRICT,
-		.doit		= mptcp_pm_nl_add_addr_doit,/*通过netlink添加地址*/
+		.doit		= mptcp_pm_nl_add_addr_doit,/*通过netlink添加local地址*/
 		.policy		= mptcp_pm_add_addr_nl_policy,
 		.maxattr	= MPTCP_PM_ENDPOINT_ADDR,
 		.flags		= GENL_UNS_ADMIN_PERM,

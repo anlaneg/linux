@@ -791,6 +791,7 @@ static inline void vma_set_anonymous(struct vm_area_struct *vma)
 	vma->vm_ops = NULL;
 }
 
+/*是否anonymous*/
 static inline bool vma_is_anonymous(struct vm_area_struct *vma)
 {
 	return !vma->vm_ops;
@@ -2747,14 +2748,14 @@ static inline pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
 {
 	pte_t *ptep;
 	__cond_lock(*ptl, ptep = __get_locked_pte(mm, addr, ptl));
-	return ptep;
+	return ptep;/*加锁并获得addr对应的pte*/
 }
 
 #ifdef __PAGETABLE_P4D_FOLDED
 static inline int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 						unsigned long address)
 {
-	return 0;
+	return 0;/*直接返回成功*/
 }
 #else
 int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address);
@@ -2777,6 +2778,7 @@ static inline void mm_inc_nr_puds(struct mm_struct *mm)
 {
 	if (mm_pud_folded(mm))
 		return;
+	/*pud页表占用的内存计入*/
 	atomic_long_add(PTRS_PER_PUD * sizeof(pud_t), &mm->pgtables_bytes);
 }
 
@@ -2829,6 +2831,7 @@ static inline unsigned long mm_pgtables_bytes(const struct mm_struct *mm)
 
 static inline void mm_inc_nr_ptes(struct mm_struct *mm)
 {
+	/*申请了一个页，增加mm pgtables的内存占用*/
 	atomic_long_add(PTRS_PER_PTE * sizeof(pte_t), &mm->pgtables_bytes);
 }
 
@@ -2853,9 +2856,12 @@ int __pte_alloc_kernel(pmd_t *pmd);
 
 #if defined(CONFIG_MMU)
 
+/*查询address对应的p4d_t,如不存在，则申请页关联后再取address对应的p4d_t*/
 static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 		unsigned long address)
 {
+	/*如果pgd未填充，则申请address对应的p4d页并关联到pgd，如果申请失败，返回NULL*/
+	/*否则已填充（或关联成功），则利用pgd查找address对应的p4d，并返回*/
 	return (unlikely(pgd_none(*pgd)) && __p4d_alloc(mm, pgd, address)) ?
 		NULL : p4d_offset(pgd, address);
 }
@@ -2870,6 +2876,8 @@ static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 
 static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 {
+	/*如果pud未填充，则申请address对应的pmd页并关联到pud，如果申请失败，返回NULL*/
+		/*否则已填充（或关联成功），则利用pud查找address对应的pmd，并返回*/
 	return (unlikely(pud_none(*pud)) && __pmd_alloc(mm, pud, address))?
 		NULL: pmd_offset(pud, address);
 }
@@ -2885,6 +2893,7 @@ static inline void *ptdesc_to_virt(const struct ptdesc *pt)
 	return page_to_virt(ptdesc_page(pt));
 }
 
+/*取此ptdesc对应的虚拟地址*/
 static inline void *ptdesc_address(const struct ptdesc *pt)
 {
 	return folio_address(ptdesc_folio(pt));
@@ -2909,7 +2918,7 @@ static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int orde
 {
 	struct page *page = alloc_pages_noprof(gfp | __GFP_COMP, order);/*申请物理页*/
 
-	return page_ptdesc(page);/*转换为ptdesc*/
+	return page_ptdesc(page);/*强转换为ptdesc类型*/
 }
 #define pagetable_alloc(...)	alloc_hooks(pagetable_alloc_noprof(__VA_ARGS__))
 
@@ -3071,7 +3080,8 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 	pte_unmap(pte);					\
 } while (0)
 
-#define pte_alloc(mm, pmd) (unlikely(pmd_none(*(pmd))) && __pte_alloc(mm, pmd))
+/*申请pte*/
+#define pte_alloc(mm, pmd) (unlikely(pmd_none(*(pmd))/*此pmd项未填充*/) && __pte_alloc(mm, pmd)/*申请并关联*/)
 
 #define pte_alloc_map(mm, pmd, address)			\
 	(pte_alloc(mm, pmd) ? NULL : pte_offset_map(pmd, address))
@@ -3089,17 +3099,19 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 static inline struct page *pmd_pgtable_page(pmd_t *pmd)
 {
 	unsigned long mask = ~(PTRS_PER_PMD * sizeof(pmd_t) - 1);
-	return virt_to_page((void *)((unsigned long) pmd & mask));
+	/*由地址转页帧，再由页帧得page结构体*/
+	return virt_to_page((void *)((unsigned long) pmd & mask)/*移除pmd指针中的flags*/);
 }
 
 static inline struct ptdesc *pmd_ptdesc(pmd_t *pmd)
 {
-	return page_ptdesc(pmd_pgtable_page(pmd));
+	/*取pmd对应的page(对应的实际上是ptdesc结构）*/
+	return page_ptdesc(pmd_pgtable_page(pmd)/*对得pmd对应的page*/);
 }
 
 static inline spinlock_t *pmd_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
-	return ptlock_ptr(pmd_ptdesc(pmd));
+	return ptlock_ptr(pmd_ptdesc(pmd));/*获得此pmd对应的spinlock*/
 }
 
 static inline bool pmd_ptlock_init(struct ptdesc *ptdesc)
@@ -3127,6 +3139,7 @@ static inline bool pmd_ptlock_init(struct ptdesc *ptdesc) { return true; }
 
 static inline spinlock_t *pmd_lock(struct mm_struct *mm, pmd_t *pmd)
 {
+	/*对此pmd进行加锁，并返回锁*/
 	spinlock_t *ptl = pmd_lockptr(mm, pmd);
 	spin_lock(ptl);
 	return ptl;

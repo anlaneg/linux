@@ -2,6 +2,7 @@
 #ifndef _PGTABLE_NOPMD_H
 #define _PGTABLE_NOPMD_H
 
+/*当pmd不存在时，此文件被包含*/
 #ifndef __ASSEMBLY__
 
 #include <asm-generic/pgtable-nopud.h>

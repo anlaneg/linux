@@ -121,6 +121,7 @@ static int reuseport_sock_index(struct sock *sk,
 	return -1;
 }
 
+/*为reuse->socks中添加socket*/
 static void __reuseport_add_sock(struct sock *sk,
 				 struct sock_reuseport *reuse)
 {
@@ -538,23 +539,23 @@ static struct sock *reuseport_select_sock_by_hash(struct sock_reuseport *reuse,
 	do {
 		struct sock *sk = reuse->socks[i];
 
-		if (sk->sk_state != TCP_ESTABLISHED) {
+		if (sk->sk_state != TCP_ESTABLISHED/*未达到EST状态*/) {
 			/* Paired with WRITE_ONCE() in __reuseport_(get|put)_incoming_cpu(). */
 			if (!READ_ONCE(reuse->incoming_cpu))
-				return sk;
+				return sk;/*不关心cpu,直接返回*/
 
 			/* Paired with WRITE_ONCE() in reuseport_update_incoming_cpu(). */
 			if (READ_ONCE(sk->sk_incoming_cpu) == raw_smp_processor_id())
-				return sk;
+				return sk;/*检查是否匹配当前cpu*/
 
 			if (!first_valid_sk)
-				first_valid_sk = sk;
+				first_valid_sk = sk;/*备选*/
 		}
 
-		i++;
+		i++;/*尝试下一个*/
 		if (i >= num_socks)
-			i = 0;
-	} while (i != j);
+			i = 0;/*绕回到零*/
+	} while (i != j/*遍历完成*/);
 
 	return first_valid_sk;
 }
@@ -570,7 +571,7 @@ static struct sock *reuseport_select_sock_by_hash(struct sock_reuseport *reuse,
  *  Returns a socket that should receive the packet (or NULL on error).
  */
 struct sock *reuseport_select_sock(struct sock *sk,
-				   u32 hash,
+				   u32 hash/*hash值*/,
 				   struct sk_buff *skb,
 				   int hdr_len)
 {
@@ -596,7 +597,8 @@ struct sock *reuseport_select_sock(struct sock *sk,
 			/*没有bpf程序或者skb为空，采用hash进行选择*/
 			goto select_by_hash;
 
-		//有bpf程序，采用bpf程序选择一个出来
+		//有bpf程序，采用bpf程序选择一个出来（reuseport用于支持多个socket绑定同一个port)
+		//这里主要解决分发问题，比如轮询，哈希
 		if (prog->type == BPF_PROG_TYPE_SK_REUSEPORT)
 			sk2 = bpf_run_sk_reuseport(reuse, sk, prog, skb, NULL, hash);
 		else

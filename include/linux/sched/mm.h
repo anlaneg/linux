@@ -454,7 +454,7 @@ static inline void memalloc_noreclaim_restore(unsigned int flags)
  */
 static inline unsigned int memalloc_pin_save(void)
 {
-	return memalloc_flags_save(PF_MEMALLOC_PIN);
+	return memalloc_flags_save(PF_MEMALLOC_PIN);/*增加PIN标记，返回旧标记*/
 }
 
 /**

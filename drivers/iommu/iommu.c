@@ -162,7 +162,7 @@ static DEFINE_SPINLOCK(iommu_device_lock);
 static const struct bus_type * const iommu_buses[] = {
 	&platform_bus_type,
 #ifdef CONFIG_PCI
-	&pci_bus_type,
+	&pci_bus_type,/*pci bus类型*/
 #endif
 #ifdef CONFIG_ARM_AMBA
 	&amba_bustype,
@@ -394,7 +394,7 @@ void dev_iommu_free(struct device *dev)
  */
 static bool dev_has_iommu(struct device *dev)
 {
-	/*此设备是否有iommu*/
+	/*此设备是否有iommu设备*/
 	return dev->iommu && dev->iommu->iommu_dev;
 }
 
@@ -1381,9 +1381,11 @@ int iommu_group_for_each_dev(struct iommu_group *group, void *data,
 	int ret = 0;
 
 	mutex_lock(&group->mutex);
+	/*利用fn遍历group->devices列表*/
 	for_each_group_device(group, device) {
 		ret = fn(device->dev, data);
 		if (ret)
+			/*出错，停止*/
 			break;
 	}
 	mutex_unlock(&group->mutex);
@@ -2069,8 +2071,10 @@ __iommu_paging_domain_alloc_flags(struct device *dev, unsigned int type,
 	ops = dev_iommu_ops(dev);
 
 	if (ops->domain_alloc_paging && !flags)
+		/*申请domain*/
 		domain = ops->domain_alloc_paging(dev);
 	else if (ops->domain_alloc_paging_flags)
+		/*申请domain*/
 		domain = ops->domain_alloc_paging_flags(dev, flags, NULL);
 #if IS_ENABLED(CONFIG_FSL_PAMU)
 	else if (ops->domain_alloc && !flags)
@@ -2084,7 +2088,7 @@ __iommu_paging_domain_alloc_flags(struct device *dev, unsigned int type,
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
-	iommu_domain_init(domain, type, ops);
+	iommu_domain_init(domain, type, ops/*iommu的ops*/);
 	return domain;
 }
 
@@ -2273,11 +2277,13 @@ static int __iommu_attach_group(struct iommu_domain *domain,
 
 	if (group->domain && group->domain != group->default_domain &&
 	    group->domain != group->blocking_domain)
+		/*domain已存在*/
 		return -EBUSY;
 
 	dev = iommu_group_first_dev(group);/*取个首个设备*/
 	if (!dev_has_iommu(dev) ||
 	    !domain_iommu_ops_compatible(dev_iommu_ops(dev), domain))
+		/*iommu不存在或者iommu ops与domain->owner不一致*/
 		return -EINVAL;
 
 	return __iommu_group_set_domain(group, domain);
@@ -2378,10 +2384,10 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	lockdep_assert_held(&group->mutex);
 
 	if (group->domain == new_domain)
-		return 0;
+		return 0;/*重复设置*/
 
 	if (WARN_ON(!new_domain))
-		return -EINVAL;
+		return -EINVAL;/*为空*/
 
 	/*
 	 * Changing the domain is done by calling attach_dev() on the new
@@ -2390,6 +2396,7 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	 * either new_domain or group->domain, never something else.
 	 */
 	result = 0;
+	/*遍历group下所有device*/
 	for_each_group_device(group, gdev) {
 		ret = __iommu_device_set_domain(group, gdev->dev, new_domain,
 						flags);
@@ -2509,7 +2516,8 @@ out_set_count:
 	return pgsize;
 }
 
-int iommu_map_nosync(struct iommu_domain *domain, unsigned long iova,
+/*实现iova到paddr的映射（映射长度为size)*/
+int iommu_map_nosync(struct iommu_domain *domain/*pgd所在的domain*/, unsigned long iova,
 		phys_addr_t paddr, size_t size/*区域大小*/, int prot, gfp_t gfp)
 {
 	const struct iommu_domain_ops *ops = domain->ops;
@@ -2525,7 +2533,7 @@ int iommu_map_nosync(struct iommu_domain *domain, unsigned long iova,
 		return -EINVAL;
 
 	if (WARN_ON(!ops->map_pages || domain->pgsize_bitmap == 0UL))
-		return -ENODEV;
+		return -ENODEV;/*无对应回调*/
 
 	/* Discourage passing strange GFP flags */
 	if (WARN_ON_ONCE(gfp & (__GFP_COMP | __GFP_DMA | __GFP_DMA32 |
@@ -2557,8 +2565,9 @@ int iommu_map_nosync(struct iommu_domain *domain, unsigned long iova,
 
 		pr_debug("mapping: iova 0x%lx pa %pa pgsize 0x%zx count %zu\n",
 			 iova, &paddr, pgsize, count);
-		ret = ops->map_pages(domain, iova, paddr, pgsize/*映射的页大小*/, count, prot,
-				     gfp, &mapped);/*填充iommu映射表项*/
+		/*填充iommu映射表项*/
+		ret = ops->map_pages(domain, iova/*起始iova地址*/, paddr/*起始paddr地址*/, pgsize/*映射的页大小*/, count/*映射的页数*/, prot,
+				     gfp, &mapped/*出参，映射的长度*/);
 		/*
 		 * Some pages may have been mapped, even if an error occurred,
 		 * so we should account for those so they can be unmapped.
@@ -2574,6 +2583,7 @@ int iommu_map_nosync(struct iommu_domain *domain, unsigned long iova,
 
 	/* unroll mapping in case something went wrong */
 	if (ret)
+		/*出错，解除已完成的映射*/
 		iommu_unmap(domain, orig_iova, orig_size - size);
 	else
 		trace_map(orig_iova, orig_paddr, orig_size);
@@ -2590,15 +2600,18 @@ int iommu_sync_map(struct iommu_domain *domain, unsigned long iova, size_t size)
 	return ops->iotlb_sync_map(domain, iova, size);
 }
 
-int iommu_map(struct iommu_domain *domain, unsigned long iova,
+/*将iova地址映射到paddr,映射长度为size*/
+int iommu_map(struct iommu_domain *domain/*pgd所在domain*/, unsigned long iova,
 	      phys_addr_t paddr/*物理起始地址*/, size_t size/*区域大小*/, int prot, gfp_t gfp)
 {
 	int ret;
 
+	/*仅填充pgd*/
 	ret = iommu_map_nosync(domain, iova, paddr, size, prot, gfp);
 	if (ret)
 		return ret;
 
+	/*同步给硬件*/
 	ret = iommu_sync_map(domain, iova, size);
 	if (ret)
 		iommu_unmap(domain, iova, size);

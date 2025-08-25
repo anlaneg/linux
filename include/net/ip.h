@@ -601,9 +601,10 @@ static inline void ip_select_ident(struct net *net, struct sk_buff *skb,
 	ip_select_ident_segs(net, skb, sk, 1);
 }
 
-static inline __wsum inet_compute_pseudo(struct sk_buff *skb, int proto)
+/*计算tcp/udp的伪头部checksum计算（会考虑进位问题）未折叠*/
+static inline __wsum inet_compute_pseudo(struct sk_buff *skb, int proto/*协议号*/)
 {
-    //伪头部checksum计算（srcip,dstip,length,protocol)
+    //伪头部checksum计算（srcip,dstip,length,protocol,0)
 	return csum_tcpudp_nofold(ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,
 				  skb->len, proto, 0);
 }

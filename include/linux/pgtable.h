@@ -66,12 +66,15 @@
 
 static inline unsigned long pte_index(unsigned long address)
 {
+	/*address关联的pte所在索引*/
 	return (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 }
 
 #ifndef pmd_index
+/*arch未提供此定义，则这里提供默认*/
 static inline unsigned long pmd_index(unsigned long address)
 {
+	/*address关联的pmd所在索引*/
 	return (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
 }
 #define pmd_index pmd_index
@@ -80,6 +83,7 @@ static inline unsigned long pmd_index(unsigned long address)
 #ifndef pud_index
 static inline unsigned long pud_index(unsigned long address)
 {
+	/*address关联的pud所在索引*/
 	return (address >> PUD_SHIFT) & (PTRS_PER_PUD - 1);
 }
 #define pud_index pud_index
@@ -115,6 +119,7 @@ static inline void pud_init(void *addr)
 #ifndef pte_offset_kernel
 static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)
 {
+	/*取address对应的pte*/
 	return (pte_t *)pmd_page_vaddr(*pmd) + pte_index(address);
 }
 #define pte_offset_kernel pte_offset_kernel
@@ -130,6 +135,7 @@ static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)
 #else
 static inline pte_t *__pte_map(pmd_t *pmd, unsigned long address)
 {
+	/*利用pmd查找address对应的pte表项*/
 	return pte_offset_kernel(pmd, address);
 }
 static inline void pte_unmap(pte_t *pte)
@@ -142,6 +148,7 @@ void pte_free_defer(struct mm_struct *mm, pgtable_t pgtable);
 
 /* Find an entry in the second-level page table.. */
 #ifndef pmd_offset
+/*arch未提定pmd_offset时，此默认函数生效*/
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 {
 	return pud_pgtable(*pud) + pmd_index(address);
@@ -290,12 +297,12 @@ static inline pte_t pte_advance_pfn(pte_t pte, unsigned long nr)
  * to the same folio.  The PTEs are all in the same PMD.
  */
 static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
-		pte_t *ptep, pte_t pte, unsigned int nr)
+		pte_t *ptep, pte_t pte, unsigned int nr/*设置数量*/)
 {
 	page_table_check_ptes_set(mm, ptep, pte, nr);
 
 	for (;;) {
-		set_pte(ptep, pte);
+		set_pte(ptep, pte);/*设置pte*/
 		if (--nr == 0)
 			break;
 		ptep++;
@@ -303,7 +310,7 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 	}
 }
 #endif
-#define set_pte_at(mm, addr, ptep, pte) set_ptes(mm, addr, ptep, pte, 1)
+#define set_pte_at(mm, addr, ptep, pte) set_ptes(mm, addr, ptep, pte, 1/*只设置一个*/)
 
 #ifndef __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 extern int ptep_set_access_flags(struct vm_area_struct *vma,
@@ -635,6 +642,7 @@ static inline pte_t ptep_get_lockless(pte_t *ptep)
 #ifndef pmdp_get_lockless
 static inline pmd_t pmdp_get_lockless(pmd_t *pmdp)
 {
+	/*无锁取pmd_t中保存的内容*/
 	return pmdp_get(pmdp);
 }
 static inline void pmdp_get_lockless_sync(void)

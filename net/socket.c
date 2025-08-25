@@ -1154,6 +1154,7 @@ int kernel_recvmsg(struct socket *sock, struct msghdr *msg,
 }
 EXPORT_SYMBOL(kernel_recvmsg);
 
+/*用于支持此文件向pipe文件复制时的读取*/
 static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
 				struct pipe_inode_info *pipe, size_t len,
 				unsigned int flags)
@@ -1399,7 +1400,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 					     cmd == SIOCGSTAMP_OLD,
 					     !IS_ENABLED(CONFIG_64BIT));
 			break;
-		case SIOCGSTAMP_NEW:
+		case SIOCGSTAMP_NEW:/*获取最近接收数据包的时间戳信息*/
 		case SIOCGSTAMPNS_NEW:
 			if (!ops->gettstamp) {
 				err = -ENOIOCTLCMD;
@@ -2614,7 +2615,7 @@ int __sys_shutdown(int fd, int how)
 
 SYSCALL_DEFINE2(shutdown, int, fd, int, how)
 {
-	return __sys_shutdown(fd, how);
+	return __sys_shutdown(fd, how);/*实现shutdown*/
 }
 
 /* A couple of helpful macros for getting the address of the 32/64 bit
@@ -3803,7 +3804,7 @@ EXPORT_SYMBOL(kernel_accept);
  *	Returns 0 or an error code.
  */
 
-int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
+int kernel_connect(struct socket *sock, struct sockaddr *addr/*目标地址*/, int addrlen,
 		   int flags)
 {
 	struct sockaddr_storage address;

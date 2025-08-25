@@ -129,9 +129,9 @@ static inline pmd_t pmd_set_flags(pmd_t pmd, pmdval_t set)
 
 static inline pmd_t pmd_clear_flags(pmd_t pmd, pmdval_t clear)
 {
-	pmdval_t v = native_pmd_val(pmd);
+	pmdval_t v = native_pmd_val(pmd);/*取得当前值*/
 
-	return native_make_pmd(v & ~clear);
+	return native_make_pmd(v & ~clear);/*清楚掉clear标记后存入*/
 }
 
 static inline pud_t pud_set_flags(pud_t pud, pudval_t set)
@@ -275,6 +275,7 @@ static inline unsigned long pmd_pfn(pmd_t pmd)
 }
 
 #define pud_pfn pud_pfn
+/*取pud值对应的页地址的页帧号*/
 static inline unsigned long pud_pfn(pud_t pud)
 {
 	phys_addr_t pfn = pud_val(pud);
@@ -346,6 +347,7 @@ static inline pud_t pud_mkspecial(pud_t pud)
 
 static inline pte_t pte_set_flags(pte_t pte, pteval_t set)
 {
+	/*为pte设置标记set*/
 	pteval_t v = native_pte_val(pte);
 
 	return native_make_pte(v | set);
@@ -470,6 +472,7 @@ static inline pte_t pte_mkyoung(pte_t pte)
 
 static inline pte_t pte_mkwrite_novma(pte_t pte)
 {
+	/*为此pte直加rw标记*/
 	return pte_set_flags(pte, _PAGE_RW);
 }
 
@@ -1031,6 +1034,7 @@ static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 
 static inline int pmd_bad(pmd_t pmd)
 {
+	/*标记位有误*/
 	return (pmd_flags(pmd) & ~(_PAGE_USER | _PAGE_ACCESSED)) !=
 	       (_KERNPG_TABLE & ~_PAGE_ACCESSED);
 }
@@ -1049,9 +1053,11 @@ static inline int pud_none(pud_t pud)
 
 static inline int pud_present(pud_t pud)
 {
+	/*检查pud项是否已填充*/
 	return pud_flags(pud) & _PAGE_PRESENT;
 }
 
+/*取pud中保存的值，移除flags后返回的即为pmd对应的页（转虚地址）*/
 static inline pmd_t *pud_pgtable(pud_t pud)
 {
 	return (pmd_t *)__va(pud_val(pud) & pud_pfn_mask(pud));
@@ -1478,6 +1484,7 @@ static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
 #endif
 }
 
+/*定义PTE_SHIFT，指明PTE起始位数*/
 #define PTE_SHIFT ilog2(PTRS_PER_PTE)
 static inline int page_level_shift(enum pg_level level)
 {
@@ -1552,6 +1559,7 @@ static inline pmd_t pmd_swp_mksoft_dirty(pmd_t pmd)
 
 static inline int pmd_swp_soft_dirty(pmd_t pmd)
 {
+	/*检查pmd上是否有swp_soft_dirty标记*/
 	return pmd_flags(pmd) & _PAGE_SWP_SOFT_DIRTY;
 }
 

@@ -967,7 +967,7 @@ struct mm_struct {
 		unsigned long mmap_compat_legacy_base;
 #endif
 		unsigned long task_size;	/* size of task vm space */
-		//进程对应的page global directory,由其中的表项可查询page midle directory
+		//进程对应的page global directory,由其中的表项可查询page midle directory,pte等
 		pgd_t * pgd;
 
 #ifdef CONFIG_MEMBARRIER
@@ -1030,6 +1030,7 @@ struct mm_struct {
 		raw_spinlock_t cpus_allowed_lock;
 #endif
 #ifdef CONFIG_MMU
+		/*pagetable占用的字节数*/
 		atomic_long_t pgtables_bytes;	/* size of all page tables */
 #endif
 		/*记录映射了多少个vma*/

@@ -794,12 +794,15 @@ static inline bool ipv6_addr_loopback(const struct in6_addr *a)
  */
 static inline bool ipv6_addr_v4mapped(const struct in6_addr *a)
 {
+	/*是否v4映射v6地址*/
 	return (
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) && BITS_PER_LONG == 64
 		*(unsigned long *)a |
 #else
+		/*前8个字节必须为0*/
 		(__force unsigned long)(a->s6_addr32[0] | a->s6_addr32[1]) |
 #endif
+		/*第3个uint32的前2个字节必须为0xFFFF，后两个字节必须为0x0000*/
 		(__force unsigned long)(a->s6_addr32[2] ^
 					cpu_to_be32(0x0000ffff))) == 0UL;
 }
@@ -845,7 +848,7 @@ static inline bool ipv6_addr_is_multicast(const struct in6_addr *addr)
 static inline void ipv6_addr_set_v4mapped(const __be32 addr,
 					  struct in6_addr *v4mapped)
 {
-	/*v4映射地址格式：::FFFF:$addr*/
+	/*v4映射地址格式：::FFFF:$addr，v4地址转换到v6地址*/
 	ipv6_addr_set(v4mapped,
 			0, 0,
 			htonl(0x0000FFFF),

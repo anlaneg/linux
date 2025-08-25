@@ -159,7 +159,9 @@ static inline bool inet_bound_dev_eq(bool l3mdev_accept, int bound_dev_if,
 				     int dif, int sdif)
 {
 	if (!bound_dev_if)
+		/*bound_dev_if为0，则sdif为0或者l3mdev_accept为真，则返回真*/
 		return !sdif || l3mdev_accept;
+	/*否则bound_dev_if不为0，则其需要与dif,sdif相等，则返回真*/
 	return bound_dev_if == dif || bound_dev_if == sdif;
 }
 
@@ -418,8 +420,10 @@ static inline unsigned int __inet_ehashfn(const __be32 laddr,
 					  const __be16 fport,
 					  u32 initval)
 {
+	/*使用jhash*/
 	return jhash_3words((__force __u32) laddr,
 			    (__force __u32) faddr,
+				/*将local port, remote port压成一个u32*/
 			    ((__u32) lport) << 16 | (__force __u32)fport,
 			    initval);
 }

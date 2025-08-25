@@ -442,6 +442,7 @@ spinlock_t *__pud_trans_huge_lock(pud_t *pud, struct vm_area_struct *vma);
 
 static inline int is_swap_pmd(pmd_t pmd)
 {
+	/*pmd被填充，但pmd未设置present,认为此pmd被换出*/
 	return !pmd_none(pmd) && !pmd_present(pmd);
 }
 

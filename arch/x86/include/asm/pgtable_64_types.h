@@ -50,6 +50,7 @@ extern unsigned int ptrs_per_p4d;
 
 /*
  * 4th level page in 5-level paging case
+ * p4d占用9bits,自[39-47]
  */
 #define P4D_SHIFT		39
 #define MAX_PTRS_PER_P4D	512
@@ -61,26 +62,37 @@ extern unsigned int ptrs_per_p4d;
 
 /*
  * 3rd level page
+ * pud占用9bits,自[30-38]
  */
 #define PUD_SHIFT	30
+/*每页大小为4K,每个指针长8字节，故512*/
 #define PTRS_PER_PUD	512
 
 /*
  * PMD_SHIFT determines the size of the area a middle-level
  * page table can map
  */
+/*pmd占用9bits,自[21-29]*/
 #define PMD_SHIFT	21
+/*每页大小为4K,每个指针长8字节，故512*/
 #define PTRS_PER_PMD	512
 
 /*
  * entries per page directory level
  */
+/*pte占用的是[12-20],PTE_SHIFT定义在arch/x86/include/asm/pgtable.h中*/
+/*每页大小为4K,每个指针长8字节，故512*/
 #define PTRS_PER_PTE	512
 
+/*一个PMD可以表示的最大空间（例如:2M)*/
 #define PMD_SIZE	(_AC(1, UL) << PMD_SHIFT)
+/*PMD掩码*/
 #define PMD_MASK	(~(PMD_SIZE - 1))
+/*一个pud可以表示的最大空间（例如：1G）*/
 #define PUD_SIZE	(_AC(1, UL) << PUD_SHIFT)
+/*pud掩码*/
 #define PUD_MASK	(~(PUD_SIZE - 1))
+/*一个PGD可表示的最大空间(例如48位，则512T)*/
 #define PGDIR_SIZE	(_AC(1, UL) << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE - 1))
 

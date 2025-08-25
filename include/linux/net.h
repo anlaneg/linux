@@ -162,7 +162,7 @@ typedef int (*skb_read_actor_t)(struct sock *, struct sk_buff *);
 
 
 //定义socket相关的函数，系统调用发生时，系统调用将依据不同的family调用对应的
-//proto_ops来完成工作
+//proto_ops来具体完成工作
 struct proto_ops {
 	/*对应的协议族*/
 	int		family;
@@ -189,18 +189,22 @@ struct proto_ops {
 	int		(*getname)   (struct socket *sock,
 				      struct sockaddr *addr/*出参，地址*/,
 				      int peer/*是否获取peer地址*/);
+	//socket文件的poll事件检测
 	__poll_t	(*poll)	     (struct file *file, struct socket *sock,
 				      struct poll_table_struct *wait);
+	/*针对socket执行ioctl调用*/
 	int		(*ioctl)     (struct socket *sock, unsigned int cmd,
 				      unsigned long arg);
 #ifdef CONFIG_COMPAT
 	int	 	(*compat_ioctl) (struct socket *sock, unsigned int cmd,
 				      unsigned long arg);
 #endif
+	/*获取最近接收数据包的时间戳信息*/
 	int		(*gettstamp) (struct socket *sock, void __user *userstamp,
 				      bool timeval, bool time32);
 	//listen系统调用实现
 	int		(*listen)    (struct socket *sock, int len);
+	/*shutdown系统调用实现*/
 	int		(*shutdown)  (struct socket *sock, int flags);
 	//setsockopt调用实现（非SOL_SOCKET情况）
 	int		(*setsockopt)(struct socket *sock, int level,
@@ -227,6 +231,7 @@ struct proto_ops {
 				      size_t total_len, int flags);
 	int		(*mmap)	     (struct file *file, struct socket *sock,
 				      struct vm_area_struct * vma);
+	/*用于支持此socket向pipe文件复制时的读取*/
 	ssize_t 	(*splice_read)(struct socket *sock,  loff_t *ppos,
 				       struct pipe_inode_info *pipe, size_t len, unsigned int flags);
 	void		(*splice_eof)(struct socket *sock);

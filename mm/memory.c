@@ -421,10 +421,12 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 	} while (vma);
 }
 
+/*pmd映射项添加，使此pmd项指向其关联的pgtable*/
 void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 {
-	spinlock_t *ptl = pmd_lock(mm, pmd);
+	spinlock_t *ptl = pmd_lock(mm, pmd);/*加锁保护*/
 
+	/*加锁后再检查一次，防止其它堆栈已填充此pmd,如已填充，则跳过*/
 	if (likely(pmd_none(*pmd))) {	/* Has another populated it ? */
 		mm_inc_nr_ptes(mm);
 		/*
@@ -441,19 +443,20 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 		 * smp_rmb() barriers in page table walking code.
 		 */
 		smp_wmb(); /* Could be smp_wmb__xxx(before|after)_spin_lock */
-		pmd_populate(mm, pmd, *pte);
+		pmd_populate(mm, pmd, *pte);/*填充pte,使此pmd项关联这个pte页*/
 		*pte = NULL;
 	}
 	spin_unlock(ptl);
 }
 
+/*申请pte页并填充此pmd项*/
 int __pte_alloc(struct mm_struct *mm, pmd_t *pmd)
 {
-	pgtable_t new = pte_alloc_one(mm);
+	pgtable_t new = pte_alloc_one(mm);/*申请pte用的页*/
 	if (!new)
 		return -ENOMEM;
 
-	pmd_install(mm, pmd, &new);
+	pmd_install(mm, pmd, &new);/*更新此pmd项，使其与申请页关联*/
 	if (new)
 		pte_free(mm, new);
 	return 0;
@@ -461,14 +464,14 @@ int __pte_alloc(struct mm_struct *mm, pmd_t *pmd)
 
 int __pte_alloc_kernel(pmd_t *pmd)
 {
-	pte_t *new = pte_alloc_one_kernel(&init_mm);
+	pte_t *new = pte_alloc_one_kernel(&init_mm);/*申请pte用的页*/
 	if (!new)
 		return -ENOMEM;
 
 	spin_lock(&init_mm.page_table_lock);
 	if (likely(pmd_none(*pmd))) {	/* Has another populated it ? */
 		smp_wmb(); /* See comment in pmd_install() */
-		pmd_populate_kernel(&init_mm, pmd, new);
+		pmd_populate_kernel(&init_mm, pmd, new);/*kernel pmd表项关联*/
 		new = NULL;
 	}
 	spin_unlock(&init_mm.page_table_lock);
@@ -2064,6 +2067,7 @@ void zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
 }
 EXPORT_SYMBOL_GPL(zap_vma_ptes);
 
+/*利用mm,addr关联到pmd*/
 static pmd_t *walk_to_pmd(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
@@ -2071,28 +2075,29 @@ static pmd_t *walk_to_pmd(struct mm_struct *mm, unsigned long addr)
 	pud_t *pud;
 	pmd_t *pmd;
 
-	pgd = pgd_offset(mm, addr);
-	p4d = p4d_alloc(mm, pgd, addr);
+	pgd = pgd_offset(mm, addr);/*取pgd*/
+	p4d = p4d_alloc(mm, pgd, addr);/*取或申请p4d*/
 	if (!p4d)
-		return NULL;
-	pud = pud_alloc(mm, p4d, addr);
+		return NULL;/*取p4d失败*/
+	pud = pud_alloc(mm, p4d, addr);/*取或申请pud*/
 	if (!pud)
-		return NULL;
-	pmd = pmd_alloc(mm, pud, addr);
+		return NULL;/*取pud失败*/
+	pmd = pmd_alloc(mm, pud, addr);/*取或申请pmd*/
 	if (!pmd)
-		return NULL;
+		return NULL;/*取pmd失败*/
 
-	VM_BUG_ON(pmd_trans_huge(*pmd));
-	return pmd;
+	VM_BUG_ON(pmd_trans_huge(*pmd));/*此pmd必没有开启super页*/
+	return pmd;/*返回pmd*/
 }
 
 pte_t *__get_locked_pte(struct mm_struct *mm, unsigned long addr,
 			spinlock_t **ptl)
 {
-	pmd_t *pmd = walk_to_pmd(mm, addr);
+	pmd_t *pmd = walk_to_pmd(mm, addr);/*获得初见pmd*/
 
 	if (!pmd)
 		return NULL;
+	/*获得pte(并加锁）*/
 	return pte_alloc_map_lock(mm, pmd, addr, ptl);
 }
 
@@ -2150,14 +2155,16 @@ static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
 				pgprot_t prot, bool mkwrite)
 {
 	struct folio *folio = page_folio(page);
-	pte_t pteval = ptep_get(pte);
+	pte_t pteval = ptep_get(pte);/*取pte值*/
 
 	if (!pte_none(pteval)) {
+		/*此pte已填充,尝试变更pte*/
 		if (!mkwrite)
 			return -EBUSY;
 
 		/* see insert_pfn(). */
 		if (pte_pfn(pteval) != page_to_pfn(page)) {
+			/*此pte中填充的内容与page不匹配*/
 			WARN_ON_ONCE(!is_zero_pfn(pte_pfn(pteval)));
 			return -EFAULT;
 		}
@@ -2169,12 +2176,12 @@ static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
 	}
 
 	/* Ok, finally just insert the thing.. */
-	pteval = mk_pte(page, prot);
+	pteval = mk_pte(page, prot);/*构造pte*/
 	if (unlikely(is_zero_folio(folio))) {
 		pteval = pte_mkspecial(pteval);
 	} else {
 		folio_get(folio);
-		pteval = mk_pte(page, prot);
+		pteval = mk_pte(page, prot);/*上面此变量已设置，这里再构造一次没啥意义*/
 		if (mkwrite) {
 			pteval = pte_mkyoung(pteval);
 			pteval = maybe_mkwrite(pte_mkdirty(pteval), vma);
@@ -2182,7 +2189,7 @@ static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
 		inc_mm_counter(vma->vm_mm, mm_counter_file(folio));
 		folio_add_file_rmap_pte(folio, page, vma);
 	}
-	set_pte_at(vma->vm_mm, addr, pte, pteval);
+	set_pte_at(vma->vm_mm, addr, pte, pteval);/*更新pte*/
 	return 0;
 }
 
@@ -2197,7 +2204,7 @@ static int insert_page(struct vm_area_struct *vma, unsigned long addr,
 	if (retval)
 		goto out;
 	retval = -ENOMEM;
-	pte = get_locked_pte(vma->vm_mm, addr, &ptl);
+	pte = get_locked_pte(vma->vm_mm, addr, &ptl);/*取得pte(加锁）*/
 	if (!pte)
 		goto out;
 	retval = insert_page_into_pte_locked(vma, pte, addr, page, prot,
@@ -2221,8 +2228,8 @@ static int insert_page_in_batch_locked(struct vm_area_struct *vma, pte_t *pte,
 /* insert_pages() amortizes the cost of spinlock operations
  * when inserting pages in a loop.
  */
-static int insert_pages(struct vm_area_struct *vma, unsigned long addr,
-			struct page **pages, unsigned long *num, pgprot_t prot)
+static int insert_pages(struct vm_area_struct *vma, unsigned long addr/*起始地址*/,
+			struct page **pages/*关联的page页*/, unsigned long *num/*pages数组数目*/, pgprot_t prot/*pte权限位*/)
 {
 	pmd_t *pmd = NULL;
 	pte_t *start_pte, *pte;
@@ -2236,26 +2243,31 @@ more:
 	ret = -EFAULT;
 	pmd = walk_to_pmd(mm, addr);
 	if (!pmd)
-		goto out;
+		goto out;/*取addr对应的pmd失败*/
 
+	/*addr会对应一个pte索引，一页只能保存PTRS_PER_PTE个，故两者相减为自addr到页尾最多有多少个pte*/
 	pages_to_write_in_pmd = min_t(unsigned long,
 		remaining_pages_total, PTRS_PER_PTE - pte_index(addr));
 
 	/* Allocate the PTE if necessary; takes PMD lock once only. */
 	ret = -ENOMEM;
 	if (pte_alloc(mm, pmd))
-		goto out;
+		goto out;/*申请pmd关联的pte table失败*/
 
 	while (pages_to_write_in_pmd) {
 		int pte_idx = 0;
 		const int batch_size = min_t(int, pages_to_write_in_pmd, 8);
 
+		/*首个pte*/
 		start_pte = pte_offset_map_lock(mm, pmd, addr, &pte_lock);
 		if (!start_pte) {
 			ret = -EFAULT;
 			goto out;
 		}
+
+		/*自pte到pte + pages_to_write_in_pmd结尾这些pte均可以通过++pte直接获取(vma是连续的）*/
 		for (pte = start_pte; pte_idx < batch_size; ++pte, ++pte_idx) {
+			/*更新addr（对应的页pages[curr_page_idx])关联的pte页信息*/
 			int err = insert_page_in_batch_locked(vma, pte,
 				addr, pages[curr_page_idx], prot);
 			if (unlikely(err)) {
@@ -2264,8 +2276,8 @@ more:
 				remaining_pages_total -= pte_idx;
 				goto out;
 			}
-			addr += PAGE_SIZE;
-			++curr_page_idx;
+			addr += PAGE_SIZE;/*地址向前移动一页*/
+			++curr_page_idx;/*pages索引向前移动一页*/
 		}
 		pte_unmap_unlock(start_pte, pte_lock);
 		pages_to_write_in_pmd -= batch_size;
@@ -2294,8 +2306,8 @@ out:
  *
  * The same restrictions apply as in vm_insert_page().
  */
-int vm_insert_pages(struct vm_area_struct *vma, unsigned long addr,
-			struct page **pages, unsigned long *num)
+int vm_insert_pages(struct vm_area_struct *vma, unsigned long addr/*要映射的起始地址*/,
+			struct page **pages/*一组页面*/, unsigned long *num/*页面数目*/)
 {
 	const unsigned long end_addr = addr + (*num * PAGE_SIZE) - 1;
 
@@ -2351,6 +2363,7 @@ int vm_insert_page(struct vm_area_struct *vma, unsigned long addr,
 		BUG_ON(vma->vm_flags & VM_PFNMAP);
 		vm_flags_set(vma, VM_MIXEDMAP);
 	}
+	/*映射单个物理页*/
 	return insert_page(vma, addr, page, vma->vm_page_prot, false);
 }
 EXPORT_SYMBOL(vm_insert_page);
@@ -2369,25 +2382,26 @@ EXPORT_SYMBOL(vm_insert_page);
  * Return: 0 on success and error code otherwise.
  */
 static int __vm_map_pages(struct vm_area_struct *vma, struct page **pages,
-				unsigned long num, unsigned long offset)
+				unsigned long num/*pages数组大小*/, unsigned long offset/*pages可用起始位置*/)
 {
-	unsigned long count = vma_pages(vma);
-	unsigned long uaddr = vma->vm_start;
+	unsigned long count = vma_pages(vma);/*此vma占用页数*/
+	unsigned long uaddr = vma->vm_start;/*起始地址*/
 	int ret, i;
 
 	/* Fail if the user requested offset is beyond the end of the object */
 	if (offset >= num)
-		return -ENXIO;
+		return -ENXIO;/*偏移量超限*/
 
 	/* Fail if the user requested size exceeds available object size */
 	if (count > num - offset)
-		return -ENXIO;
+		return -ENXIO;/*pages不足以映射此vma*/
 
 	for (i = 0; i < count; i++) {
+		/*映射单个物理页*/
 		ret = vm_insert_page(vma, uaddr, pages[offset + i]);
 		if (ret < 0)
 			return ret;
-		uaddr += PAGE_SIZE;
+		uaddr += PAGE_SIZE;/*跳到下一页*/
 	}
 
 	return 0;
@@ -2412,9 +2426,9 @@ static int __vm_map_pages(struct vm_area_struct *vma, struct page **pages,
  * Return: 0 on success and error code otherwise.
  */
 int vm_map_pages(struct vm_area_struct *vma, struct page **pages,
-				unsigned long num)
+				unsigned long num/*pages数组大小*/)
 {
-	return __vm_map_pages(vma, pages, num, vma->vm_pgoff);
+	return __vm_map_pages(vma, pages, num, vma->vm_pgoff/*pages可分配的起始位置*/);
 }
 EXPORT_SYMBOL(vm_map_pages);
 
@@ -2432,9 +2446,9 @@ EXPORT_SYMBOL(vm_map_pages);
  * Return: 0 on success and error code otherwise.
  */
 int vm_map_pages_zero(struct vm_area_struct *vma, struct page **pages,
-				unsigned long num)
+				unsigned long num/*pages数组大小*/)
 {
-	return __vm_map_pages(vma, pages, num, 0);
+	return __vm_map_pages(vma, pages, num, 0/*从0号位置开始分配*/);
 }
 EXPORT_SYMBOL(vm_map_pages_zero);
 
@@ -6426,15 +6440,15 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
  */
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
-	pud_t *new = pud_alloc_one(mm, address);
+	pud_t *new = pud_alloc_one(mm, address);/*申请pud对应的页*/
 	if (!new)
 		return -ENOMEM;
 
-	spin_lock(&mm->page_table_lock);
+	spin_lock(&mm->page_table_lock);/*对pud这种加锁粒度比较粗*/
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
-		p4d_populate(mm, p4d, new);
+		p4d_populate(mm, p4d, new);/*填充p4d表项关联到此pud页*/
 	} else	/* Another has populated it */
 		pud_free(mm, new);
 	spin_unlock(&mm->page_table_lock);

@@ -48,6 +48,7 @@
 /* - if the user mapped it with PROT_NONE; pte_present gives true */
 #define _PAGE_BIT_PROTNONE	_PAGE_BIT_GLOBAL
 
+/*指明是否页存在*/
 #define _PAGE_PRESENT	(_AT(pteval_t, 1) << _PAGE_BIT_PRESENT)
 #define _PAGE_RW	(_AT(pteval_t, 1) << _PAGE_BIT_RW)
 #define _PAGE_USER	(_AT(pteval_t, 1) << _PAGE_BIT_USER)
@@ -55,6 +56,7 @@
 #define _PAGE_PCD	(_AT(pteval_t, 1) << _PAGE_BIT_PCD)
 #define _PAGE_ACCESSED	(_AT(pteval_t, 1) << _PAGE_BIT_ACCESSED)
 #define _PAGE_DIRTY	(_AT(pteval_t, 1) << _PAGE_BIT_DIRTY)
+/*指明是否为super页*/
 #define _PAGE_PSE	(_AT(pteval_t, 1) << _PAGE_BIT_PSE)
 #define _PAGE_GLOBAL	(_AT(pteval_t, 1) << _PAGE_BIT_GLOBAL)
 #define _PAGE_SOFTW1	(_AT(pteval_t, 1) << _PAGE_BIT_SOFTW1)
@@ -218,6 +220,7 @@ enum page_cache_mode {
 #define _KERNPG_TABLE_NOENC	 (__PP|__RW|   0|___A|   0|___D|   0|   0)
 #define _KERNPG_TABLE		 (__PP|__RW|   0|___A|   0|___D|   0|   0| _ENC)
 #define _PAGE_TABLE_NOENC	 (__PP|__RW|_USR|___A|   0|___D|   0|   0)
+/*页表用标记位*/
 #define _PAGE_TABLE		 (__PP|__RW|_USR|___A|   0|___D|   0|   0| _ENC)
 
 #define __PAGE_KERNEL_RO	 (__PP|   0|   0|___A|__NX|   0|   0|___G)
@@ -339,6 +342,7 @@ static inline pgdval_t pgd_flags(pgd_t pgd)
 }
 
 #if CONFIG_PGTABLE_LEVELS > 4
+/*level大于4时生效*/
 typedef struct { p4dval_t p4d; } p4d_t;
 
 static inline p4d_t native_make_p4d(pudval_t val)
@@ -372,6 +376,7 @@ static inline pud_t native_make_pud(pmdval_t val)
 	return (pud_t) { val };
 }
 
+/*取pud数值*/
 static inline pudval_t native_pud_val(pud_t pud)
 {
 	return pud.pud;
@@ -417,12 +422,12 @@ static inline pmdval_t native_pmd_val(pmd_t pmd)
 static inline p4dval_t p4d_pfn_mask(p4d_t p4d)
 {
 	/* No 512 GiB huge pages yet */
-	return PTE_PFN_MASK;
+	return PTE_PFN_MASK;/*取p4d对应的掩码,这里没有大页问题，直接使用pte mask*/
 }
 
 static inline p4dval_t p4d_flags_mask(p4d_t p4d)
 {
-	return ~p4d_pfn_mask(p4d);
+	return ~p4d_pfn_mask(p4d);/*取反，即p4d值可有哪些bit可以用于存放flags*/
 }
 
 /*取p4d上的flags*/
@@ -434,36 +439,42 @@ static inline p4dval_t p4d_flags(p4d_t p4d)
 static inline pudval_t pud_pfn_mask(pud_t pud)
 {
 	if (native_pud_val(pud) & _PAGE_PSE)
+		/*pud为super页，则返回pud物理页帧掩码*/
 		return PHYSICAL_PUD_PAGE_MASK;
 	else
+		/*非pud super页，返回PTE物理页帧掩码*/
 		return PTE_PFN_MASK;
 }
 
 static inline pudval_t pud_flags_mask(pud_t pud)
 {
-	return ~pud_pfn_mask(pud);
+	return ~pud_pfn_mask(pud);/*取反，即pud值可有哪些bit可以用于存放flags*/
 }
 
 static inline pudval_t pud_flags(pud_t pud)
 {
+	/*取得pud值中包含的flags*/
 	return native_pud_val(pud) & pud_flags_mask(pud);
 }
 
 static inline pmdval_t pmd_pfn_mask(pmd_t pmd)
 {
 	if (native_pmd_val(pmd) & _PAGE_PSE)
+		/*pmd项为super页，则返回pmd物理页帧掩码*/
 		return PHYSICAL_PMD_PAGE_MASK;
 	else
+		/*非pmd super页，返回pmd物理页帧掩码*/
 		return PTE_PFN_MASK;
 }
 
 static inline pmdval_t pmd_flags_mask(pmd_t pmd)
 {
-	return ~pmd_pfn_mask(pmd);
+	return ~pmd_pfn_mask(pmd);/*取反，即pmd值可有哪些bit可以用于存放flags*/
 }
 
 static inline pmdval_t pmd_flags(pmd_t pmd)
 {
+	/*取得pmd值中包含的flags*/
 	return native_pmd_val(pmd) & pmd_flags_mask(pmd);
 }
 
@@ -479,6 +490,7 @@ static inline pteval_t native_pte_val(pte_t pte)
 
 static inline pteval_t pte_flags(pte_t pte)
 {
+	/*取得pte值中包含的flags*/
 	return native_pte_val(pte) & PTE_FLAGS_MASK;
 }
 

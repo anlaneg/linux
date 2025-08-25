@@ -4311,10 +4311,10 @@ static bool tcp_fast_parse_options(const struct net *net,
  * Parse Signature options
  */
 int tcp_do_parse_auth_options(const struct tcphdr *th,
-			      const u8 **md5_hash, const u8 **ao_hash)
+			      const u8 **md5_hash/*出参，md5 hash*/, const u8 **ao_hash/*出参，ao hash*/)
 {
 	int length = (th->doff << 2) - sizeof(*th);
-	const u8 *ptr = (const u8 *)(th + 1);
+	const u8 *ptr = (const u8 *)(th + 1);/*指向选项*/
 	unsigned int minlen = TCPOLEN_MD5SIG;
 
 	if (IS_ENABLED(CONFIG_TCP_AO))
@@ -4325,7 +4325,7 @@ int tcp_do_parse_auth_options(const struct tcphdr *th,
 
 	/* If not enough data remaining, we can short cut */
 	while (length >= minlen) {
-		int opcode = *ptr++;
+		int opcode = *ptr++;/*取opcode*/
 		int opsize;
 
 		switch (opcode) {
@@ -4335,16 +4335,18 @@ int tcp_do_parse_auth_options(const struct tcphdr *th,
 			length--;
 			continue;
 		default:
-			opsize = *ptr++;
+			opsize = *ptr++;/*取选项对应的长度*/
 			if (opsize < 2 || opsize > length)
 				return -EINVAL;
 			if (opcode == TCPOPT_MD5SIG) {
+				/*遇到TCPOPT_MD5SIG选项*/
 				if (opsize != TCPOLEN_MD5SIG)
-					return -EINVAL;
+					return -EINVAL;/*长度有误*/
 				if (unlikely(*md5_hash || *ao_hash))
-					return -EEXIST;
-				*md5_hash = ptr;
+					return -EEXIST;/*已存在*/
+				*md5_hash = ptr;/*指向hash*/
 			} else if (opcode == TCPOPT_AO) {
+				/*遇到TCPOPT_AO选项*/
 				if (opsize <= sizeof(struct tcp_ao_hdr))
 					return -EINVAL;
 				if (unlikely(*md5_hash || *ao_hash))

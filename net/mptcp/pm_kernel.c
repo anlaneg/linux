@@ -32,7 +32,7 @@ struct pm_nl_pernet {
 
 static struct pm_nl_pernet *pm_nl_get_pernet(const struct net *net)
 {
-	return net_generic(net, pm_nl_pernet_id);
+	return net_generic(net, pm_nl_pernet_id);/*取此net namespace中的pm_nl_pernet_id数据*/
 }
 
 static struct pm_nl_pernet *
@@ -62,6 +62,7 @@ unsigned int mptcp_pm_get_add_addr_accept_max(const struct mptcp_sock *msk)
 }
 EXPORT_SYMBOL_GPL(mptcp_pm_get_add_addr_accept_max);
 
+/*subflow的最大数*/
 unsigned int mptcp_pm_get_subflows_max(const struct mptcp_sock *msk)
 {
 	struct pm_nl_pernet *pernet = pm_nl_get_pernet_from_msk(msk);
@@ -84,19 +85,20 @@ static bool lookup_subflow_by_daddr(const struct list_head *list,
 	struct mptcp_subflow_context *subflow;
 	struct mptcp_addr_info cur;
 
+	/*遍历list上串连的所有subflow*/
 	list_for_each_entry(subflow, list, node) {
 		struct sock *ssk = mptcp_subflow_tcp_sock(subflow);
 
 		if (!((1 << inet_sk_state_load(ssk)) &
 		      (TCPF_ESTABLISHED | TCPF_SYN_SENT | TCPF_SYN_RECV)))
-			continue;
+			continue;/*socket状态不满足*/
 
 		mptcp_remote_address((struct sock_common *)ssk, &cur);
 		if (mptcp_addresses_equal(&cur, daddr, daddr->port))
-			return true;
+			return true;/*已包含相同的daddr地址*/
 	}
 
-	return false;
+	return false;/*未包含*/
 }
 
 static bool
@@ -381,8 +383,8 @@ static void mptcp_pm_nl_subflow_established(struct mptcp_sock *msk)
  * and return the array size.
  */
 static unsigned int fill_local_addresses_vec(struct mptcp_sock *msk,
-					     struct mptcp_addr_info *remote,
-					     struct mptcp_pm_local *locals)
+					     struct mptcp_addr_info *remote,/*远端地址*/
+					     struct mptcp_pm_local *locals/*出参，填充local地址*/)
 {
 	struct sock *sk = (struct sock *)msk;
 	struct mptcp_pm_addr_entry *entry;
@@ -391,18 +393,19 @@ static unsigned int fill_local_addresses_vec(struct mptcp_sock *msk,
 	unsigned int subflows_max;
 	int i = 0;
 
-	pernet = pm_nl_get_pernet_from_msk(msk);
+	pernet = pm_nl_get_pernet_from_msk(msk);/*取得socket对应netns的私有数据*/
 	subflows_max = mptcp_pm_get_subflows_max(msk);
 
-	mptcp_local_address((struct sock_common *)msk, &mpc_addr);
+	mptcp_local_address((struct sock_common *)msk, &mpc_addr);/*取得socket上本端地址*/
 
 	rcu_read_lock();
+	/*遍历pernet->local_addr_list,收集locals数组*/
 	list_for_each_entry_rcu(entry, &pernet->local_addr_list, list) {
 		if (!(entry->flags & MPTCP_PM_ADDR_FLAG_FULLMESH))
 			continue;
 
 		if (!mptcp_pm_addr_families_match(sk, &entry->addr, remote))
-			continue;
+			continue;/*family不匹配*/
 
 		if (msk->pm.subflows < subflows_max) {
 			locals[i].addr = entry->addr;
@@ -411,6 +414,7 @@ static unsigned int fill_local_addresses_vec(struct mptcp_sock *msk,
 
 			/* Special case for ID0: set the correct ID */
 			if (mptcp_addresses_equal(&locals[i].addr, &mpc_addr, locals[i].addr.port))
+				/*locals地址与socket上本端地址的相同*/
 				locals[i].addr.id = 0;
 
 			msk->pm.subflows++;
@@ -423,6 +427,7 @@ static unsigned int fill_local_addresses_vec(struct mptcp_sock *msk,
 	 * 'IPADDRANY' local address
 	 */
 	if (!i) {
+		/*无有效地址，使用remote地址的family,使用0做为local地址*/
 		memset(&locals[i], 0, sizeof(locals[i]));
 		locals[i].addr.family =
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
@@ -438,7 +443,7 @@ static unsigned int fill_local_addresses_vec(struct mptcp_sock *msk,
 		i++;
 	}
 
-	return i;
+	return i;/*返回locals数组长度*/
 }
 
 static void mptcp_pm_nl_add_addr_received(struct mptcp_sock *msk)
@@ -458,25 +463,26 @@ static void mptcp_pm_nl_add_addr_received(struct mptcp_sock *msk)
 		 msk->pm.add_addr_accepted, add_addr_accept_max,
 		 msk->pm.remote.family);
 
-	remote = msk->pm.remote;
+	remote = msk->pm.remote;/*取远端地址*/
 	mptcp_pm_announce_addr(msk, &remote, true);
 	mptcp_pm_addr_send_ack(msk);
 
 	if (lookup_subflow_by_daddr(&msk->conn_list, &remote))
-		return;
+		return;/*remote地址已存在*/
 
 	/* pick id 0 port, if none is provided the remote address */
 	if (!remote.port)
-		remote.port = sk->sk_dport;
+		remote.port = sk->sk_dport;/*使用原socket 目的地址*/
 
 	/* connect to the specified remote address, using whatever
 	 * local address the routing configuration will pick.
 	 */
 	nr = fill_local_addresses_vec(msk, &remote, locals);
 	if (nr == 0)
-		return;
+		return;/*local地址数为0，退出*/
 
 	spin_unlock_bh(&msk->pm.lock);
+	/*利用这些地址逐个与remotel建立连接*/
 	for (i = 0; i < nr; i++)
 		if (__mptcp_subflow_connect(sk, &locals[i], &remote) == 0)
 			sf_created = true;
@@ -608,7 +614,7 @@ find_next:
 
 	pernet->addrs++;
 	if (!entry->addr.port)
-		list_add_tail_rcu(&entry->list, &pernet->local_addr_list);
+		list_add_tail_rcu(&entry->list, &pernet->local_addr_list);/*添加local地址*/
 	else
 		list_add_rcu(&entry->list, &pernet->local_addr_list);
 	ret = entry->addr.id;

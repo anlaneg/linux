@@ -42,6 +42,7 @@ static int mptcp_sched_default_get_retrans(struct mptcp_sock *msk)
 	return 0;
 }
 
+/*定义default方式的scheduler*/
 static struct mptcp_sched_ops mptcp_sched_default = {
 	.get_send	= mptcp_sched_default_get_send,
 	.get_retrans	= mptcp_sched_default_get_retrans,
@@ -138,7 +139,7 @@ int mptcp_init_sched(struct mptcp_sock *msk,
 	if (!bpf_try_module_get(sched, sched->owner))
 		return -EBUSY;
 
-	msk->sched = sched;
+	msk->sched = sched;/*设置调度器*/
 	if (msk->sched->init)
 		msk->sched->init(msk);
 
@@ -191,7 +192,7 @@ int mptcp_sched_get_send(struct mptcp_sock *msk)
 	}
 
 	if (msk->sched == &mptcp_sched_default || !msk->sched)
-		return mptcp_sched_default_get_send(msk);
+		return mptcp_sched_default_get_send(msk);/*采用默认方式获取sender*/
 	return msk->sched->get_send(msk);/*取得可发送的socket(遍历subflow选择）*/
 }
 

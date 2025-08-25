@@ -6,6 +6,6 @@
 
 static inline u32 net_hash_mix(const struct net *net)
 {
-	return net->hash_mix;
+	return net->hash_mix;/*netns中的hash secret*/
 }
 #endif

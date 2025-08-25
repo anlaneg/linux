@@ -37,7 +37,7 @@
  * but LISTEN ones.
  */
 struct inet_ehash_bucket {
-	struct hlist_nulls_head chain;
+	struct hlist_nulls_head chain;/*链表头*/
 };
 
 /* There are a few simple rules, which allow for local port reuse by
@@ -328,6 +328,7 @@ static inline struct sock *inet_lookup_listener(struct net *net,
 #define INET_COMBINED_PORTS(__sport, __dport) \
 	((__force __portpair)(((__force __u32)(__be16)(__sport) << 16) | (__u32)(__dport)))
 #else /* __LITTLE_ENDIAN */
+/*将srcport,dstport压成一个u32的port pair*/
 #define INET_COMBINED_PORTS(__sport, __dport) \
 	((__force __portpair)(((__u32)(__dport) << 16) | (__force __u32)(__be16)(__sport)))
 #endif
@@ -338,6 +339,7 @@ static inline struct sock *inet_lookup_listener(struct net *net,
 				   (((__force __u64)(__be32)(__saddr)) << 32) | \
 				   ((__force __u64)(__be32)(__daddr)))
 #else /* __LITTLE_ENDIAN */
+/*将saddr,daddr压成一个u64位的addr pair*/
 #define INET_ADDR_COOKIE(__name, __saddr, __daddr) \
 	const __addrpair __name = (__force __addrpair) ( \
 				   (((__force __u64)(__be32)(__daddr)) << 32) | \
@@ -345,17 +347,17 @@ static inline struct sock *inet_lookup_listener(struct net *net,
 #endif /* __BIG_ENDIAN */
 
 static inline bool inet_match(const struct net *net, const struct sock *sk,
-			      const __addrpair cookie, const __portpair ports,
+			      const __addrpair cookie/*地址pair*/, const __portpair ports/*端口pair*/,
 			      int dif, int sdif)
 {
 	if (!net_eq(sock_net(sk), net) ||
 	    sk->sk_portpair != ports ||
 	    sk->sk_addrpair != cookie)
-	        return false;
+	        return false;/*以上三者存在不匹配*/
 
 	/* READ_ONCE() paired with WRITE_ONCE() in sock_bindtoindex_locked() */
 	return inet_sk_bound_dev_eq(net, READ_ONCE(sk->sk_bound_dev_if), dif,
-				    sdif);
+				    sdif);/*检查sk->sk_bound_dev_if匹配情况*/
 }
 
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so we need
@@ -407,7 +409,7 @@ static inline struct sock *__inet_lookup(struct net *net,
 					 const int dif, const int sdif,
 					 bool *refcounted)
 {
-    //将目的端口转为本地值
+    //将目的端口转为主机序
 	u16 hnum = ntohs(dport);
 	struct sock *sk;
 
@@ -487,11 +489,11 @@ struct sock *inet_steal_sock(struct net *net, struct sk_buff *skb, int doff,
 //查询skb对应的socket
 static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 					     struct sk_buff *skb,
-					     int doff,//tcp头部长度
+					     int doff,//tcp头部长度（数据偏移量）
 					     const __be16 sport,//源port
 					     const __be16 dport,//目的port
 					     const int sdif,//入接口
-					     bool *refcounted)
+					     bool *refcounted/*出参，是否已增加引用计数*/)
 {
 	struct net *net = skb_dst_dev_net_rcu(skb);
 	const struct iphdr *iph = ip_hdr(skb);

@@ -2247,15 +2247,15 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	u32 isn;
 
 	drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
-	//只处理到本机的tcp报文
 	if (skb->pkt_type != PACKET_HOST)
+		//只处理到本机的tcp报文
 		goto discard_it;
 
 	/* Count it even if it's bad */
 	__TCP_INC_STATS(net, TCP_MIB_INSEGS);/*tcp总入包数*/
 
-	//报文长度不足tcp头长度，丢包
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
+		//报文长度不足tcp头长度，丢包
 		goto discard_it;
 
 	/*取tcp头*/
@@ -2277,7 +2277,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	 * So, we defer the checks. */
 
 	//checksum校验
-	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo))
+	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo/*伪头部计算函数*/))
 		goto csum_error;
 
 	/*取报文tcp头部，ip头部*/
@@ -2406,6 +2406,7 @@ process:
 	if (drop_reason)
 		goto discard_and_relse;
 
+	/*清除掉skb上引用的ct*/
 	nf_reset_ct(skb);
 
 	//tcp bpf处理(可通过此调整性能）

@@ -544,6 +544,7 @@ static inline swp_entry_t pmd_to_swp_entry(pmd_t pmd)
 	swp_entry_t arch_entry;
 
 	if (pmd_swp_soft_dirty(pmd))
+		/*pmd有swp soft dirty标记，则清除此标记*/
 		pmd = pmd_swp_clear_soft_dirty(pmd);
 	if (pmd_swp_uffd_wp(pmd))
 		pmd = pmd_swp_clear_uffd_wp(pmd);

@@ -387,7 +387,7 @@ int mptcp_pm_nl_subflow_create_doit(struct sk_buff *skb, struct genl_info *info)
 	entry.flags |= MPTCP_PM_ADDR_FLAG_SUBFLOW;
 
 	raddr = info->attrs[MPTCP_PM_ATTR_ADDR_REMOTE];
-	err = mptcp_pm_parse_addr(raddr, info, &addr_r);
+	err = mptcp_pm_parse_addr(raddr, info, &addr_r);/*解析raddr,填充addr_r(远端地址)*/
 	if (err < 0)
 		goto create_err;
 
@@ -404,6 +404,7 @@ int mptcp_pm_nl_subflow_create_doit(struct sk_buff *skb, struct genl_info *info)
 		goto create_err;
 	}
 
+	/*本端地址*/
 	local.addr = entry.addr;
 	local.flags = entry.flags;
 	local.ifindex = entry.ifindex;
@@ -593,7 +594,7 @@ int mptcp_userspace_pm_set_flags(struct mptcp_pm_addr_entry *local,
 	}
 
 	if (local->flags & MPTCP_PM_ADDR_FLAG_BACKUP)
-		bkup = 1;
+		bkup = 1;/*添加为backup*/
 
 	spin_lock_bh(&msk->pm.lock);
 	entry = mptcp_userspace_pm_lookup_addr(msk, &local->addr);

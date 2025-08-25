@@ -1801,7 +1801,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case SO_REUSEPORT:
-		v.val = sk->sk_reuseport;
+		v.val = sk->sk_reuseport;/*取reuseport情况*/
 		break;
 
 	case SO_KEEPALIVE:

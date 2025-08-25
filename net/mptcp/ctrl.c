@@ -39,8 +39,8 @@ struct mptcp_pernet {
 	u8 checksum_enabled;
 	u8 allow_join_initial_addr_port;
 	u8 pm_type;
-	char scheduler[MPTCP_SCHED_NAME_MAX];
-	char path_manager[MPTCP_PM_NAME_MAX];
+	char scheduler[MPTCP_SCHED_NAME_MAX];/*调度器名称*/
+	char path_manager[MPTCP_PM_NAME_MAX];/*path管理器名称*/
 };
 
 static struct mptcp_pernet *mptcp_get_pernet(const struct net *net)
@@ -92,6 +92,7 @@ const char *mptcp_get_path_manager(const struct net *net)
 	return mptcp_get_pernet(net)->path_manager;
 }
 
+/*取此netns中指明的调度器*/
 const char *mptcp_get_scheduler(const struct net *net)
 {
 	return mptcp_get_pernet(net)->scheduler;
@@ -110,8 +111,8 @@ static void mptcp_pernet_set_defaults(struct mptcp_pernet *pernet)
 	pernet->allow_join_initial_addr_port = 1;
 	pernet->stale_loss_cnt = 4;
 	pernet->pm_type = MPTCP_PM_TYPE_KERNEL;
-	strscpy(pernet->scheduler, "default", sizeof(pernet->scheduler));
-	strscpy(pernet->path_manager, "kernel", sizeof(pernet->path_manager));/*path管理方式*/
+	strscpy(pernet->scheduler, "default", sizeof(pernet->scheduler));/*默认为default调度器*/
+	strscpy(pernet->path_manager, "kernel", sizeof(pernet->path_manager));/*默认是kernel来管理path*/
 }
 
 #ifdef CONFIG_SYSCTL

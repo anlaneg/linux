@@ -849,9 +849,9 @@ void __init io_uring_optable_init(void)
 	BUILD_BUG_ON(ARRAY_SIZE(io_issue_defs) != IORING_OP_LAST);
 
 	for (i = 0; i < ARRAY_SIZE(io_issue_defs); i++) {
-		BUG_ON(!io_issue_defs[i].prep);
+		BUG_ON(!io_issue_defs[i].prep);/*prep不得为空*/
 		if (io_issue_defs[i].prep != io_eopnotsupp_prep)
-			BUG_ON(!io_issue_defs[i].issue);
-		WARN_ON_ONCE(!io_cold_defs[i].name);
+			BUG_ON(!io_issue_defs[i].issue);/*此情况下issue不得为空（除非prep为io_eopnotsupp_prep)*/
+		WARN_ON_ONCE(!io_cold_defs[i].name);/*必须设置name*/
 	}
 }

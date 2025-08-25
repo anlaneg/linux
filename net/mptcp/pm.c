@@ -50,6 +50,7 @@ bool mptcp_pm_addr_families_match(const struct sock *sk,
 #endif
 }
 
+/*检查a,b地址是否相等*/
 bool mptcp_addresses_equal(const struct mptcp_addr_info *a,
 			   const struct mptcp_addr_info *b, bool use_port)
 {
@@ -78,6 +79,7 @@ bool mptcp_addresses_equal(const struct mptcp_addr_info *a,
 	return a->port == b->port;
 }
 
+/*自socket中获取local地址*/
 void mptcp_local_address(const struct sock_common *skc,
 			 struct mptcp_addr_info *addr)
 {
@@ -91,6 +93,7 @@ void mptcp_local_address(const struct sock_common *skc,
 #endif
 }
 
+/*自socket中获取remote地址*/
 void mptcp_remote_address(const struct sock_common *skc,
 			  struct mptcp_addr_info *addr)
 {
@@ -195,7 +198,7 @@ static void __mptcp_pm_send_ack(struct mptcp_sock *msk,
 	slow = lock_sock_fast(ssk);
 	if (prio) {
 		subflow->send_mp_prio = 1;
-		subflow->request_bkup = backup;
+		subflow->request_bkup = backup;/*请求变更为backup*/
 	}
 
 	__mptcp_subflow_send_ack(ssk);
@@ -618,7 +621,7 @@ void mptcp_pm_add_addr_received(const struct sock *ssk,
 		mptcp_pm_announce_addr(msk, addr, true);
 		mptcp_pm_add_addr_send_ack(msk);
 	} else if (mptcp_pm_schedule_work(msk, MPTCP_PM_ADD_ADDR_RECEIVED)) {
-		pm->remote = *addr;
+		pm->remote = *addr;/*设置远端地址*/
 	} else {
 		__MPTCP_INC_STATS(sock_net((struct sock *)msk), MPTCP_MIB_ADDADDRDROP);
 	}
@@ -754,7 +757,7 @@ void mptcp_pm_mp_prio_received(struct sock *ssk, u8 bkup)
 	pr_debug("subflow->backup=%d, bkup=%d\n", subflow->backup, bkup);
 	msk = mptcp_sk(sk);
 	if (subflow->backup != bkup)
-		subflow->backup = bkup;
+		subflow->backup = bkup;/*指明为backup*/
 
 	mptcp_event(MPTCP_EVENT_SUB_PRIORITY, msk, ssk, GFP_ATOMIC);
 }

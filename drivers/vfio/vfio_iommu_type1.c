@@ -50,7 +50,7 @@ module_param_named(allow_unsafe_interrupts,
 MODULE_PARM_DESC(allow_unsafe_interrupts,
 		 "Enable VFIO IOMMU support for on platforms without interrupt remapping support.");
 
-static bool disable_hugepages;/*禁用大页（默认为false)*/
+static bool disable_hugepages;/*是否禁用大页（默认为false)*/
 module_param_named(disable_hugepages,
 		   disable_hugepages, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_hugepages,
@@ -62,7 +62,7 @@ MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
 
 struct vfio_iommu {
-	struct list_head	domain_list;/*指向首个domain（链表），目的？*/
+	struct list_head	domain_list;/*链表：指向首个domain，目的？*/
 	struct list_head	iova_list;/*用于串连所有可用vfio_iova，用于检查哪些iova地址是有效的*/
 	struct mutex		lock;
 	struct rb_root		dma_list;/*dma region（采用红黑树）,所以map的内存挂接在此树上*/
@@ -87,11 +87,13 @@ struct vfio_domain {
 struct vfio_dma {
 	struct rb_node		node;/*用于加入树*/
 	dma_addr_t		iova;		/* Device address */
+	/*进程虚拟地址（这个地址会被转换成一个或多个连续的物理页）*/
 	unsigned long		vaddr;		/* Process virtual addr */
-	/*map地址长度*/
+	/*map地址长度（映射长度）*/
 	size_t			size;		/* Map size (bytes) */
+	/*权限*/
 	int			prot;		/* IOMMU_READ/WRITE */
-	bool			iommu_mapped;
+	bool			iommu_mapped;/*iommu是否已映射*/
 	bool			lock_cap;	/* capable(CAP_IPC_LOCK) */
 	bool			vaddr_invalid;/*指出此dma地址vaddr地址是否无效*/
 	struct task_struct	*task;/*指向进程组组长*/
@@ -587,7 +589,7 @@ static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 	mmap_read_lock(mm);
 	/*pin用户页*/
 	ret = pin_user_pages_remote(mm, vaddr, pin_pages, flags | FOLL_LONGTERM,
-				    batch->pages, NULL);
+				    batch->pages/*出参，对应的物理页*/, NULL);
 	if (ret > 0) {
 		*pfn = page_to_pfn(batch->pages[0]);/*首页页帧编号*/
 		batch->size = ret;/*页数*/
@@ -632,11 +634,11 @@ done:
  * first page and all consecutive pages with the same locking.
  */
 static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr/*虚拟地址*/,
-				  unsigned long npage/*总页数*/, unsigned long *pfn_base/*出参，*/,
+				  unsigned long npage/*总页数*/, unsigned long *pfn_base/*出参，物理地址起始页号*/,
 				  unsigned long limit, struct vfio_batch *batch/*出参，*/)
 {
 	unsigned long pfn;
-	struct mm_struct *mm = current->mm;
+	struct mm_struct *mm = current->mm;/*使用当前进程的mm*/
 	long ret, pinned = 0, lock_acct = 0;
 	bool rsvd;
 	dma_addr_t iova = vaddr - dma->vaddr + dma->iova;/*vaddr对应的iova地址*/
@@ -1453,12 +1455,14 @@ unlock:
 	return ret;
 }
 
+/*针对vfio-iommu,将iova地址起始的npage个页内容映射到pfn*/
 static int vfio_iommu_map(struct vfio_iommu *iommu, dma_addr_t iova,
 			  unsigned long pfn, long npage, int prot)
 {
 	struct vfio_domain *d;
 	int ret;
 
+	/*遍历vfio-iommu上所有vfio-domain，将iova地址起始的npage个页内容映射到pfn*/
 	list_for_each_entry(d, &iommu->domain_list, next) {
 		ret = iommu_map(d->domain, iova, (phys_addr_t)pfn << PAGE_SHIFT/*物理地址*/,
 				npage << PAGE_SHIFT/*地址区域长度*/, prot | IOMMU_CACHE,
@@ -1472,6 +1476,7 @@ static int vfio_iommu_map(struct vfio_iommu *iommu, dma_addr_t iova,
 	return 0;
 
 unwind:
+	/*映射失败，回退*/
 	list_for_each_entry_continue_reverse(d, &iommu->domain_list, next) {
 		iommu_unmap(d->domain, iova, npage << PAGE_SHIFT);
 		cond_resched();
@@ -1480,6 +1485,7 @@ unwind:
 	return ret;
 }
 
+/*pin dma地址段并填充iommu实现iova到phy之间的映射（由于vaddr可能会被解释成多个物理地址连续页，故采用了循环)*/
 static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 			    size_t map_size/*要map的长度*/)
 {
@@ -1495,9 +1501,9 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 	while (size) {
 		/* Pin a contiguous chunk of memory */
-		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*结束虚拟地址*/,
+		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*虚拟地址结束位置*/,
 					      size >> PAGE_SHIFT/*要map的页数*/, &pfn/*出参，首页页帧号*/, limit/*内存占用上限*/,
-					      &batch);/*pin这一段内存*/
+					      &batch);/*pin这一段物理连续的内存*/
 		if (npage <= 0) {
 			WARN_ON(!npage);
 			ret = (int)npage;
@@ -1505,8 +1511,9 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		}
 
 		/* Map it! */
+		/*填充iommu映射表项，使iova地址映射到pfn对应的npage页上*/
 		ret = vfio_iommu_map(iommu, iova + dma->size/*iova地址是连续的*/, pfn, npage,
-				     dma->prot);/*映射这一组内存，填充iommu映射表项*/
+				     dma->prot);
 		if (ret) {
 			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
 						npage, true);
@@ -1514,7 +1521,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 			break;
 		}
 
-		size -= npage << PAGE_SHIFT;
+		size -= npage << PAGE_SHIFT;/*size减少*/
 		dma->size += npage << PAGE_SHIFT;
 	}
 
@@ -1863,7 +1870,7 @@ static struct vfio_iommu_group *find_iommu_group(struct vfio_domain *domain,
 {
 	struct vfio_iommu_group *g;
 
-	/*遍历此domain下所有iommu-group*/
+	/*遍历此domain下所有iommu-group，返回与iommu_group一致的*/
 	list_for_each_entry(g, &domain->group_list, next) {
 		if (g->iommu_group == iommu_group)
 			return g;
@@ -1872,7 +1879,7 @@ static struct vfio_iommu_group *find_iommu_group(struct vfio_domain *domain,
 	return NULL;
 }
 
-/*在iommu中检查iommu_group是否已存在*/
+/*在vfio-iommu中检查iommu_group是否已存在*/
 static struct vfio_iommu_group*
 vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
 			    struct iommu_group *iommu_group)
@@ -2158,11 +2165,11 @@ static void vfio_iommu_iova_insert_copy(struct vfio_iommu *iommu,
 	list_splice_tail(iova_copy, iova);/*设置新的iova_list*/
 }
 
+/*遍历此bus下所有device，找到iommu设备，并创建iommu_domain*/
 static int vfio_iommu_domain_alloc(struct device *dev, void *data)
 {
 	struct iommu_domain **domain = data;
 
-	/*遍历此bus下所有device，找到iommu设备，并创建iommu_domain*/
 	*domain = iommu_paging_domain_alloc(dev);
 	/*已设置，返回1，不再遍历*/
 	return 1; /* Don't iterate */
@@ -2226,7 +2233,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 	 * us a representative device for the IOMMU API call. We don't actually
 	 * want to iterate beyond the first device (if any).
 	 */
-	/*遍历iommu-group下所有device,创建iommu-domain*/
+	/*遍历iommu-group下所有device,针对dev->iommu,创建iommu-domain*/
 	iommu_group_for_each_dev(iommu_group, &domain->domain,
 				 vfio_iommu_domain_alloc);
 	if (IS_ERR(domain->domain)) {
@@ -2864,7 +2871,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 	if (map.argsz < minsz || map.flags & ~mask)
 		return -EINVAL;/*参数长度有误或者flag标记不匹配*/
 
-	/*pin地址，并完成dma地址映射*/
+	/*pin地址，并完成dma->iova地址到dma->vaddr对应的物理地址间的映射*/
 	return vfio_dma_do_map(iommu, &map);
 }
 
@@ -3038,7 +3045,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		/*获取iommu信息*/
 		return vfio_iommu_type1_get_info(iommu, arg);
 	case VFIO_IOMMU_MAP_DMA:
-		/*pin地址，并执行iommu映射表项填充*/
+		/*pin地址，并执行iommu映射表项填充（实现iova到vaddr物理地址间的映射）*/
 		return vfio_iommu_type1_map_dma(iommu, arg);
 	case VFIO_IOMMU_UNMAP_DMA:
 		/*移除iommu映射表项*/

@@ -34,6 +34,7 @@ u32 inet_ehashfn(const struct net *net, const __be32 laddr,
 		 const __u16 lport, const __be32 faddr,
 		 const __be16 fport)
 {
+	/*secret(仅初始化一次)*/
 	net_get_random_once(&inet_ehash_secret, sizeof(inet_ehash_secret));
 
 	return lport + __inet_ehashfn(laddr, 0, faddr, fport,
@@ -321,16 +322,16 @@ static inline int compute_score(struct sock *sk, const struct net *net,
 
 	if (net_eq(sock_net(sk), net) && sk->sk_num == hnum &&
 			!ipv6_only_sock(sk)) {
-	    	//端口号必须一致且非ipv6 only socket,否则继续匹配
+	    //监听的端口号必须一致且非ipv6 only socket,否则继续匹配
 		if (sk->sk_rcv_saddr != daddr)
-			return -1;
+			return -1;/*目的地址与接收地址不相等，忽略*/
 
 		if (!inet_sk_bound_dev_eq(net, sk->sk_bound_dev_if, dif, sdif))
-			return -1;
-		score =  sk->sk_bound_dev_if ? 2 : 1;
+			return -1;/*接口不匹配，忽略*/
+		score =  sk->sk_bound_dev_if ? 2 : 1;/*接口通过非0匹配大于0匹配*/
 
 		if (sk->sk_family == PF_INET)
-			score++;
+			score++;/*ipv4优先*/
 		if (READ_ONCE(sk->sk_incoming_cpu) == raw_smp_processor_id())
 			score++;
 	}
@@ -361,7 +362,6 @@ struct sock *inet_lookup_reuseport(const struct net *net, struct sock *sk,
 	struct sock *reuse_sk = NULL;
 	u32 phash;
 
-	//得分大于之前匹配的socket,则优先使用此匹配
 	if (sk->sk_reuseport) {
 		//此socket容许port reuse,且状态不为EST状态
 		//计算hash，并自其中选一个socket出来
@@ -393,20 +393,22 @@ static struct sock *inet_lhash2_lookup(const struct net *net,
 	struct hlist_nulls_node *node;
 	int score, hiscore = 0;
 
+	/*遍历桶*/
 	sk_nulls_for_each_rcu(sk, node, &ilb2->nulls_head) {
-		score = compute_score(sk, net, hnum, daddr, dif, sdif);
+		score = compute_score(sk, net, hnum, daddr, dif, sdif);/*监听表先查目的ip,目的port*/
 		if (score > hiscore) {
+			/*可能有多个socket绑定同一port的情况（即reuseport)查询reuseport表*/
 			result = inet_lookup_reuseport(net, sk, skb, doff,
-						       saddr, sport, daddr, hnum, inet_ehashfn);
+						       saddr, sport, daddr, hnum, inet_ehashfn/*稳定连接表hash计算方法*/);/*再带上源ip,源端口查reuseport*/
 			if (result)
-				return result;
+				return result;/*reuse优先*/
 
-			result = sk;
-			hiscore = score;
+			result = sk;/*未查到result,备选sk*/
+			hiscore = score;/*更新历史分数*/
 		}
 	}
 
-	return result;
+	return result;/*返回结果*/
 }
 
 struct sock *inet_lookup_run_sk_lookup(const struct net *net,
@@ -446,6 +448,7 @@ struct sock *__inet_lookup_listener(const struct net *net,
 	/* Lookup redirect from BPF */
 	if (static_branch_unlikely(&bpf_sk_lookup_enabled) &&
 	    hashinfo == net->ipv4.tcp_death_row.hashinfo) {
+		/*利用bpf选socket*/
 		result = inet_lookup_run_sk_lookup(net, IPPROTO_TCP, skb, doff,
 						   saddr, sport, daddr, hnum, dif,
 						   inet_ehashfn);
@@ -457,6 +460,7 @@ struct sock *__inet_lookup_listener(const struct net *net,
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
+	/*选利用当前获得的daddr来查询socket*/
 	result = inet_lhash2_lookup(net, ilb2/*待查询的hash桶*/, skb, doff,
 				    saddr, sport, daddr, hnum,
 				    dif, sdif);
@@ -464,12 +468,12 @@ struct sock *__inet_lookup_listener(const struct net *net,
 		goto done;
 
 	/* Lookup lhash2 with INADDR_ANY */
-	//查询通过any绑定的socket
+	//没有命中，再将daddr变更为any，再查listen的socket
 	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
 	result = inet_lhash2_lookup(net, ilb2/*待查询的hash桶*/, skb, doff,
-				    saddr, sport, htonl(INADDR_ANY), hnum,
+				    saddr/*远端ip*/, sport/*远端端口*/, htonl(INADDR_ANY)/*监听地址*/, hnum/*监听端口*/,
 				    dif, sdif);
 done:
 	if (IS_ERR(result))
@@ -515,25 +519,27 @@ struct sock *__inet_lookup_established(const struct net *net,
 	 * have wildcards anyways.
 	 */
 	//查询稳定连接哈希表
-	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);
-	unsigned int slot = hash & hashinfo->ehash_mask;
-	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
+	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);/*取hash*/
+	unsigned int slot = hash & hashinfo->ehash_mask;/*通过hash拿到桶索引*/
+	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];/*取得桶头*/
 
 begin:
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
-		//hash比对
 		if (sk->sk_hash != hash)
+			//hash比对不相等，忽略
 			continue;
+
 		//hash值相等，与sk内部成员进行比对（地址pair,port pair及接口匹配）
 		if (likely(inet_match(net, sk, acookie, ports, dif, sdif))) {
-		    //增加此socket的引用
 			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
+				//增加此socket的引用失败，失配
 				goto out;
+
 			//增加socket引用成功，再查询一遍（为什么？）
 			if (unlikely(!inet_match(net, sk, acookie,
 						 ports, dif, sdif))) {
 				sock_gen_put(sk);
-				goto begin;
+				goto begin;/*增加引用后再查询失败了，重查*/
 			}
 
 			//找到匹配的sk
@@ -546,7 +552,7 @@ begin:
 	 * We probably met an item that was moved to another chain.
 	 */
 	if (get_nulls_value(node) != slot)
-		goto begin;
+		goto begin;/*此node被移到其它slot了，重查（为什么？）*/
 out:
 	sk = NULL;
 found:

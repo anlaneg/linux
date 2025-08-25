@@ -311,6 +311,7 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
  * (pmds are folded into pgds so this doesn't get actually called,
  * but the define is needed for a generic inline function.)
  */
+/*设置pmd*/
 #define set_pmd(pmdptr, pmdval) (*(pmdptr) = pmdval)
 
 #define PFN_PTE_SHIFT	PAGE_SHIFT

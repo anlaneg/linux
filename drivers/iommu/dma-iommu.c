@@ -1030,7 +1030,7 @@ out_unmap:
  */
 struct dma_sgt_handle {
 	struct sg_table sgt;
-	struct page **pages;
+	struct page **pages;/*一组物理页*/
 };
 #define sgt_handle(sgt) \
 	container_of((sgt), struct dma_sgt_handle, sgt)
@@ -1689,7 +1689,7 @@ int iommu_dma_mmap(struct device *dev, struct vm_area_struct *vma,
 		struct page **pages = dma_common_find_pages(cpu_addr);
 
 		if (pages)
-			return vm_map_pages(vma, pages, nr_pages);
+			return vm_map_pages(vma, pages, nr_pages);/*指定了pages,将vma区域与pages相映射（填充mmu)*/
 		pfn = vmalloc_to_pfn(cpu_addr);
 	} else {
 		pfn = page_to_pfn(virt_to_page(cpu_addr));

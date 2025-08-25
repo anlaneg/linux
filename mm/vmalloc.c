@@ -4577,7 +4577,7 @@ int remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 		struct page *page = vmalloc_to_page(kaddr);
 		int ret;
 
-		ret = vm_insert_page(vma, uaddr, page);
+		ret = vm_insert_page(vma, uaddr, page);/*映射uaddr到单个物理页page*/
 		if (ret)
 			return ret;
 

@@ -137,7 +137,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 				 mp_opt->token, mp_opt->nonce);
 		} else if (opsize == TCPOLEN_MPTCP_MPJ_SYNACK) {
 			mp_opt->suboptions |= OPTION_MPTCP_MPJ_SYNACK;
-			mp_opt->backup = *ptr++ & MPTCPOPT_BACKUP;
+			mp_opt->backup = *ptr++ & MPTCPOPT_BACKUP;/*是否指明为backup*/
 			mp_opt->join_id = *ptr++;
 			mp_opt->thmac = get_unaligned_be64(ptr);
 			ptr += 8;
@@ -364,7 +364,7 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 }
 
 void mptcp_get_options(const struct sk_buff *skb,
-		       struct mptcp_options_received *mp_opt/*出参*/)
+		       struct mptcp_options_received *mp_opt/*出参,收到的选项*/)
 {
 	const struct tcphdr *th = tcp_hdr(skb);
 	const unsigned char *ptr;
@@ -1456,45 +1456,49 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 		if (unlikely(OPTION_MPTCP_FAIL & opts->suboptions))
 			goto mp_fail;
 	} else if (OPTIONS_MPTCP_MPC & opts->suboptions) {
-		u8 len, flag = MPTCP_CAP_HMAC_SHA256;
+		u8 len, flag = MPTCP_CAP_HMAC_SHA256;/*指明加密算法HMAC-sha256*/
 
 		if (OPTION_MPTCP_MPC_SYN & opts->suboptions) {
-			len = TCPOLEN_MPTCP_MPC_SYN;
+			len = TCPOLEN_MPTCP_MPC_SYN;/*syn报文，仅4字节*/
 		} else if (OPTION_MPTCP_MPC_SYNACK & opts->suboptions) {
-			len = TCPOLEN_MPTCP_MPC_SYNACK;
+			len = TCPOLEN_MPTCP_MPC_SYNACK;/*syn+ack报文，4+8(sender key)*/
 		} else if (opts->data_len) {
-			len = TCPOLEN_MPTCP_MPC_ACK_DATA;
+			len = TCPOLEN_MPTCP_MPC_ACK_DATA;/*...+ 2(data_len)*/
 			if (opts->csum_reqd)
-				len += TCPOLEN_MPTCP_DSS_CHECKSUM;
+				len += TCPOLEN_MPTCP_DSS_CHECKSUM;/*要求开checksum + 2（checksum)*/
 		} else {
-			len = TCPOLEN_MPTCP_MPC_ACK;
+			len = TCPOLEN_MPTCP_MPC_ACK;/*ack报文且data_len为0，4+8（sender key）+8(receive key)*/
 		}
 
 		if (opts->csum_reqd)
-			flag |= MPTCP_CAP_CHECKSUM_REQD;
+			flag |= MPTCP_CAP_CHECKSUM_REQD;/*要求checksum*/
 
 		if (!opts->allow_join_id0)
-			flag |= MPTCP_CAP_DENY_JOIN_ID0;
+			flag |= MPTCP_CAP_DENY_JOIN_ID0;/*不接受连接到0号地址及port*/
 
+		/* 每个数据包都包含支持多路径（MP_CAPABLE）的TCP选项。
+		 * 此选项表明其发送方能够执行多路径TCP，并希望在此特定连接上执行。*/
 		*ptr++ = mptcp_option(MPTCPOPT_MP_CAPABLE, len,
-				      MPTCP_SUPPORTED_VERSION,
+				      MPTCP_SUPPORTED_VERSION/*rfc8684规定版本1*/,
 				      flag);
 
 		if (!((OPTION_MPTCP_MPC_SYNACK | OPTION_MPTCP_MPC_ACK) &
 		    opts->suboptions))
-			goto mp_capable_done;
+			goto mp_capable_done;/*仅为syn包，不包含key*/
 
+		/*存入发送方为该MPTCP连接生成的64位密钥（明文)*/
 		put_unaligned_be64(opts->sndr_key, ptr);
 		ptr += 2;
 		if (!((OPTION_MPTCP_MPC_ACK) & opts->suboptions))
-			goto mp_capable_done;
+			goto mp_capable_done;/*仅为synack报文，不包含recv key*/
 
-		put_unaligned_be64(opts->rcvr_key, ptr);
+		put_unaligned_be64(opts->rcvr_key, ptr);/*存入接收方64位密钥*/
 		ptr += 2;
 		if (!opts->data_len)
-			goto mp_capable_done;
+			goto mp_capable_done;/*不包含data_len情况*/
 
 		if (opts->csum_reqd) {
+			/*data len后面跟checksum情况*/
 			put_len_csum(opts->data_len,
 				     __mptcp_make_csum(opts->data_seq,
 						       opts->subflow_seq,
@@ -1502,6 +1506,7 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 						       ~csum_unfold(opts->csum)),
 				     ptr);
 		} else {
+			/*仅包含data len*/
 			put_unaligned_be32(opts->data_len << 16 |
 					   TCPOPT_NOP << 8 | TCPOPT_NOP, ptr);
 		}
@@ -1511,9 +1516,15 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 		goto mp_capable_done;
 	} else if (OPTIONS_MPTCP_MPJ & opts->suboptions) {
 		if (OPTION_MPTCP_MPJ_SYN & opts->suboptions) {
+			/*设置了SYN标志的数据包上的MP_JOIN选项还包括4位标志，
+			 * 其中3位当前保留，发送方必须将其设置为零。最后一位标记为“B”，
+			 * 表示此选项的发送方是希望在其他路径出现故障时将此子流用作备用路径\((B=1)\)，
+			 * 还是希望立即将其用作连接的一部分。
+			 * 通过设置B=1，该选项的发送方请求另一主机仅在不存在可用子流的情况下，
+			 * 才在此子流上发送数据\(B=0\)。子流策略将在3.3.8节中详细讨论。*/
 			*ptr++ = mptcp_option(MPTCPOPT_MP_JOIN,
 					      TCPOLEN_MPTCP_MPJ_SYN,
-					      opts->backup, opts->join_id);
+					      opts->backup/*指明是否backup*/, opts->join_id/*地址id*/);
 			put_unaligned_be32(opts->token, ptr);
 			ptr += 1;
 			put_unaligned_be32(opts->nonce, ptr);
@@ -1521,7 +1532,7 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 		} else if (OPTION_MPTCP_MPJ_SYNACK & opts->suboptions) {
 			*ptr++ = mptcp_option(MPTCPOPT_MP_JOIN,
 					      TCPOLEN_MPTCP_MPJ_SYNACK,
-					      opts->backup, opts->join_id);
+					      opts->backup/*指明是否backup*/, opts->join_id);
 			put_unaligned_be64(opts->thmac, ptr);
 			ptr += 2;
 			put_unaligned_be32(opts->nonce, ptr);
@@ -1529,7 +1540,7 @@ void mptcp_write_options(struct tcphdr *th, __be32 *ptr, struct tcp_sock *tp,
 		} else {
 			*ptr++ = mptcp_option(MPTCPOPT_MP_JOIN,
 					      TCPOLEN_MPTCP_MPJ_ACK, 0, 0);
-			memcpy(ptr, opts->hmac, MPTCPOPT_HMAC_LEN);
+			memcpy(ptr, opts->hmac, MPTCPOPT_HMAC_LEN);/*20字节的hmac*/
 			ptr += 5;
 		}
 	} else if (OPTION_MPTCP_ADD_ADDR & opts->suboptions) {

@@ -15,7 +15,7 @@ static inline const struct iommu_ops *dev_iommu_ops(struct device *dev)
 	 * within the IOMMU subsystem itself, so we should be able to trust
 	 * ourselves not to misuse the helper.
 	 */
-	return dev->iommu->iommu_dev->ops;
+	return dev->iommu->iommu_dev->ops;/*管理此设备的iommu的ops*/
 }
 
 void dev_iommu_free(struct device *dev);

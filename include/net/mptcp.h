@@ -65,10 +65,10 @@ struct mptcp_out_options {
 	u16 suboptions;
 	struct mptcp_rm_list rm_list;
 	u8 join_id;
-	u8 backup;
+	u8 backup;/*1/0,用于指明当前流是否做为backup*/
 	u8 reset_reason:4,
 	   reset_transient:1,
-	   csum_reqd:1,
+	   csum_reqd:1,/*是否要求checksum*/
 	   allow_join_id0:1;
 	union {
 		struct {

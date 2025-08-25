@@ -289,8 +289,8 @@ pte_t *___pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
 	pmdp_get_lockless_end(irqflags);
 
 	if (pmdvalp)
-		*pmdvalp = pmdval;
-	if (unlikely(pmd_none(pmdval) || is_pmd_migration_entry(pmdval)))
+		*pmdvalp = pmdval;/*记录pmd存的值*/
+	if (unlikely(pmd_none(pmdval)/*pmd未填充*/ || is_pmd_migration_entry(pmdval)))
 		goto nomap;
 	if (unlikely(pmd_trans_huge(pmdval)))
 		goto nomap;
@@ -298,7 +298,7 @@ pte_t *___pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
 		pmd_clear_bad(pmd);
 		goto nomap;
 	}
-	return __pte_map(&pmdval, addr);
+	return __pte_map(&pmdval, addr);/*利用pmd获得此addr对应的pte*/
 nomap:
 	rcu_read_unlock();
 	return NULL;
@@ -394,15 +394,15 @@ pte_t *__pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 	pmd_t pmdval;
 	pte_t *pte;
 again:
-	pte = __pte_offset_map(pmd, addr, &pmdval);
+	pte = __pte_offset_map(pmd, addr, &pmdval);/*取得pte*/
 	if (unlikely(!pte))
 		return pte;
 	ptl = pte_lockptr(mm, &pmdval);
-	spin_lock(ptl);
+	spin_lock(ptl);/*对pmd加锁*/
 	if (likely(pmd_same(pmdval, pmdp_get_lockless(pmd)))) {
 		*ptlp = ptl;
-		return pte;
+		return pte;/*两者一致，返回*/
 	}
 	pte_unmap_unlock(pte, ptl);
-	goto again;
+	goto again;/*解锁再查*/
 }

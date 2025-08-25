@@ -379,11 +379,14 @@ struct sock {
 #define sk_dontcopy_begin	__sk_common.skc_dontcopy_begin
 /*此位置前的sk_common成员，不得复制*/
 #define sk_dontcopy_end		__sk_common.skc_dontcopy_end
+/*socket存放在hash table时使用的hash值*/
 #define sk_hash			__sk_common.skc_hash
-	/*port合并信息（源+目的）*/
+/*port合并得到的pair信息,用于查询（源&目的）*/
 #define sk_portpair		__sk_common.skc_portpair
+/*主机序（监听的端口）*/
 #define sk_num			__sk_common.skc_num
 #define sk_dport		__sk_common.skc_dport
+/*addr合并得到的pair信息，用于查询（源&目的地址）*/
 #define sk_addrpair		__sk_common.skc_addrpair
 //对端目的地址
 #define sk_daddr		__sk_common.skc_daddr
@@ -395,8 +398,12 @@ struct sock {
 #define sk_state		__sk_common.skc_state
 //地址reuse
 #define sk_reuse		__sk_common.skc_reuse
-//port reuse
+/*port reuse，当多个 socket 都设置了 SO_REUSEPORT 选项，
+ * 并绑定到相同的 (IP, 端口) 时，操作系统会将
+ * 收到的该端口的网络数据包均衡地分发到这些
+ * socket（具体分发策略因操作系统而异，如轮询、哈希等）。*/
 #define sk_reuseport		__sk_common.skc_reuseport
+/*是否ipv6 only socket*/
 #define sk_ipv6only		__sk_common.skc_ipv6only
 #define sk_net_refcnt		__sk_common.skc_net_refcnt
 #define sk_bound_dev_if		__sk_common.skc_bound_dev_if
@@ -598,7 +605,7 @@ struct sock {
 						  struct sk_buff *skb);
 	//sock释放函数
 	void                    (*sk_destruct)(struct sock *sk);
-	//reuse控制块，记录与此socket一起reuse此port的socket
+	//reuse控制块(用于支持多个socket绑定同一port)，记录与此socket一起reuse此port的socket
 	struct sock_reuseport __rcu	*sk_reuseport_cb;
 #ifdef CONFIG_BPF_SYSCALL
 	struct bpf_local_storage __rcu	*sk_bpf_storage;

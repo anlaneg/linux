@@ -6331,7 +6331,7 @@ void __init maple_tree_init(void)
  */
 void *mtree_load(struct maple_tree *mt, unsigned long index)
 {
-	MA_STATE(mas, mt, index, index);
+	MA_STATE(mas, mt, index, index);/*初始化，指明start状态*/
 	void *entry;
 
 	trace_ma_read(__func__, &mas);

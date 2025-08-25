@@ -436,6 +436,7 @@ enum maple_status {
  *
  */
 struct ma_state {
+	/*要操作的树*/
 	struct maple_tree *tree;	/* The tree we're operating in */
 	unsigned long index;		/* The index we're operating on - range start */
 	unsigned long last;		/* The last index we're operating on - range end */

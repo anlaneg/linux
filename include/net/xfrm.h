@@ -1306,6 +1306,7 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir/*报文方向，
 	       __xfrm_policy_check(sk, ndir, skb, family);
 }
 
+/*xfrm policy check入口*/
 static inline int xfrm_policy_check(struct sock *sk/*关联socket*/, int dir/*策略方向*/, struct sk_buff *skb, unsigned short family/*协议族*/)
 {
 	return __xfrm_policy_check2(sk, dir, skb, family, 0/*不反转*/);

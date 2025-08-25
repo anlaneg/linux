@@ -1570,22 +1570,25 @@ void mptcpv6_handle_mapped(struct sock *sk, bool mapped)
 }
 #endif
 
+/*info地址转换为addr(按fmaily要求转）*/
 void mptcp_info2sockaddr(const struct mptcp_addr_info *info,
-			 struct sockaddr_storage *addr,
-			 unsigned short family)
+			 struct sockaddr_storage *addr/*出参，地址*/,
+			 unsigned short family/*v6/v4*/)
 {
 	memset(addr, 0, sizeof(*addr));
 	addr->ss_family = family;
 	if (addr->ss_family == AF_INET) {
+		/*v4地址*/
 		struct sockaddr_in *in_addr = (struct sockaddr_in *)addr;
 
 		if (info->family == AF_INET)
-			in_addr->sin_addr = info->addr;
+			in_addr->sin_addr = info->addr;/*填充v4地址*/
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
 		else if (ipv6_addr_v4mapped(&info->addr6))
+			/*取映射地址*/
 			in_addr->sin_addr.s_addr = info->addr6.s6_addr32[3];
 #endif
-		in_addr->sin_port = info->port;
+		in_addr->sin_port = info->port;/*设置port*/
 	}
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
 	else if (addr->ss_family == AF_INET6) {
@@ -1602,8 +1605,8 @@ void mptcp_info2sockaddr(const struct mptcp_addr_info *info,
 }
 
 /*与remote地址建立连接*/
-int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
-			    const struct mptcp_addr_info *remote)
+int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local/*本端地址*/,
+			    const struct mptcp_addr_info *remote/*远端地址*/)
 {
 	struct mptcp_sock *msk = mptcp_sk(sk);
 	struct mptcp_subflow_context *subflow;
@@ -1620,6 +1623,7 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 	if (!mptcp_is_fully_established(sk))
 		goto err_out;
 
+	/*创建tcp socket,subflow*/
 	err = mptcp_subflow_create_socket(sk, local->addr.family, &sf);
 	if (err) {
 		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_JOINSYNTXCREATSKERR);
@@ -1629,7 +1633,7 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 	}
 
 	ssk = sf->sk;
-	subflow = mptcp_subflow_ctx(ssk);
+	subflow = mptcp_subflow_ctx(ssk);/*取得关联的subflow*/
 	do {
 		get_random_bytes(&subflow->local_nonce, sizeof(u32));
 	} while (!subflow->local_nonce);
@@ -1637,11 +1641,11 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 	/* if 'IPADDRANY', the ID will be set later, after the routing */
 	if (local->addr.family == AF_INET) {
 		if (!local->addr.addr.s_addr)
-			local_id = -1;
+			local_id = -1;/*本端地址为0*/
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
 	} else if (sk->sk_family == AF_INET6) {
 		if (ipv6_addr_any(&local->addr.addr6))
-			local_id = -1;
+			local_id = -1;/*本端地址为0*/
 #endif
 	}
 
@@ -1676,12 +1680,12 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_pm_local *local,
 	subflow->request_join = 1;
 	subflow->request_bkup = !!(local->flags & MPTCP_PM_ADDR_FLAG_BACKUP);
 	subflow->subflow_id = msk->subflow_id++;
-	mptcp_info2sockaddr(remote, &addr, ssk->sk_family);
+	mptcp_info2sockaddr(remote, &addr, ssk->sk_family);/*remote地址转换为addr*/
 
 	sock_hold(ssk);
 	list_add_tail(&subflow->node, &msk->conn_list);
-	/*连接到远端地址*/
-	err = kernel_connect(sf, (struct sockaddr *)&addr, addrlen, O_NONBLOCK);
+	/*连接到远端地址addr*/
+	err = kernel_connect(sf, (struct sockaddr *)&addr, addrlen, O_NONBLOCK/*不阻塞*/);
 	if (err && err != -EINPROGRESS) {
 		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_JOINSYNTXCONNECTERR);
 		pr_debug("msk=%p local=%d remote=%d connect error: %d\n",
@@ -1790,7 +1794,8 @@ int mptcp_subflow_create_socket(struct sock *sk, unsigned short family,
 	 * Update ns_tracker to current stack trace and refcounted tracker.
 	 */
 	sk_net_refcnt_upgrade(sf->sk);
-	err = tcp_set_ulp(sf->sk, "mptcp");/*将socket的上层协议更新为mptcp*/
+	/*将socket的上层协议更新为mptcp,初始化并关联subflow*/
+	err = tcp_set_ulp(sf->sk, "mptcp");
 	if (err)
 		goto err_free;
 
@@ -1807,7 +1812,7 @@ int mptcp_subflow_create_socket(struct sock *sk, unsigned short family,
 	SOCK_INODE(sf)->i_uid = SOCK_INODE(sk->sk_socket)->i_uid;
 	SOCK_INODE(sf)->i_gid = SOCK_INODE(sk->sk_socket)->i_gid;
 
-	subflow = mptcp_subflow_ctx(sf->sk);/*取subflow*/
+	subflow = mptcp_subflow_ctx(sf->sk);/*取socket关联的subflow*/
 	pr_debug("subflow=%p\n", subflow);
 
 	*new_sock = sf;
@@ -1834,7 +1839,7 @@ static struct mptcp_subflow_context *subflow_create_ctx(struct sock *sk,
 	if (!ctx)
 		return NULL;
 
-	rcu_assign_pointer(icsk->icsk_ulp_data, ctx);
+	rcu_assign_pointer(icsk->icsk_ulp_data, ctx);/*设置ctx(指明subflow)*/
 	INIT_LIST_HEAD(&ctx->node);
 	INIT_LIST_HEAD(&ctx->delegated_node);
 
@@ -1969,7 +1974,7 @@ static int subflow_ulp_init(struct sock *sk)
 		goto out;
 	}
 
-	ctx = subflow_create_ctx(sk, GFP_KERNEL);
+	ctx = subflow_create_ctx(sk, GFP_KERNEL);/*初始化subflow，并关联到sk*/
 	if (!ctx) {
 		err = -ENOMEM;
 		goto out;
@@ -2114,7 +2119,7 @@ static int tcp_abort_override(struct sock *ssk, int err)
 static struct tcp_ulp_ops subflow_ulp_ops __read_mostly = {
 	.name		= "mptcp",
 	.owner		= THIS_MODULE,
-	.init		= subflow_ulp_init,
+	.init		= subflow_ulp_init,/*创建subflow并关联到socket*/
 	.release	= subflow_ulp_release,
 	.clone		= subflow_ulp_clone,
 };

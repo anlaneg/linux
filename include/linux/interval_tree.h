@@ -6,7 +6,9 @@
 
 struct interval_tree_node {
 	struct rb_node rb;
+	/*起始地址*/
 	unsigned long start;	/* Start of interval */
+	/*终止地址*/
 	unsigned long last;	/* Last location _in_ interval */
 	unsigned long __subtree_last;
 };

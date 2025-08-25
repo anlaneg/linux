@@ -203,6 +203,7 @@ static inline struct tcp_request_sock *tcp_rsk(const struct request_sock *req)
 
 static inline bool tcp_rsk_used_ao(const struct request_sock *req)
 {
+	/*是否使用tcp ao*/
 #ifndef CONFIG_TCP_AO
 	return false;
 #else

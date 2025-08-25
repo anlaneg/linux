@@ -14,6 +14,7 @@
 #include <net/genetlink.h>
 #include <net/rstreason.h>
 
+/*采用RFC8684版本*/
 #define MPTCP_SUPPORTED_VERSION	1
 
 /* MPTCP option bits */
@@ -95,6 +96,7 @@
 
 /* MPTCP MP_CAPABLE flags */
 #define MPTCP_VERSION_MASK	(0x0F)
+/*是否需要checksum*/
 #define MPTCP_CAP_CHECKSUM_REQD	BIT(7)
 #define MPTCP_CAP_EXTENSIBILITY	BIT(6)
 #define MPTCP_CAP_DENY_JOIN_ID0	BIT(5)
@@ -184,9 +186,9 @@ struct mptcp_options_received {
 	u64	fail_seq;
 };
 
-static inline __be32 mptcp_option(u8 subopt, u8 len, u8 nib, u8 field)
+static inline __be32 mptcp_option(u8 subopt/*子选项*/, u8 len/*选项长度*/, u8 nib, u8 field)
 {
-	return htonl((TCPOPT_MPTCP << 24) | (len << 16) | (subopt << 12) |
+	return htonl((TCPOPT_MPTCP << 24)/*tcp选项kind*/ | (len << 16) | (subopt << 12) |
 		     ((nib & 0xF) << 8) | field);
 }
 
@@ -346,7 +348,7 @@ struct mptcp_sock {
 				 * lock as such sock is freed after close().
 				 */
 	struct mptcp_pm_data	pm;
-	struct mptcp_sched_ops	*sched;
+	struct mptcp_sched_ops	*sched;/*调度器*/
 	struct {
 		u32	space;	/* bytes copied in last measurement window */
 		u32	copied; /* bytes copied in this measurement window */

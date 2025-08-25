@@ -19,7 +19,7 @@
 static inline pte_t *__pte_alloc_one_kernel_noprof(struct mm_struct *mm)
 {
 	struct ptdesc *ptdesc = pagetable_alloc_noprof(GFP_PGTABLE_KERNEL &
-			~__GFP_HIGHMEM, 0);
+			~__GFP_HIGHMEM, 0/*1页内存*/);
 
 	if (!ptdesc)
 		return NULL;
@@ -72,9 +72,9 @@ static inline pgtable_t __pte_alloc_one_noprof(struct mm_struct *mm, gfp_t gfp)
 {
 	struct ptdesc *ptdesc;
 
-	ptdesc = pagetable_alloc_noprof(gfp, 0);
+	ptdesc = pagetable_alloc_noprof(gfp, 0/*申请1页*/);
 	if (!ptdesc)
-		return NULL;
+		return NULL;/*申请失败*/
 	if (!pagetable_pte_ctor(mm, ptdesc)) {
 		pagetable_free(ptdesc);
 		return NULL;
@@ -175,7 +175,7 @@ static inline pud_t *__pud_alloc_one_noprof(struct mm_struct *mm, unsigned long 
 		gfp = GFP_PGTABLE_KERNEL;
 	gfp &= ~__GFP_HIGHMEM;
 
-	ptdesc = pagetable_alloc_noprof(gfp, 0);
+	ptdesc = pagetable_alloc_noprof(gfp, 0/*申请1页内存*/);
 	if (!ptdesc)
 		return NULL;
 
@@ -196,6 +196,7 @@ static inline pud_t *__pud_alloc_one_noprof(struct mm_struct *mm, unsigned long 
  */
 static inline pud_t *pud_alloc_one_noprof(struct mm_struct *mm, unsigned long addr)
 {
+	/*申请addr对应的pud对应的页*/
 	return __pud_alloc_one_noprof(mm, addr);
 }
 #define pud_alloc_one(...)	alloc_hooks(pud_alloc_one_noprof(__VA_ARGS__))

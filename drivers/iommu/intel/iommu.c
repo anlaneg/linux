@@ -711,12 +711,13 @@ pgtable_walk:
 }
 #endif
 
+/*取pfn对应的dma pte*/
 static struct dma_pte *pfn_to_dma_pte(struct dmar_domain *domain,
-				      unsigned long pfn, int *target_level,
+				      unsigned long pfn/*页号（已右移取除了页内offset)*/, int *target_level/*置为0时，在未关联时跳出，非0时，在对应level跳出*/,
 				      gfp_t gfp)
 {
 	struct dma_pte *parent, *pte;
-	int level = agaw_to_level(domain->agaw);
+	int level = agaw_to_level(domain->agaw);/*取最大level*/
 	int offset;
 
 	if (!domain_pfn_supported(domain, pfn))
@@ -728,46 +729,50 @@ static struct dma_pte *pfn_to_dma_pte(struct dmar_domain *domain,
 	while (1) {
 		void *tmp_page;
 
-		offset = pfn_level_offset(pfn, level);
-		pte = &parent[offset];
+		offset = pfn_level_offset(pfn, level);/*取此level对应的offset*/
+		pte = &parent[offset];/*取对应的pte*/
 		if (!*target_level && (dma_pte_superpage(pte) || !dma_pte_present(pte)))
+			/*target_level为0且pte未映射或者pte是super页*/
 			break;
 		if (level == *target_level)
-			break;
+			break;/*达到预期level，跳出*/
 
 		if (!dma_pte_present(pte)) {
+			/*此pte未映射，申请相应的页并关联*/
 			uint64_t pteval, tmp;
 
+			/*申请临时页*/
 			tmp_page = iommu_alloc_pages_node_sz(domain->nid, gfp,
 							     SZ_4K);
 
 			if (!tmp_page)
+				/*临时页申请失败*/
 				return NULL;
 
 			domain_flush_cache(domain, tmp_page, VTD_PAGE_SIZE);
 			pteval = virt_to_phys(tmp_page) | DMA_PTE_READ |
-				 DMA_PTE_WRITE;
+				 DMA_PTE_WRITE;/*虚拟地址转物理地址&权限*/
 			if (domain->use_first_level)
 				pteval |= DMA_FL_PTE_US | DMA_FL_PTE_ACCESS;
 
 			tmp = 0ULL;
 			if (!try_cmpxchg64(&pte->val, &tmp, pteval))
 				/* Someone else set it while we were thinking; use theirs. */
-				iommu_free_pages(tmp_page);
+				iommu_free_pages(tmp_page);/*关联此页时，其它堆栈已更新，释放掉临时page*/
 			else
 				domain_flush_cache(domain, pte, sizeof(*pte));
 		}
 		if (level == 1)
-			break;
+			break;/*已达到最后一级level，跳出*/
 
-		parent = phys_to_virt(dma_pte_addr(pte));
-		level--;
+		parent = phys_to_virt(dma_pte_addr(pte));/*更新parent*/
+		level--;/*更新level*/
 	}
 
 	if (!*target_level)
-		*target_level = level;
+		*target_level = level;/*target_level为0，设置实际level*/
 
-	return pte;
+	return pte;/*返回命中的pte*/
 }
 
 /* return address's pte at specific level */
@@ -907,7 +912,7 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 {
 	struct dma_pte *pte = phys_to_virt(dma_pte_addr(parent_pte));
 
-	iommu_pages_list_add(freelist, pte);
+	iommu_pages_list_add(freelist, pte);/*串成freelist链*/
 
 	if (level == 1)
 		return;
@@ -922,7 +927,7 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 				struct dma_pte *pte, unsigned long pfn,
 				unsigned long start_pfn, unsigned long last_pfn,
-				struct iommu_pages_list *freelist)
+				struct iommu_pages_list *freelist/*出叁，待释放page列表*/)
 {
 	struct dma_pte *first_pte = NULL, *last_pte = NULL;
 
@@ -933,7 +938,7 @@ static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 		unsigned long level_pfn = pfn & level_mask(level);
 
 		if (!dma_pte_present(pte))
-			goto next;
+			goto next;/*此pte未映射，检查下一个*/
 
 		/* If range covers entire pagetable, free it */
 		if (start_pfn <= level_pfn &&
@@ -943,7 +948,7 @@ static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 			if (level > 1 && !dma_pte_superpage(pte))
 				dma_pte_list_pagetables(domain, level - 1, pte, freelist);
 
-			dma_clear_pte(pte);
+			dma_clear_pte(pte);/*pte内容清除掉*/
 			if (!first_pte)
 				first_pte = pte;
 			last_pte = pte;
@@ -976,7 +981,7 @@ static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
 
 	/* we don't need lock here; nobody else touches the iova range */
 	dma_pte_clear_level(domain, agaw_to_level(domain->agaw),
-			    domain->pgd, 0, start_pfn, last_pfn, freelist);
+			    domain->pgd/*提供表指针*/, 0, start_pfn, last_pfn, freelist);
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == DOMAIN_MAX_PFN(domain->gaw)) {
@@ -1557,6 +1562,9 @@ static int hardware_largepage_caps(struct dmar_domain *domain, unsigned long iov
 	   merge them and check both at once. */
 	pfnmerge = iov_pfn | phy_pfn;
 
+	/*如果支持大页,取得大页对应的level
+	 * 由于1指的是4k页，占用9bit,则2指的是4k*512=2M,则3指的是2M*512=1G
+	 * */
 	while (support && !(pfnmerge & ~VTD_STRIDE_MASK)) {
 		pages >>= VTD_STRIDE_SHIFT;
 		if (!pages)
@@ -1602,8 +1610,8 @@ static void switch_to_super_page(struct dmar_domain *domain,
 }
 
 static int
-__domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
-		 unsigned long phys_pfn, unsigned long nr_pages, int prot,
+__domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn/*通过iov_pfn映射pte*/,
+		 unsigned long phys_pfn/*利用phys_pfn填充pte.val*/, unsigned long nr_pages/*页数*/, int prot,
 		 gfp_t gfp)
 {
 	struct dma_pte *first_pte = NULL, *pte = NULL;
@@ -1616,9 +1624,10 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 		return -EINVAL;
 
 	if ((prot & (DMA_PTE_READ|DMA_PTE_WRITE)) == 0)
-		return -EINVAL;
+		return -EINVAL;/*权限不正常*/
 
 	if (!(prot & DMA_PTE_WRITE) && domain->nested_parent) {
+		/*只读页不容许domain->nested_parent为真*/
 		pr_err_ratelimited("Read-only mapping is disallowed on the domain which serves as the parent in a nested configuration, due to HW errata (ERRATA_772415_SPR17)\n");
 		return -EINVAL;
 	}
@@ -1632,34 +1641,38 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 
 	domain->has_mappings = true;
 
+	/*起始地址&属性*/
 	pteval = ((phys_addr_t)phys_pfn << VTD_PAGE_SHIFT) | attr;
 
 	while (nr_pages > 0) {
 		uint64_t tmp;
 
 		if (!pte) {
+			/*取大页level，如果domain不支持大页，则返回1*/
 			largepage_lvl = hardware_largepage_caps(domain, iov_pfn,
 					phys_pfn, nr_pages);
 
-			pte = pfn_to_dma_pte(domain, iov_pfn, &largepage_lvl,
-					     gfp);
+			pte = pfn_to_dma_pte(domain, iov_pfn/*通过iov_pfn映射pte*/, &largepage_lvl,
+					     gfp);/*获得largetpage level对应的上一级pte*/
 			if (!pte)
-				return -ENOMEM;
+				return -ENOMEM;/*没有pte,则iommu映射申请内存失败*/
 			first_pte = pte;
 
-			lvl_pages = lvl_to_nr_pages(largepage_lvl);
+			lvl_pages = lvl_to_nr_pages(largepage_lvl);/*转换为page数*/
 
 			/* It is large page*/
 			if (largepage_lvl > 1) {
+				/*大页情况*/
 				unsigned long end_pfn;
 				unsigned long pages_to_remove;
 
-				pteval |= DMA_PTE_LARGE_PAGE;
+				pteval |= DMA_PTE_LARGE_PAGE;/*添加大页标记*/
 				pages_to_remove = min_t(unsigned long, nr_pages,
 							nr_pte_to_next_page(pte) * lvl_pages);
 				end_pfn = iov_pfn + pages_to_remove - 1;
 				switch_to_super_page(domain, iov_pfn, end_pfn, largepage_lvl);
 			} else {
+				/*普通页（移除大页标记）*/
 				pteval &= ~(uint64_t)DMA_PTE_LARGE_PAGE;
 			}
 
@@ -1668,6 +1681,7 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 		 * touches the iova range
 		 */
 		tmp = 0ULL;
+		/*更新此pte*/
 		if (!try_cmpxchg64_local(&pte->val, &tmp, pteval)) {
 			static int dumps = 5;
 			pr_crit("ERROR: DMA PTE for vPFN 0x%lx already set (to %llx not %llx)\n",
@@ -1679,8 +1693,8 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 			WARN_ON(1);
 		}
 
-		nr_pages -= lvl_pages;
-		iov_pfn += lvl_pages;
+		nr_pages -= lvl_pages;/*页数减少*/
+		iov_pfn += lvl_pages;/*iov_pfn增加*/
 		phys_pfn += lvl_pages;
 		pteval += lvl_pages * VTD_PAGE_SIZE;
 
@@ -1696,12 +1710,12 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 		 * end of the mapping, if the trailing size is not enough to
 		 * use another superpage (i.e. nr_pages < lvl_pages).
 		 */
-		pte++;
+		pte++;/*直接取下一个pte*/
 		if (!nr_pages || first_pte_in_page(pte) ||
 		    (largepage_lvl > 1 && nr_pages < lvl_pages)) {
 			domain_flush_cache(domain, first_pte,
 					   (void *)pte - (void *)first_pte);
-			pte = NULL;
+			pte = NULL;/*不可直接使用next pte更新为NULL*/
 		}
 	}
 
@@ -3267,6 +3281,7 @@ static int iommu_superpage_capability(struct intel_iommu *iommu, bool first_stag
 	return fls(cap_super_page_val(iommu->cap));
 }
 
+/*创建dmar_domain*/
 static struct dmar_domain *paging_domain_alloc(struct device *dev, bool first_stage)
 {
 	struct device_domain_info *info = dev_iommu_priv_get(dev);
@@ -3322,8 +3337,9 @@ static struct dmar_domain *paging_domain_alloc(struct device *dev, bool first_st
 		domain->domain.geometry.aperture_end = __DOMAIN_MAX_ADDR(domain->gaw);
 
 	/* always allocate the top pgd */
-	domain->pgd = iommu_alloc_pages_node_sz(domain->nid, GFP_KERNEL, SZ_4K);
+	domain->pgd = iommu_alloc_pages_node_sz(domain->nid, GFP_KERNEL, SZ_4K);/*申请1个4k页*/
 	if (!domain->pgd) {
+		/*申请失败*/
 		kfree(domain);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -3343,10 +3359,12 @@ intel_iommu_domain_alloc_first_stage(struct device *dev,
 
 	/* Only SL is available in legacy mode */
 	if (!sm_supported(iommu) || !ecap_flts(iommu->ecap))
+		/*必须支持sm,flts*/
 		return ERR_PTR(-EOPNOTSUPP);
 
 	dmar_domain = paging_domain_alloc(dev, true);
 	if (IS_ERR(dmar_domain))
+		/*创建dmar_domain失败*/
 		return ERR_CAST(dmar_domain);
 
 	dmar_domain->domain.ops = &intel_fs_paging_domain_ops;
@@ -3358,9 +3376,10 @@ intel_iommu_domain_alloc_first_stage(struct device *dev,
 	if (rwbf_required(iommu))
 		dmar_domain->iotlb_sync_map = true;
 
-	return &dmar_domain->domain;
+	return &dmar_domain->domain;/*返回基类*/
 }
 
+/*申请second stage对应的iommu_domain*/
 static struct iommu_domain *
 intel_iommu_domain_alloc_second_stage(struct device *dev,
 				      struct intel_iommu *iommu, u32 flags)
@@ -3382,6 +3401,7 @@ intel_iommu_domain_alloc_second_stage(struct device *dev,
 	if (sm_supported(iommu) && !ecap_slts(iommu->ecap))
 		return ERR_PTR(-EOPNOTSUPP);
 
+	/*创建dmar_domain(非首个stage)*/
 	dmar_domain = paging_domain_alloc(dev, false);
 	if (IS_ERR(dmar_domain))
 		return ERR_CAST(dmar_domain);
@@ -3408,7 +3428,7 @@ intel_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 				      const struct iommu_user_data *user_data)
 {
 	struct device_domain_info *info = dev_iommu_priv_get(dev);
-	struct intel_iommu *iommu = info->iommu;
+	struct intel_iommu *iommu = info->iommu;/*取得iommu设备*/
 	struct iommu_domain *domain;
 
 	if (user_data)
@@ -3417,7 +3437,8 @@ intel_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	/* Prefer first stage if possible by default. */
 	domain = intel_iommu_domain_alloc_first_stage(dev, iommu, flags);
 	if (domain != ERR_PTR(-EOPNOTSUPP))
-		return domain;
+		return domain;/*支持情况下，直接返回*/
+	/*不支持情况下，通过second stage申请*/
 	return intel_iommu_domain_alloc_second_stage(dev, iommu, flags);
 }
 
@@ -3563,22 +3584,23 @@ static int intel_iommu_attach_device(struct iommu_domain *domain,
 	return ret;
 }
 
+/*映射[iova,iova+size]之间的内存(按4k页对齐），使其对应到[hpa,hpa+size](按4k页对齐）*/
 static int intel_iommu_map(struct iommu_domain *domain,
 			   unsigned long iova, phys_addr_t hpa,
 			   size_t size, int iommu_prot, gfp_t gfp)
 {
-	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
+	struct dmar_domain *dmar_domain = to_dmar_domain(domain);/*转成dmar_domain*/
 	u64 max_addr;
 	int prot = 0;
 
 	if (iommu_prot & IOMMU_READ)
-		prot |= DMA_PTE_READ;
+		prot |= DMA_PTE_READ;/*读*/
 	if (iommu_prot & IOMMU_WRITE)
-		prot |= DMA_PTE_WRITE;
+		prot |= DMA_PTE_WRITE;/*写*/
 	if (dmar_domain->set_pte_snp)
 		prot |= DMA_PTE_SNP;
 
-	max_addr = iova + size;
+	max_addr = iova + size;/*最大地址*/
 	if (dmar_domain->max_addr < max_addr) {
 		u64 end;
 
@@ -3594,35 +3616,36 @@ static int intel_iommu_map(struct iommu_domain *domain,
 	}
 	/* Round up size to next multiple of PAGE_SIZE, if it and
 	   the low bits of hpa would take us onto the next page */
-	size = aligned_nrpages(hpa, size);
-	return __domain_mapping(dmar_domain, iova >> VTD_PAGE_SHIFT,
-				hpa >> VTD_PAGE_SHIFT, size, prot, gfp);
+	size = aligned_nrpages(hpa, size);/*获得终止页号（由于起始页号从0计，共实际为页总数）*/
+	return __domain_mapping(dmar_domain, iova >> VTD_PAGE_SHIFT/*页号（起始）*/,
+				hpa >> VTD_PAGE_SHIFT/*页号（起始）*/, size/*页总数*/, prot, gfp);
 }
 
 static int intel_iommu_map_pages(struct iommu_domain *domain,
 				 unsigned long iova, phys_addr_t paddr,
-				 size_t pgsize, size_t pgcount,
-				 int prot, gfp_t gfp, size_t *mapped)
+				 size_t pgsize/*页大小*/, size_t pgcount/*页数*/,
+				 int prot, gfp_t gfp, size_t *mapped/*出参，映射长度*/)
 {
 	unsigned long pgshift = __ffs(pgsize);
-	size_t size = pgcount << pgshift;
+	size_t size = pgcount << pgshift;/*总大小*/
 	int ret;
 
 	if (pgsize != SZ_4K && pgsize != SZ_2M && pgsize != SZ_1G)
-		return -EINVAL;
+		return -EINVAL;/*页大小无效*/
 
 	if (!IS_ALIGNED(iova | paddr, pgsize))
-		return -EINVAL;
+		return -EINVAL;/*未按页对齐*/
 
+	/*填充domain->pgd,实现iova到paddr间的映射*/
 	ret = intel_iommu_map(domain, iova, paddr, size, prot, gfp);
 	if (!ret && mapped)
-		*mapped = size;
+		*mapped = size;/*设置映射size*/
 
 	return ret;
 }
 
 static size_t intel_iommu_unmap(struct iommu_domain *domain,
-				unsigned long iova, size_t size,
+				unsigned long iova, size_t size/*unmap的总长度*/,
 				struct iommu_iotlb_gather *gather)
 {
 	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
@@ -3661,8 +3684,8 @@ static size_t intel_iommu_unmap_pages(struct iommu_domain *domain,
 				      size_t pgsize, size_t pgcount,
 				      struct iommu_iotlb_gather *gather)
 {
-	unsigned long pgshift = __ffs(pgsize);
-	size_t size = pgcount << pgshift;
+	unsigned long pgshift = __ffs(pgsize);/*页大小对应的shift*/
+	size_t size = pgcount << pgshift;/*映射长度*/
 
 	return intel_iommu_unmap(domain, iova, size, gather);
 }
@@ -4493,6 +4516,7 @@ const struct iommu_domain_ops intel_ss_paging_domain_ops = {
 	.enforce_cache_coherency = intel_iommu_enforce_cache_coherency_ss,
 };
 
+/*intel iommu操作集*/
 const struct iommu_ops intel_iommu_ops = {
 	.blocked_domain		= &blocking_domain,
 	.release_domain		= &blocking_domain,

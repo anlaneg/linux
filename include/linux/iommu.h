@@ -225,6 +225,8 @@ enum iommu_domain_cookie_type {
 struct iommu_domain {
 	unsigned type;
 	enum iommu_domain_cookie_type cookie_type;
+	/*domain操作集，
+	 * 例如intel_fs_paging_domain_ops/intel_ss_paging_domain_ops*/
 	const struct iommu_domain_ops *ops;
 	const struct iommu_dirty_ops *dirty_ops;
 	const struct iommu_ops *owner; /* Whose domain_alloc we came from */
@@ -673,6 +675,7 @@ struct iommu_ops {
 	struct iommu_domain *(*domain_alloc)(unsigned iommu_domain_type);/*按type创建iommu_domain并初始化*/
 #endif
 	struct iommu_domain *(*domain_alloc_identity)(struct device *dev);
+	/*申请iommu_domain*/
 	struct iommu_domain *(*domain_alloc_paging_flags)(
 		struct device *dev, u32 flags,
 		const struct iommu_user_data *user_data);
@@ -758,10 +761,11 @@ struct iommu_domain_ops {
 	int (*set_dev_pasid)(struct iommu_domain *domain, struct device *dev,
 			     ioasid_t pasid, struct iommu_domain *old);
 
-	/*iommu映射表项填充，使iotlb中对应表项无效*/
+	/*iommu映射表项填充，实现iova到paddr的映射，映射长度为pgcount * pgsize*/
 	int (*map_pages)(struct iommu_domain *domain, unsigned long iova,
 			 phys_addr_t paddr, size_t pgsize, size_t pgcount,
-			 int prot, gfp_t gfp, size_t *mapped);
+			 int prot/*权限*/, gfp_t gfp, size_t *mapped/*出参，映射长度*/);
+	/*iommu映射表unmap*/
 	size_t (*unmap_pages)(struct iommu_domain *domain, unsigned long iova,
 			      size_t pgsize, size_t pgcount,
 			      struct iommu_iotlb_gather *iotlb_gather);

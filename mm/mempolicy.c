@@ -2473,7 +2473,7 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 }
 EXPORT_SYMBOL(vma_alloc_folio_noprof);
 
-struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned order)
+struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned order/*申请的页大小*/)
 {
 	struct mempolicy *pol = &default_policy;
 

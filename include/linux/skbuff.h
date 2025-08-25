@@ -4741,7 +4741,7 @@ static inline bool __skb_checksum_validate_needed(struct sk_buff *skb,
 		return false;
 	}
 
-	return true;
+	return true;/*需要执行checksum检查*/
 }
 
 /* For small packets <= CHECKSUM_BREAK perform checksum complete directly
@@ -4772,7 +4772,7 @@ static inline void skb_checksum_complete_unset(struct sk_buff *skb)
  */
 static inline __sum16 __skb_checksum_validate_complete(struct sk_buff *skb,
 						       bool complete,
-						       __wsum psum)
+						       __wsum psum/*伪头计算结果（不折叠）*/)
 {
 	if (skb->ip_summed == CHECKSUM_COMPLETE) {
         /*当前为complete,skb->csum中保存的为不含伪头的checksum,加上伪头并折叠后，如果为0,则校验通过*/
@@ -4812,7 +4812,7 @@ static inline __wsum null_compute_pseudo(struct sk_buff *skb, int proto)
  *   0: checksum is validated or try to in skb_checksum_complete
  *   non-zero: value of invalid checksum
  */
-#define __skb_checksum_validate(skb, proto, complete,			\
+#define __skb_checksum_validate(skb, proto/*协议号*/, complete,			\
 				zero_okay, check, compute_pseudo)	\
 ({									\
 	__sum16 __ret = 0;						\
@@ -4824,7 +4824,7 @@ static inline __wsum null_compute_pseudo(struct sk_buff *skb, int proto)
 })
 
 //校验skb的checksum
-#define skb_checksum_init(skb, proto, compute_pseudo/*伪头计算函数*/)			\
+#define skb_checksum_init(skb, proto/*协议号*/, compute_pseudo/*伪头计算函数*/)			\
 	__skb_checksum_validate(skb, proto, false, false, 0, compute_pseudo)
 
 #define skb_checksum_init_zero_check(skb, proto, check, compute_pseudo)	\

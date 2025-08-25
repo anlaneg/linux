@@ -2244,7 +2244,7 @@ static void xs_udp_setup_socket(struct work_struct *work)
 		current->flags |= PF_MEMALLOC;
 	sock = xs_create_sock(xprt, transport,
 			xs_addr(xprt)->sa_family, SOCK_DGRAM,
-			IPPROTO_UDP, false);
+			IPPROTO_UDP, false/*指明reuse port为假*/);
 	if (IS_ERR(sock))
 		goto out;
 

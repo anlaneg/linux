@@ -28,7 +28,8 @@ static int mptcp_pm_family_to_addr(int family)
 	return MPTCP_PM_ADDR_ATTR_ADDR4;
 }
 
-static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[],
+/*解析attr到tb,并依据tb内容填充addr，获得mptcp地址信息*/
+static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[]/*属性*/,
 				       const struct nlattr *attr,
 				       struct genl_info *info,
 				       struct mptcp_addr_info *addr,
@@ -43,7 +44,7 @@ static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[],
 
 	/* no validation needed - was already done via nested policy */
 	err = nla_parse_nested_deprecated(tb, MPTCP_PM_ADDR_ATTR_MAX, attr,
-					  mptcp_pm_address_nl_policy, info->extack);
+					  mptcp_pm_address_nl_policy, info->extack);/*解析attr,填充tb*/
 	if (err)
 		return err;
 
@@ -65,6 +66,7 @@ static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[],
 	    && addr->family != AF_INET6
 #endif
 	    ) {
+		/*遇到不认识的family*/
 		NL_SET_ERR_MSG_ATTR(info->extack, attr,
 				    "unknown address family");
 		return -EINVAL;
@@ -78,6 +80,7 @@ static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[],
 
 #if IS_ENABLED(CONFIG_MPTCP_IPV6)
 	if (addr->family == AF_INET6)
+		/*填写ipv6地址*/
 		addr->addr6 = nla_get_in6_addr(tb[addr_addr]);
 	else
 #endif
@@ -89,6 +92,7 @@ static int mptcp_pm_parse_pm_addr_attr(struct nlattr *tb[],
 	return 0;
 }
 
+/*解析并填充addr*/
 int mptcp_pm_parse_addr(struct nlattr *attr, struct genl_info *info,
 			struct mptcp_addr_info *addr)
 {

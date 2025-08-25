@@ -243,8 +243,8 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes) {}
 		_res = _do_alloc;					\
 		alloc_tag_restore(_tag, _old);				\
 	} else								\
-		_res = _do_alloc;					\
-	_res;								\
+		_res = _do_alloc;/*调用函数*/					\
+	_res;/*返回值*/								\
 })
 
 #define alloc_hooks(_do_alloc)						\

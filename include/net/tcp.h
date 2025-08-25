@@ -2190,6 +2190,7 @@ static inline void tcp_write_collapse_fence(struct sock *sk)
 static inline void tcp_push_pending_frames(struct sock *sk)
 {
 	if (tcp_send_head(sk)) {
+		/*sk->sk_write_queue上有待发送的报文*/
 		struct tcp_sock *tp = tcp_sk(sk);
 
 		__tcp_push_pending_frames(sk, tcp_current_mss(sk), tp->nonagle);
@@ -2864,8 +2865,9 @@ static inline u64 tcp_transmit_time(const struct sock *sk)
 	return 0;
 }
 
+/*解析tcp auth选项*/
 static inline int tcp_parse_auth_options(const struct tcphdr *th,
-		const u8 **md5_hash, const struct tcp_ao_hdr **aoh)
+		const u8 **md5_hash/*出参，TCPOPT_MD5SIG选项*/, const struct tcp_ao_hdr **aoh/*出参，TCPOPT_AO选项*/)
 {
 	const u8 *md5_tmp, *ao_tmp;
 	int ret;

@@ -2121,12 +2121,13 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 	req->cancel_seq_set = false;
 
 	if (unlikely(opcode >= IORING_OP_LAST)) {
+		/*opcode不合法*/
 		req->opcode = 0;
 		return io_init_fail_req(req, -EINVAL);
 	}
 	opcode = array_index_nospec(opcode, IORING_OP_LAST);
 
-	def = &io_issue_defs[opcode];
+	def = &io_issue_defs[opcode];/*由opcode取io_issue_def*/
 	if (unlikely(sqe_flags & ~SQE_COMMON_FLAGS)) {
 		/* enforce forwards compatibility on users */
 		if (sqe_flags & ~SQE_VALID_FLAGS)
@@ -3912,6 +3913,7 @@ allowed_lsm:
 	return security_uring_allowed();
 }
 
+/*io_uring_setup系统调用实现*/
 SYSCALL_DEFINE2(io_uring_setup, u32, entries,
 		struct io_uring_params __user *, params)
 {

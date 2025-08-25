@@ -217,7 +217,7 @@ static struct pci_driver virtiovf_pci_driver = {
 	.driver_managed_dma = true,
 };
 
-module_pci_driver(virtiovf_pci_driver);
+module_pci_driver(virtiovf_pci_driver);/*注册pci driver*/
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yishai Hadas <yishaih@nvidia.com>");

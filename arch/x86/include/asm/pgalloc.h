@@ -62,7 +62,7 @@ static inline void __pte_free_tlb(struct mmu_gather *tlb, struct page *pte,
 static inline void pmd_populate_kernel(struct mm_struct *mm,
 				       pmd_t *pmd, pte_t *pte)
 {
-	paravirt_alloc_pte(mm, __pa(pte) >> PAGE_SHIFT);
+	paravirt_alloc_pte(mm, __pa(pte) >> PAGE_SHIFT);/*xen的alloc_pte钩子*/
 	set_pmd(pmd, __pmd(__pa(pte) | _PAGE_TABLE));/*设置此pmd,使之指向pte*/
 }
 
@@ -73,13 +73,14 @@ static inline void pmd_populate_kernel_safe(struct mm_struct *mm,
 	set_pmd_safe(pmd, __pmd(__pa(pte) | _PAGE_TABLE));
 }
 
+/*填充pmd,设置此pmd项关联的pte页*/
 static inline void pmd_populate(struct mm_struct *mm, pmd_t *pmd,
 				struct page *pte)
 {
-	unsigned long pfn = page_to_pfn(pte);
+	unsigned long pfn = page_to_pfn(pte);/*此页将存放pte,先搞清楚页帧号*/
 
-	paravirt_alloc_pte(mm, pfn);
-	set_pmd(pmd, __pmd(((pteval_t)pfn << PAGE_SHIFT) | _PAGE_TABLE));
+	paravirt_alloc_pte(mm, pfn);/*xen的alloc_pte钩子点调用*/
+	set_pmd(pmd, __pmd(((pteval_t)pfn << PAGE_SHIFT)/*页指针*/ | _PAGE_TABLE/*页表专用标记位*/));
 }
 #if CONFIG_PGTABLE_LEVELS > 2
 extern void ___pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd);
@@ -96,7 +97,7 @@ extern void pud_populate(struct mm_struct *mm, pud_t *pudp, pmd_t *pmd);
 static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
 {
 	paravirt_alloc_pmd(mm, __pa(pmd) >> PAGE_SHIFT);
-	set_pud(pud, __pud(_PAGE_TABLE | __pa(pmd)));
+	set_pud(pud, __pud(_PAGE_TABLE | __pa(pmd)));/*填充pud,设置此pud项关联的pmd*/
 }
 
 static inline void pud_populate_safe(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)

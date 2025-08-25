@@ -39,6 +39,7 @@
 #define IOVA_PFN(addr)		((addr) >> PAGE_SHIFT)
 
 #define VTD_STRIDE_SHIFT        (9)
+/*获得低VTD_STRIDE_SHIFT位为‘0’,其它位为‘1’的mask*/
 #define VTD_STRIDE_MASK         (((u64)-1) << VTD_STRIDE_SHIFT)
 
 #define DMA_PTE_READ		BIT_ULL(0)
@@ -708,12 +709,14 @@ struct qi_batch {
 };
 
 struct dmar_domain {
+	/*从属于哪个numa node*/
 	int	nid;			/* node id */
 	struct xarray iommu_array;	/* Attached IOMMU array */
 
 	u8 iommu_coherency: 1;		/* indicate coherency of iommu access */
 	u8 force_snooping : 1;		/* Create IOPTEs with snoop control */
 	u8 set_pte_snp:1;
+	/*是否首个stage*/
 	u8 use_first_level:1;		/* DMA translation for the domain goes
 					 * through the first level page table,
 					 * otherwise, goes through the second
@@ -736,6 +739,7 @@ struct dmar_domain {
 	struct list_head cache_tags;	/* Cache tag list */
 	struct qi_batch *qi_batch;	/* Batched QI descriptors */
 
+	/*是否支持大页*/
 	int		iommu_superpage;/* Level of superpages supported:
 					   0 == 4KiB (no superpages), 1 == 2MiB,
 					   2 == 1GiB, 3 == 512GiB, 4 == 1TiB */
@@ -743,7 +747,7 @@ struct dmar_domain {
 		/* DMA remapping domain */
 		struct {
 			/* virtual address */
-			struct dma_pte	*pgd;
+			struct dma_pte	*pgd;/*根表(利用iov地址查询phy地址）*/
 			/* max guest address width */
 			int		gaw;
 			/*
@@ -753,7 +757,7 @@ struct dmar_domain {
 			 *   2: level 4 48-bit
 			 *   3: level 5 57-bit
 			 */
-			int		agaw;
+			int		agaw;/*如上示，取值为0时为30bit,即9（level2)+9(level1)+12(offset)*/
 			/* maximum mapped address */
 			u64		max_addr;
 			/* Protect the s1_domains list */
@@ -778,6 +782,7 @@ struct dmar_domain {
 		};
 	};
 
+	/*基类*/
 	struct iommu_domain domain;	/* generic domain data structure for
 					   iommu core */
 };
@@ -1002,6 +1007,7 @@ static inline void dma_clear_pte(struct dma_pte *pte)
 	pte->val = 0;
 }
 
+/*pte地址转物理地址（移除掉标记）*/
 static inline u64 dma_pte_addr(struct dma_pte *pte)
 {
 #ifdef CONFIG_64BIT
@@ -1014,6 +1020,7 @@ static inline u64 dma_pte_addr(struct dma_pte *pte)
 
 static inline bool dma_pte_present(struct dma_pte *pte)
 {
+	/*检查此pte是否已映射*/
 	return (pte->val & 3) != 0;
 }
 
@@ -1048,10 +1055,12 @@ static inline bool context_present(struct context_entry *context)
 	return (context->lo & 1);
 }
 
+/*1页有4096字节，8字节一个表项，共计512个，[0-511]共需要9bits*/
 #define LEVEL_STRIDE		(9)
-/*当level_stride为9时，此值取511*/
+/*当level_stride为9时，此值9bits最大值511*/
 #define LEVEL_MASK		(((u64)1 << LEVEL_STRIDE) - 1)
 #define MAX_AGAW_WIDTH		(64)
+/*地址宽度减去页大小占用的宽度（即可共各level占用的最大bits)*/
 #define MAX_AGAW_PFN_WIDTH	(MAX_AGAW_WIDTH - VTD_PAGE_SHIFT)
 
 static inline int agaw_to_level(int agaw)
@@ -1071,11 +1080,17 @@ static inline int width_to_agaw(int width)
 
 static inline unsigned int level_to_offset_bits(int level)
 {
+	/*level为1时，[0-9）
+	 * level为2时，[9-18)
+	 * level为3时，[18-27)
+	 * level为4时，[27-36)
+	 * level为5时，[36-45)*/
 	return (level - 1) * LEVEL_STRIDE;
 }
 
 static inline int pfn_level_offset(u64 pfn, int level)
 {
+	/*取pfn中level对应的内容*/
 	return (pfn >> level_to_offset_bits(level)) & LEVEL_MASK;
 }
 
@@ -1094,6 +1109,7 @@ static inline u64 align_to_level(u64 pfn, int level)
 	return (pfn + level_size(level) - 1) & level_mask(level);
 }
 
+/*此level需要占用多少pages*/
 static inline unsigned long lvl_to_nr_pages(unsigned int lvl)
 {
 	return 1UL << min_t(int, (lvl - 1) * LEVEL_STRIDE, MAX_AGAW_PFN_WIDTH);
@@ -1214,7 +1230,8 @@ static inline void context_clear_sm_pre(struct context_entry *context)
 /* Returns a number of VTD pages, but aligned to MM page size */
 static inline unsigned long aligned_nrpages(unsigned long host_addr, size_t size)
 {
-	host_addr &= ~PAGE_MASK;
+	host_addr &= ~PAGE_MASK;/*host_addr按页对齐*/
+	/*结尾地址按页对齐（转换为页数）*/
 	return PAGE_ALIGN(host_addr + size) >> VTD_PAGE_SHIFT;
 }
 
@@ -1514,11 +1531,13 @@ extern const struct iommu_domain_ops intel_ss_paging_domain_ops;
 
 static inline bool intel_domain_is_fs_paging(struct dmar_domain *domain)
 {
+	/*是否first paging*/
 	return domain->domain.ops == &intel_fs_paging_domain_ops;
 }
 
 static inline bool intel_domain_is_ss_paging(struct dmar_domain *domain)
 {
+	/*是否second paging*/
 	return domain->domain.ops == &intel_ss_paging_domain_ops;
 }
 

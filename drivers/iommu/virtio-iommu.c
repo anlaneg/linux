@@ -55,8 +55,8 @@ struct viommu_dev {
 };
 
 struct viommu_mapping {
-	phys_addr_t			paddr;
-	struct interval_tree_node	iova;
+	phys_addr_t			paddr;/*与iova起始地址对应*/
+	struct interval_tree_node	iova;/*iova地址范围*/
 	u32				flags;
 };
 
@@ -67,7 +67,7 @@ struct viommu_domain {
 	u32				map_flags;
 
 	spinlock_t			mappings_lock;
-	struct rb_root_cached		mappings;
+	struct rb_root_cached		mappings;/*用于保存viommu_mapping*/
 
 	unsigned long			nr_endpoints;
 };
@@ -333,6 +333,7 @@ static int viommu_add_mapping(struct viommu_domain *vdomain, u64 iova, u64 end,
 	unsigned long irqflags;
 	struct viommu_mapping *mapping;
 
+	/*申请并填充mapping*/
 	mapping = kzalloc(sizeof(*mapping), GFP_ATOMIC);
 	if (!mapping)
 		return -ENOMEM;
@@ -343,7 +344,7 @@ static int viommu_add_mapping(struct viommu_domain *vdomain, u64 iova, u64 end,
 	mapping->flags		= flags;
 
 	spin_lock_irqsave(&vdomain->mappings_lock, irqflags);
-	interval_tree_insert(&mapping->iova, &vdomain->mappings);
+	interval_tree_insert(&mapping->iova, &vdomain->mappings);/*添加进mappings中*/
 	spin_unlock_irqrestore(&vdomain->mappings_lock, irqflags);
 
 	return 0;
@@ -838,13 +839,13 @@ static void viommu_detach_dev(struct viommu_endpoint *vdev)
 }
 
 static int viommu_map_pages(struct iommu_domain *domain, unsigned long iova,
-			    phys_addr_t paddr, size_t pgsize, size_t pgcount,
+			    phys_addr_t paddr/*物理地址*/, size_t pgsize/*页面大小*/, size_t pgcount/*页数目*/,
 			    int prot, gfp_t gfp, size_t *mapped)
 {
 	int ret;
 	u32 flags;
 	size_t size = pgsize * pgcount;
-	u64 end = iova + size - 1;
+	u64 end = iova + size - 1;/*结束iova地址*/
 	struct virtio_iommu_req_map map;
 	struct viommu_domain *vdomain = to_viommu_domain(domain);
 
@@ -855,6 +856,7 @@ static int viommu_map_pages(struct iommu_domain *domain, unsigned long iova,
 	if (flags & ~vdomain->map_flags)
 		return -EINVAL;
 
+	/*添加mapping*/
 	ret = viommu_add_mapping(vdomain, iova, end, paddr, flags);
 	if (ret)
 		return ret;
@@ -1086,6 +1088,7 @@ static bool viommu_capable(struct device *dev, enum iommu_cap cap)
 	}
 }
 
+/*viommu设备对应的ops*/
 static const struct iommu_ops viommu_ops = {
 	.capable		= viommu_capable,
 	.domain_alloc_identity	= viommu_domain_alloc_identity,
@@ -1098,7 +1101,7 @@ static const struct iommu_ops viommu_ops = {
 	.owner			= THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev		= viommu_attach_dev,
-		.map_pages		= viommu_map_pages,
+		.map_pages		= viommu_map_pages,/*映射pages*/
 		.unmap_pages		= viommu_unmap_pages,
 		.iova_to_phys		= viommu_iova_to_phys,
 		.flush_iotlb_all	= viommu_flush_iotlb_all,
@@ -1292,7 +1295,7 @@ static struct virtio_driver virtio_iommu_drv = {
 	.config_changed		= viommu_config_changed,
 };
 
-module_virtio_driver(virtio_iommu_drv);
+module_virtio_driver(virtio_iommu_drv);/*注册virtio driver*/
 
 MODULE_DESCRIPTION("Virtio IOMMU driver");
 MODULE_AUTHOR("Jean-Philippe Brucker <jean-philippe.brucker@arm.com>");

@@ -1576,7 +1576,7 @@ struct vfio_iommu_type1_dma_map {
 	__u64	vaddr;				/* Process virtual address */
 	//对应的iova地址
 	__u64	iova;				/* IO virtual address */
-	/*内存长度*/
+	/*映射内存长度*/
 	__u64	size;				/* Size of mapping (bytes) */
 };
 

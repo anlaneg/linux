@@ -290,7 +290,7 @@ __alloc_pages_node_noprof(int nid/*申请内存优先选择的numa node*/, gfp_t
 #define  __alloc_pages_node(...)		alloc_hooks(__alloc_pages_node_noprof(__VA_ARGS__))
 
 static inline
-struct folio *__folio_alloc_node_noprof(gfp_t gfp, unsigned int order, int nid)
+struct folio *__folio_alloc_node_noprof(gfp_t gfp, unsigned int order/*内存大小order*/, int nid/*所属的numa node*/)
 {
 	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);
 	warn_if_node_offline(nid, gfp);

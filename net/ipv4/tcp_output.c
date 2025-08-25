@@ -54,7 +54,7 @@
  */
 void tcp_mstamp_refresh(struct tcp_sock *tp)
 {
-	u64 val = tcp_clock_ns();
+	u64 val = tcp_clock_ns();/*取当前时间*/
 
 	/*记录当前时间*/
 	tp->tcp_clock_cache = val;

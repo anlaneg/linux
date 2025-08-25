@@ -6,7 +6,7 @@
 
 #define __PAGETABLE_P4D_FOLDED 1
 
-typedef struct { pgd_t pgd; } p4d_t;/*X86_64中此结构占用8个字节*/
+typedef struct { pgd_t pgd; } p4d_t;/*X86_64中此结构占用8个字节（此文件被包含时p4d不存在)*/
 
 #define P4D_SHIFT		PGDIR_SHIFT
 #define PTRS_PER_P4D		1
@@ -18,8 +18,8 @@ typedef struct { pgd_t pgd; } p4d_t;/*X86_64中此结构占用8个字节*/
  * setup: the p4d is never bad, and a p4d always exists (as it's folded
  * into the pgd entry)
  */
-static inline int pgd_none(pgd_t pgd)		{ return 0; } /*两级时,直接返回0,表示PGD恒存在*/
-static inline int pgd_bad(pgd_t pgd)		{ return 0; }
+static inline int pgd_none(pgd_t pgd)		{ return 0; } /*直接返回0,表示PGD恒存在*/
+static inline int pgd_bad(pgd_t pgd)		{ return 0; } /*直接返回0，表示未bad*/
 static inline int pgd_present(pgd_t pgd)	{ return 1; }/*直接返回1,表示PGD恒存在*/
 static inline void pgd_clear(pgd_t *pgd)	{ }
 #define p4d_ERROR(p4d)				(pgd_ERROR((p4d).pgd))

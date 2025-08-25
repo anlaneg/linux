@@ -95,14 +95,15 @@ static int __mptcp_socket_create(struct mptcp_sock *msk)
 	struct socket *ssock;
 	int err;
 
+	/*创建tcp socket及关联的首个subflow*/
 	err = mptcp_subflow_create_socket(sk, sk->sk_family, &ssock);
 	if (err)
 		return err;
 
 	msk->scaling_ratio = tcp_sk(ssock->sk)->scaling_ratio;
 	WRITE_ONCE(msk->first, ssock->sk);
-	subflow = mptcp_subflow_ctx(ssock->sk);
-	list_add(&subflow->node, &msk->conn_list);/*添加subflow*/
+	subflow = mptcp_subflow_ctx(ssock->sk);/*取得关联的subflow*/
+	list_add(&subflow->node, &msk->conn_list);/*添加subflow到mptcp socket*/
 	sock_hold(ssock->sk);
 	subflow->request_mptcp = 1;
 	subflow->subflow_id = msk->subflow_id++;/*分配subflow id*/
@@ -127,12 +128,13 @@ struct sock *__mptcp_nmpc_sk(struct mptcp_sock *msk)
 		return ERR_PTR(-EINVAL);
 
 	if (!msk->first) {
+		/*未创建首个subflow,创建它*/
 		ret = __mptcp_socket_create(msk);
 		if (ret)
 			return ERR_PTR(ret);
 	}
 
-	return msk->first;
+	return msk->first;/*返回首个subflow对应的socket*/
 }
 
 static void mptcp_drop(struct sock *sk, struct sk_buff *skb)
@@ -1532,7 +1534,7 @@ void __mptcp_push_pending(struct sock *sk, unsigned int flags)
 		int ret = 0;
 
 		if (mptcp_sched_get_send(msk))
-			break;/*选择失败*/
+			break;/*选择sender失败*/
 
 		push_count = 0;
 
@@ -3710,7 +3712,7 @@ static int mptcp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return PTR_ERR(ssk);
 
 	mptcp_set_state(sk, TCP_SYN_SENT);
-	subflow = mptcp_subflow_ctx(ssk);
+	subflow = mptcp_subflow_ctx(ssk);/*取得关联的subflow*/
 #ifdef CONFIG_TCP_MD5SIG
 	/* no MPTCP if MD5SIG is enabled on this socket or we may run out of
 	 * TCP option space.
@@ -3751,7 +3753,7 @@ static int mptcp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			goto out;
 	}
 
-	err = ssk->sk_prot->connect(ssk, uaddr, addr_len);
+	err = ssk->sk_prot->connect(ssk, uaddr, addr_len);/*交给tcp socket具体实现*/
 	if (err < 0)
 		goto out;
 
@@ -3779,7 +3781,7 @@ static struct proto mptcp_prot = {
 	.name		= "MPTCP",
 	.owner		= THIS_MODULE,
 	.init		= mptcp_init_sock,
-	.connect	= mptcp_connect,
+	.connect	= mptcp_connect,/*mptcp connect实现*/
 	.disconnect	= mptcp_disconnect,
 	.close		= mptcp_close,
 	.setsockopt	= mptcp_setsockopt,

@@ -3600,6 +3600,7 @@ static bool filemap_map_pmd(struct vm_fault *vmf, struct folio *folio,
 	}
 
 	if (pmd_none(*vmf->pmd) && vmf->prealloc_pte)
+		/*此pmd项未填充且pte已申请，关联此pte对应的页*/
 		pmd_install(mm, vmf->pmd, &vmf->prealloc_pte);
 
 	return false;

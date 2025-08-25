@@ -2066,9 +2066,9 @@ static int tcp_zerocopy_vm_insert_batch_error(struct vm_area_struct *vma,
 }
 
 static int tcp_zerocopy_vm_insert_batch(struct vm_area_struct *vma,
-					struct page **pages,
-					unsigned int pages_to_map,
-					unsigned long *address,
+					struct page **pages/*映射的一组物理页页*/,
+					unsigned int pages_to_map/*页面数目*/,
+					unsigned long *address/*要映射的起始地址*/,
 					u32 *length,
 					u32 *seq,
 					struct tcp_zerocopy_receive *zc,
@@ -2155,7 +2155,7 @@ static int tcp_zerocopy_receive(struct sock *sk,
 				struct scm_timestamping_internal *tss)
 {
 	u32 length = 0, offset, vma_len, avail_len, copylen = 0;
-	unsigned long address = (unsigned long)zc->address;
+	unsigned long address = (unsigned long)zc->address;/*映射地址*/
 	struct page *pages[TCP_ZEROCOPY_PAGE_BATCH_SIZE];
 	s32 copybuf_len = zc->copybuf_len;
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -4920,6 +4920,7 @@ tcp_inbound_hash(struct sock *sk, const struct request_sock *req,
 
 	if (req) {
 		if (tcp_rsk_used_ao(req) != !!aoh) {
+			/*未开启，但提供了aoh;开启，但未提供了aoh*/
 			u8 keyid, rnext, maclen;
 
 			if (aoh) {
@@ -4943,6 +4944,7 @@ tcp_inbound_hash(struct sock *sk, const struct request_sock *req,
 
 	/* Fast path: unsigned segments */
 	if (likely(!md5_location && !aoh)) {
+		/*两个选项都没有。*/
 		/* Drop if there's TCP-MD5 or TCP-AO key with any rcvid/sndid
 		 * for the remote peer. On TCP-AO established connection
 		 * the last key is impossible to remove, so there's

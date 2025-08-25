@@ -102,7 +102,7 @@ static inline struct sock *skb_steal_sock(struct sk_buff *skb,
 	if (!sk) {
 		*prefetched = false;
 		*refcounted = false;
-		return NULL;
+		return NULL;/*未设置socket*/
 	}
 
 	*prefetched = skb_sk_is_prefetched(skb);
