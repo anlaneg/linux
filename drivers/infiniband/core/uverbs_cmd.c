@@ -475,7 +475,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	rdma_restrack_new(&pd->res, RDMA_RESTRACK_PD);
 	rdma_restrack_set_name(&pd->res, NULL);
 
-	/*驱动处理alloc_pd*/
+	/*驱动处理alloc_pd,*/
 	ret = ib_dev->ops.alloc_pd(pd, &attrs->driver_udata);
 	if (ret)
 		goto err_alloc;
@@ -484,7 +484,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	uobj->object = pd;
 	uobj_finalize_uobj_create(uobj, attrs);
 
-	resp.pd_handle = uobj->id;
+	resp.pd_handle = uobj->id;/*指定obj编号做为handle*/
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
 err_alloc:
@@ -751,7 +751,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 		goto err_free;
 
 	/*查询cmd指定的pd*/
-	pd = uobj_get_obj_read(pd, UVERBS_OBJECT_PD, cmd.pd_handle, attrs);
+	pd = uobj_get_obj_read(pd, UVERBS_OBJECT_PD, cmd.pd_handle/*pd对应的handle*/, attrs);
 	if (IS_ERR(pd)) {
 		ret = PTR_ERR(pd);
 		goto err_free;
@@ -3983,7 +3983,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UVERBS_OBJECT_PD,
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_ALLOC_PD,
-			ib_uverbs_alloc_pd,/*为指定ib设备创建pd*/
+			ib_uverbs_alloc_pd,/*为指定ib设备申请创建pd*/
 			UAPI_DEF_WRITE_UDATA_IO(struct ib_uverbs_alloc_pd,
 						struct ib_uverbs_alloc_pd_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(alloc_pd)),

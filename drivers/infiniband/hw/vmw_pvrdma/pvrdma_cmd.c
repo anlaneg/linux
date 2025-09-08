@@ -57,19 +57,21 @@ static inline int pvrdma_cmd_recv(struct pvrdma_dev *dev,
 
 	dev_dbg(&dev->pdev->dev, "receive response from device\n");
 
+	/*等待命令执行完成*/
 	err = wait_for_completion_interruptible_timeout(&dev->cmd_done,
 			msecs_to_jiffies(PVRDMA_CMD_TIMEOUT));
 	if (err == 0 || err == -ERESTARTSYS) {
 		dev_warn(&dev->pdev->dev,
 			 "completion timeout or interrupted\n");
-		return -ETIMEDOUT;
+		return -ETIMEDOUT;/*响应超时*/
 	}
 
 	spin_lock(&dev->cmd_lock);
-	memcpy(resp, dev->resp_slot, sizeof(*resp));
+	memcpy(resp, dev->resp_slot, sizeof(*resp));/*复制响应内容到resp*/
 	spin_unlock(&dev->cmd_lock);
 
 	if (resp->hdr.ack != resp_code) {
+		/*遇到非预期的响应code*/
 		dev_warn(&dev->pdev->dev,
 			 "unknown response %#x expected %#x\n",
 			 resp->hdr.ack, resp_code);
@@ -88,26 +90,28 @@ pvrdma_cmd_post(struct pvrdma_dev *dev, union pvrdma_cmd_req *req,
 	dev_dbg(&dev->pdev->dev, "post request to device\n");
 
 	/* Serializiation */
-	down(&dev->cmd_sema);
+	down(&dev->cmd_sema);/*减少信号量*/
 
 	BUILD_BUG_ON(sizeof(union pvrdma_cmd_req) !=
 		     sizeof(struct pvrdma_cmd_modify_qp));
 
 	spin_lock(&dev->cmd_lock);
-	memcpy(dev->cmd_slot, req, sizeof(*req));
+	memcpy(dev->cmd_slot, req, sizeof(*req));/*请求写入cmd_slot*/
 	spin_unlock(&dev->cmd_lock);
 
 	init_completion(&dev->cmd_done);
-	pvrdma_write_reg(dev, PVRDMA_REG_REQUEST, 0);
+	pvrdma_write_reg(dev, PVRDMA_REG_REQUEST, 0);/*写寄存器*/
 
 	/* Make sure the request is written before reading status. */
 	mb();
 
-	err = pvrdma_read_reg(dev, PVRDMA_REG_ERR);
+	err = pvrdma_read_reg(dev, PVRDMA_REG_ERR);/*读寄存器*/
 	if (err == 0) {
 		if (resp != NULL)
+			/*读取响应*/
 			err = pvrdma_cmd_recv(dev, resp, resp_code);
 	} else {
+		/*请求出错*/
 		dev_warn(&dev->pdev->dev,
 			 "failed to write request error reg: %d\n", err);
 		err = -EFAULT;

@@ -52,7 +52,7 @@
  *		daddr: unchangeable
  */
 
-static struct kmem_cache *peer_cachep __ro_after_init;
+static struct kmem_cache *peer_cachep __ro_after_init;/*用于分配inet_peer结构体*/
 
 void inet_peer_base_init(struct inet_peer_base *bp)
 {
@@ -169,7 +169,7 @@ static void inet_peer_gc(struct inet_peer_base *base,
 
 /* Must be called under RCU : No refcount change is done here. */
 struct inet_peer *inet_getpeer(struct inet_peer_base *base,
-			       const struct inetpeer_addr *daddr)
+			       const struct inetpeer_addr *daddr/*对端地址*/)
 {
 	struct inet_peer *p, *gc_stack[PEER_MAX_GC];
 	struct rb_node **pp, *parent;
@@ -182,7 +182,7 @@ struct inet_peer *inet_getpeer(struct inet_peer_base *base,
 	p = lookup(daddr, base, seq, NULL, &gc_cnt, &parent, &pp);
 
 	if (p)
-		return p;
+		return p;/*已存在直接返回*/
 
 	/* retry an exact lookup, taking the lock before.
 	 * At least, nodes should be hot in our cache.
@@ -195,7 +195,7 @@ struct inet_peer *inet_getpeer(struct inet_peer_base *base,
 	if (!p) {
 		p = kmem_cache_alloc(peer_cachep, GFP_ATOMIC);
 		if (p) {
-			p->daddr = *daddr;
+			p->daddr = *daddr;/*对端地址*/
 			p->dtime = (__u32)jiffies;
 			refcount_set(&p->refcnt, 1);
 			atomic_set(&p->rid, 0);
@@ -208,7 +208,7 @@ struct inet_peer *inet_getpeer(struct inet_peer_base *base,
 			p->rate_last = jiffies - 60*HZ;
 
 			rb_link_node(&p->rb_node, parent, pp);
-			rb_insert_color(&p->rb_node, &base->rb_root);
+			rb_insert_color(&p->rb_node, &base->rb_root);/*添加peer*/
 			base->total++;
 		}
 	}
@@ -266,7 +266,7 @@ bool inet_peer_xrlim_allow(struct inet_peer *peer, int timeout)
 		rc = true;
 	}
 	if (token != otoken)
-		WRITE_ONCE(peer->rate_tokens, token);
+		WRITE_ONCE(peer->rate_tokens, token);/*更新token*/
 	return rc;
 }
 EXPORT_IPV6_MOD(inet_peer_xrlim_allow);

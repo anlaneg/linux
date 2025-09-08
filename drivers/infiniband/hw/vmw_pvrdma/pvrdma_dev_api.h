@@ -640,6 +640,7 @@ struct pvrdma_cmd_destroy_bind {
 	u8 reserved[4];
 };
 
+/*请求结构体混合版*/
 union pvrdma_cmd_req {
 	struct pvrdma_cmd_hdr hdr;
 	struct pvrdma_cmd_query_port query_port;

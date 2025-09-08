@@ -382,11 +382,11 @@ static void tcp_data_ecn_check(struct sock *sk, const struct sk_buff *skb)
 		 * it is probably a retransmit.
 		 */
 		if (tp->ecn_flags & TCP_ECN_SEEN)
-			tcp_enter_quickack_mode(sk, 2);
+			tcp_enter_quickack_mode(sk, 2);/*前面已看到ECN标记，现在看到一个无ECN标记的，认为重传*/
 		break;
 	case INET_ECN_CE:
 		if (tcp_ca_needs_ecn(sk))
-			tcp_ca_event(sk, CA_EVENT_ECN_IS_CE);
+			tcp_ca_event(sk, CA_EVENT_ECN_IS_CE);/*触发CE事件*/
 
 		if (!(tp->ecn_flags & TCP_ECN_DEMAND_CWR)) {
 			/* Better not delay acks, sender can have a very low cwnd */
@@ -396,9 +396,8 @@ static void tcp_data_ecn_check(struct sock *sk, const struct sk_buff *skb)
 		tp->ecn_flags |= TCP_ECN_SEEN;
 		break;
 	default:
-	    /*标记看到ecn标记*/
 		if (tcp_ca_needs_ecn(sk))
-			tcp_ca_event(sk, CA_EVENT_ECN_NO_CE);
+			tcp_ca_event(sk, CA_EVENT_ECN_NO_CE);/*触发无非CE事件*/
 		tp->ecn_flags |= TCP_ECN_SEEN;
 		break;
 	}
@@ -3759,8 +3758,10 @@ static void tcp_in_ack_event(struct sock *sk, int flag)
 		u32 ack_ev_flags = 0;
 
 		if (flag & FLAG_WIN_UPDATE)
+			/*窗口更新*/
 			ack_ev_flags |= CA_ACK_WIN_UPDATE;
 		if (flag & FLAG_SLOWPATH) {
+			/*slow patch*/
 			ack_ev_flags |= CA_ACK_SLOWPATH;
 			if (flag & FLAG_ECE)
 				ack_ev_flags |= CA_ACK_ECE;
@@ -3929,7 +3930,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	tcp_rack_update_reo_wnd(sk, &rs);
 
-	tcp_in_ack_event(sk, flag);
+	tcp_in_ack_event(sk, flag);/*ack事件针对cc触发*/
 
 	if (tp->tlp_high_seq)
 		tcp_process_tlp_ack(sk, ack, flag);
@@ -3962,7 +3963,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	return 1;
 
 no_queue:
-	tcp_in_ack_event(sk, flag);
+	tcp_in_ack_event(sk, flag);/*ack事件针对cc触发*/
 	/* If data was DSACKed, see if we can undo a cwnd reduction. */
 	if (flag & FLAG_DSACKING_ACK) {
 		tcp_fastretrans_alert(sk, prior_snd_una, num_dupack, &flag,

@@ -669,7 +669,7 @@ struct ib_device *_ib_alloc_device(size_t size/*结构体大小（含私有成�
 	/*支持哪此cmd命令*/
 	device->uverbs_cmd_mask =
 		BIT_ULL(IB_USER_VERBS_CMD_ALLOC_MW) |
-		BIT_ULL(IB_USER_VERBS_CMD_ALLOC_PD) |
+		BIT_ULL(IB_USER_VERBS_CMD_ALLOC_PD)/*申请pd*/ |
 		BIT_ULL(IB_USER_VERBS_CMD_ATTACH_MCAST) |
 		BIT_ULL(IB_USER_VERBS_CMD_CLOSE_XRCD) |
 		BIT_ULL(IB_USER_VERBS_CMD_CREATE_AH) |

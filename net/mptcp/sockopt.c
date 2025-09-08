@@ -592,7 +592,7 @@ static int mptcp_setsockopt_sol_tcp_congestion(struct mptcp_sock *msk, sockptr_t
 		return -EINVAL;
 
 	ret = strncpy_from_sockptr(name, optval,
-				   min_t(long, TCP_CA_NAME_MAX - 1, optlen));
+				   min_t(long, TCP_CA_NAME_MAX - 1, optlen));/*取拥塞算法名称*/
 	if (ret < 0)
 		return -EFAULT;
 
@@ -608,7 +608,7 @@ static int mptcp_setsockopt_sol_tcp_congestion(struct mptcp_sock *msk, sockptr_t
 		int err;
 
 		lock_sock(ssk);
-		err = tcp_set_congestion_control(ssk, name, true, cap_net_admin);
+		err = tcp_set_congestion_control(ssk, name/*拥塞算法名称*/, true, cap_net_admin);
 		if (err < 0 && ret == 0)
 			ret = err;
 		subflow->setsockopt_seq = msk->setsockopt_seq;
@@ -1572,7 +1572,7 @@ static void sync_socket_options(struct mptcp_sock *msk, struct sock *ssk)
 	sock_valbool_flag(ssk, SOCK_DBG, sock_flag(sk, SOCK_DBG));
 
 	if (inet_csk(sk)->icsk_ca_ops != inet_csk(ssk)->icsk_ca_ops)
-		tcp_set_congestion_control(ssk, msk->ca_name, false, true);
+		tcp_set_congestion_control(ssk, msk->ca_name/*拥塞算法名称*/, false, true);
 	__tcp_sock_set_cork(ssk, !!msk->cork);
 	__tcp_sock_set_nodelay(ssk, !!msk->nodelay);
 	tcp_sock_set_keepidle_locked(ssk, msk->keepalive_idle);

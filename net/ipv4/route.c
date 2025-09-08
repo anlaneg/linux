@@ -888,8 +888,10 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 	vif = l3mdev_master_ifindex_rcu(rt->dst.dev);
 
 	net = dev_net(rt->dst.dev);
+	/*查询/新建saddr对应的peer*/
 	peer = inet_getpeer_v4(net->ipv4.peers, ip_hdr(skb)->saddr, vif);
 	if (!peer) {
+		/*没有查找到peer,发送redirect*/
 		rcu_read_unlock();
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST,
 			  rt_nexthop(rt, ip_hdr(skb)->daddr));
@@ -3793,7 +3795,7 @@ static int __net_init ipv4_inetpeer_init(struct net *net)
 	if (!bp)
 		return -ENOMEM;
 	inet_peer_base_init(bp);
-	net->ipv4.peers = bp;
+	net->ipv4.peers = bp;/*初始化peer base*/
 	return 0;
 }
 
@@ -3885,7 +3887,7 @@ int __init ip_rt_init(void)
 #endif
 	register_pernet_subsys(&ip_rt_ops);
 	register_pernet_subsys(&rt_genid_ops);
-	register_pernet_subsys(&ipv4_inetpeer_ops);
+	register_pernet_subsys(&ipv4_inetpeer_ops);/*注册pernet ops*/
 	return 0;
 }
 

@@ -361,7 +361,7 @@ static inline int rkey_is_mw(u32 rkey)
 
 struct rxe_mr {
 	struct rxe_pool_elem	elem;
-	struct ib_mr		ibmr;
+	struct ib_mr		ibmr;/*子类*/
 
 	/*对应的umem信息*/
 	struct ib_umem		*umem;

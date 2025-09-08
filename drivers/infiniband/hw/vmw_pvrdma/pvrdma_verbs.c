@@ -399,7 +399,7 @@ int pvrdma_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vma)
 int pvrdma_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 {
 	struct ib_device *ibdev = ibpd->device;
-	struct pvrdma_pd *pd = to_vpd(ibpd);
+	struct pvrdma_pd *pd = to_vpd(ibpd);/*转结构体到pvrdma_pd*/
 	struct pvrdma_dev *dev = to_vdev(ibdev);
 	union pvrdma_cmd_req req = {};
 	union pvrdma_cmd_resp rsp = {};
@@ -414,6 +414,7 @@ int pvrdma_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	if (!atomic_add_unless(&dev->num_pds, 1, dev->dsr->caps.max_pd))
 		return -ENOMEM;
 
+	/*指明cmd为create pd*/
 	cmd->hdr.cmd = PVRDMA_CMD_CREATE_PD;
 	cmd->ctx_handle = context ? context->ctx_handle : 0;
 	ret = pvrdma_cmd_post(dev, &req, &rsp, PVRDMA_CMD_CREATE_PD_RESP);

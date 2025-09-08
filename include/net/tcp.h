@@ -404,6 +404,7 @@ static inline bool tcp_ecn_mode_accecn(const struct tcp_sock *tp)
 
 static inline bool tcp_ecn_disabled(const struct tcp_sock *tp)
 {
+	/*检查ecn是否被禁用*/
 	return !tcp_ecn_mode_any(tp);
 }
 
@@ -1177,7 +1178,7 @@ enum tcp_ca_event {
 };
 
 /* Information about inbound ACK, passed to cong_ops->in_ack_event() */
-enum tcp_ca_ack_event_flags {
+enum tcp_ca_ack_event_flags {/**/
 	CA_ACK_SLOWPATH		= (1 << 0),	/* In slow path processing */
 	CA_ACK_WIN_UPDATE	= (1 << 1),	/* ACK updated window */
 	CA_ACK_ECE		= (1 << 2),	/* ECE bit is set on ack */
@@ -1195,6 +1196,7 @@ enum tcp_ca_ack_event_flags {
 /* Algorithm can be set on socket without CAP_NET_ADMIN privileges */
 #define TCP_CONG_NON_RESTRICTED		BIT(0)
 /* Requires ECN/ECT set on all packets */
+/*报文是否需要ecn标记*/
 #define TCP_CONG_NEEDS_ECN		BIT(1)
 #define TCP_CONG_MASK	(TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN)
 
@@ -1237,16 +1239,16 @@ struct tcp_congestion_ops {
 /* fast path fields are put first to fill one cache line */
 
 	/* return slow start threshold (required) */
-	u32 (*ssthresh)(struct sock *sk);/*返回慢启动时的门限值*/
+	u32 (*ssthresh)(struct sock *sk);/*返回慢启动时的门限值(必须提供）*/
 
 	/* do new cwnd calculation (required) */
-	void (*cong_avoid)(struct sock *sk, u32 ack, u32 acked);
+	void (*cong_avoid)(struct sock *sk, u32 ack, u32 acked);/*必须提供*/
 
 	/* call before changing ca_state (optional) */
-	void (*set_state)(struct sock *sk, u8 new_state);/*拥塞状态更新前调用*/
+	void (*set_state)(struct sock *sk, u8 new_state);/*拥塞状态设置*/
 
 	/* call when cwnd event occurs (optional) */
-	void (*cwnd_event)(struct sock *sk, enum tcp_ca_event ev);/*窗口事件发生时调用*/
+	void (*cwnd_event)(struct sock *sk, enum tcp_ca_event ev);/*窗口事件发生时调用（可选）*/
 
 	/* call when ack arrives (optional) */
 	void (*in_ack_event)(struct sock *sk, u32 flags);
@@ -1260,11 +1262,11 @@ struct tcp_congestion_ops {
 	/* call when packets are delivered to update cwnd and pacing rate,
 	 * after all the ca_state processing. (optional)
 	 */
-	void (*cong_control)(struct sock *sk, u32 ack, int flag, const struct rate_sample *rs);
+	void (*cong_control)(struct sock *sk, u32 ack, int flag, const struct rate_sample *rs);/*必须提供*/
 
 
 	/* new value of cwnd after loss (required) */
-	u32  (*undo_cwnd)(struct sock *sk);
+	u32  (*undo_cwnd)(struct sock *sk);/*必须提供*/
 	/* returns the multiplier used in tcp_sndbuf_expand (optional) */
 	u32 (*sndbuf_expand)(struct sock *sk);
 
@@ -1281,9 +1283,9 @@ struct tcp_congestion_ops {
 	u32			flags;
 
 	/* initialize private data (optional) */
-	void (*init)(struct sock *sk);/*拥塞私有数据初始化*/
+	void (*init)(struct sock *sk);/*拥塞针对socket私有数据初始化（可选）*/
 	/* cleanup private data  (optional) */
-	void (*release)(struct sock *sk);/*拥塞私有数据清除*/
+	void (*release)(struct sock *sk);/*拥塞针对socket私有数据清除(可选）*/
 } ____cacheline_aligned_in_smp;
 
 int tcp_register_congestion_control(struct tcp_congestion_ops *type);
@@ -1331,7 +1333,7 @@ static inline bool tcp_ca_needs_ecn(const struct sock *sk)
 }
 
 /*触发窗口事件*/
-static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
+static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event/*事件*/)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 

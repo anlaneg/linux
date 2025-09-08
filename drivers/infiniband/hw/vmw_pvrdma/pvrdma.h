@@ -207,8 +207,8 @@ struct pvrdma_dev {
 	void __iomem *regs;
 	struct pvrdma_device_shared_region *dsr; /* Shared region pointer */
 	dma_addr_t dsrbase; /* Shared region base address */
-	void *cmd_slot;
-	void *resp_slot;
+	void *cmd_slot;/*请求命令内容*/
+	void *resp_slot;/*响应内容*/
 	unsigned long flags;
 	struct list_head device_link;
 	unsigned int dsr_version;
@@ -298,11 +298,13 @@ static inline struct pvrdma_ah *to_vah(struct ib_ah *ibah)
 
 static inline void pvrdma_write_reg(struct pvrdma_dev *dev, u32 reg, u32 val)
 {
-	writel(cpu_to_le32(val), dev->regs + reg);
+	/*写寄存器*/
+	writel(cpu_to_le32(val), dev->regs + reg/*寄存器编号*/);
 }
 
 static inline u32 pvrdma_read_reg(struct pvrdma_dev *dev, u32 reg)
 {
+	/*读寄存器*/
 	return le32_to_cpu(readl(dev->regs + reg));
 }
 

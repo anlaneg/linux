@@ -139,7 +139,7 @@ struct uverbs_api {
  * -ENOMSG means that any object is allowed to match during lookup.
  */
 static inline const struct uverbs_api_object *
-uapi_get_object(struct uverbs_api *uapi, u16 object_id)
+uapi_get_object(struct uverbs_api *uapi, u16 object_id/*obj类型*/)
 {
 	const struct uverbs_api_object *res;
 

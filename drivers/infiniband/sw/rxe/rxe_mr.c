@@ -671,7 +671,7 @@ struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 	/*如果查询的是local,则匹配lkey,否则查询的是remote,则匹配rkey*/
 	if (unlikely((type == RXE_LOOKUP_LOCAL && mr->lkey != key) ||
 		     (type == RXE_LOOKUP_REMOTE && mr->rkey != key) ||
-		     mr_pd(mr) != pd/*pd必须匹配*/ || ((access & mr->access) != access)/*必须支持此访问权限*/ ||
+		     mr_pd(mr) != pd/*pd必须匹配（用于实现隔离，使mr在pd范围内有效）*/ || ((access & mr->access) != access)/*必须支持此访问权限*/ ||
 		     mr->state != RXE_MR_STATE_VALID/*mr状态必须是有效的*/)) {
 		/*对查询出来的mr进行校验，校验不通过。*/
 		rxe_put(mr);

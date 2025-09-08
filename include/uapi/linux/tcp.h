@@ -196,7 +196,7 @@ enum tcp_fastopen_client_fail {
  * in the last round of packets sent. The state is driven by the ACK
  * information and timer events.
  */
-enum tcp_ca_state {
+enum tcp_ca_state {/*定义CA状态*/
 	/*
 	 * Nothing bad has been observed recently.
 	 * No apparent reordering, packet loss, or ECN marks.

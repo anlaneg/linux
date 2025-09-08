@@ -271,14 +271,14 @@ static void tcp_reinit_congestion_control(struct sock *sk,
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	tcp_cleanup_congestion_control(sk);
-	icsk->icsk_ca_ops = ca;
+	icsk->icsk_ca_ops = ca;/*设置拥塞算法*/
 	icsk->icsk_ca_setsockopt = 1;
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 
 	if (ca->flags & TCP_CONG_NEEDS_ECN)
-		INET_ECN_xmit(sk);
+		INET_ECN_xmit(sk);/*要求ecn标记，tos上添加enc0标记*/
 	else
-		INET_ECN_dontxmit(sk);
+		INET_ECN_dontxmit(sk);/*不需要ecn标记，清楚掉ecn标记*/
 
 	/*重新初始化cc*/
 	if (!((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)))
@@ -293,7 +293,7 @@ void tcp_cleanup_congestion_control(struct sock *sk)
 	/*清除掉旧拥塞算法资源*/
 	if (icsk->icsk_ca_initialized && icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
-	icsk->icsk_ca_initialized = 0;
+	icsk->icsk_ca_initialized = 0;/*指明私有数据未初始化*/
 	bpf_module_put(icsk->icsk_ca_ops, icsk->icsk_ca_ops->owner);
 }
 

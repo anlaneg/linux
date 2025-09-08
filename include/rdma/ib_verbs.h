@@ -1602,9 +1602,9 @@ struct ib_udata {
 struct ib_pd {
 	u32			local_dma_lkey;
 	u32			flags;
-	/*所属的ib device*/
+	/*关联的ib device*/
 	struct ib_device       *device;
-	struct ib_uobject      *uobject;
+	struct ib_uobject      *uobject;/*handle对应的uobject.id*/
 	atomic_t          	usecnt; /* count all resources */
 
 	u32			unsafe_global_rkey;
@@ -1919,7 +1919,7 @@ struct ib_dmah {
 struct ib_mr {
     /*mr所属的ib设备*/
 	struct ib_device  *device;
-	/*mr所属的pd*/
+	/*mr所属的pd（用于隔离）*/
 	struct ib_pd	  *pd;
 	u32		   lkey;/*在本端的key*/
 	u32		   rkey;/*在对端的key*/
@@ -2393,7 +2393,7 @@ struct iw_cm_conn_param;
 
 /*申请某一个driver对应的ib_type类型的obj*/
 #define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type/*obj类型*/, gfp)                          \
-	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*此ib设备ib_type类型元素大小*/, \
+	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*此ib设备上ib_type类型元素大小（各类型定制）*/, \
 					   gfp, false))
 
 #define rdma_zalloc_drv_obj_numa(ib_dev, ib_type)                              \
@@ -2613,7 +2613,7 @@ struct ib_device_ops {
 	void (*post_destroy_cq)(struct ib_cq *cq);
 	struct ib_mr *(*get_dma_mr)(struct ib_pd *pd, int mr_access_flags);
 	/*注册memory region*/
-	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd, u64 start, u64 length,
+	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd/*pd参数*/, u64 start, u64 length,
 				     u64 virt_addr, int mr_access_flags,
 				     struct ib_dmah *dmah,
 				     struct ib_udata *udata);

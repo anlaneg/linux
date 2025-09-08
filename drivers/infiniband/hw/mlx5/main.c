@@ -2515,7 +2515,7 @@ static int mlx5_ib_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 		udata, struct mlx5_ib_ucontext, ibucontext);
 
 	uid = context ? context->devx_uid : 0;
-	MLX5_SET(alloc_pd_in, in, opcode, MLX5_CMD_OP_ALLOC_PD);
+	MLX5_SET(alloc_pd_in, in, opcode, MLX5_CMD_OP_ALLOC_PD);/*设置opcode申请PD*/
 	MLX5_SET(alloc_pd_in, in, uid, uid);
 	err = mlx5_cmd_exec_inout(to_mdev(ibdev)->mdev, alloc_pd, in, out);
 	if (err)

@@ -891,7 +891,7 @@ static int pvrdma_pci_probe(struct pci_dev *pdev,
 		goto err_free_dsr;
 	}
 
-	dev->dsr->cmd_slot_dma = (u64)slot_dma;
+	dev->dsr->cmd_slot_dma = (u64)slot_dma;/*对应的dma地址*/
 
 	/* Response slot. */
 	dev->resp_slot = dma_alloc_coherent(&pdev->dev, PAGE_SIZE,
@@ -1004,6 +1004,7 @@ static int pvrdma_pci_probe(struct pci_dev *pdev,
 	/* Check if device was successfully activated */
 	ret = pvrdma_read_reg(dev, PVRDMA_REG_ERR);
 	if (ret != 0) {
+		/*激活失败*/
 		dev_err(&pdev->dev, "failed to activate device\n");
 		ret = -EFAULT;
 		goto err_disable_intr;

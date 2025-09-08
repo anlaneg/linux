@@ -20,7 +20,7 @@ enum rxe_elem_type {
 };
 
 struct rxe_pool_elem {
-	/*所属的pool*/
+	/*元素所属的pool*/
 	struct rxe_pool		*pool;
 	void			*obj;
 	/*此entry的引用计数*/

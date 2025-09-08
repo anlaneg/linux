@@ -639,7 +639,7 @@ void __icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info,
 	 *	No replies to physical multicast/broadcast
 	 */
 	if (skb_in->pkt_type != PACKET_HOST)
-		goto out;
+		goto out;/*非到本地报文*/
 
 	/*
 	 *	Now check at the protocol level
@@ -652,7 +652,7 @@ void __icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info,
 	 *	mask for efficiency.
 	 */
 	if (iph->frag_off & htons(IP_OFFSET))
-		goto out;
+		goto out;/*非首片*/
 
 	/*
 	 *	If we send an ICMP error to an ICMP error a mess would result..
