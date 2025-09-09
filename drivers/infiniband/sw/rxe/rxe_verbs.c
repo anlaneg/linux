@@ -1339,9 +1339,9 @@ err_free:
 	return ERR_PTR(err);
 }
 
-/*rxe设备注册mr*/
+/*rxe设备注册用户态mr*/
 static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始地址*/,
-				     u64 length/*内存长度*/, u64 iova, int access/*访问标记*/,
+				     u64 length/*内存长度*/, u64 iova/*start对应的iova地址*/, int access/*访问标记*/,
 				     struct ib_dmah *dmah,
 				     struct ib_udata *udata)
 {
@@ -1351,9 +1351,11 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	int err, cleanup_err;
 
 	if (dmah)
+		/*不支持dmah不为空的处理*/
 		return ERR_PTR(-EOPNOTSUPP);
 
 	if (access & ~RXE_ACCESS_SUPPORTED_MR) {
+		/*存在不认识的标记*/
 		rxe_err_pd(pd, "access = %#x not supported (%#x)\n", access,
 				RXE_ACCESS_SUPPORTED_MR);
 		return ERR_PTR(-EOPNOTSUPP);
@@ -1364,7 +1366,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
-	/*此mr信息添加进mr pool*/
+	/*先将mr信息添加进mr pool*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err) {
 		rxe_dbg_pd(pd, "unable to create mr\n");
@@ -1379,7 +1381,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	if (access & IB_ACCESS_ON_DEMAND)
 		err = rxe_odp_mr_init_user(rxe, start, length, iova, access, mr);
 	else
-		err = rxe_mr_init_user(rxe, start, length, access, mr);
+		err = rxe_mr_init_user(rxe, start, length, access, mr);/*完成虚拟地址到dma间映射*/
 	if (err) {
 		rxe_dbg_mr(mr, "reg_user_mr failed, err = %d\n", err);
 		goto err_cleanup;
@@ -1601,7 +1603,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.query_port = rxe_query_port,/*查询port属性*/
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
-	.reg_user_mr = rxe_reg_user_mr,/*rxe注册mr*/
+	.reg_user_mr = rxe_reg_user_mr,/*rxe注册用户态mr*/
 	.req_notify_cq = rxe_req_notify_cq,
 	.rereg_user_mr = rxe_rereg_user_mr,
 	.resize_cq = rxe_resize_cq,

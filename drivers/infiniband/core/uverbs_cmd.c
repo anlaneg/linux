@@ -757,8 +757,8 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 		goto err_free;
 	}
 
-	/*此pd对应的device执行user space内存注册*/
-	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*hca地址*/,
+	/*此pd对应的device执行user mr注册*/
+	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*hca/iova地址*/,
 					 cmd.access_flags/*访问标记*/, NULL,
 					 &attrs->driver_udata);
 	if (IS_ERR(mr)) {
@@ -1020,7 +1020,7 @@ static int ib_uverbs_create_comp_channel(struct uverbs_attr_bundle *attrs)
 	struct ib_device *ib_dev;
 	int ret;
 
-	ret = uverbs_request(attrs, &cmd, sizeof(cmd));
+	ret = uverbs_request(attrs, &cmd, sizeof(cmd));/*解析cmd*/
 	if (ret)
 		return ret;
 
@@ -1030,7 +1030,7 @@ static int ib_uverbs_create_comp_channel(struct uverbs_attr_bundle *attrs)
 
 	ev_file = container_of(uobj, struct ib_uverbs_completion_event_file,
 			       uobj);
-	ib_uverbs_init_event_queue(&ev_file->ev_queue);
+	ib_uverbs_init_event_queue(&ev_file->ev_queue);/*初始化event queue*/
 	uobj_finalize_uobj_create(uobj, attrs);
 
 	resp.fd = uobj->id;
@@ -2063,7 +2063,7 @@ static void *alloc_wr(size_t wr_size, __u32 num_sge)
 		       GFP_KERNEL);
 }
 
-/*收到post send消息*/
+/*收到post send通知消息*/
 static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_post_send      cmd;
@@ -3840,7 +3840,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UVERBS_OBJECT_COMP_CHANNEL,
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL,
-			ib_uverbs_create_comp_channel,
+			ib_uverbs_create_comp_channel,/*创建comp channel*/
 			UAPI_DEF_WRITE_IO(
 				struct ib_uverbs_create_comp_channel,
 				struct ib_uverbs_create_comp_channel_resp))),
@@ -3947,12 +3947,12 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_MR,
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_DEREG_MR,
-				     ib_uverbs_dereg_mr,
+				     ib_uverbs_dereg_mr,/*取消mr注册函数*/
 				     UAPI_DEF_WRITE_I(struct ib_uverbs_dereg_mr),
 				     UAPI_DEF_METHOD_NEEDS_FN(dereg_mr)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_REG_MR,
-			ib_uverbs_reg_mr,/*注册mr*/
+			ib_uverbs_reg_mr,/*注册mr函数*/
 			UAPI_DEF_WRITE_UDATA_IO(struct ib_uverbs_reg_mr,
 						struct ib_uverbs_reg_mr_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(reg_user_mr)),

@@ -578,10 +578,10 @@ static struct folio *try_grab_folio_fast(struct page *page, int refs,
 	 * try_get_folio() is left intact.
 	 */
 	if (folio_has_pincount(folio))
-		atomic_add(refs, &folio->_pincount);
+		atomic_add(refs, &folio->_pincount);/*有pincount,增加pincount*/
 	else
 		folio_ref_add(folio,
-				refs * (GUP_PIN_COUNTING_BIAS - 1));
+				refs * (GUP_PIN_COUNTING_BIAS - 1));/*针对单页，增加引用计数*/
 	/*
 	 * Adjust the pincount before re-checking the PTE for changes.
 	 * This is essentially a smp_mb() and is paired with a memory
@@ -2871,19 +2871,19 @@ static void __maybe_unused gup_fast_undo_dev_pagemap(int *nr, int nr_start,
  * also check pmd here to make sure pmd doesn't change (corresponds to
  * pmdp_collapse_flush() in the THP collapse code path).
  */
-static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
-		unsigned long end, unsigned int flags, struct page **pages,
-		int *nr)
+static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr/*起始地址*/,
+		unsigned long end/*终止地址*/, unsigned int flags, struct page **pages/*出参，起始地址与终止地址间对应的pages*/,
+		int *nr/*pages数组长度*/)
 {
 	struct dev_pagemap *pgmap = NULL;
 	int ret = 0;
 	pte_t *ptep, *ptem;
 
-	ptem = ptep = pte_offset_map(&pmd, addr);
+	ptem = ptep = pte_offset_map(&pmd, addr);/*取得pte指针*/
 	if (!ptep)
-		return 0;
+		return 0;/*无对应pte*/
 	do {
-		pte_t pte = ptep_get_lockless(ptep);
+		pte_t pte = ptep_get_lockless(ptep);/*取pte数据*/
 		struct page *page;
 		struct folio *folio;
 
@@ -2901,18 +2901,18 @@ static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 			goto pte_unmap;
 
 		if (pte_special(pte))
-			goto pte_unmap;
+			goto pte_unmap;/*special pte,解引用*/
 
 		/* If it's not marked as special it must have a valid memmap. */
 		VM_WARN_ON_ONCE(!pfn_valid(pte_pfn(pte)));
-		page = pte_page(pte);
+		page = pte_page(pte);/*由pte转换为page结构体*/
 
 		folio = try_grab_folio_fast(page, 1, flags);
 		if (!folio)
 			goto pte_unmap;
 
 		if (unlikely(pmd_val(pmd) != pmd_val(*pmdp)) ||
-		    unlikely(pte_val(pte) != pte_val(ptep_get(ptep)))) {
+		    unlikely(pte_val(pte) != pte_val(ptep_get(ptep)))) {/*发生了变更*/
 			gup_put_folio(folio, 1, flags);
 			goto pte_unmap;
 		}
@@ -2941,8 +2941,8 @@ static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 			}
 		}
 		folio_set_referenced(folio);
-		pages[*nr] = page;
-		(*nr)++;
+		pages[*nr] = page;/*记录页结构*/
+		(*nr)++;/*总数增加*/
 	} while (ptep++, addr += PAGE_SIZE, addr != end);
 
 	ret = 1;
@@ -3053,14 +3053,14 @@ static int gup_fast_pud_leaf(pud_t orig, pud_t *pudp, unsigned long addr,
 	return 1;
 }
 
-static int gup_fast_pmd_range(pud_t *pudp, pud_t pud, unsigned long addr,
-		unsigned long end, unsigned int flags, struct page **pages,
-		int *nr)
+static int gup_fast_pmd_range(pud_t *pudp, pud_t pud, unsigned long addr/*起始地址*/,
+		unsigned long end/*终止地址*/, unsigned int flags, struct page **pages/*出参，起始地址与终止地址间对应的pages*/,
+		int *nr/*pages数组长度*/)
 {
 	unsigned long next;
 	pmd_t *pmdp;
 
-	pmdp = pmd_offset_lockless(pudp, pud, addr);
+	pmdp = pmd_offset_lockless(pudp, pud, addr);/*取pmd指针*/
 	do {
 		pmd_t pmd = pmdp_get_lockless(pmdp);
 
@@ -3069,6 +3069,7 @@ static int gup_fast_pmd_range(pud_t *pudp, pud_t pud, unsigned long addr,
 			return 0;
 
 		if (unlikely(pmd_leaf(pmd))) {
+			/*pmd是叶子情况*/
 			/* See gup_fast_pte_range() */
 			if (pmd_protnone(pmd))
 				return 0;
@@ -3078,7 +3079,7 @@ static int gup_fast_pmd_range(pud_t *pudp, pud_t pud, unsigned long addr,
 				return 0;
 
 		} else if (!gup_fast_pte_range(pmd, pmdp, addr, next, flags,
-					       pages, nr))
+					       pages, nr))/*检查pte*/
 			return 0;
 	} while (pmdp++, addr = next, addr != end);
 
@@ -3092,19 +3093,20 @@ static int gup_fast_pud_range(p4d_t *p4dp, p4d_t p4d, unsigned long addr,
 	unsigned long next;
 	pud_t *pudp;
 
-	pudp = pud_offset_lockless(p4dp, p4d, addr);
+	pudp = pud_offset_lockless(p4dp, p4d, addr);/*取pudp指针*/
 	do {
-		pud_t pud = READ_ONCE(*pudp);
+		pud_t pud = READ_ONCE(*pudp);/*取pud*/
 
 		next = pud_addr_end(addr, end);
 		if (unlikely(!pud_present(pud)))
-			return 0;
+			return 0;/*pud不存在，退出*/
 		if (unlikely(pud_leaf(pud))) {
+			/*pud这一层为叶子*/
 			if (!gup_fast_pud_leaf(pud, pudp, addr, next, flags,
 					       pages, nr))
 				return 0;
 		} else if (!gup_fast_pmd_range(pudp, pud, addr, next, flags,
-					       pages, nr))
+					       pages, nr))/*检查pmd*/
 			return 0;
 	} while (pudp++, addr = next, addr != end);
 
@@ -3118,15 +3120,16 @@ static int gup_fast_p4d_range(pgd_t *pgdp, pgd_t pgd, unsigned long addr,
 	unsigned long next;
 	p4d_t *p4dp;
 
-	p4dp = p4d_offset_lockless(pgdp, pgd, addr);
+	p4dp = p4d_offset_lockless(pgdp, pgd, addr);/*取p4dp指针*/
 	do {
-		p4d_t p4d = READ_ONCE(*p4dp);
+		p4d_t p4d = READ_ONCE(*p4dp);/*取p4d*/
 
-		next = p4d_addr_end(addr, end);
+		next = p4d_addr_end(addr, end);/*取此p4d项的结束地址（或者取end,两者取最小值)*/
 		if (!p4d_present(p4d))
-			return 0;
+			return 0;/*此p4d不存在*/
 		BUILD_BUG_ON(p4d_leaf(p4d));
-		if (!gup_fast_pud_range(p4dp, p4d, addr, next, flags,
+		/*检查pud*/
+		if (!gup_fast_pud_range(p4dp, p4d, addr/*起始地址*/, next/*结束地址*/, flags,
 					pages, nr))
 			return 0;
 	} while (p4dp++, addr = next, addr != end);
@@ -3134,23 +3137,24 @@ static int gup_fast_p4d_range(pgd_t *pgdp, pgd_t pgd, unsigned long addr,
 	return 1;
 }
 
-static void gup_fast_pgd_range(unsigned long addr, unsigned long end,
+static void gup_fast_pgd_range(unsigned long addr/*起始地址*/, unsigned long end/*终止地址*/,
 		unsigned int flags, struct page **pages, int *nr)
 {
 	unsigned long next;
 	pgd_t *pgdp;
 
-	pgdp = pgd_offset(current->mm, addr);
+	pgdp = pgd_offset(current->mm, addr);/*取得pgdp*/
 	do {
-		pgd_t pgd = READ_ONCE(*pgdp);
+		pgd_t pgd = READ_ONCE(*pgdp);/*读取pgd*/
 
-		next = pgd_addr_end(addr, end);
+		next = pgd_addr_end(addr, end);/*此pgd项的结束地址（当end小于此pgd项结束地址时，使用end)*/
 		if (pgd_none(pgd))
-			return;
+			return;/*此pgd不存在，返回*/
 		BUILD_BUG_ON(pgd_leaf(pgd));
-		if (!gup_fast_p4d_range(pgdp, pgd, addr, next, flags,
+		/*检查p4d*/
+		if (!gup_fast_p4d_range(pgdp/*pgd指针*/, pgd/*pdg*/, addr/*起始地址*/, next/*结束地址*/, flags,
 					pages, nr))
-			return;
+			return;/*出错，返回*/
 	} while (pgdp++, addr = next, addr != end);
 }
 #else
@@ -3171,7 +3175,7 @@ static bool gup_fast_permitted(unsigned long start, unsigned long end)
 }
 #endif
 
-static unsigned long gup_fast(unsigned long start, unsigned long end,
+static unsigned long gup_fast(unsigned long start/*起始地址*/, unsigned long end/*终止地址*/,
 		unsigned int gup_flags, struct page **pages)
 {
 	unsigned long flags;
@@ -3214,7 +3218,7 @@ static unsigned long gup_fast(unsigned long start, unsigned long end,
 			sanity_check_pinned_pages(pages, nr_pinned);
 		}
 	}
-	return nr_pinned;
+	return nr_pinned;/*返回pages数目*/
 }
 
 static int gup_fast_fallback(unsigned long start/*起始地址*/, unsigned long nr_pages/*页数*/,
@@ -3241,15 +3245,16 @@ static int gup_fast_fallback(unsigned long start/*起始地址*/, unsigned long 
 	start = untagged_addr(start) & PAGE_MASK;
 	/*内存长度*/
 	len = nr_pages << PAGE_SHIFT;
+	/*end = start + len后，检查是否导致overflow,如导致，则返回错误*/
 	if (check_add_overflow(start, len, &end))
 		return -EOVERFLOW;
 	if (end > TASK_SIZE_MAX)
-		return -EFAULT;
+		return -EFAULT;/*end超限*/
 
-	//？？？？
+	//检查start,end间的映射page结构体，收集并填充到pages数组中，返回pages数组中的元素数
 	nr_pinned = gup_fast(start, end, gup_flags, pages);
 	if (nr_pinned == nr_pages || gup_flags & FOLL_FAST_ONLY)
-		return nr_pinned;
+		return nr_pinned;/*pin的数量与实际数量一致*/
 
 	/* Slow path: try to get the remaining pages with get_user_pages */
 	start += nr_pinned << PAGE_SHIFT;
@@ -3355,7 +3360,7 @@ EXPORT_SYMBOL_GPL(get_user_pages_fast);
  * Note that if a zero_page is amongst the returned pages, it will not have
  * pins in it and unpin_user_page() will not remove pins from it.
  */
-int pin_user_pages_fast(unsigned long start, int nr_pages,
+int pin_user_pages_fast(unsigned long start/*首页地址*/, int nr_pages,
 			unsigned int gup_flags, struct page **pages)
 {
 	if (!is_valid_gup_args(pages, NULL, &gup_flags, FOLL_PIN))

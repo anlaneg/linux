@@ -1923,7 +1923,7 @@ struct ib_mr {
 	struct ib_pd	  *pd;
 	u32		   lkey;/*在本端的key*/
 	u32		   rkey;/*在对端的key*/
-	u64		   iova;/*内存起始位置*/
+	u64		   iova;/*内存iova起始位置*/
 	/*内存长度*/
 	u64		   length;
 	/*此mr对应的页的大小*/
@@ -2612,7 +2612,7 @@ struct ib_device_ops {
 	 */
 	void (*post_destroy_cq)(struct ib_cq *cq);
 	struct ib_mr *(*get_dma_mr)(struct ib_pd *pd, int mr_access_flags);
-	/*注册memory region*/
+	/*注册用户态memory region*/
 	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd/*pd参数*/, u64 start, u64 length,
 				     u64 virt_addr, int mr_access_flags,
 				     struct ib_dmah *dmah,

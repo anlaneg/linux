@@ -377,8 +377,8 @@ struct ib_uverbs_reg_mr {
 
 struct ib_uverbs_reg_mr_resp {
 	__u32 mr_handle;
-	__u32 lkey;
-	__u32 rkey;
+	__u32 lkey;/*本端key*/
+	__u32 rkey;/*远端key*/
 	__u32 driver_data[];
 };
 

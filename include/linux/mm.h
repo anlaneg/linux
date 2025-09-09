@@ -1864,7 +1864,7 @@ static inline bool folio_has_pincount(const struct folio *folio)
 {
 	if (IS_ENABLED(CONFIG_64BIT))
 		return folio_test_large(folio);
-	return folio_order(folio) > 1;
+	return folio_order(folio) > 1;/*是否多页*/
 }
 
 /**
@@ -3050,8 +3050,9 @@ static inline pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr,
 	pte_t *pte;
 
 	__cond_lock(RCU, pte = ___pte_offset_map(pmd, addr, pmdvalp));
-	return pte;
+	return pte;/*返回addr对应的pte*/
 }
+/*利用pmd查询addr获得其对应的pte*/
 static inline pte_t *pte_offset_map(pmd_t *pmd, unsigned long addr)
 {
 	return __pte_offset_map(pmd, addr, NULL);

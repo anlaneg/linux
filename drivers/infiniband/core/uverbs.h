@@ -117,9 +117,9 @@ struct ib_uverbs_device {
 };
 
 struct ib_uverbs_event_queue {
-	spinlock_t				lock;
+	spinlock_t				lock;/*保护锁*/
 	int					is_closed;
-	wait_queue_head_t			poll_wait;
+	wait_queue_head_t			poll_wait;/*用于阻塞在此队列上等待event*/
 	struct fasync_struct		       *async_queue;
 	struct list_head			event_list;
 };

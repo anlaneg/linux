@@ -51,7 +51,7 @@
  */
 static inline bool __must_check __must_check_overflow(bool overflow)
 {
-	return unlikely(overflow);
+	return unlikely(overflow);/*是否发生overflow*/
 }
 
 /**
@@ -66,6 +66,7 @@ static inline bool __must_check __must_check_overflow(bool overflow)
  * wrap-around occurred.
  */
 #define check_add_overflow(a, b, d)	\
+	/*__builtin_add_overflow用于将a,b相加，并将结果存放在d中，如果发生overflow，则返回true,否则返回false*/\
 	__must_check_overflow(__builtin_add_overflow(a, b, d))
 
 /**

@@ -155,8 +155,8 @@ EXPORT_SYMBOL(ib_umem_find_best_pgsz);
  * @size: length of region to pin
  * @access: IB_ACCESS_xxx flags for memory being pinned
  */
-struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
-			    size_t size, int access)
+struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*内存起始地址*/,
+			    size_t size/*内存区域长度*/, int access)
 {
 	struct ib_umem *umem;
 	struct page **page_list;
@@ -235,12 +235,13 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	while (npages) {
 		cond_resched();
 		/*pin内存*/
-		pinned = pin_user_pages_fast(cur_base,
+		pinned = pin_user_pages_fast(cur_base/*首页地址*/,
 					  min_t(unsigned long, npages,
 						PAGE_SIZE /
 						sizeof(struct page *)),
 					  gup_flags, page_list);
 		if (pinned < 0) {
+			/*pin的过程中出错*/
 			ret = pinned;
 			goto umem_release;
 		}
@@ -249,7 +250,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 		cur_base += pinned * PAGE_SIZE;
 		npages -= pinned;/*待pin的内存页数减少*/
 		ret = sg_alloc_append_table_from_pages(
-			&umem->sgt_append, page_list, pinned, 0,
+			&umem->sgt_append, page_list, pinned/*完成pin的数目，即page_list数组的大小*/, 0,
 			pinned << PAGE_SHIFT, ib_dma_max_seg_size(device),
 			npages, GFP_KERNEL);
 		if (ret) {
@@ -262,7 +263,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 		dma_attr |= DMA_ATTR_WEAK_ORDERING;
 
 	ret = ib_dma_map_sgtable_attrs(device, &umem->sgt_append.sgt,
-				       DMA_BIDIRECTIONAL, dma_attr);
+				       DMA_BIDIRECTIONAL, dma_attr);/*完成映射*/
 	if (ret)
 		goto umem_release;
 	goto out;

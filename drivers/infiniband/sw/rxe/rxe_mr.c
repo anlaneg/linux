@@ -141,11 +141,11 @@ int rxe_mr_init_user(struct rxe_dev *rxe, u64 start/*内存起始地址*/, u64 l
 	struct ib_umem *umem;
 	int err;
 
-	rxe_mr_init(access, mr);
+	rxe_mr_init(access, mr);/*初始化mr*/
 
 	xa_init(&mr->page_list);
 
-	umem = ib_umem_get(&rxe->ib_dev, start, length, access);
+	umem = ib_umem_get(&rxe->ib_dev, start, length, access);/*映射这一段地址*/
 	if (IS_ERR(umem)) {
 		rxe_dbg_mr(mr, "Unable to pin memory region err = %d\n",
 			(int)PTR_ERR(umem));
@@ -159,7 +159,7 @@ int rxe_mr_init_user(struct rxe_dev *rxe, u64 start/*内存起始地址*/, u64 l
 	}
 
 	mr->umem = umem;
-	mr->ibmr.type = IB_MR_TYPE_USER;
+	mr->ibmr.type = IB_MR_TYPE_USER;/*指明此为用户态mr*/
 	mr->state = RXE_MR_STATE_VALID;
 
 	return 0;

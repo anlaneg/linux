@@ -331,6 +331,7 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 #define	pmd_bad(x)	(pmd_val(x) & ~PAGE_MASK)
 
 #define pages_to_mb(x)	((x) >> (20-PAGE_SHIFT))
+/*从pte转换为page结构体*/
 #define pte_page(x)	pfn_to_page(pte_pfn(x))
 
 /*

@@ -281,7 +281,7 @@ static __always_inline int page_is_fake_head(const struct page *page)
 
 static __always_inline unsigned long _compound_head(const struct page *page)
 {
-    /*取对此页对应的复合页
+    /*取此页对应的复合页
      * {复合页（Compound Page）就是将物理上连续的两个或多个页看成一个
      独立的大页}*/
 	unsigned long head = READ_ONCE(page->compound_head);
@@ -306,6 +306,7 @@ static __always_inline unsigned long _compound_head(const struct page *page)
  * a reference on the folio.
  * Return: The folio which contains this page.
  */
+/*将page转换为folio*/
 #define page_folio(p)		(_Generic((p),				\
 	const struct page *:	(const struct folio *)_compound_head(p), \
 	struct page *:		(struct folio *)_compound_head(p)))

@@ -304,7 +304,7 @@ static inline bool pmd_leaf(pmd_t pte)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 static inline int pmd_trans_huge(pmd_t pmd)
 {
-	return (pmd_val(pmd) & _PAGE_PSE) == _PAGE_PSE;
+	return (pmd_val(pmd) & _PAGE_PSE) == _PAGE_PSE;/*是否super页*/
 }
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
@@ -1642,7 +1642,7 @@ static inline bool __pte_access_permitted(unsigned long pteval, bool write)
 		need_pte_bits |= _PAGE_RW;
 
 	if ((pteval & need_pte_bits) != need_pte_bits)
-		return 0;
+		return 0;/*没有need_pte_bits标记，返回false*/
 
 	return __pkru_allows_pkey(pte_flags_pkey(pteval), write);
 }

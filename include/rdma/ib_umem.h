@@ -21,6 +21,7 @@ struct ib_umem {
 	struct ib_device       *ibdev;
 	/*此进程对程对应的mm*/
 	struct mm_struct       *owning_mm;
+	/*address对应的iova地址*/
 	u64 iova;
 	/*内存大小*/
 	size_t			length;
@@ -30,7 +31,7 @@ struct ib_umem {
 	u32 writable : 1;
 	u32 is_odp : 1;
 	u32 is_dmabuf : 1;
-	struct sg_append_table sgt_append;
+	struct sg_append_table sgt_append;/*由(address,address+len)映射得到的pages*/
 };
 
 struct ib_umem_dmabuf {

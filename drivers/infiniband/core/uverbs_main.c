@@ -437,7 +437,7 @@ void ib_uverbs_async_handler(struct ib_uverbs_async_event_file *async_file,
 	entry->desc.async.reserved = 0;
 	entry->counter = counter;
 
-	list_add_tail(&entry->list, &async_file->ev_queue.event_list);
+	list_add_tail(&entry->list, &async_file->ev_queue.event_list);/*添加entry到链表*/
 	if (obj_list)
 		list_add_tail(&entry->obj_list, obj_list);
 	spin_unlock_irqrestore(&async_file->ev_queue.lock, flags);

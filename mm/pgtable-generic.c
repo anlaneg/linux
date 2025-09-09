@@ -278,14 +278,14 @@ static unsigned long pmdp_get_lockless_start(void) { return 0; }
 static void pmdp_get_lockless_end(unsigned long irqflags) { }
 #endif
 
-pte_t *___pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
+pte_t *___pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp/*出参，用于保存pmd中保存的值*/)
 {
 	unsigned long irqflags;
 	pmd_t pmdval;
 
 	rcu_read_lock();
 	irqflags = pmdp_get_lockless_start();
-	pmdval = pmdp_get_lockless(pmd);
+	pmdval = pmdp_get_lockless(pmd);/*取pmd中保存的pmdval*/
 	pmdp_get_lockless_end(irqflags);
 
 	if (pmdvalp)

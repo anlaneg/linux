@@ -3027,8 +3027,8 @@ int ib_dma_virt_map_sg(struct ib_device *dev, struct scatterlist *sg, int nents)
 	int i;
 
 	for_each_sg(sg, s, nents, i) {
-		sg_dma_address(s) = (uintptr_t)sg_virt(s);
-		sg_dma_len(s) = s->length;
+		sg_dma_address(s) = (uintptr_t)sg_virt(s);/*设置dma地址*/
+		sg_dma_len(s) = s->length;/*设置dma地址长度*/
 	}
 	return nents;
 }

@@ -216,7 +216,7 @@ static int __dma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 	    arch_dma_map_sg_direct(dev, sg, nents))
 		ents = dma_direct_map_sg(dev, sg, nents, dir, attrs);
 	else if (use_dma_iommu(dev))
-		ents = iommu_dma_map_sg(dev, sg, nents, dir, attrs);
+		ents = iommu_dma_map_sg(dev, sg, nents, dir, attrs);/*使用iommu进行映射*/
 	else
 		ents = ops->map_sg(dev, sg, nents, dir, attrs);
 

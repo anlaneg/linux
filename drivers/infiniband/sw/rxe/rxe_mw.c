@@ -293,12 +293,12 @@ err:
 
 struct rxe_mw *rxe_lookup_mw(struct rxe_qp *qp, int access, u32 rkey)
 {
-	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
+	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);/*找到rxe设备*/
 	struct rxe_pd *pd = to_rpd(qp->ibqp.pd);
 	struct rxe_mw *mw;
 	int index = rkey >> 8;
 
-	mw = rxe_pool_get_index(&rxe->mw_pool, index);
+	mw = rxe_pool_get_index(&rxe->mw_pool, index);/*通过index查询mw*/
 	if (!mw)
 		return NULL;
 
