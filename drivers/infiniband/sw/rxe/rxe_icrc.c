@@ -140,5 +140,5 @@ void rxe_icrc_generate(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	icrc = rxe_icrc_hdr(skb, pkt);/*先计算header的icrc*/
 	icrc = rxe_crc32(pkt->rxe, icrc, (u8 *)payload_addr(pkt),
 				payload_size(pkt) + bth_pad(pkt));/*再计算payload的icrc*/
-	*icrcp = ~icrc;
+	*icrcp = ~icrc;/*取反后填充icrc*/
 }

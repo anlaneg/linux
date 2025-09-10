@@ -863,7 +863,7 @@ static struct sk_buff *prepare_ack_packet(struct rxe_qp *qp,
 	ack->paylen = paylen;
 	ack->psn = psn;
 
-	/*构造ack的bth报文*/
+	/*填写ack的bth报文*/
 	bth_init(ack, opcode, 0, 0, pad, IB_DEFAULT_PKEY_FULL/*指明pkey*/,
 		 qp->attr.dest_qp_num/*设置目标qp*/, 0/*不要求响应ack*/, psn);
 

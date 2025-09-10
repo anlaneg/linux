@@ -169,8 +169,8 @@ struct rxe_send_wqe {
 	__u32			state;
 	__aligned_u64		iova;
 	__u32			mask;
-	__u32			first_psn;/*首包psn(packet send number)*/
-	__u32			last_psn;/*属包psn*/
+	__u32			first_psn;/*此wqe被发送时首包对应的psn(packet send number)*/
+	__u32			last_psn;/*此wqe被发送时尾包对应的psn*/
 	__u32			ack_length;
 	__u32			ssn;/*此send wqe关联的全局唯一number*/
 	__u32			has_rd_atomic;

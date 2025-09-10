@@ -853,7 +853,7 @@ static void rxe_qp_do_cleanup(struct work_struct *work)
 		rxe_cleanup_task(&qp->send_task);
 
 	/* flush out any receive wr's or pending requests */
-	rxe_sender(qp);
+	rxe_sender(qp);/*发送请求*/
 	rxe_receiver(qp);
 
 	if (qp->sq.queue)

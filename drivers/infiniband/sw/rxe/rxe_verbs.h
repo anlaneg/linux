@@ -106,14 +106,14 @@ struct rxe_srq {
 };
 
 struct rxe_req_info {
-	int			wqe_index;/*生产者指针*/
+	int			wqe_index;/*指向待发送的WQE*/
 	u32			psn;/*packet对应的唯一编号*/
-	int			opcode;
+	int			opcode;/*记录上次报文发送时使用的OPCODE,如果不知道上次是哪个,置为-1*/
 	atomic_t		rd_atomic;
 	int			wait_fence;
 	int			need_rd_atomic;
 	int			wait_psn;/*指明有等待psn(需要发送，但窗口已满）*/
-	int			need_retry;
+	int			need_retry;/*指明请求是否需要重传*/
 	int			wait_for_rnr_timer;
 	/*记录截止上次已没有添加ack报文的数目（实现每隔N个报文打一次ack标记)*/
 	int			noack_pkts;
@@ -121,11 +121,11 @@ struct rxe_req_info {
 };
 
 struct rxe_comp_info {
-	u32			psn;
+	u32			psn;/*收到ack的psn*/
 	int			opcode;
-	int			timeout;
+	int			timeout;/*标1时,表示超时重传定时器被触发*/
 	int			timeout_retry;
-	int			started_retry;
+	int			started_retry;/*指明已启动重传(防止重复启动)*/
 	u32			retry_cnt;
 	u32			rnr_retry;
 };
@@ -285,7 +285,7 @@ struct rxe_qp {
 	 * qp->comp.task 对应的task负责处理这些报文(即rxe_completer函数）*/
 	struct sk_buff_head	resp_pkts;
 
-	struct rxe_task		send_task;
+	struct rxe_task		send_task;/*此TASK负责向外发送请求.对应rxe_sender函数处理*/
 	struct rxe_task		recv_task;
 
 	/*处理发送请求，处理req_pkts*/
@@ -305,7 +305,7 @@ struct rxe_qp {
 	 * received.
 	 */
 	struct timer_list retrans_timer;/*重传定时器，回调：retransmit_timer*/
-	u64 qp_timeout_jiffies;
+	u64 qp_timeout_jiffies;/*超时重传间隔*/
 
 	/* Timer for handling RNR NAKS. */
 	struct timer_list rnr_nak_timer;

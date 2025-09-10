@@ -104,10 +104,13 @@ struct rxe_bth {
 #define BTH_TVER_MASK		(0x0f)
 #define BTH_FECN_MASK		(0x80000000)
 #define BTH_BECN_MASK		(0x40000000)
+/*QPN字段上的预留位*/
 #define BTH_RESV6A_MASK		(0x3f000000)
+/*QPN的有效位*/
 #define BTH_QPN_MASK		(0x00ffffff)
 /*ack request标记，标明此报文需要响应ack*/
 #define BTH_ACK_MASK		(0x80000000)
+/*PSN字段上预留位*/
 #define BTH_RESV7_MASK		(0x7f000000)
 /*psn占用24位*/
 #define BTH_PSN_MASK		(0x00ffffff)
@@ -454,6 +457,7 @@ static inline void bth_set_psn(struct rxe_pkt_info *pkt, u32 psn)
 	__bth_set_psn(pkt->hdr, psn);
 }
 
+/*填写bth头*/
 static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否有se标记*/,
 			    int mig/*是否有mig标记*/, int pad/*pad长度*/, u16 pkey/*对应的pkey*/, u32 qpn/*关联的24位有效的qpn*/, int ack_req/*是否要求回复ack*/,
 			    u32 psn)
@@ -462,16 +466,16 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否�
 
 	/*初始化操作码*/
 	bth->opcode = opcode;
-	bth->flags = (pad << 4) & BTH_PAD_MASK;/*写入pad*/
+	bth->flags = (pad << 4) & BTH_PAD_MASK;/*写入pad长度(隐含的版本也被填为0)*/
 	if (se)
 		bth->flags |= BTH_SE_MASK;
 	if (mig)
 		bth->flags |= BTH_MIG_MASK;
-	bth->pkey = cpu_to_be16(pkey);
+	bth->pkey = cpu_to_be16(pkey);/*设置pkey*/
 	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置目标qpn*/
-	psn &= BTH_PSN_MASK;
+	psn &= BTH_PSN_MASK;/*psn有效位数为24位*/
 	if (ack_req)
-		/*如果要求ack request,则加上ack req标记*/
+		/*如果为ack request,则加上ack req标记*/
 		psn |= BTH_ACK_MASK;
 	bth->apsn = cpu_to_be32(psn);/*设置psn*/
 }
@@ -645,13 +649,14 @@ static inline void reth_set_va(struct rxe_pkt_info *pkt, u64 va)
 		rxe_opcode[pkt->opcode].offset[RXE_RETH], va);
 }
 
+/*取报文中reth HEADER中的rkey字段*/
 static inline u32 reth_rkey(struct rxe_pkt_info *pkt)
 {
-	/*取reth头中指明的rkey*/
 	return __reth_rkey(pkt->hdr +
 		rxe_opcode[pkt->opcode].offset[RXE_RETH]);
 }
 
+/*填充报文中reth HEADER中的rkey字段*/
 static inline void reth_set_rkey(struct rxe_pkt_info *pkt, u32 rkey)
 {
 	__reth_set_rkey(pkt->hdr +
@@ -711,9 +716,10 @@ static inline u32 feth_sel(struct rxe_pkt_info *pkt)
 static inline void feth_init(struct rxe_pkt_info *pkt, u8 type, u8 level)
 {
 	struct rxe_feth *feth = (struct rxe_feth *)
-		    (pkt->hdr + rxe_opcode[pkt->opcode].offset[RXE_FETH]);
+		    (pkt->hdr + rxe_opcode[pkt->opcode].offset[RXE_FETH]);/*取报文中feth头指针*/
+	/*level与type共占用8bit,且level当前占用高4位*/
 	u32 bits = ((level << FETH_SEL_SHIFT) & FETH_SEL_MASK) |
-		   (type & FETH_PLT_MASK);
+		   (type & FETH_PLT_MASK);/*当前bits仅占用8位*/
 
 	feth->bits = cpu_to_be32(bits);
 }
@@ -952,6 +958,7 @@ struct rxe_immdt {
 	__be32			imm;
 };
 
+/*取rxe_immdt header*/
 static inline __be32 __immdt_imm(void *arg)
 {
 	struct rxe_immdt *immdt = arg;
@@ -959,6 +966,7 @@ static inline __be32 __immdt_imm(void *arg)
 	return immdt->imm;
 }
 
+/*设置rxe_immdt header中唯一的成员*/
 static inline void __immdt_set_imm(void *arg, __be32 imm)
 {
 	struct rxe_immdt *immdt = arg;
@@ -966,12 +974,14 @@ static inline void __immdt_set_imm(void *arg, __be32 imm)
 	immdt->imm = imm;
 }
 
+/*取报文中包含的rxe_immdt header*/
 static inline __be32 immdt_imm(struct rxe_pkt_info *pkt)
 {
 	return __immdt_imm(pkt->hdr +
 		rxe_opcode[pkt->opcode].offset[RXE_IMMDT]);
 }
 
+/*填充报文中包含的rxe_immdt header*/
 static inline void immdt_set_imm(struct rxe_pkt_info *pkt, __be32 imm)
 {
 	__immdt_set_imm(pkt->hdr +
@@ -1014,10 +1024,10 @@ static inline void ieth_set_rkey(struct rxe_pkt_info *pkt, u32 rkey)
 
 /*定义各header长度*/
 enum rxe_hdr_length {
-	RXE_BTH_BYTES		= sizeof(struct rxe_bth),/*base transport header长度*/
+	RXE_BTH_BYTES		= sizeof(struct rxe_bth),/*指明base transport header长度*/
 	RXE_DETH_BYTES		= sizeof(struct rxe_deth),/*Datagram Extended Transport Header长度*/
 	RXE_IMMDT_BYTES		= sizeof(struct rxe_immdt),
-	RXE_RETH_BYTES		= sizeof(struct rxe_reth),/*rdma扩展传输头 长度*/
+	RXE_RETH_BYTES		= sizeof(struct rxe_reth),/*rdma扩展传输头长度*/
 	RXE_AETH_BYTES		= sizeof(struct rxe_aeth),
 	RXE_ATMACK_BYTES	= sizeof(struct rxe_atmack),
 	RXE_ATMETH_BYTES	= sizeof(struct rxe_atmeth),

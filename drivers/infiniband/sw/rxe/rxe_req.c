@@ -34,6 +34,7 @@ static inline void retry_first_write_send(struct rxe_qp *qp,
 	}
 }
 
+/*处理重传*/
 static void req_retry(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
@@ -45,16 +46,16 @@ static void req_retry(struct rxe_qp *qp)
 	unsigned int cons;
 	unsigned int prod;
 
-	cons = queue_get_consumer(q, QUEUE_TYPE_FROM_CLIENT);
+	cons = queue_get_consumer(q, QUEUE_TYPE_FROM_CLIENT);/*从消费者首位置开始(此位置为首个未被ACK的WQE)*/
 	prod = queue_get_producer(q, QUEUE_TYPE_FROM_CLIENT);
 
-	qp->req.wqe_index	= cons;
-	qp->req.psn		= qp->comp.psn;
-	qp->req.opcode		= -1;
+	qp->req.wqe_index	= cons;/*待发送wqe位置设置从首个未ACK的位置开始重传*/
+	qp->req.psn		= qp->comp.psn;/*设置待重传的PSN编号*/
+	qp->req.opcode		= -1;/*上次OPCODE未知*/
 
 	for (wqe_index = cons; wqe_index != prod;
 			wqe_index = queue_next_index(q, wqe_index)) {
-		wqe = queue_addr_from_index(qp->sq.queue, wqe_index);
+		wqe = queue_addr_from_index(qp->sq.queue, wqe_index);/*取wqe*/
 		mask = wr_opcode_mask(wqe->wr.opcode, qp);
 
 		if (wqe->state == wqe_state_posted)
@@ -168,9 +169,9 @@ static struct rxe_send_wqe *__req_next_wqe(struct rxe_qp *qp)
 
 	prod = queue_get_producer(q, QUEUE_TYPE_FROM_CLIENT);
 	if (index == prod)
-		return NULL;
+		return NULL;/*队列为空,无需发送wqe*/
 	else
-		return queue_addr_from_index(q, index);
+		return queue_addr_from_index(q, index);/*取待发送wqe*/
 }
 
 /*自sq取一个wqe*/
@@ -227,7 +228,7 @@ static int rxe_wqe_is_fenced(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 static int next_opcode_rc(struct rxe_qp *qp, u32 opcode, int fits)
 {
 	switch (opcode) {
-	case IB_WR_RDMA_WRITE:
+	case IB_WR_RDMA_WRITE:/*WRITE操作*/
 		if (qp->req.opcode == IB_OPCODE_RC_RDMA_WRITE_FIRST ||
 		    qp->req.opcode == IB_OPCODE_RC_RDMA_WRITE_MIDDLE)
 			return fits ?
@@ -252,13 +253,14 @@ static int next_opcode_rc(struct rxe_qp *qp, u32 opcode, int fits)
 	case IB_WR_SEND/*send操作*/:
 		if (qp->req.opcode == IB_OPCODE_RC_SEND_FIRST ||
 		    qp->req.opcode == IB_OPCODE_RC_SEND_MIDDLE)
+			/*上一次opcode是以上两种,则看本次是否可以发送完*/
 			return fits ?
-				IB_OPCODE_RC_SEND_LAST :
+				IB_OPCODE_RC_SEND_LAST /*可以发送完,则本次为LAST*/:
 				IB_OPCODE_RC_SEND_MIDDLE;
 		else
 			return fits ?
-				IB_OPCODE_RC_SEND_ONLY :
-				IB_OPCODE_RC_SEND_FIRST;
+				IB_OPCODE_RC_SEND_ONLY /*上次不是以上操作,本次可以发送完,则本次为send_only*/:
+				IB_OPCODE_RC_SEND_FIRST/*否则发不完,则本次为send_frist*/;
 
 	case IB_WR_SEND_WITH_IMM:
 		if (qp->req.opcode == IB_OPCODE_RC_SEND_FIRST ||
@@ -358,7 +360,7 @@ static int next_opcode_uc(struct rxe_qp *qp, u32 opcode, int fits)
 static int next_opcode(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       u32 opcode)
 {
-	int fits = (wqe->dma.resid <= qp->mtu);/*数据小于mtu，则数据发送本次将结束*/
+	int fits = (wqe->dma.resid <= qp->mtu);/*数据小于mtu，则数据发送本次将结束(即最后一片)*/
 
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
@@ -412,7 +414,7 @@ static inline int get_mtu(struct rxe_qp *qp)
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 
 	if ((qp_type(qp) == IB_QPT_RC) || (qp_type(qp) == IB_QPT_UC))
-		return qp->mtu;
+		return qp->mtu;/*这种选QP中设置的mtu*/
 
 	return rxe->port.mtu_cap;
 }
@@ -420,13 +422,13 @@ static inline int get_mtu(struct rxe_qp *qp)
 static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 				       struct rxe_av *av,
 				       struct rxe_send_wqe *wqe,
-				       int opcode, u32 payload,
+				       int opcode/*报文对应的opcode*/, u32 payload,
 				       struct rxe_pkt_info *pkt)
 {
 	struct rxe_dev		*rxe = to_rdev(qp->ibqp.device);
 	struct sk_buff		*skb;
 	struct rxe_send_wr	*ibwr = &wqe->wr;
-	int			pad = (-payload) & 0x3;/*内容必须以4字节对齐*/
+	int			pad = (-payload) & 0x3;/*PAYLOAD内容必须以4字节对齐,故payload-(payload&(~(0X3))*/
 	int			paylen;
 	int			solicited;
 	u32			qp_num;
@@ -434,11 +436,11 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 
 	/*报文总长度*/
 	/* length from start of bth to end of icrc */
-	paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE;
-	pkt->paylen = paylen;
+	paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE;/*header长度与PAYLOAD之后还需要考虑PAD及ICRC*/
+	pkt->paylen = paylen;/*此即为UDP长度*/
 
 	/* init skb */
-	/*初始化skb*/
+	/*申请并初始化skb*/
 	skb = rxe_init_packet(rxe, av, paylen, pkt);
 	if (unlikely(!skb))
 		return NULL;
@@ -448,7 +450,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 			(pkt->mask & RXE_END_MASK) &&
 			((pkt->mask & (RXE_SEND_MASK)) ||
 			(pkt->mask & (RXE_WRITE_MASK | RXE_IMMDT_MASK)) ==
-			(RXE_WRITE_MASK | RXE_IMMDT_MASK));
+			(RXE_WRITE_MASK | RXE_IMMDT_MASK));/*是否有se标记*/
 
 	qp_num = (pkt->mask & RXE_DETH_MASK) ? ibwr->wr.ud.remote_qpn :
 					 qp->attr.dest_qp_num;
@@ -458,33 +460,39 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 		ack_req = ((pkt->mask & RXE_END_MASK) ||
 			   (qp->req.noack_pkts++ > RXE_MAX_PKT_PER_ACK));
 	if (ack_req)
-		qp->req.noack_pkts = 0;
+		qp->req.noack_pkts = 0;/*本次已添加标记,计数回归到0*/
 
-	/*初始化bth header*/
+	/*填写bth header*/
 	bth_init(pkt, pkt->opcode, solicited, 0, pad, IB_DEFAULT_PKEY_FULL, qp_num,
 		 ack_req, pkt->psn);
 
 	/* init optional headers */
 	if (pkt->mask & RXE_RETH_MASK) {
+		/*报文中需包含rxe_reth头*/
 		if (pkt->mask & RXE_FETH_MASK)
+			/*报文中还需包含有rxe_feth头*/
 			reth_set_rkey(pkt, ibwr->wr.flush.rkey);
 		else
 			reth_set_rkey(pkt, ibwr->wr.rdma.rkey);
-		reth_set_va(pkt, wqe->iova);
-		reth_set_len(pkt, wqe->dma.resid);
+		reth_set_va(pkt, wqe->iova);/*填充va地址*/
+		reth_set_len(pkt, wqe->dma.resid);/*填充内存长度*/
 	}
 
 	/* Fill Flush Extension Transport Header */
 	if (pkt->mask & RXE_FETH_MASK)
+		/*报文中需包含有rxe_feth头*/
 		feth_init(pkt, ibwr->wr.flush.type, ibwr->wr.flush.level);
 
 	if (pkt->mask & RXE_IMMDT_MASK)
+		/*报文中需包含有rxe_immdt头*/
 		immdt_set_imm(pkt, ibwr->ex.imm_data);
 
 	if (pkt->mask & RXE_IETH_MASK)
+		/*报文中需包含有rxe_ieth头*/
 		ieth_set_rkey(pkt, ibwr->ex.invalidate_rkey);
 
 	if (pkt->mask & RXE_ATMETH_MASK) {
+		/*报文中需包含有rxe_atmeth头*/
 		atmeth_set_va(pkt, wqe->iova);
 		if (opcode == IB_OPCODE_RC_COMPARE_SWAP) {
 			atmeth_set_swap_add(pkt, ibwr->wr.atomic.swap);
@@ -496,6 +504,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	}
 
 	if (pkt->mask & RXE_DETH_MASK) {
+		/*报文中需包含有rxe_deth头*/
 		if (qp->ibqp.qp_num == 1)
 			deth_set_qkey(pkt, GSI_QKEY);
 		else
@@ -506,7 +515,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	return skb;
 }
 
-/*构造报文，并填充报文负载*/
+/*构造报文，并填充报文负载,更新wqe上待发送的剩余长度*/
 static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 			 struct rxe_send_wqe *wqe/*待发送的buffer*/, struct rxe_pkt_info *pkt,
 			 struct sk_buff *skb/*报文buffer*/, u32 payload)
@@ -530,7 +539,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 		} else {
 		    /*填写负载报文：op_code暂为空*/
 			err = copy_data(qp->pd, 0, &wqe->dma,
-					payload_addr(pkt)/*待填充的首地址*/, payload/*待填充内容长度*/,
+					payload_addr(pkt)/*待填充的PAYLOAD首地址*/, payload/*待填充内容长度*/,
 					RXE_FROM_MR_OBJ/*从mr中复制数据到payload*/);
 			if (err)
 				return err;
@@ -561,8 +570,9 @@ static void update_wqe_state(struct rxe_qp *qp,
 		struct rxe_pkt_info *pkt)
 {
 	if (pkt->mask & RXE_END_MASK) {
+		/*此报文为此操作中最后一个报文*/
 		if (qp_type(qp) == IB_QPT_RC)
-			wqe->state = wqe_state_pending;
+			wqe->state = wqe_state_pending;/*RC情况,状态定为pending*/
 		else
 			wqe->state = wqe_state_done;
 	} else {
@@ -580,10 +590,10 @@ static void update_wqe_psn(struct rxe_qp *qp,
 
 	/* handle zero length packet case */
 	if (num_pkt == 0)
-		num_pkt = 1;/*整除为0，最少一个包*/
+		num_pkt = 1;/*整除为0，但最少是一个包*/
 
 	if (pkt->mask & RXE_START_MASK) {
-		/*设置psn,记录first,last psn*/
+		/*刚发送的报文是此opcode的首操作包,设置psn,记录first,last psn*/
 		wqe->first_psn = qp->req.psn;
 		wqe->last_psn = (qp->req.psn + num_pkt - 1) & BTH_PSN_MASK;
 	}
@@ -592,16 +602,16 @@ static void update_wqe_psn(struct rxe_qp *qp,
 		/*读情况，更新到尾包psn*/
 		qp->req.psn = (wqe->first_psn + num_pkt) & BTH_PSN_MASK;
 	else
-		/*非读情况，更新到首个包psn*/
+		/*非读情况，更新psn*/
 		qp->req.psn = (qp->req.psn + 1) & BTH_PSN_MASK;
 }
 
 static void update_state(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 {
-	qp->req.opcode = pkt->opcode;
+	qp->req.opcode = pkt->opcode;/*更新上次报文的OPCODE*/
 
 	if (pkt->mask & RXE_END_MASK)
-		/*更新wqe发送指针*/
+		/*此报文opcode的最后一个包,即此WQE被发送完成,更新wqe_index指针*/
 		qp->req.wqe_index = queue_next_index(qp->sq.queue,
 						     qp->req.wqe_index);
 
@@ -610,7 +620,7 @@ static void update_state(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	if (qp->qp_timeout_jiffies && !timer_pending(&qp->retrans_timer))
 		/*启动重传定时器*/
 		mod_timer(&qp->retrans_timer,
-			  jiffies + qp->qp_timeout_jiffies);
+			  jiffies + qp->qp_timeout_jiffies/*超时时间*/);
 }
 
 static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
@@ -672,7 +682,7 @@ int rxe_requester(struct rxe_qp *qp)
 	int opcode;
 	int err;
 	int ret;
-	/*取出待发送queue*/
+	/*取发送queue*/
 	struct rxe_queue *q = qp->sq.queue;
 	struct rxe_ah *ah;
 	struct rxe_av *av;
@@ -685,6 +695,7 @@ int rxe_requester(struct rxe_qp *qp)
 	}
 
 	if (unlikely(qp_state(qp) == IB_QPS_ERR)) {
+		/*QP状态有误*/
 		wqe = __req_next_wqe(qp);
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		if (wqe) {
@@ -715,14 +726,14 @@ int rxe_requester(struct rxe_qp *qp)
 	 * retry flow
 	 */
 	if (unlikely(qp->req.need_retry && !qp->req.wait_for_rnr_timer)) {
-		req_retry(qp);
-		qp->req.need_retry = 0;
+		req_retry(qp);/*处理重传*/
+		qp->req.need_retry = 0;/*简单设置重传位置,后面会和正常发送一样,重传处理结束,置为0*/
 	}
 
-	/*自sq中提取一个用户态填充好的send wqe*/
+	/*自sq中提取一个用户态填充好的send wqe,准备发送这个wqe*/
 	wqe = req_next_wqe(qp);
 	if (unlikely(!wqe))
-		goto exit;
+		goto exit;/*没有要发送的wqe,直接退出*/
 
 	if (rxe_wqe_is_fenced(qp, wqe)) {
 		qp->req.wait_fence = 1;
@@ -741,7 +752,7 @@ int rxe_requester(struct rxe_qp *qp)
 	if (unlikely(qp_type(qp) == IB_QPT_RC &&
 		psn_compare(qp->req.psn, (qp->comp.psn +
 				RXE_MAX_UNACKED_PSNS)) > 0)) {
-		/*超过窗口大小，需要等待，退出*/
+		/*超过最大未确认窗口大小，需要等待，退出*/
 		qp->req.wait_psn = 1;
 		goto exit;
 	}
@@ -760,7 +771,7 @@ int rxe_requester(struct rxe_qp *qp)
 		goto err;
 	}
 
-	mask = rxe_opcode[opcode].mask;
+	mask = rxe_opcode[opcode].mask;/*得到此opcode对应的标记数据*/
 	if (unlikely(mask & (RXE_READ_OR_ATOMIC_MASK |
 			RXE_ATOMIC_WRITE_MASK))) {
 		if (check_init_depth(qp, wqe))
@@ -768,10 +779,11 @@ int rxe_requester(struct rxe_qp *qp)
 	}
 
 	mtu = get_mtu(qp);
-	/*取报文payload长度*/
+	/*依据OPCODE确定报文payload长度*/
 	payload = (mask & (RXE_WRITE_OR_SEND_MASK | RXE_ATOMIC_WRITE_MASK)) ?
 			wqe->dma.resid : 0;
 	if (payload > mtu) {
+		/*待发送的数据长度大于MTU*/
 		if (qp_type(qp) == IB_QPT_UD) {
 			/* C10-93.1.1: If the total sum of all the buffer lengths specified for a
 			 * UD message exceeds the MTU of the port as returned by QueryHCA, the CI
@@ -788,16 +800,16 @@ int rxe_requester(struct rxe_qp *qp)
 						       qp->req.wqe_index);
 			wqe->state = wqe_state_done;
 			wqe->status = IB_WC_SUCCESS;
-			goto done;
+			goto done;/*不实际发送,直接按成功处理*/
 		}
-		payload = mtu;
+		payload = mtu;/*变更PAYLOAD为MTU*/
 	}
 
 	pkt.rxe = rxe;
 	pkt.opcode = opcode;/*指明为next opcode*/
 	pkt.qp = qp;
 	pkt.psn = qp->req.psn;
-	pkt.mask = rxe_opcode[opcode].mask;
+	pkt.mask = rxe_opcode[opcode].mask;/*指明此opcode的标记信息(这个信息非常重要)*/
 	pkt.wqe = wqe;/*此报文要发送走的wqe*/
 
 	/*取ah,av*/
@@ -808,7 +820,7 @@ int rxe_requester(struct rxe_qp *qp)
 		goto err;
 	}
 
-	/*申请足够长度的skb*/
+	/*申请足够长度的skb,依据opcode填充bth及其之后所有HEADER*/
 	skb = init_req_packet(qp, av, wqe, opcode, payload, &pkt);
 	if (unlikely(!skb)) {
 		rxe_dbg_qp(qp, "Failed allocating skb\n");
@@ -835,15 +847,16 @@ int rxe_requester(struct rxe_qp *qp)
 	if (ah)
 		rxe_put(ah);
 
-	/*qp发送报文*/
+	/*报文构造完,qp向外发送报文*/
 	err = rxe_xmit_packet(qp, &pkt, skb);
 	if (err) {
 		wqe->status = IB_WC_LOC_QP_OP_ERR;/*标记此wqe失败*/
 		goto err;
 	}
 
+	/*到此报文已成功发送出去*/
 	update_wqe_state(qp, wqe, &pkt);
-	update_wqe_psn(qp, wqe, &pkt, payload);
+	update_wqe_psn(qp, wqe, &pkt, payload);/*更新psn*/
 	update_state(qp, &pkt);
 
 	/* A non-zero return value will cause rxe_do_task to
@@ -870,10 +883,10 @@ int rxe_sender(struct rxe_qp *qp)
 	int comp_ret;
 
 	/* process the send queue */
-	req_ret = rxe_requester(qp);
+	req_ret = rxe_requester(qp);/*发送处理*/
 
 	/* process the response queue */
-	comp_ret = rxe_completer(qp);
+	comp_ret = rxe_completer(qp);/*响应处理(及超时处理)*/
 
 	/* exit the task loop if both requester and completer
 	 * are ready

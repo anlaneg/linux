@@ -105,7 +105,7 @@ int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	IP_INC_STATS(net, IPSTATS_MIB_OUTREQUESTS);
 
-	iph_set_totlen(iph, skb->len);/*设置此报文总长度*/
+	iph_set_totlen(iph, skb->len);/*IP层设置此报文总长度*/
 	ip_send_check(iph);/*只计算ip头checksum*/
 
 	/* if egress device is enslaved to an L3 master device pass the

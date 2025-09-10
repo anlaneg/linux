@@ -11,7 +11,7 @@
  * them to rxe_counter_name[] vector.
  */
 enum rxe_counters {
-	RXE_CNT_SENT_PKTS,
+	RXE_CNT_SENT_PKTS,/*发送成功统计计数*/
 	RXE_CNT_RCVD_PKTS,
 	RXE_CNT_DUP_REQ,/*收到重复请求的次数*/
 	RXE_CNT_OUT_OF_SEQ_REQ,/*收到乱序请求的次数*/
@@ -22,7 +22,7 @@ enum rxe_counters {
 	RXE_CNT_RETRY_EXCEEDED,
 	RXE_CNT_RNR_RETRY_EXCEEDED,
 	RXE_CNT_COMP_RETRY,
-	RXE_CNT_SEND_ERR,
+	RXE_CNT_SEND_ERR,/*发送出错统计计数*/
 	RXE_CNT_LINK_DOWNED,
 	RXE_CNT_RDMA_SEND,
 	RXE_CNT_RDMA_RECV,

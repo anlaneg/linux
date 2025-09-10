@@ -15,7 +15,7 @@ struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
 	[IB_WR_RDMA_WRITE]				= {
 		.name	= "IB_WR_RDMA_WRITE",
 		.mask	= {
-				/*不同qp对应的mask*/
+			/*不同qp类型对应的mask*/
 			[IB_QPT_RC]	= WR_INLINE_MASK | WR_WRITE_MASK,
 			[IB_QPT_UC]	= WR_INLINE_MASK | WR_WRITE_MASK,
 		},
@@ -122,18 +122,18 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 	[IB_OPCODE_RC_SEND_FIRST]			= {
 		.name	= "IB_OPCODE_RC_SEND_FIRST",
 		.mask	= RXE_PAYLOAD_MASK/*报文包含payload*/ | RXE_REQ_MASK/*请求类操作*/ | RXE_RWR_MASK |
-			  RXE_SEND_MASK/*指明报文为send类操作*/ | RXE_START_MASK,
+			  RXE_SEND_MASK/*指明报文为send类操作*/ | RXE_START_MASK/*指明为首操作码标记*/,
 		.length = RXE_BTH_BYTES,/*header的总长度*/
 		.offset = {
-				/*报文格式为bth + payload*/
-			[RXE_BTH]	= 0,
-			[RXE_PAYLOAD]	= RXE_BTH_BYTES,
+			/*报文格式为bth + payload*/
+			[RXE_BTH]	= 0,/*故BTH头偏移量为0*/
+			[RXE_PAYLOAD]	= RXE_BTH_BYTES,/*故PAYLOAD头偏移量为BTH头长度*/
 		}
 	},
 	[IB_OPCODE_RC_SEND_MIDDLE]		= {
 		.name	= "IB_OPCODE_RC_SEND_MIDDLE",
 		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK | RXE_SEND_MASK |
-			  RXE_MIDDLE_MASK,
+			  RXE_MIDDLE_MASK/*指明为中间操作码标记*/,
 		.length = RXE_BTH_BYTES,
 		.offset = {
 			[RXE_BTH]	= 0,

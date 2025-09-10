@@ -112,7 +112,7 @@ static enum ib_wc_opcode wr_to_wc_opcode(enum ib_wr_opcode opcode)
 	}
 }
 
-/*重传定时器被触发*/
+/*超时重传定时器被触发*/
 void retransmit_timer(struct timer_list *t)
 {
 	struct rxe_qp *qp = timer_container_of(qp, t, retrans_timer);
@@ -122,7 +122,7 @@ void retransmit_timer(struct timer_list *t)
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (qp->valid) {
-		qp->comp.timeout = 1;/*标记timeout*/
+		qp->comp.timeout = 1;/*标记超时定时器被触发*/
 		rxe_sched_task(&qp->send_task);
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
@@ -132,8 +132,8 @@ void retransmit_timer(struct timer_list *t)
 void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
 	rxe_counter_inc(SKB_TO_PKT(skb)->rxe, RXE_CNT_SENDER_SCHED);
-	skb_queue_tail(&qp->resp_pkts, skb);/*报文入队*/
-	rxe_sched_task(&qp->send_task);
+	skb_queue_tail(&qp->resp_pkts, skb);/*报文入队,后续ROCE协议栈会拿包处理*/
+	rxe_sched_task(&qp->send_task);/*促使send task运行*/
 }
 
 static inline enum comp_state get_wqe(struct rxe_qp *qp,
@@ -452,12 +452,12 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 			wqe->status != IB_WC_SUCCESS);
 
 	if (post)
-		make_send_cqe(qp, wqe, &cqe);
+		make_send_cqe(qp, wqe, &cqe);/*填充cqe*/
 
-	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
+	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*消费者队列前移一位*/
 
 	if (post)
-		/*触发cqe*/
+		/*触发cqe入队*/
 		rxe_cq_post(qp->scq, &cqe, 0);
 
 	if (wqe->wr.opcode == IB_WR_SEND ||
@@ -516,7 +516,7 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 
 	comp_check_sq_drain_done(qp);
 
-	do_complete(qp, wqe);
+	do_complete(qp, wqe);/*指明这个wqe已被ACK*/
 
 	if (psn_compare(pkt->psn, qp->comp.psn) >= 0)
 		return COMPST_UPDATE_COMP;
@@ -667,10 +667,11 @@ int rxe_completer(struct rxe_qp *qp)
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
 	if (qp->comp.timeout) {
+		/*超时重传定时器被触发,标记需要超时重传*/
 		qp->comp.timeout_retry = 1;
-		qp->comp.timeout = 0;
+		qp->comp.timeout = 0;/*将TIMER用的标记清零*/
 	} else {
-		qp->comp.timeout_retry = 0;
+		qp->comp.timeout_retry = 0;/*标记不需要超时重传*/
 	}
 
 	if (qp->req.need_retry)
@@ -716,13 +717,14 @@ int rxe_completer(struct rxe_qp *qp)
 		case COMPST_WRITE_SEND:
 			if (wqe->state == wqe_state_pending &&
 			    wqe->last_psn == pkt->psn)
+				/*此wqe处于pending,且其最后一个PSN即为当前ACK的.变状态*/
 				state = COMPST_COMP_ACK;
 			else
 				state = COMPST_UPDATE_COMP;
 			break;
 
 		case COMPST_COMP_ACK:
-			state = complete_ack(qp, pkt, wqe);
+			state = complete_ack(qp, pkt, wqe);/*这个wqe被确认*/
 			break;
 
 		case COMPST_COMP_WQE:
@@ -751,6 +753,7 @@ int rxe_completer(struct rxe_qp *qp)
 
 		case COMPST_EXIT:
 			if (qp->comp.timeout_retry && wqe) {
+				/*标记有超时重传,且wqe不为空,进入error_reTry状态*/
 				state = COMPST_ERROR_RETRY;
 				break;
 			}
@@ -779,22 +782,23 @@ int rxe_completer(struct rxe_qp *qp)
 				goto done;
 
 			if (qp->comp.retry_cnt > 0) {
+				/*重传尝试次数大于0,仍可重传*/
 				if (qp->comp.retry_cnt != 7)
-					qp->comp.retry_cnt--;
+					qp->comp.retry_cnt--;/*重传次数不为7,减少重传次数(7指无限重传?)*/
 
 				/* no point in retrying if we have already
 				 * seen the last ack that the requester could
 				 * have caused
 				 */
 				if (psn_compare(qp->req.psn,
-						qp->comp.psn) > 0) {
+						qp->comp.psn) > 0) {/*此时请求的PSN仍大于ACK的PSN,故仍未回复ACK,则启动重传*/
 					/* tell the requester to retry the
 					 * send queue next time around
 					 */
 					rxe_counter_inc(rxe,
 							RXE_CNT_COMP_RETRY);
-					qp->req.need_retry = 1;
-					qp->comp.started_retry = 1;
+					qp->req.need_retry = 1;/*指明请求需要重传*/
+					qp->comp.started_retry = 1;/*指明重传已启动,防止后续仍启动*/
 					qp->req.again = 1;
 				}
 				goto done;

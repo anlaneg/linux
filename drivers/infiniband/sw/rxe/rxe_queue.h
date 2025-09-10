@@ -132,7 +132,7 @@ static inline u32 queue_get_producer(const struct rxe_queue *q,
 	return prod;
 }
 
-/*消费者指针*/
+/*取消费者指针*/
 static inline u32 queue_get_consumer(const struct rxe_queue *q,
 				     enum queue_type type)
 {
@@ -225,6 +225,7 @@ static inline void queue_advance_producer(struct rxe_queue *q,
 	}
 }
 
+/*更新消费者指针*/
 static inline void queue_advance_consumer(struct rxe_queue *q,
 					  enum queue_type type)
 {
@@ -233,7 +234,7 @@ static inline void queue_advance_consumer(struct rxe_queue *q,
 	switch (type) {
 	case QUEUE_TYPE_FROM_CLIENT:
 		/* used by rxe which owns the index */
-		cons = (q->index + 1) & q->index_mask;
+		cons = (q->index + 1) & q->index_mask;/*前移一位*/
 		q->index = cons;
 		/* release so client can read it safely */
 		smp_store_release(&q->buf->consumer_index, cons);

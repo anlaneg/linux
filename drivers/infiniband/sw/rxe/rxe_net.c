@@ -463,14 +463,14 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 		    struct sk_buff *skb)
 {
 	int err;
-	int is_request = pkt->mask & RXE_REQ_MASK;/*是否请求类报文*/
+	int is_request = pkt->mask & RXE_REQ_MASK;/*是否为请求类报文*/
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if ((is_request && (qp_state(qp) < IB_QPS_RTS)) ||
 	    (!is_request && (qp_state(qp) < IB_QPS_RTR))) {
-		/*qp状态有误，不容许外发。*/
+		/*qp状态还未达到可发送状态，不容许外发。*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		rxe_dbg_qp(qp, "Packet dropped. QP is not in ready state\n");
 		goto drop;
@@ -501,6 +501,7 @@ done:
 	return err;
 }
 
+/*申请skb并初始化*/
 struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 				int paylen, struct rxe_pkt_info *pkt)
 {

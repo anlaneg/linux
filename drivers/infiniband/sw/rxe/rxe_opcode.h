@@ -58,14 +58,14 @@ enum rxe_hdr_mask {
 	RXE_LRH_MASK		= BIT(RXE_LRH),
 	RXE_GRH_MASK		= BIT(RXE_GRH),
 	RXE_BTH_MASK		= BIT(RXE_BTH),
-	RXE_IMMDT_MASK		= BIT(RXE_IMMDT),
+	RXE_IMMDT_MASK		= BIT(RXE_IMMDT),/*标记报文中包含rxe_immdt头*/
 	RXE_RETH_MASK		= BIT(RXE_RETH),/*标明报文中包含rxe_reth头*/
-	RXE_AETH_MASK		= BIT(RXE_AETH),/*包含rxe_aeth头*/
-	RXE_ATMETH_MASK		= BIT(RXE_ATMETH),
-	RXE_ATMACK_MASK		= BIT(RXE_ATMACK),/*包含rxe_atmack头*/
-	RXE_IETH_MASK		= BIT(RXE_IETH),/*标明报文中包含ieth头*/
+	RXE_AETH_MASK		= BIT(RXE_AETH),/*标明报文中包含rxe_aeth头*/
+	RXE_ATMETH_MASK		= BIT(RXE_ATMETH),/*标明报文中包含rxe_atmeth头*/
+	RXE_ATMACK_MASK		= BIT(RXE_ATMACK),/*标明报文中包含rxe_atmack头*/
+	RXE_IETH_MASK		= BIT(RXE_IETH),/*标明报文中包含rxe_ieth头*/
 	RXE_RDETH_MASK		= BIT(RXE_RDETH),
-	RXE_DETH_MASK		= BIT(RXE_DETH),
+	RXE_DETH_MASK		= BIT(RXE_DETH),/*标明报文中包含rxe_deth头*/
 	RXE_FETH_MASK		= BIT(RXE_FETH),
 	RXE_PAYLOAD_MASK	= BIT(RXE_PAYLOAD),/*标记包括payload*/
 
