@@ -2254,7 +2254,7 @@ static __always_inline void *lowmem_page_address(const struct page *page)
 }
 
 #if !defined(HASHED_PAGE_VIRTUAL) && !defined(WANT_PAGE_VIRTUAL)
-//取此页对应的起始地址（虚拟地址）
+//取此页对应的起始地址（虚拟地址,先转换为物理地址再转换为kernel虚拟地址）
 #define page_address(page) lowmem_page_address(page)
 #define set_page_address(page, address)  do { } while(0)
 #define page_address_init()  do { } while(0)

@@ -352,6 +352,7 @@ enum rxe_rereg {
 				| IB_MR_REREG_ACCESS,
 };
 
+/*是否为mw*/
 static inline int rkey_is_mw(u32 rkey)
 {
 	u32 index = rkey >> 8;

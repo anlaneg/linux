@@ -303,7 +303,7 @@ struct ib_pd *__ib_alloc_pd(struct ib_device *device, unsigned int flags,
 	if (mr_access_flags) {
 		struct ib_mr *mr;
 
-		mr = pd->device->ops.get_dma_mr(pd, mr_access_flags);
+		mr = pd->device->ops.get_dma_mr(pd, mr_access_flags);/*取得dma mr*/
 		if (IS_ERR(mr)) {
 			ib_dealloc_pd(pd);
 			return ERR_CAST(mr);
@@ -315,7 +315,7 @@ struct ib_pd *__ib_alloc_pd(struct ib_device *device, unsigned int flags,
 		mr->uobject	= NULL;
 		mr->need_inval	= false;
 
-		pd->__internal_mr = mr;
+		pd->__internal_mr = mr;/*pd对应的内部mr*/
 
 		if (!(device->attrs.kernel_cap_flags & IBK_LOCAL_DMA_LKEY))
 			pd->local_dma_lkey = pd->__internal_mr->lkey;
@@ -342,6 +342,7 @@ int ib_dealloc_pd_user(struct ib_pd *pd, struct ib_udata *udata)
 	int ret;
 
 	if (pd->__internal_mr) {
+		/*释放pd申请的内部mr*/
 		ret = pd->device->ops.dereg_mr(pd->__internal_mr, NULL);
 		WARN_ON(ret);
 		pd->__internal_mr = NULL;

@@ -1077,13 +1077,13 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	if (pkt->mask & RXE_SEND_MASK) {
 		if (qp_type(qp) == IB_QPT_UD ||
 		    qp_type(qp) == IB_QPT_GSI) {
-			/*只处理ud,gsi类型的send类操作（这两种需要将ip header复制上去）*/
+			/*只处理ud,gsi类型的send类操作（这两种需要将ip header也复制上去）*/
 			if (skb->protocol == htons(ETH_P_IP)) {
 				/*将ipv4 hdr填充到qp->resp.wqe->dma中*/
 				memset(&hdr.reserved, 0,
-						sizeof(hdr.reserved));
+						sizeof(hdr.reserved));/*先清空结构体中的reserved字段*/
 				memcpy(&hdr.roce4grh, ip_hdr(skb),
-						sizeof(hdr.roce4grh));/*复制skb内容到roce4grh*/
+						sizeof(hdr.roce4grh));/*复制skb中的iphdr中的内容到roce4grh*/
 				/*复制roce4grh到qp->resp.wqe->dma*/
 				err = send_data_in(qp, &hdr, sizeof(hdr));
 			} else {

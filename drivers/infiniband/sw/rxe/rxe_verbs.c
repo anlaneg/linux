@@ -1303,7 +1303,7 @@ err_out:
 	return err;
 }
 
-/* mr */
+/* dma mr */
 static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 {
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
@@ -1329,7 +1329,7 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	mr->ibmr.pd = ibpd;
 	mr->ibmr.device = ibpd->device;
 
-	rxe_mr_init_dma(access, mr);
+	rxe_mr_init_dma(access, mr);/*指明为dma mr*/
 	rxe_finalize(mr);
 	return &mr->ibmr;
 
@@ -1381,7 +1381,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	if (access & IB_ACCESS_ON_DEMAND)
 		err = rxe_odp_mr_init_user(rxe, start, length, iova, access, mr);
 	else
-		err = rxe_mr_init_user(rxe, start, length, access, mr);/*完成虚拟地址到dma间映射*/
+		err = rxe_mr_init_user(rxe, start, length, access, mr);/*初始化用户态的这一段mr*/
 	if (err) {
 		rxe_dbg_mr(mr, "reg_user_mr failed, err = %d\n", err);
 		goto err_cleanup;

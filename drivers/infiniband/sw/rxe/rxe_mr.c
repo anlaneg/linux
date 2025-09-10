@@ -36,7 +36,7 @@ int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
 	case IB_MR_TYPE_MEM_REG:
 		if (iova < mr->ibmr.iova/*iova地址左侧不在此range中*/ ||
 		    iova + length > mr->ibmr.iova + mr->ibmr.length/*iova地址右侧不在此range中*/) {
-			rxe_dbg_mr(mr, "iova/length out of range\n");
+			rxe_dbg_mr(mr, "iova/length out of range\n");/*此iova地址不在mr中*/
 			return -EINVAL;
 		}
 		/*校验能过*/
@@ -81,7 +81,9 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 
 static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 {
-	/*iova地址相对于mr->ibmr.iova的页偏移量（或者称为mr页号）*/
+	/*取此iova地址相对于mr->ibmr.iova的页数偏移量
+	 * （mr->ibmr.iova中保存的为此mr的首iova地址。
+	 * 换句话说，偏移多少页可以从mr->ibmr.iova地址所在页偏移到iova所在页）*/
 	return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
 }
 
@@ -145,13 +147,15 @@ int rxe_mr_init_user(struct rxe_dev *rxe, u64 start/*内存起始地址*/, u64 l
 
 	xa_init(&mr->page_list);
 
-	umem = ib_umem_get(&rxe->ib_dev, start, length, access);/*映射这一段地址*/
+	/*pin这一段地址，并获得这一段地址对应的一组物理page*/
+	umem = ib_umem_get(&rxe->ib_dev, start, length, access);
 	if (IS_ERR(umem)) {
 		rxe_dbg_mr(mr, "Unable to pin memory region err = %d\n",
 			(int)PTR_ERR(umem));
 		return PTR_ERR(umem);
 	}
 
+	/*将这组物理page映射关系设置到mr,后续从mr读取或者向mr写入时需要这些信息*/
 	err = rxe_mr_fill_pages_from_sgt(mr, &umem->sgt_append.sgt);
 	if (err) {
 		ib_umem_release(umem);
@@ -258,7 +262,7 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova/*数据源或数据目的*/, void *addr/*数据目的或者数据源*/,
 			      unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir/*指明复制方向*/)
 {
-	/*取页偏移量*/
+	/*取此iova地址在页中的偏移量*/
 	unsigned int page_offset = rxe_mr_iova_to_page_offset(mr, iova);
 	/*页号偏移量*/
 	unsigned long index = rxe_mr_iova_to_index(mr, iova);
@@ -267,7 +271,7 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova/*数据源或数据目
 	void *va;
 
 	while (length) {
-		/*取mr中index号page*/
+		/*取此mr中index号页对应的page结构体*/
 		page = xa_load(&mr->page_list, index);
 		if (!page)
 			return -EFAULT;
@@ -275,13 +279,13 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova/*数据源或数据目
 		/*此轮（本页）可复制的字节长度*/
 		bytes = min_t(unsigned int, length,
 				mr_page_size(mr) - page_offset);
-		/*此页对应的虚地址*/
+		/*此page对应的kernel虚地址*/
 		va = kmap_local_page(page);
 		if (dir == RXE_FROM_MR_OBJ)
-			/*从va+page_offset复制bytes字节，并填充到addr*/
+			/*从va+page_offset复制bytes字节，并填充到addr(从mr到addr复制)*/
 			memcpy(addr, va + page_offset, bytes);
 		else
-			/*从addr复制内容bytes字节，并填充到va+page_offset*/
+			/*从addr复制内容bytes字节，并填充到va+page_offset（从addr到mr复制)*/
 			memcpy(va + page_offset, addr, bytes);
 		kunmap_local(va);
 
@@ -294,8 +298,9 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova/*数据源或数据目
 	return 0;
 }
 
-static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr/*源地址*/,
-			    unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir)
+/*dma类型内存复制*/
+static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr/*地址2*/, void *addr/*地址1*/,
+			    unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir/*复制方向*/)
 {
 	unsigned int page_offset = dma_addr & (PAGE_SIZE - 1);/*dma地址在页内的偏移量*/
 	unsigned int bytes;
@@ -307,7 +312,7 @@ static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr/*源地�
 		page = ib_virt_dma_to_page(dma_addr);
 		bytes = min_t(unsigned int, length,
 				PAGE_SIZE - page_offset);/*本次能复制的bytes数（dma是物理地址，其和虚拟地址映射间可能不连续）*/
-		va = kmap_local_page(page);/*此页起始虚拟地址*/
+		va = kmap_local_page(page);/*取此页对应的起始虚拟地址*/
 
 		/*按方向确定src,dst*/
 		if (dir == RXE_TO_MR_OBJ)
@@ -325,7 +330,7 @@ static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr/*源地�
 	}
 }
 
-int rxe_mr_copy(struct rxe_mr *mr, u64 iova/*起始地址1*/, void *addr/*起始地址2*/,
+int rxe_mr_copy(struct rxe_mr *mr, u64 iova/*起始地址1*/, void *addr/*起始地址2（源）*/,
 		unsigned int length/*复制内容长度*/, enum rxe_mr_copy_dir dir/*复制方向*/)
 {
 	int err;
@@ -335,6 +340,7 @@ int rxe_mr_copy(struct rxe_mr *mr, u64 iova/*起始地址1*/, void *addr/*起始
 		return 0;
 
 	if (WARN_ON(!mr))
+		/*必须提供mr*/
 		return -EINVAL;
 
 	/*dma类型内存复制*/
@@ -343,7 +349,6 @@ int rxe_mr_copy(struct rxe_mr *mr, u64 iova/*起始地址1*/, void *addr/*起始
 		return 0;
 	}
 
-	/*mr到虚拟地址之间的复制*/
 	/*检查iova到iova+length这个区间包含在mr中*/
 	err = mr_check_range(mr, iova, length);
 	if (unlikely(err)) {
@@ -370,18 +375,18 @@ int copy_data(
 	enum rxe_mr_copy_dir	dir/*复制方向*/)
 {
 	int			bytes;
-	/*取当前seg指向的rxe_sge*/
+	/*取当前待操作的sge*/
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
-	/*当前在rxe_sge中的起点偏移*/
+	/*取此sge的起点偏移量*/
 	int			offset	= dma->sge_offset;
-	/*资源长度*/
+	/*资源可用长度*/
 	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
 	u64			iova;
 	int			err;
 
 	if (length == 0)
-		/*buffer长度为零，无论读写均不需要操作*/
+		/*要复制的buffer长度为零，无论读写均不需要操作*/
 		return 0;
 
 	if (length > resid) {
@@ -391,7 +396,7 @@ int copy_data(
 	}
 
 	if (sge->length && (offset < sge->length)) {
-		/*？？？当前sge中有待复制数据，先查sge对应的mr*/
+		/*检查sge对应的mr是否存在*/
 		mr = lookup_mr(pd, access, sge->lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
 			err = -EINVAL;
@@ -403,10 +408,10 @@ int copy_data(
 		bytes = length;
 
 		if (offset >= sge->length) {
-			/*当前offset超过seg能提供的length*/
+			/*当前offset超过此seg能提供的length，切换mr*/
 			if (mr) {
-				rxe_put(mr);
-				mr = NULL;/*归还当前mr*/
+				rxe_put(mr);/*归还当前mr*/
+				mr = NULL;
 			}
 			sge++;/*指针切换到下一个sge*/
 			dma->cur_sge++;/*下标切换到下一个sge*/
@@ -419,7 +424,7 @@ int copy_data(
 			}
 
 			if (sge->length) {
-				/*这个sge有内容，利用sge->lkey查询此mr*/
+				/*这个sge有内容，利用sge->lkey查询此mr，检查此mr是否存在*/
 				mr = lookup_mr(pd, access, sge->lkey,
 					       RXE_LOOKUP_LOCAL);
 				if (!mr) {
@@ -428,7 +433,7 @@ int copy_data(
 					goto err1;
 				}
 			} else {
-				/*这个sge内容为空，跳过,忽略*/
+				/*这个sge内容为空，跳过,忽略此sge*/
 				continue;
 			}
 		}
@@ -438,9 +443,9 @@ int copy_data(
 			bytes = sge->length - offset;
 
 		if (bytes > 0) {
-			/*确认复制起始地址iova,需复制bytes字节*/
+			/*确认mr中复制/读取起始地址iova,需复制/读取的bytes字节*/
 			iova = sge->addr + offset;
-			err = rxe_mr_copy(mr, iova, addr, bytes, dir);
+			err = rxe_mr_copy(mr, iova/*mr中的地址*/, addr/*buffer中地址*/, bytes/*复制字节数*/, dir);
 			if (err)
 				goto err2;
 
@@ -553,7 +558,7 @@ enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 		}
 		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
 		index = rxe_mr_iova_to_index(mr, iova);
-		page = xa_load(&mr->page_list, index);
+		page = xa_load(&mr->page_list, index);/*取index号页*/
 		if (!page)
 			return RESPST_ERR_RKEY_VIOLATION;
 	}
@@ -563,7 +568,7 @@ enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 		return RESPST_ERR_MISALIGNED_ATOMIC;
 	}
 
-	va = kmap_local_page(page);
+	va = kmap_local_page(page);/*取此页对应的kernel va地址*/
 
 	spin_lock_bh(&atomic_ops_lock);
 	value = *orig_val = va[page_offset >> 3];
@@ -656,7 +661,7 @@ int advance_dma_data(struct rxe_dma_info *dma, unsigned int length)
 }
 
 /*查询mr*/
-struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
+struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access/*访问权限*/, u32 key,
 			 enum rxe_mr_lookup_type type)
 {
 	struct rxe_mr *mr;
