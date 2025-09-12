@@ -744,7 +744,7 @@ struct ib_uverbs_modify_qp {
 	struct ib_uverbs_qp_dest dest;
 	struct ib_uverbs_qp_dest alt_dest;
 	__u32 qp_handle;/*qp编号*/
-	__u32 attr_mask;/*待修改属性*/
+	__u32 attr_mask;/*指明哪些属性被设置了值*/
 	__u32 qkey;
 	__u32 rq_psn;
 	__u32 sq_psn;

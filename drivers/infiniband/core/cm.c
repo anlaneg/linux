@@ -4170,8 +4170,8 @@ static int cm_init_qp_rtr_attr(struct cm_id_private *cm_id_priv,
 		    cm_id_priv->av.dlid_datapath &&
 		    (cm_id_priv->av.dlid_datapath != 0xffff))
 			qp_attr->ah_attr.ib.dlid = cm_id_priv->av.dlid_datapath;
-		qp_attr->path_mtu = cm_id_priv->path_mtu;
-		qp_attr->dest_qp_num = be32_to_cpu(cm_id_priv->remote_qpn);
+		qp_attr->path_mtu = cm_id_priv->path_mtu;/*利用cm_id设置协商的mtu*/
+		qp_attr->dest_qp_num = be32_to_cpu(cm_id_priv->remote_qpn);/*利用cm_id设置远端qpn*/
 		qp_attr->rq_psn = be32_to_cpu(cm_id_priv->rq_psn);
 		if (cm_id_priv->qp_type == IB_QPT_RC ||
 		    cm_id_priv->qp_type == IB_QPT_XRC_TGT) {

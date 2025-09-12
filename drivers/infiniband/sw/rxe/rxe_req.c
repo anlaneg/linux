@@ -453,7 +453,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 			(RXE_WRITE_MASK | RXE_IMMDT_MASK));/*是否有se标记*/
 
 	qp_num = (pkt->mask & RXE_DETH_MASK) ? ibwr->wr.ud.remote_qpn :
-					 qp->attr.dest_qp_num;
+					 qp->attr.dest_qp_num/*取qp中的dest qpn*/;
 
 	/*opt要求加ack标记或者qp要求每隔64包必须回复ack*/
 	if (qp_type(qp) != IB_QPT_UD && qp_type(qp) != IB_QPT_UC)

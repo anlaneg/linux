@@ -659,10 +659,10 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if ((mask & IB_QP_AV) && (attr->ah_attr.ah_flags & IB_AH_GRH))
-		/*生成qp对应的src port*/
+		/*生成qp对应的src port(当flow_label没有提供，则通过本端qpn及远端qpn产生flow_label)*/
 		qp->src_port = rdma_get_udp_sport(attr->ah_attr.grh.flow_label,
-						  qp->ibqp.qp_num,
-						  qp->attr.dest_qp_num);
+						  qp->ibqp.qp_num/*本端qpn*/,
+						  qp->attr.dest_qp_num/*远端qpn*/);
 
 	return 0;
 

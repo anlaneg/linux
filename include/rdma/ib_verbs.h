@@ -1331,7 +1331,7 @@ struct ib_qp_attr {
 	u32			qkey;
 	u32			rq_psn;
 	u32			sq_psn;
-	u32			dest_qp_num;
+	u32			dest_qp_num;/*目标qp_num*/
 	/*qp的访问属性，例如IB_ACCESS_REMOTE_READ等*/
 	int			qp_access_flags;
 	struct ib_qp_cap	cap;
@@ -5110,12 +5110,12 @@ static inline u32 rdma_calc_flow_label(u32 lqpn, u32 rqpn)
  * @lqpn:               local qp number
  * @rqpn:               remote qp number
  */
-static inline u16 rdma_get_udp_sport(u32 fl, u32 lqpn, u32 rqpn)
+static inline u16 rdma_get_udp_sport(u32 fl, u32 lqpn/*本端qpn*/, u32 rqpn/*远端qpn*/)
 {
 	if (!fl)
-		fl = rdma_calc_flow_label(lqpn, rqpn);
+		fl = rdma_calc_flow_label(lqpn, rqpn);/*通过两端qpn生成fl*/
 
-	return rdma_flow_label_to_udp_sport(fl);
+	return rdma_flow_label_to_udp_sport(fl);/*由fl产生udp src port*/
 }
 
 const struct ib_port_immutable*

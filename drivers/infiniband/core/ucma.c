@@ -1725,6 +1725,7 @@ err_unlock:
 	return ret;
 }
 
+/*ucma命令表*/
 static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 				   const char __user *inbuf,
 				   int in_len, int out_len) = {

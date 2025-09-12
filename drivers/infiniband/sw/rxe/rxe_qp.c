@@ -769,7 +769,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 		qp->attr.path_mig_state = attr->path_mig_state;
 
 	if (mask & IB_QP_DEST_QPN)
-		qp->attr.dest_qp_num = attr->dest_qp_num;
+		qp->attr.dest_qp_num = attr->dest_qp_num;/*设置目标QPN*/
 
 	return 0;
 }

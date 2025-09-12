@@ -1392,12 +1392,12 @@ static enum resp_states duplicate_request(struct rxe_qp *qp,
 					  struct rxe_pkt_info *pkt)
 {
 	enum resp_states rc;
-	u32 prev_psn = (qp->resp.ack_psn - 1) & BTH_PSN_MASK;
+	u32 prev_psn = (qp->resp.ack_psn - 1) & BTH_PSN_MASK;/*响应ack*/
 
 	if (pkt->mask & RXE_SEND_MASK ||
 	    pkt->mask & RXE_WRITE_MASK) {
 		/* SEND. Ack again and cleanup. C9-105. */
-		send_ack(qp, AETH_ACK_UNLIMITED, prev_psn);
+		send_ack(qp, AETH_ACK_UNLIMITED, prev_psn);/*收到重复报文，且报文为send/write回复ack*/
 		return RESPST_CLEANUP;
 	} else if (pkt->mask & RXE_FLUSH_MASK) {
 		struct resp_res *res;

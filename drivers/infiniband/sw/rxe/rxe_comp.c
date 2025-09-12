@@ -403,11 +403,11 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 
 	if (!qp->is_user) {
 		wc->wr_id = wqe->wr.wr_id;
-		wc->status = wqe->status;
+		wc->status = wqe->status;/*设置wc状态*/
 		wc->qp = &qp->ibqp;
 	} else {
 		uwc->wr_id = wqe->wr.wr_id;
-		uwc->status = wqe->status;
+		uwc->status = wqe->status;/*设置wc状态*/
 		uwc->qp_num = qp->ibqp.qp_num;
 	}
 
@@ -449,15 +449,15 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	/* do we need to post a completion */
 	post = ((qp->sq_sig_type == IB_SIGNAL_ALL_WR) ||
 			(wqe->wr.send_flags & IB_SEND_SIGNALED) ||
-			wqe->status != IB_WC_SUCCESS);
+			wqe->status != IB_WC_SUCCESS/*wqe操作不成功*/);
 
 	if (post)
-		make_send_cqe(qp, wqe, &cqe);/*填充cqe*/
+		make_send_cqe(qp, wqe, &cqe);/*构建cqe*/
 
 	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*消费者队列前移一位*/
 
 	if (post)
-		/*触发cqe入队*/
+		/*触发cqe入队到scq*/
 		rxe_cq_post(qp->scq, &cqe, 0);
 
 	if (wqe->wr.opcode == IB_WR_SEND ||
@@ -804,9 +804,10 @@ int rxe_completer(struct rxe_qp *qp)
 				goto done;
 
 			} else {
+				/*重传次数超限*/
 				rxe_counter_inc(rxe, RXE_CNT_RETRY_EXCEEDED);
 				wqe->status = IB_WC_RETRY_EXC_ERR;
-				state = COMPST_ERROR;
+				state = COMPST_ERROR;/*qp状态置为错误*/
 			}
 			break;
 
@@ -814,7 +815,7 @@ int rxe_completer(struct rxe_qp *qp)
 			/* we come here if we received an RNR NAK */
 			if (qp->comp.rnr_retry > 0) {
 				if (qp->comp.rnr_retry != 7)
-					qp->comp.rnr_retry--;
+					qp->comp.rnr_retry--;/*次数减少*/
 
 				/* don't start a retry flow until the
 				 * rnr timer has fired
@@ -827,6 +828,7 @@ int rxe_completer(struct rxe_qp *qp)
 						& ~AETH_TYPE_MASK));
 				goto exit;
 			} else {
+				/*次数超限，qp状态出错*/
 				rxe_counter_inc(rxe,
 						RXE_CNT_RNR_RETRY_EXCEEDED);
 				wqe->status = IB_WC_RNR_RETRY_EXC_ERR;
@@ -837,7 +839,7 @@ int rxe_completer(struct rxe_qp *qp)
 		case COMPST_ERROR:
 			WARN_ON_ONCE(wqe->status == IB_WC_SUCCESS);
 			do_complete(qp, wqe);
-			rxe_qp_error(qp);
+			rxe_qp_error(qp);/*qp状态错误*/
 			goto exit;
 		}
 	}

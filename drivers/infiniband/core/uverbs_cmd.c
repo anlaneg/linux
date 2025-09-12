@@ -1739,7 +1739,7 @@ static int ib_uverbs_query_qp(struct uverbs_attr_bundle *attrs)
 	resp.qkey                   = attr->qkey;
 	resp.rq_psn                 = attr->rq_psn;
 	resp.sq_psn                 = attr->sq_psn;
-	resp.dest_qp_num            = attr->dest_qp_num;
+	resp.dest_qp_num            = attr->dest_qp_num;/*返回qp对端qpn*/
 	resp.qp_access_flags        = attr->qp_access_flags;
 	resp.pkey_index             = attr->pkey_index;
 	resp.alt_pkey_index         = attr->alt_pkey_index;
@@ -1844,7 +1844,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		}
 
 		if (cmd->base.attr_mask & IB_QP_STATE &&
-		    cmd->base.qp_state == IB_QPS_RTR) {
+		    cmd->base.qp_state == IB_QPS_RTR) {/*可以接收*/
 		/* We are in INIT->RTR TRANSITION (if we are not,
 		 * this transition will be rejected in subsequent checks).
 		 * In the INIT->RTR transition, we cannot have IB_QP_PORT set,
@@ -1930,7 +1930,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 	if (cmd->base.attr_mask & IB_QP_SQ_PSN)
 		attr->sq_psn = cmd->base.sq_psn;
 	if (cmd->base.attr_mask & IB_QP_DEST_QPN)
-		attr->dest_qp_num = cmd->base.dest_qp_num;
+		attr->dest_qp_num = cmd->base.dest_qp_num;/*设置目标qp对应的qpn*/
 	if (cmd->base.attr_mask & IB_QP_ACCESS_FLAGS)
 		attr->qp_access_flags = cmd->base.qp_access_flags;
 	if (cmd->base.attr_mask & IB_QP_PKEY_INDEX)

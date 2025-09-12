@@ -524,7 +524,7 @@ static int fill_res_qp_entry_query(struct sk_buff *msg,
 
 	if (qp->qp_type == IB_QPT_RC || qp->qp_type == IB_QPT_UC) {
 		if (nla_put_u32(msg, RDMA_NLDEV_ATTR_RES_RQPN,
-				qp_attr.dest_qp_num))
+				qp_attr.dest_qp_num))/*存放目的qpn*/
 			goto err;
 		if (nla_put_u32(msg, RDMA_NLDEV_ATTR_RES_RQ_PSN,
 				qp_attr.rq_psn))
