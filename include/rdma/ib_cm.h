@@ -358,7 +358,7 @@ struct ib_cm_req_param {
 	enum ib_qp_type		qp_type;
 	u32			starting_psn;
 	const void		*private_data;
-	u8			private_data_len;
+	u8			private_data_len;/*私有数据长度*/
 	u8			responder_resources;
 	u8			initiator_depth;
 	u8			remote_cm_response_timeout;

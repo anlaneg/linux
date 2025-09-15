@@ -35,15 +35,15 @@
  */
 struct rdma_dev_addr {
 	unsigned char src_dev_addr[MAX_ADDR_LEN];/*源mac地址*/
-	unsigned char dst_dev_addr[MAX_ADDR_LEN];
-	unsigned char broadcast[MAX_ADDR_LEN];
-	unsigned short dev_type;
-	int bound_dev_if;/*设置的目的端口*/
+	unsigned char dst_dev_addr[MAX_ADDR_LEN];/*目的MAC地址*/
+	unsigned char broadcast[MAX_ADDR_LEN];/*广播MAC地址*/
+	unsigned short dev_type;/*设备类型*/
+	int bound_dev_if;/*设置的目的接口IFINDEX*/
 	enum rdma_transport_type transport;/*使用哪种transport类型，例如udp,iwrap*/
 	struct net *net;/*当前所属net namespace*/
 	const struct ib_gid_attr *sgid_attr;/*使用的gid信息*/
 	enum rdma_network_type network;/*使用哪种网络:ipv4,ipv6,ib*/
-	/*取hop limit*/
+	/*指定的报文hop limit,来源于路由*/
 	int hoplimit;
 };
 
@@ -104,6 +104,7 @@ static inline void ib_addr_get_mgid(struct rdma_dev_addr *dev_addr,
 
 static inline int rdma_addr_gid_offset(struct rdma_dev_addr *dev_addr)
 {
+	/*依据dev_type跳过若干字节*/
 	return dev_addr->dev_type == ARPHRD_INFINIBAND ? 4 : 0;
 }
 
@@ -112,16 +113,18 @@ static inline u16 rdma_vlan_dev_vlan_id(const struct net_device *dev)
 	return is_vlan_dev(dev) ? vlan_dev_vlan_id(dev) : 0xffff;
 }
 
-/*将ip地址映射为gid*/
-static inline int rdma_ip2gid(struct sockaddr *addr, union ib_gid *gid)
+/*将ip地址映射为gid(V6直转,V4映射为V6)*/
+static inline int rdma_ip2gid(struct sockaddr *addr, union ib_gid *gid/*出参,转换后的GID*/)
 {
 	switch (addr->sa_family) {
 	case AF_INET:
+		/*将v4地址直接转换为V6地址,认定为gid*/
 		ipv6_addr_set_v4mapped(((struct sockaddr_in *)
 					addr)->sin_addr.s_addr,
 				       (struct in6_addr *)gid);
 		break;
 	case AF_INET6:
+		/*直接使用v6地址*/
 		*(struct in6_addr *)&gid->raw =
 			((struct sockaddr_in6 *)addr)->sin6_addr;
 		break;

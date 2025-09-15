@@ -18,8 +18,8 @@
  * RDMA identifier and release all resources allocated with the device.
  */
 enum rdma_cm_event_type {
-	RDMA_CM_EVENT_ADDR_RESOLVED,
-	RDMA_CM_EVENT_ADDR_ERROR,
+	RDMA_CM_EVENT_ADDR_RESOLVED,/*解析地址成功*/
+	RDMA_CM_EVENT_ADDR_ERROR,/*解析地址失败*/
 	RDMA_CM_EVENT_ROUTE_RESOLVED,
 	RDMA_CM_EVENT_ROUTE_ERROR,
 	RDMA_CM_EVENT_CONNECT_REQUEST,
@@ -51,7 +51,7 @@ struct rdma_addr {
 
 struct rdma_route {
 	struct rdma_addr addr;
-	struct sa_path_rec *path_rec;
+	struct sa_path_rec *path_rec;/*由路由解析流程设置*/
 
 	/* Optional path records of primary path */
 	struct sa_path_rec *path_rec_inbound;
@@ -111,12 +111,12 @@ typedef int (*rdma_cm_event_handler)(struct rdma_cm_id *id,
 
 struct rdma_cm_id {
 	struct ib_device	*device;/*关联的ib设备*/
-	void			*context;
+	void			*context;/*关联的ucma_context*/
 	struct ib_qp		*qp;
-	/*event处理函数，例如ucma_event_hadler*/
+	/*KERNEL产生cm event后的处理函数，例如ucma_event_hadler*/
 	rdma_cm_event_handler	 event_handler;
-	struct rdma_route	 route;
-	enum rdma_ucm_port_space ps;
+	struct rdma_route	 route;/*路由信息*/
+	enum rdma_ucm_port_space ps;/*port space*/
 	enum ib_qp_type		 qp_type;/*qp类型*/
 	u32			 port_num;/*关联的ib设备port*/
 	struct work_struct net_work;

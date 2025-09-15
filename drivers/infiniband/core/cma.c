@@ -164,6 +164,7 @@ static DEFINE_SPINLOCK(id_table_lock);
 static struct workqueue_struct *cma_wq;
 static unsigned int cma_pernet_id;
 
+/*每个NET NS保存的端口分配情况*/
 struct cma_pernet {
 	struct xarray tcp_ps;
 	struct xarray udp_ps;
@@ -212,7 +213,7 @@ struct cma_device {
 
 struct rdma_bind_list {
 	enum rdma_ucm_port_space ps;
-	struct hlist_head	owners;
+	struct hlist_head	owners;/*被哪些rdma_id_private使用*/
 	unsigned short		port;
 };
 
@@ -391,6 +392,7 @@ struct cma_req_info {
 	u16 pkey;
 };
 
+/*检查rdma_id_private现有状态是否为comp,如果为comp,则更新为exch,并返回非0;否则不更新并返回0*/
 static int cma_comp_exch(struct rdma_id_private *id_priv,
 			 enum rdma_cm_state comp, enum rdma_cm_state exch)
 {
@@ -406,12 +408,12 @@ static int cma_comp_exch(struct rdma_id_private *id_priv,
 	if (comp == RDMA_CM_CONNECT || exch == RDMA_CM_CONNECT)
 		lockdep_assert_held(&id_priv->handler_mutex);
 
-	/*如果当前状态为comp,则更新为exch*/
+	/*如果当前状态为$comp,则更新为$exch*/
 	spin_lock_irqsave(&id_priv->lock, flags);
 	if ((ret = (id_priv->state == comp)))
 		id_priv->state = exch;
 	spin_unlock_irqrestore(&id_priv->lock, flags);
-	/*返回非0，表示已更新；返回0，表示未更新*/
+	/*返回非0，表示旧状态匹配且已更新；返回0，表示旧状态不匹配且未更新*/
 	return ret;
 }
 
@@ -665,7 +667,7 @@ static int cma_translate_addr(struct sockaddr *addr, struct rdma_dev_addr *dev_a
 	int ret;
 
 	if (addr->sa_family != AF_IB) {
-		ret = rdma_translate_ip(addr, dev_addr);
+		ret = rdma_translate_ip(addr, dev_addr);/*利用addr填充dev_addr*/
 	} else {
 		cma_translate_ib((struct sockaddr_ib *) addr, dev_addr);
 		ret = 0;
@@ -688,10 +690,10 @@ cma_validate_port(struct ib_device *device, u32 port,
 	struct net_device *pdev = NULL;
 
 	if (!rdma_dev_access_netns(device, id_priv->id.route.addr.dev_addr.net))
-		goto out;
+		goto out;/*此设备必须在NET ns下可见*/
 
 	if ((dev_type == ARPHRD_INFINIBAND) && !rdma_protocol_ib(device, port))
-		goto out;
+		goto out;/*设备类型与PORT支持能力不同*/
 
 	if ((dev_type != ARPHRD_INFINIBAND) && rdma_protocol_ib(device, port))
 		goto out;
@@ -740,8 +742,10 @@ cma_validate_port(struct ib_device *device, u32 port,
 	 * ARPHDR_NONE means a TUN device.
 	 */
 	if (device->ops.driver_id == RDMA_DRIVER_RXE) {
+		/*设备驱动为rxe*/
 		if ((dev_type == ARPHRD_NONE || dev_type == ARPHRD_ETHER)
 			&& rdma_protocol_roce(device, port)) {
+			/*取得指明的netdev*/
 			ndev = dev_get_by_index(dev_addr->net, bound_if_index);
 			if (!ndev)
 				goto out;
@@ -790,23 +794,24 @@ static int cma_acquire_dev_by_src_ip(struct rdma_id_private *id_priv)
 
 	if (dev_addr->dev_type != ARPHRD_INFINIBAND &&
 	    id_priv->id.ps == RDMA_PS_IPOIB)
-		return -EINVAL;
+		return -EINVAL;/*ipoib时设备类型必须为ARPHRD_INFINIBAND*/
 
-	/*由ip地址转换为gid*/
+	/*由ip地址转换为iboe_gid*/
 	rdma_ip2gid((struct sockaddr *)&id_priv->id.route.addr.src_addr,
 		    &iboe_gid);
 
+	/*利用src_dev_addr mac构造gid(目的MAC的一部分也会被包含)*/
 	memcpy(&gid, dev_addr->src_dev_addr +
 	       rdma_addr_gid_offset(dev_addr), sizeof(gid));
 
 	mutex_lock(&lock);
 	/*遍历所有cma设备*/
 	list_for_each_entry(cma_dev, &dev_list, list) {
-		/*遍历某一个cma设备的所有port*/
+		/*遍历一个cma设备的所有port*/
 		rdma_for_each_port (cma_dev->device, port) {
 			gidp = rdma_protocol_roce(cma_dev->device, port) ?
-			       &iboe_gid/*支持roce情况下的gid*/ : &gid;
-			gid_type = cma_dev->default_gid_type[port - 1];
+			       &iboe_gid/*支持roce情况下使用iboe_gid*/ : &gid/*不支持ROCE情况下使用的gid*/;
+			gid_type = cma_dev->default_gid_type[port - 1];/*此PORT的gid_type*/
 			sgid_attr = cma_validate_port(cma_dev->device, port,
 						      gid_type, gidp, id_priv);
 			if (!IS_ERR(sgid_attr)) {
@@ -1028,7 +1033,7 @@ __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
 
 	id_priv->state = RDMA_CM_IDLE;/*设置初始化状态*/
 	id_priv->id.context = context;
-	/*设置event 在kernel中的交付函数，采用ucma_event_hadler*/
+	/*设置event在kernel中的交付函数，例如采用ucma_event_hadler*/
 	id_priv->id.event_handler = event_handler;
 	id_priv->id.ps = ps;
 	id_priv->id.qp_type = qp_type;
@@ -1088,7 +1093,7 @@ struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler,
 		return ERR_CAST(ret);
 
 	rdma_restrack_set_name(&ret->res, NULL);
-	return &ret->id;
+	return &ret->id;/*返回基类*/
 }
 EXPORT_SYMBOL(rdma_create_user_id);
 
@@ -1304,8 +1309,9 @@ int rdma_init_qp_attr(struct rdma_cm_id *id, struct ib_qp_attr *qp_attr,
 	struct rdma_id_private *id_priv;
 	int ret = 0;
 
-	id_priv = container_of(id, struct rdma_id_private, id);
+	id_priv = container_of(id, struct rdma_id_private, id);/*由ID拿到rdma_id_private*/
 	if (rdma_cap_ib_cm(id->device, id->port_num)) {
+		/*有IB cm能力的设备处理方式*/
 		if (!id_priv->cm_id.ib || (id_priv->id.qp_type == IB_QPT_UD))
 			ret = cma_ib_init_qp_attr(id_priv, qp_attr, qp_attr_mask);
 		else
@@ -1315,6 +1321,7 @@ int rdma_init_qp_attr(struct rdma_cm_id *id, struct ib_qp_attr *qp_attr,
 		if (qp_attr->qp_state == IB_QPS_RTR)
 			qp_attr->rq_psn = id_priv->seq_num;
 	} else if (rdma_cap_iw_cm(id->device, id->port_num)) {
+		/*IW CM能力的设备的处理方式*/
 		if (!id_priv->cm_id.iw) {
 			qp_attr->qp_access_flags = 0;
 			*qp_attr_mask = IB_QP_STATE | IB_QP_ACCESS_FLAGS;
@@ -1324,6 +1331,7 @@ int rdma_init_qp_attr(struct rdma_cm_id *id, struct ib_qp_attr *qp_attr,
 		qp_attr->port_num = id_priv->id.port_num;
 		*qp_attr_mask |= IB_QP_PORT;
 	} else {
+		/*当前没有其它的*/
 		ret = -ENOSYS;
 	}
 
@@ -1406,6 +1414,7 @@ static int cma_addr_cmp(const struct sockaddr *src, const struct sockaddr *dst)
 	}
 }
 
+/*取PORT*/
 static __be16 cma_port(const struct sockaddr *addr)
 {
 	struct sockaddr_ib *sib;
@@ -1426,7 +1435,7 @@ static __be16 cma_port(const struct sockaddr *addr)
 
 static inline int cma_any_port(const struct sockaddr *addr)
 {
-	return !cma_port(addr);
+	return !cma_port(addr);/*port是否为0*/
 }
 
 static void cma_save_ib_info(struct sockaddr *src_addr,
@@ -2193,7 +2202,7 @@ static int cma_cm_event_handler(struct rdma_id_private *id_priv,
 	lockdep_assert_held(&id_priv->handler_mutex);
 
 	trace_cm_event_handler(id_priv, event);
-	ret = id_priv->id.event_handler(&id_priv->id, event);
+	ret = id_priv->id.event_handler(&id_priv->id, event);/*由此回调处理此事件*/
 	trace_cm_event_done(id_priv, event, ret);
 	return ret;
 }
@@ -2808,6 +2817,7 @@ err_listen:
 	return ret;
 }
 
+/*TOS设置*/
 void rdma_set_service_type(struct rdma_cm_id *id, int tos)
 {
 	struct rdma_id_private *id_priv;
@@ -3054,10 +3064,10 @@ static void cma_work_handler(struct work_struct *_work)
 	//如果状态符合预期（与old_state相等），则执行状态变更new->old
 	if (work->old_state != 0 || work->new_state != 0) {
 		if (!cma_comp_exch(id_priv, work->old_state, work->new_state))
-			goto out_unlock;
+			goto out_unlock;/*与旧状态不匹配,更新状态失败*/
 	}
 
-	/*按event类型处理cm事件*/
+	/*触发指定event类型cm事件*/
 	if (cma_cm_event_handler(id_priv, &work->event)) {
 		cma_id_put(id_priv);
 		destroy_id_handler_unlock(id_priv);
@@ -3160,7 +3170,7 @@ cma_iboe_set_path_rec_l2_fields(struct rdma_id_private *id_priv)
 	struct net_device *ndev;
 
 	if (!addr->dev_addr.bound_dev_if)
-		return NULL;
+		return NULL;/*未指明设备,返回0*/
 
 	/*取指定的netdev*/
 	ndev = dev_get_by_index(addr->dev_addr.net,
@@ -3178,9 +3188,9 @@ cma_iboe_set_path_rec_l2_fields(struct rdma_id_private *id_priv)
 		gid_type = ib_network_to_gid_type(addr->dev_addr.network);
 	route->path_rec->rec_type = sa_conv_gid_to_pathrec_type(gid_type);
 
-	route->path_rec->roce.route_resolved = true;
+	route->path_rec->roce.route_resolved = true;/*指明路由解析完成*/
 	sa_path_set_dmac(route->path_rec, addr->dev_addr.dst_dev_addr);
-	return ndev;
+	return ndev;/*返回绑定的设备*/
 }
 
 int rdma_set_ib_path(struct rdma_cm_id *id,
@@ -3306,9 +3316,10 @@ static __be32 cma_get_roce_udp_flow_label(struct rdma_id_private *id_priv)
 	u16 dport, sport;
 	u32 hash, fl;
 
-	addr6 = (struct sockaddr_in6 *)cma_src_addr(id_priv);
+	addr6 = (struct sockaddr_in6 *)cma_src_addr(id_priv);/*取源ip*/
 	fl = be32_to_cpu(addr6->sin6_flowinfo) & IB_GRH_FLOWLABEL_MASK;
 	if ((cma_family(id_priv) != AF_INET6) || !fl) {
+		/*v4情况或没有配置flow label,利用sport,dport计算flow label*/
 		dport = be16_to_cpu(cma_port(cma_dst_addr(id_priv)));
 		sport = be16_to_cpu(cma_port(cma_src_addr(id_priv)));
 		hash = (u32)sport * 31 + dport;
@@ -3332,6 +3343,7 @@ static int cma_resolve_iboe_route(struct rdma_id_private *id_priv)
 	u8 tos;
 
 	mutex_lock(&id_priv->qp_mutex);
+	/*如设置,则使用设置的tos,否则使用默认tos*/
 	tos = id_priv->tos_set ? id_priv->tos : default_roce_tos;
 	mutex_unlock(&id_priv->qp_mutex);
 
@@ -3340,13 +3352,14 @@ static int cma_resolve_iboe_route(struct rdma_id_private *id_priv)
 	if (!work)
 		return -ENOMEM;
 
+	/*申请结构体*/
 	route->path_rec = kzalloc(sizeof *route->path_rec, GFP_KERNEL);
 	if (!route->path_rec) {
 		ret = -ENOMEM;
 		goto err1;
 	}
 
-	route->num_pri_alt_paths = 1;
+	route->num_pri_alt_paths = 1;/*IBOE总是1*/
 
 	ndev = cma_iboe_set_path_rec_l2_fields(id_priv);
 	if (!ndev) {
@@ -3362,7 +3375,7 @@ static int cma_resolve_iboe_route(struct rdma_id_private *id_priv)
 
 	if (((struct sockaddr *)&id_priv->id.route.addr.dst_addr)->sa_family != AF_IB)
 		/* TODO: get the hoplimit from the inet/inet6 device */
-		route->path_rec->hop_limit = addr->dev_addr.hoplimit;
+		route->path_rec->hop_limit = addr->dev_addr.hoplimit;/*设置hoplimit*/
 	else
 		route->path_rec->hop_limit = 1;
 	route->path_rec->reversible = 1;
@@ -3399,9 +3412,9 @@ static int cma_resolve_iboe_route(struct rdma_id_private *id_priv)
 		route->path_rec->flow_label =
 			cma_get_roce_udp_flow_label(id_priv);
 
-	/*初始化route解析的路由work*/
+	/*初始化route解析的work*/
 	cma_init_resolve_route_work(work, id_priv);
-	queue_work(cma_wq, &work->work);
+	queue_work(cma_wq, &work->work);/*此work入队*/
 
 	return 0;
 
@@ -3414,7 +3427,7 @@ err1:
 	return ret;
 }
 
-int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms)
+int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms/*超时时间*/)
 {
 	struct rdma_id_private *id_priv;
 	int ret;
@@ -3423,10 +3436,11 @@ int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms)
 		/*超时时间不为0*/
 		return -EINVAL;
 
-	id_priv = container_of(id, struct rdma_id_private, id);
+	id_priv = container_of(id, struct rdma_id_private, id);/*取得rdma_id_private*/
 	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_RESOLVED, RDMA_CM_ROUTE_QUERY))
-		return -EINVAL;
+		return -EINVAL;/*状态不为addr_resolved*/
 
+	/*上一个状态为RDMA_CM_ADDR_RESOLVED,且已切换至RDMA_CM_ROUTE_QUERY*/
 	cma_id_get(id_priv);
 	if (rdma_cap_ib_sa(id->device, id->port_num))
 		ret = cma_resolve_ib_route(id_priv, timeout_ms);
@@ -3437,6 +3451,7 @@ int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms)
 			cma_add_id_to_tree(id_priv);
 	}
 	else if (rdma_protocol_iwarp(id->device, id->port_num))
+		/*IWARP路由解析*/
 		ret = cma_resolve_iw_route(id_priv);
 	else
 		ret = -ENOSYS;
@@ -3528,7 +3543,8 @@ out:
 	return ret;
 }
 
-static void addr_handler(int status, struct sockaddr *src_addr,
+/*地址解析成功后,此回调将被调用,依据运行结果产生RDMA_CM_EVENT_ADDR_ERROR或者RDMA_CM_ADDR_RESOLVED事件*/
+static void addr_handler(int status/*解析结果*/, struct sockaddr *src_addr/*请求时的源地址*/,
 			 struct rdma_dev_addr *dev_addr, void *context)
 {
 	struct rdma_id_private *id_priv = context;
@@ -3539,17 +3555,19 @@ static void addr_handler(int status, struct sockaddr *src_addr,
 	mutex_lock(&id_priv->handler_mutex);
 	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_QUERY,
 			   RDMA_CM_ADDR_RESOLVED))
-		goto out;
+		goto out;/*前一个状态不为ADDR_QUERY,报错返回*/
 
+	/*此时状态变更为RDMA_CM_ADDR_RESOLVED*/
 	/*
 	 * Store the previous src address, so that if we fail to acquire
 	 * matching rdma device, old address can be restored back, which helps
 	 * to cancel the cma listen operation correctly.
 	 */
-	addr = cma_src_addr(id_priv);
+	addr = cma_src_addr(id_priv);/*取源地址*/
 	memcpy(&old_addr, addr, rdma_addr_size(addr));/*保存old_addr*/
 	memcpy(addr, src_addr, rdma_addr_size(src_addr));/*利用src_addr更新addr*/
 	if (!status && !id_priv->cma_dev) {
+		/*解析成功,未设置cma_dev*/
 		status = cma_acquire_dev_by_src_ip(id_priv);
 		if (status)
 			pr_debug_ratelimited("RDMA CM: ADDR_ERROR: failed to acquire device. status %d\n",
@@ -3563,15 +3581,15 @@ static void addr_handler(int status, struct sockaddr *src_addr,
 	if (status) {
 		/*地址解析失败*/
 		memcpy(addr, &old_addr,
-		       rdma_addr_size((struct sockaddr *)&old_addr));
+		       rdma_addr_size((struct sockaddr *)&old_addr));/*还原旧地址*/
 		if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_RESOLVED,
-				   RDMA_CM_ADDR_BOUND))
+				   RDMA_CM_ADDR_BOUND))/*状态回退至addr_bound*/
 			goto out;
-		event.event = RDMA_CM_EVENT_ADDR_ERROR;
+		event.event = RDMA_CM_EVENT_ADDR_ERROR;/*产生addr_error事件*/
 		event.status = status;
 	} else
 		/*地址解析成功*/
-		event.event = RDMA_CM_EVENT_ADDR_RESOLVED;
+		event.event = RDMA_CM_EVENT_ADDR_RESOLVED;/*产生addr_resolved事件*/
 
 	/*处理此event*/
 	if (cma_cm_event_handler(id_priv, &event)) {
@@ -3643,7 +3661,7 @@ int rdma_set_reuseaddr(struct rdma_cm_id *id, int reuse)
 	spin_lock_irqsave(&id_priv->lock, flags);
 	if ((reuse && id_priv->state != RDMA_CM_LISTEN) ||
 	    id_priv->state == RDMA_CM_IDLE) {
-		id_priv->reuseaddr = reuse;
+		id_priv->reuseaddr = reuse;/*设置地址重用(为true时仅在非listen情况下可设置)*/
 		ret = 0;
 	} else {
 		ret = -EINVAL;
@@ -3673,6 +3691,7 @@ int rdma_set_afonly(struct rdma_cm_id *id, int afonly)
 }
 EXPORT_SYMBOL(rdma_set_afonly);
 
+/*rdma_id_private与rdma_bind_list绑定*/
 static void cma_bind_port(struct rdma_bind_list *bind_list,
 			  struct rdma_id_private *id_priv)
 {
@@ -3683,8 +3702,8 @@ static void cma_bind_port(struct rdma_bind_list *bind_list,
 
 	lockdep_assert_held(&lock);
 
-	addr = cma_src_addr(id_priv);
-	port = htons(bind_list->port);
+	addr = cma_src_addr(id_priv);/*源地址*/
+	port = htons(bind_list->port);/*源PORT*/
 
 	switch (addr->sa_family) {
 	case AF_INET:
@@ -3701,10 +3720,11 @@ static void cma_bind_port(struct rdma_bind_list *bind_list,
 		sib->sib_sid_mask = cpu_to_be64(~0ULL);
 		break;
 	}
-	id_priv->bind_list = bind_list;
+	id_priv->bind_list = bind_list;/*设置bind_list*/
 	hlist_add_head(&id_priv->node, &bind_list->owners);
 }
 
+/*申请bind_list,并关联id_priv*/
 static int cma_alloc_port(enum rdma_ucm_port_space ps,
 			  struct rdma_id_private *id_priv, unsigned short snum)
 {
@@ -3717,14 +3737,15 @@ static int cma_alloc_port(enum rdma_ucm_port_space ps,
 	if (!bind_list)
 		return -ENOMEM;
 
+	/*添加此snum对应的bind_list,表明此snum被占用*/
 	ret = cma_ps_alloc(id_priv->id.route.addr.dev_addr.net, ps, bind_list,
 			   snum);
 	if (ret < 0)
 		goto err;
 
 	bind_list->ps = ps;
-	bind_list->port = snum;
-	cma_bind_port(bind_list, id_priv);
+	bind_list->port = snum;/*记录port*/
+	cma_bind_port(bind_list, id_priv);/*两者相互关联*/
 	return 0;
 err:
 	kfree(bind_list);
@@ -3735,43 +3756,45 @@ static int cma_port_is_unique(struct rdma_bind_list *bind_list,
 			      struct rdma_id_private *id_priv)
 {
 	struct rdma_id_private *cur_id;
-	struct sockaddr  *daddr = cma_dst_addr(id_priv);
-	struct sockaddr  *saddr = cma_src_addr(id_priv);
-	__be16 dport = cma_port(daddr);
+	struct sockaddr  *daddr = cma_dst_addr(id_priv);/*自身目的地址*/
+	struct sockaddr  *saddr = cma_src_addr(id_priv);/*自身源地址*/
+	__be16 dport = cma_port(daddr);/*自身目的port*/
 
 	lockdep_assert_held(&lock);
 
+	/*此bind_list被 多个rdma_id_private使用,遍历这些rdma_id_private*/
 	hlist_for_each_entry(cur_id, &bind_list->owners, node) {
-		struct sockaddr  *cur_daddr = cma_dst_addr(cur_id);
-		struct sockaddr  *cur_saddr = cma_src_addr(cur_id);
-		__be16 cur_dport = cma_port(cur_daddr);
+		struct sockaddr  *cur_daddr = cma_dst_addr(cur_id);/*取目的地址*/
+		struct sockaddr  *cur_saddr = cma_src_addr(cur_id);/*取源地址*/
+		__be16 cur_dport = cma_port(cur_daddr);/*取目的port*/
 
 		if (id_priv == cur_id)
-			continue;
+			continue;/*跳过自身*/
 
 		/* different dest port -> unique */
 		if (!cma_any_port(daddr) &&
 		    !cma_any_port(cur_daddr) &&
 		    (dport != cur_dport))
-			continue;
+			continue;/*目的PORT不相等,可复用*/
 
 		/* different src address -> unique */
 		if (!cma_any_addr(saddr) &&
 		    !cma_any_addr(cur_saddr) &&
 		    cma_addr_cmp(saddr, cur_saddr))
-			continue;
+			continue;/*源地址不相等,可复用*/
 
 		/* different dst address -> unique */
 		if (!cma_any_addr(daddr) &&
 		    !cma_any_addr(cur_daddr) &&
 		    cma_addr_cmp(daddr, cur_daddr))
-			continue;
+			continue;/*目的地址不相等,可复用*/
 
-		return -EADDRNOTAVAIL;
+		return -EADDRNOTAVAIL;/*复用此bind_list会导致五元组重复*/
 	}
-	return 0;
+	return 0;/*可复用*/
 }
 
+/*在PS空间里为rdma_id分配一个port,分配成功返回PORT,否则失败返回<0*/
 static int cma_alloc_any_port(enum rdma_ucm_port_space ps,
 			      struct rdma_id_private *id_priv)
 {
@@ -3782,39 +3805,42 @@ static int cma_alloc_any_port(enum rdma_ucm_port_space ps,
 
 	lockdep_assert_held(&lock);
 
-	inet_get_local_port_range(net, &low, &high);
-	remaining = (high - low) + 1;
-	rover = get_random_u32_inclusive(low, remaining + low - 1);
+	inet_get_local_port_range(net, &low, &high);/*取Port范围*/
+	remaining = (high - low) + 1;/*有多少可用PORT*/
+	rover = get_random_u32_inclusive(low, remaining + low - 1);/*随机在low,high间选一个*/
 retry:
 	if (last_used_port != rover) {
+		/*上一次用的PORT与当前选的不一样*/
 		struct rdma_bind_list *bind_list;
 		int ret;
 
-		bind_list = cma_ps_find(net, ps, (unsigned short)rover);
+		bind_list = cma_ps_find(net, ps, (unsigned short)rover);/*查此port是否有bind LIST*/
 
 		if (!bind_list) {
+			/*没有,此PORT可用*/
 			ret = cma_alloc_port(ps, id_priv, rover);
 		} else {
 			ret = cma_port_is_unique(bind_list, id_priv);
 			if (!ret)
-				cma_bind_port(bind_list, id_priv);
+				cma_bind_port(bind_list, id_priv);/*可复用,关联*/
 		}
 		/*
 		 * Remember previously used port number in order to avoid
 		 * re-using same port immediately after it is closed.
 		 */
 		if (!ret)
-			last_used_port = rover;
+			last_used_port = rover;/*不可复用,记录上次检查过的port*/
 		if (ret != -EADDRNOTAVAIL)
-			return ret;
+			return ret;/*成功了,直接返回*/
 	}
 	if (--remaining) {
+		/*这个冲突了,再选一个*/
 		rover++;
 		if ((rover < low) || (rover > high))
 			rover = low;
 		goto retry;
 	}
-	return -EADDRNOTAVAIL;
+	return -EADDRNOTAVAIL;/*所有都尝试遍了,没有找到可用的,出错返回*/
 }
 
 /*
@@ -3832,9 +3858,10 @@ static int cma_check_port(struct rdma_bind_list *bind_list,
 	lockdep_assert_held(&lock);
 
 	addr = cma_src_addr(id_priv);
+	/*遍历此bind_list关联的rdma_id_private*/
 	hlist_for_each_entry(cur_id, &bind_list->owners, node) {
 		if (id_priv == cur_id)
-			continue;
+			continue;/*跳过自身*/
 
 		if (reuseaddr && cur_id->reuseaddr)
 			continue;
@@ -3862,17 +3889,18 @@ static int cma_use_port(enum rdma_ucm_port_space ps,
 
 	lockdep_assert_held(&lock);
 
-	snum = ntohs(cma_port(cma_src_addr(id_priv)));
+	snum = ntohs(cma_port(cma_src_addr(id_priv)));/*取指明的port*/
 	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
-		return -EACCES;
+		return -EACCES;/*指明的port值过小,检查权限*/
 
+	/*检查此snum是否有对应的bind_list*/
 	bind_list = cma_ps_find(id_priv->id.route.addr.dev_addr.net, ps, snum);
 	if (!bind_list) {
-		ret = cma_alloc_port(ps, id_priv, snum);
+		ret = cma_alloc_port(ps, id_priv, snum);/*申请占用此port*/
 	} else {
-		ret = cma_check_port(bind_list, id_priv, id_priv->reuseaddr);
+		ret = cma_check_port(bind_list, id_priv, id_priv->reuseaddr);/*检查此port是否可复用*/
 		if (!ret)
-			cma_bind_port(bind_list, id_priv);
+			cma_bind_port(bind_list, id_priv);/*可复用,执行关联*/
 	}
 	return ret;
 }
@@ -3924,6 +3952,7 @@ cma_select_ib_ps(struct rdma_id_private *id_priv)
 	return ps;
 }
 
+/*占用源port*/
 static int cma_get_port(struct rdma_id_private *id_priv)
 {
 	enum rdma_ucm_port_space ps;
@@ -3938,9 +3967,10 @@ static int cma_get_port(struct rdma_id_private *id_priv)
 
 	mutex_lock(&lock);
 	if (cma_any_port(cma_src_addr(id_priv)))
+		/*未指明源PORT,申请一个PORT,并占用*/
 		ret = cma_alloc_any_port(ps, id_priv);
 	else
-		ret = cma_use_port(ps, id_priv);
+		ret = cma_use_port(ps, id_priv);/*指明源port,尝试占用*/
 	mutex_unlock(&lock);
 
 	return ret;
@@ -3953,7 +3983,7 @@ static int cma_check_linklocal(struct rdma_dev_addr *dev_addr,
 	struct sockaddr_in6 *sin6;
 
 	if (addr->sa_family != AF_INET6)
-		return 0;
+		return 0;/*仅IPV6需要执行下面的检查*/
 
 	sin6 = (struct sockaddr_in6 *) addr;
 
@@ -4036,9 +4066,9 @@ err:
 }
 EXPORT_SYMBOL(rdma_listen);
 
-//为rdma绑定源地址
+//为rdma绑定源地址,占用源port,设置目的地址,状态由idle转为addr_bound
 static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
-			      struct sockaddr *addr, const struct sockaddr *daddr)
+			      struct sockaddr *addr/*源地址*/, const struct sockaddr *daddr/*目的地址*/)
 {
 	struct sockaddr *id_daddr;
 	int ret;
@@ -4049,8 +4079,10 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 		return -EAFNOSUPPORT;
 
 	if (!cma_comp_exch(id_priv, RDMA_CM_IDLE, RDMA_CM_ADDR_BOUND))
-		return -EINVAL;
+		return -EINVAL;/*当前状态不为RDMA_CM_IDLE,报错*/
 
+	/*上一个状态为RDMA_CM_IDLE,且现在已变更为RDMA_CM_ADDR_BOUND*/
+	/*检查linklocal地址*/
 	ret = cma_check_linklocal(&id_priv->id.route.addr.dev_addr, addr);
 	if (ret)
 		goto err1;
@@ -4058,7 +4090,7 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 	//填充源地址
 	memcpy(cma_src_addr(id_priv), addr, rdma_addr_size(addr));
 	if (!cma_any_addr(addr)) {
-		/*用户态指定了源ip*/
+		/*源地址不为ANY,也不是LOOPBACK地址,利用addr填充dev_addr*/
 		ret = cma_translate_addr(addr, &id_priv->id.route.addr.dev_addr);
 		if (ret)
 			goto err1;
@@ -4082,15 +4114,16 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 #endif
 	}
 
-	/*设置daddr协议族*/
+	/*设置目的地址及其协议族为addr*/
 	id_daddr = cma_dst_addr(id_priv);
 	if (daddr != id_daddr)
 		memcpy(id_daddr, daddr, rdma_addr_size(addr));
 	id_daddr->sa_family = addr->sa_family;
 
+	/*占用源port*/
 	ret = cma_get_port(id_priv);
 	if (ret)
-		goto err2;
+		goto err2;/*占用源port失败*/
 
 	if (!cma_any_addr(addr))
 		/*未设置srcip*/
@@ -4100,18 +4133,19 @@ err2:
 	if (id_priv->cma_dev)
 		cma_release_dev(id_priv);
 err1:
-	cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND, RDMA_CM_IDLE);
+	cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND, RDMA_CM_IDLE);/*出错,回退状态到idle*/
 	return ret;
 }
 
-static int cma_bind_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
-			 const struct sockaddr *dst_addr)
+static int cma_bind_addr(struct rdma_cm_id *id, struct sockaddr *src_addr/*源地址*/,
+			 const struct sockaddr *dst_addr/*目的地址*/)
 {
 	struct rdma_id_private *id_priv =
 		container_of(id, struct rdma_id_private, id);
 	struct sockaddr_storage zero_sock = {};
 
 	if (src_addr && src_addr->sa_family)
+		/*指明了源地址,且源地址指明了family*/
 		return rdma_bind_addr_dst(id_priv, src_addr, dst_addr);
 
 	/*
@@ -4127,7 +4161,7 @@ static int cma_bind_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 		src_addr6->sin6_scope_id = dst_addr6->sin6_scope_id;
 		if (ipv6_addr_type(&dst_addr6->sin6_addr) & IPV6_ADDR_LINKLOCAL)
 			id->route.addr.dev_addr.bound_dev_if =
-				dst_addr6->sin6_scope_id;
+				dst_addr6->sin6_scope_id;/*设置设备ifindex*/
 	} else if (dst_addr->sa_family == AF_IB) {
 		((struct sockaddr_ib *)&zero_sock)->sib_pkey =
 			((struct sockaddr_ib *)dst_addr)->sib_pkey;
@@ -4142,43 +4176,49 @@ static int cma_bind_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
  * ignored.
  */
 static int resolve_prepare_src(struct rdma_id_private *id_priv,
-			       struct sockaddr *src_addr,
-			       const struct sockaddr *dst_addr)
+			       struct sockaddr *src_addr/*源地址*/,
+			       const struct sockaddr *dst_addr/*目的地址*/)
 {
 	int ret;
 
 	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND, RDMA_CM_ADDR_QUERY)) {
+		/*当前状态不为RDMA_CM_ADDR_BOUND*/
 		/* For a well behaved ULP state will be RDMA_CM_IDLE */
-		ret = cma_bind_addr(&id_priv->id, src_addr, dst_addr);
+		ret = cma_bind_addr(&id_priv->id, src_addr, dst_addr);/*绑定地址,由idle转addr_bound*/
 		if (ret)
-			return ret;
+			return ret;/*出错返回*/
 		if (WARN_ON(!cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND,
 					   RDMA_CM_ADDR_QUERY)))
-			return -EINVAL;
+			return -EINVAL;/*上一状态不为addr_bound,报错*/
 
+		/*上一个状态是RDMA_CM_ADDR_BOUND,且当前已变更为RDMA_CM_ADDR_QUERY*/
 	} else {
+		/*上一个状态是RDMA_CM_ADDR_BOUND,且当前已变更为RDMA_CM_ADDR_QUERY*/
+		/*设置目的地址*/
 		memcpy(cma_dst_addr(id_priv), dst_addr, rdma_addr_size(dst_addr));
 	}
 
 	if (cma_family(id_priv) != dst_addr->sa_family) {
+		/*源地址family与目的地址family不相等*/
 		ret = -EINVAL;
 		goto err_state;
 	}
 	return 0;
 
 err_state:
-	cma_comp_exch(id_priv, RDMA_CM_ADDR_QUERY, RDMA_CM_ADDR_BOUND);
+	cma_comp_exch(id_priv, RDMA_CM_ADDR_QUERY, RDMA_CM_ADDR_BOUND);/*出错,状态回退至addr_bound*/
 	return ret;
 }
 
-int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
-		      const struct sockaddr *dst_addr, unsigned long timeout_ms)
+/*执行地址相关的查询处理(填充rdma_cm_id),此函数仅负责触发,即便邻居表项可以立即查到,也异步交给addr_handler处理.*/
+int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr/*源地址*/,
+		      const struct sockaddr *dst_addr/*目的地址*/, unsigned long timeout_ms/*超时时间*/)
 {
 	struct rdma_id_private *id_priv =
-		container_of(id, struct rdma_id_private, id);
+		container_of(id, struct rdma_id_private, id);/*由id取得rdma_id_private*/
 	int ret;
 
-	ret = resolve_prepare_src(id_priv, src_addr, dst_addr);
+	ret = resolve_prepare_src(id_priv, src_addr, dst_addr);/*绑定地址,状态转为RDMA_CM_ADDR_QUERY*/
 	if (ret)
 		return ret;
 
@@ -4204,17 +4244,17 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 			if (id_priv->used_resolve_ip)
 				rdma_addr_cancel(&id->route.addr.dev_addr);
 			else
-				id_priv->used_resolve_ip = 1;
+				id_priv->used_resolve_ip = 1;/*标记执行resolve_ip*/
 			ret = rdma_resolve_ip(cma_src_addr(id_priv), dst_addr,
 					      &id->route.addr.dev_addr,
-					      timeout_ms, addr_handler/*地址解析结果处理*/,
+					      timeout_ms, addr_handler/*地址解析结果处理(所有成功的地址解析均走此处理)*/,
 					      false, id_priv);
 		}
 	}
 	if (ret)
-		goto err;
+		goto err;/*请求解析地址失败者*/
 
-	return 0;
+	return 0;/*成功处理(存在未完成邻居地址解析的情况)*/
 err:
 	cma_comp_exch(id_priv, RDMA_CM_ADDR_QUERY, RDMA_CM_ADDR_BOUND);
 	return ret;
@@ -4393,12 +4433,13 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 	u8 offset;
 	int ret;
 
-	memset(&req, 0, sizeof req);
+	memset(&req, 0, sizeof req);/*结构体清零*/
 	offset = cma_user_data_offset(id_priv);
 	if (check_add_overflow(offset, conn_param->private_data_len, &req.private_data_len))
 		return -EINVAL;
 
 	if (req.private_data_len) {
+		/*申请私有数据长度*/
 		private_data = kzalloc(req.private_data_len, GFP_ATOMIC);
 		if (!private_data)
 			return -ENOMEM;
@@ -4408,7 +4449,7 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 
 	if (conn_param->private_data && conn_param->private_data_len)
 		memcpy(private_data + offset, conn_param->private_data,
-		       conn_param->private_data_len);
+		       conn_param->private_data_len);/*填写私有数据*/
 
 	id = ib_create_cm_id(id_priv->id.device, cma_ib_handler, id_priv);
 	if (IS_ERR(id)) {
@@ -4450,6 +4491,7 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 	req.ece.attr_mod = id_priv->ece.attr_mod;
 
 	trace_cm_send_req(id_priv);
+	/*发送cm请求*/
 	ret = ib_send_cm_req(id_priv->cm_id.ib, &req);
 out:
 	if (ret && !IS_ERR(id)) {
@@ -4522,9 +4564,9 @@ int rdma_connect_locked(struct rdma_cm_id *id,
 		container_of(id, struct rdma_id_private, id);
 	int ret;
 
-	/*只能由route_resolved移动到 cm_connect状态*/
 	if (!cma_comp_exch(id_priv, RDMA_CM_ROUTE_RESOLVED, RDMA_CM_CONNECT))
-		return -EINVAL;
+		return -EINVAL;/*当前状态不为RDMA_CM_ROUTE_RESOLVED,报错*/
+	/*上一个状态为RDMA_CM_ROUTE_RESOLVED,当前状态更新为RDMA_CM_CONNECT*/
 
 	if (!id->qp) {
 		id_priv->qp_num = conn_param->qp_num;
@@ -4536,6 +4578,7 @@ int rdma_connect_locked(struct rdma_cm_id *id,
 			/*ud类型的qp处理连接*/
 			ret = cma_resolve_ib_udp(id_priv, conn_param);
 		else
+			/*其它类型的QP连接处理*/
 			ret = cma_connect_ib(id_priv, conn_param);
 	} else if (rdma_cap_iw_cm(id->device, id->port_num)) {
 		ret = cma_connect_iw(id_priv, conn_param);
@@ -4585,12 +4628,13 @@ EXPORT_SYMBOL(rdma_connect);
  *
  * See rdma_connect() explanation.
  */
-int rdma_connect_ece(struct rdma_cm_id *id, struct rdma_conn_param *conn_param,
+int rdma_connect_ece(struct rdma_cm_id *id, struct rdma_conn_param *conn_param/*连接参数*/,
 		     struct rdma_ucm_ece *ece)
 {
 	struct rdma_id_private *id_priv =
 		container_of(id, struct rdma_id_private, id);
 
+	/*设置ece到RDMA_ID_PRIVATE*/
 	id_priv->ece.vendor_id = ece->vendor_id;
 	id_priv->ece.attr_mod = ece->attr_mod;
 

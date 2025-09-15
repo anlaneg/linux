@@ -40,7 +40,7 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 {
 	__be32 st;
 
-	st = addr->s6_addr32[0];/*ipv6地址的前4个字节*/
+	st = addr->s6_addr32[0];/*取ipv6地址的前4个字节*/
 
 	/* Consider all addresses with the first three bits different of
 	   000 and 111 as unicasts.

@@ -420,14 +420,14 @@ static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
 	rcu_read_lock();
 
 	if (likely(rt->rt_gw_family == AF_INET)) {
-	    /*查询网关对应的邻居表项*/
+	    /*有网关,查询网关对应的邻居表项*/
 		n = ip_neigh_gw4(dev, rt->rt_gw4);
 	} else if (rt->rt_gw_family == AF_INET6) {
 		n = ip_neigh_gw6(dev, &rt->rt_gw6);
         } else {
 		__be32 pkey;
 
-		/*有skb以skb中的目地地址为准，无skb以提定的daddr为准*/
+		/*有skb以skb中的目地地址为准;无skb,则以指定的daddr为准*/
 		pkey = skb ? ip_hdr(skb)->daddr : *((__be32 *) daddr);
 		n = ip_neigh_gw4(dev, pkey);
 	}
@@ -633,6 +633,7 @@ static void fill_route_from_fnhe(struct rtable *rt, struct fib_nh_exception *fnh
 	rt->dst.expires = fnhe->fnhe_expires;
 
 	if (fnhe->fnhe_gw) {
+		/*有网关*/
 		rt->rt_flags |= RTCF_REDIRECTED;
 		rt->rt_uses_gateway = 1;
 		rt->rt_gw_family = AF_INET;
@@ -1601,6 +1602,7 @@ static void rt_set_nexthop(struct rtable *rt, __be32 daddr,
 		struct fib_nh_common *nhc = FIB_RES_NHC(*res);
 
 		if (nhc->nhc_gw_family && nhc->nhc_scope == RT_SCOPE_LINK) {
+			/*有网关*/
 			rt->rt_uses_gateway = 1;
 			rt->rt_gw_family = nhc->nhc_gw_family;
 			//设置gateway

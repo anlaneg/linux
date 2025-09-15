@@ -667,7 +667,7 @@ static inline void __ipv6_addr_set_half(__be32 *addr,
 }
 
 /*将addr设置为wl,w2,w3,w4*/
-static inline void ipv6_addr_set(struct in6_addr *addr/*出参*/,
+static inline void ipv6_addr_set(struct in6_addr *addr/*出参,转换后地址*/,
 				     __be32 w1, __be32 w2,
 				     __be32 w3, __be32 w4)
 {

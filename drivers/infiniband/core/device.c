@@ -141,7 +141,7 @@ MODULE_PARM_DESC(netns_mode,
  */
 bool rdma_dev_access_netns(const struct ib_device *dev, const struct net *net)
 {
-    /*检查dev是否在net namespace中可见*/
+    /*检查dev是否在此net namespace中可见*/
 	return (ib_devices_shared_netns ||
 		net_eq(read_pnet(&dev->coredev.rdma_net), net));
 }

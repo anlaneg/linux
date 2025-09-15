@@ -404,7 +404,7 @@ static inline void dst_confirm(struct dst_entry *dst)
 
 static inline struct neighbour *dst_neigh_lookup(const struct dst_entry *dst, const void *daddr)
 {
-	/*领居表项查询（非报文方式）*/
+	/*领居表项查询（非报文方式,此函数会考虑网关问题）*/
 	struct neighbour *n = dst->ops->neigh_lookup(dst, NULL, daddr);
 	return IS_ERR(n) ? NULL : n;
 }

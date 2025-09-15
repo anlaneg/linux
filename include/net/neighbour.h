@@ -514,6 +514,7 @@ static __always_inline int neigh_event_send_probe(struct neighbour *neigh,
 	return 0;
 }
 
+/*向外发送邻居表项探测报文*/
 static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 {
 	return neigh_event_send_probe(neigh, skb, true);

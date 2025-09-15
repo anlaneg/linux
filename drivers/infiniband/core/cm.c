@@ -882,6 +882,7 @@ struct ib_cm_id *ib_create_cm_id(struct ib_device *device,
 {
 	struct cm_id_private *cm_id_priv;
 
+	/*创建cm_id_private*/
 	cm_id_priv = cm_alloc_id_priv(device, cm_handler, context);
 	if (IS_ERR(cm_id_priv))
 		return ERR_CAST(cm_id_priv);
@@ -1583,7 +1584,7 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	if (param->alternate_path)
 		cm_move_av_from_path(&cm_id_priv->alt_av, &alt_av);
 
-	msg = cm_alloc_priv_msg(cm_id_priv, IB_CM_REQ_SENT);
+	msg = cm_alloc_priv_msg(cm_id_priv, IB_CM_REQ_SENT);/*申请msg*/
 	if (IS_ERR(msg)) {
 		ret = PTR_ERR(msg);
 		goto out_unlock;
@@ -1597,7 +1598,7 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	cm_id_priv->rq_psn = cpu_to_be32(IBA_GET(CM_REQ_STARTING_PSN, req_msg));
 
 	trace_icm_send_req(&cm_id_priv->id);
-	ret = ib_post_send_mad(msg, NULL);
+	ret = ib_post_send_mad(msg, NULL);/*发送此msg*/
 	if (ret)
 		goto out_free;
 	BUG_ON(cm_id->state != IB_CM_IDLE);
@@ -4118,8 +4119,10 @@ static int cm_init_qp_init_attr(struct cm_id_private *cm_id_priv,
 	case IB_CM_REP_SENT:
 	case IB_CM_MRA_REP_RCVD:
 	case IB_CM_ESTABLISHED:
+		/*设置字段掩码*/
 		*qp_attr_mask = IB_QP_STATE | IB_QP_ACCESS_FLAGS |
 				IB_QP_PKEY_INDEX | IB_QP_PORT;
+		/*填充字段值*/
 		qp_attr->qp_access_flags = IB_ACCESS_REMOTE_WRITE;
 		if (cm_id_priv->responder_resources) {
 			struct ib_device *ib_dev = cm_id_priv->id.device;
@@ -4272,6 +4275,7 @@ int ib_cm_init_qp_attr(struct ib_cm_id *cm_id,
 	cm_id_priv = container_of(cm_id, struct cm_id_private, id);
 	switch (qp_attr->qp_state) {
 	case IB_QPS_INIT:
+		/*取得INIT时属性初始化参数*/
 		ret = cm_init_qp_init_attr(cm_id_priv, qp_attr, qp_attr_mask);
 		break;
 	case IB_QPS_RTR:
@@ -4281,7 +4285,7 @@ int ib_cm_init_qp_attr(struct ib_cm_id *cm_id,
 		ret = cm_init_qp_rts_attr(cm_id_priv, qp_attr, qp_attr_mask);
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -EINVAL;/*其它状态不支持取*/
 		break;
 	}
 	return ret;

@@ -145,7 +145,7 @@ struct sa_path_rec_ib {
  */
 struct sa_path_rec_roce {
 	bool	route_resolved;
-	u8	dmac[ETH_ALEN];
+	u8	dmac[ETH_ALEN];/*设置目的MAC*/
 };
 
 struct sa_path_rec_opa {
@@ -185,7 +185,7 @@ struct sa_path_rec {
 		struct sa_path_rec_roce roce;
 		struct sa_path_rec_opa opa;
 	};
-	enum sa_path_rec_type rec_type;
+	enum sa_path_rec_type rec_type;/*roce类型*/
 	u32 flags;
 };
 
@@ -207,7 +207,7 @@ static inline enum sa_path_rec_type
 {
 	switch (type) {
 	case IB_GID_TYPE_ROCE:
-		return SA_PATH_REC_TYPE_ROCE_V1;
+		return SA_PATH_REC_TYPE_ROCE_V1;/*ROCEv1*/
 	case IB_GID_TYPE_ROCE_UDP_ENCAP:
 		return SA_PATH_REC_TYPE_ROCE_V2;
 	default:

@@ -51,9 +51,9 @@ enum rdma_cm_state {
 };
 
 struct rdma_id_private {
-	struct rdma_cm_id	id;
+	struct rdma_cm_id	id;/*包含基类rdma_cm_id*/
 
-	struct rdma_bind_list	*bind_list;
+	struct rdma_bind_list	*bind_list;/*指明使用的源PORT*/
 	struct hlist_node	node;
 	union {
 		struct list_head device_item; /* On cma_device->id_list */
@@ -69,7 +69,7 @@ struct rdma_id_private {
 	struct list_head	mc_list;
 
 	int			internal_id;
-	enum rdma_cm_state	state;
+	enum rdma_cm_state	state;/*状态(初始状态为RDMA_CM_IDLE)*/
 	spinlock_t		lock;
 	struct mutex		qp_mutex;
 
@@ -86,18 +86,18 @@ struct rdma_id_private {
 		struct iw_cm_id	*iw;
 	} cm_id;
 
-	u32			seq_num;
+	u32			seq_num;/*初始化随机值(且仅24位)*/
 	u32			qkey;
-	u32			qp_num;
-	u32			options;
+	u32			qp_num;/*QP编号*/
+	u32			options;/*选项标记*/
 	u8			srq;
 	u8			tos;/*配置的tos值*/
-	u8			tos_set:1;
-	u8                      timeout_set:1;
+	u8			tos_set:1;/*指明是否配置了tos值*/
+	u8                      timeout_set:1;/*指明是否配置了timeout*/
 	u8			min_rnr_timer_set:1;
-	u8			reuseaddr;
-	u8			afonly;
-	u8			timeout;
+	u8			reuseaddr;/*配置是否重用地址*/
+	u8			afonly;/*配置的afonly*/
+	u8			timeout;/*配置的timeout*/
 	u8			min_rnr_timer;
 	u8 used_resolve_ip;
 	enum ib_gid_type	gid_type;

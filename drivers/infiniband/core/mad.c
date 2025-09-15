@@ -1047,6 +1047,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
 	sge = mad_send_wr->sg_list;
+	/*获得dma地址*/
 	sge[0].addr = ib_dma_map_single(mad_agent->device,
 					mad_send_wr->send_buf.mad,
 					sge[0].length,
@@ -1274,7 +1275,7 @@ static bool mad_is_for_backlog(struct ib_mad_send_wr_private *mad_send_wr)
  * ib_post_send_mad - Posts MAD(s) to the send queue of the QP associated
  *  with the registered client
  */
-int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
+int ib_post_send_mad(struct ib_mad_send_buf *send_buf/*待发送的消息*/,
 		     struct ib_mad_send_buf **bad_send_buf)
 {
 	struct ib_mad_agent_private *mad_agent_priv;
@@ -1312,7 +1313,7 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
 		 * current one completes, and the user modifies the work
 		 * request associated with the completion
 		 */
-		next_send_buf = send_buf->next;
+		next_send_buf = send_buf->next;/*取下一个待发送buf*/
 		mad_send_wr->send_wr.ah = send_buf->ah;
 
 		if (((struct ib_mad_hdr *) send_buf->mad)->mgmt_class ==
@@ -1351,7 +1352,7 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
 			if (ret >= 0 && ret != IB_RMPP_RESULT_CONSUMED)
 				ret = ib_send_mad(mad_send_wr);
 		} else
-			ret = ib_send_mad(mad_send_wr);
+			ret = ib_send_mad(mad_send_wr);/*发送此mad*/
 		if (ret < 0) {
 			/* Fail send request */
 			spin_lock_irqsave(&mad_agent_priv->lock, flags);

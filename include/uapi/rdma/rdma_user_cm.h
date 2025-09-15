@@ -74,7 +74,7 @@ enum {
 enum rdma_ucm_port_space {
 	RDMA_PS_IPOIB = 0x0002,
 	RDMA_PS_IB    = 0x013F,
-	RDMA_PS_TCP   = 0x0106,
+	RDMA_PS_TCP   = 0x0106,/*使用TCP*/
 	RDMA_PS_UDP   = 0x0111,
 };
 
@@ -88,8 +88,9 @@ struct rdma_ucm_cmd_hdr {
 };
 
 struct rdma_ucm_create_id {
-	__aligned_u64 uid;
-	__aligned_u64 response;//响应地址
+	__aligned_u64 uid;/*CREATE ID用户态指定的ID*/
+	__aligned_u64 response;//CREATE ID响应内容
+	/*指明qp_type类型对应关系*/
 	__u16 ps;                  /* use enum rdma_ucm_port_space */
 	__u8  qp_type;
 	__u8  reserved[5];
