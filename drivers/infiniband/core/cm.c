@@ -487,8 +487,9 @@ static int cm_init_av_for_response(struct cm_port *port, struct ib_wc *wc,
 				       grh, &av->ah_attr);
 }
 
+/*选择path对应的cm_port*/
 static struct cm_port *
-get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr)
+get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr/*为NULL时依据PATH选cm_port*/)
 {
 	struct cm_device *cm_dev;
 	struct cm_port *port = NULL;
@@ -496,8 +497,10 @@ get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr)
 
 	if (attr) {
 		read_lock_irqsave(&cm.device_lock, flags);
+		/*遍历所有cm_device*/
 		list_for_each_entry(cm_dev, &cm.device_list, list) {
 			if (cm_dev->ib_device == attr->device) {
+				/*找到对应的cm_device,取对应的port*/
 				port = cm_dev->port[attr->port_num - 1];
 				break;
 			}
@@ -511,13 +514,15 @@ get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr)
 		 * (c) LAP send messages
 		 */
 		read_lock_irqsave(&cm.device_lock, flags);
+		/*遍历所有cm_device*/
 		list_for_each_entry(cm_dev, &cm.device_list, list) {
+			/*检查此设备是否匹配PATH要求的sgid,及gid_type*/
 			attr = rdma_find_gid(cm_dev->ib_device,
 					     &path->sgid,
 					     sa_conv_pathrec_to_gid_type(path),
 					     NULL);
 			if (!IS_ERR(attr)) {
-				port = cm_dev->port[attr->port_num - 1];
+				port = cm_dev->port[attr->port_num - 1];/*取选中的port*/
 				break;
 			}
 		}
@@ -525,7 +530,7 @@ get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr)
 		if (port)
 			rdma_put_gid_attr(attr);
 	}
-	return port;
+	return port;/*返回选中的cm_port*/
 }
 
 static int cm_init_av_by_path(struct sa_path_rec *path,
@@ -537,10 +542,11 @@ static int cm_init_av_by_path(struct sa_path_rec *path,
 	struct cm_port *port;
 	int ret;
 
+	/*取对应的cm_port*/
 	port = get_cm_port_from_path(path, sgid_attr);
 	if (!port)
 		return -EINVAL;
-	cm_dev = port->cm_dev;
+	cm_dev = port->cm_dev;/*此port对应的cm_dev*/
 
 	ret = ib_find_cached_pkey(cm_dev->ib_device, port->port_num,
 				  be16_to_cpu(path->pkey), &av->pkey_index);
@@ -827,14 +833,16 @@ cm_insert_remote_sidr(struct cm_id_private *cm_id_priv)
 	return NULL;
 }
 
+/*申请cm_id_private结构体并初始化*/
 static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
-					      ib_cm_handler cm_handler,
+					      ib_cm_handler cm_handler/*cm处理函数*/,
 					      void *context)
 {
 	struct cm_id_private *cm_id_priv;
 	u32 id;
 	int ret;
 
+	/*申请cm_id_private结构体*/
 	cm_id_priv = kzalloc(sizeof *cm_id_priv, GFP_KERNEL);
 	if (!cm_id_priv)
 		return ERR_PTR(-ENOMEM);
@@ -843,7 +851,7 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 	cm_id_priv->id.device = device;
 	cm_id_priv->id.cm_handler = cm_handler;/*cm处理函数*/
 	cm_id_priv->id.context = context;
-	cm_id_priv->id.remote_cm_qpn = 1;
+	cm_id_priv->id.remote_cm_qpn = 1;/*远端CM QPN为1*/
 
 	RB_CLEAR_NODE(&cm_id_priv->service_node);
 	RB_CLEAR_NODE(&cm_id_priv->sidr_id_node);
@@ -853,11 +861,12 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 	atomic_set(&cm_id_priv->work_count, -1);
 	refcount_set(&cm_id_priv->refcount, 1);
 
+	/*分配个ID*/
 	ret = xa_alloc_cyclic(&cm.local_id_table, &id, NULL, xa_limit_32b,
 			      &cm.local_id_next, GFP_KERNEL);
 	if (ret < 0)
 		goto error;
-	cm_id_priv->id.local_id = (__force __be32)id ^ cm.random_id_operand;
+	cm_id_priv->id.local_id = (__force __be32)id ^ cm.random_id_operand;/*设置ID(映射了一下)*/
 
 	return cm_id_priv;
 
@@ -872,8 +881,8 @@ error:
  */
 static void cm_finalize_id(struct cm_id_private *cm_id_priv)
 {
-	xa_store(&cm.local_id_table, cm_local_id(cm_id_priv->id.local_id),
-		 cm_id_priv, GFP_ATOMIC);
+	xa_store(&cm.local_id_table, cm_local_id(cm_id_priv->id.local_id)/*取local_id*/,
+		 cm_id_priv, GFP_ATOMIC);/*关联local_id与cm_id_priv*/
 }
 
 struct ib_cm_id *ib_create_cm_id(struct ib_device *device,
@@ -888,7 +897,7 @@ struct ib_cm_id *ib_create_cm_id(struct ib_device *device,
 		return ERR_CAST(cm_id_priv);
 
 	cm_finalize_id(cm_id_priv);
-	return &cm_id_priv->id;
+	return &cm_id_priv->id;/*返回新创建并初始化的ib_cm_id*/
 }
 EXPORT_SYMBOL(ib_create_cm_id);
 
@@ -989,10 +998,10 @@ static struct cm_timewait_info *cm_create_timewait_info(__be32 local_id)
 	if (!timewait_info)
 		return ERR_PTR(-ENOMEM);
 
-	/*触发timewait 事件*/
+	/*设置timewait_info->work*/
 	timewait_info->work.local_id = local_id;
 	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);
-	timewait_info->work.cm_event.event = IB_CM_TIMEWAIT_EXIT;
+	timewait_info->work.cm_event.event = IB_CM_TIMEWAIT_EXIT;/*对应exit事件*/
 	return timewait_info;
 }
 
@@ -1504,16 +1513,16 @@ static int cm_validate_req_param(struct ib_cm_req_param *param)
 
 	if (param->qp_type != IB_QPT_RC && param->qp_type != IB_QPT_UC &&
 	    param->qp_type != IB_QPT_XRC_INI)
-		return -EINVAL;
+		return -EINVAL;/*只能是以上QP类型*/
 
 	if (param->private_data &&
 	    param->private_data_len > IB_CM_REQ_PRIVATE_DATA_SIZE)
-		return -EINVAL;
+		return -EINVAL;/*私有数据长度过大*/
 
 	if (param->alternate_path &&
 	    (param->alternate_path->pkey != param->primary_path->pkey ||
 	     param->alternate_path->mtu != param->primary_path->mtu))
-		return -EINVAL;
+		return -EINVAL;/*备选路径pkey,mtu必须与主PATH一致*/
 
 	return 0;
 }
@@ -1537,7 +1546,7 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 	spin_lock_irqsave(&cm_id_priv->lock, flags);
 	if (cm_id->state != IB_CM_IDLE || WARN_ON(cm_id_priv->timewait_info)) {
 		spin_unlock_irqrestore(&cm_id_priv->lock, flags);
-		return -EINVAL;
+		return -EINVAL;/*此时状态必须是Idle,timewait_info必须未设置值*/
 	}
 	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
 
@@ -1549,11 +1558,13 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 		return ret;
 	}
 
+	/*取主路径对应的cm_av*/
 	ret = cm_init_av_by_path(param->primary_path,
 				 param->ppath_sgid_attr, &av);
 	if (ret)
 		return ret;
 	if (param->alternate_path) {
+		/*取备选路径对应的cm_av*/
 		ret = cm_init_av_by_path(param->alternate_path, NULL,
 					 &alt_av);
 		if (ret) {

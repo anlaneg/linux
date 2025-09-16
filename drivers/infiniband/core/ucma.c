@@ -1129,7 +1129,7 @@ static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 	}
 
 	mutex_lock(&ctx->mutex);
-	ret = rdma_connect_ece(ctx->cm_id, &conn_param, &ece);
+	ret = rdma_connect_ece(ctx->cm_id, &conn_param, &ece);/*执行connect*/
 	mutex_unlock(&ctx->mutex);
 	ucma_put_ctx(ctx);
 	return ret;

@@ -374,9 +374,9 @@ union cma_ip_addr {
 struct cma_hdr {
 	u8 cma_version;
 	u8 ip_version;	/* IP version: 7:4 */
-	__be16 port;
-	union cma_ip_addr src_addr;
-	union cma_ip_addr dst_addr;
+	__be16 port;/*源PORT*/
+	union cma_ip_addr src_addr;/*源地址*/
+	union cma_ip_addr dst_addr;/*目的地址*/
 };
 
 #define CMA_VERSION 0x00
@@ -423,7 +423,7 @@ static inline u8 cma_get_ip_ver(const struct cma_hdr *hdr)
 	return hdr->ip_version >> 4;
 }
 
-static void cma_set_ip_ver(struct cma_hdr *hdr, u8 ip_ver)
+static void cma_set_ip_ver(struct cma_hdr *hdr, u8 ip_ver/*IP版本,占高4位*/)
 {
 	hdr->ip_version = (ip_ver << 4) | (hdr->ip_version & 0xF);
 }
@@ -1943,6 +1943,7 @@ err:
 
 static inline u8 cma_user_data_offset(struct rdma_id_private *id_priv)
 {
+	/*如果非ib,则私有数据需要先跳过一个cma_hdr结构体*/
 	return cma_family(id_priv) == AF_IB ? 0 : sizeof(struct cma_hdr);
 }
 
@@ -2513,9 +2514,10 @@ net_dev_put:
 __be64 rdma_get_service_id(struct rdma_cm_id *id, struct sockaddr *addr)
 {
 	if (addr->sa_family == AF_IB)
+		/*IB时*/
 		return ((struct sockaddr_ib *) addr)->sib_sid;
 
-	return cpu_to_be64(((u64)id->ps << 16) + be16_to_cpu(cma_port(addr)));
+	return cpu_to_be64(((u64)id->ps << 16) + be16_to_cpu(cma_port(addr)));/*非IB时,使用PORT信息*/
 }
 EXPORT_SYMBOL(rdma_get_service_id);
 
@@ -4270,12 +4272,13 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 }
 EXPORT_SYMBOL(rdma_bind_addr);
 
+/*此函数仅支持ipv4,ipv6,故按cma_user_data_offset函数约定,私有数据前有一个cma_hdr结构体*/
 static int cma_format_hdr(void *hdr, struct rdma_id_private *id_priv)
 {
 	struct cma_hdr *cma_hdr;
 
 	cma_hdr = hdr;
-	cma_hdr->cma_version = CMA_VERSION;
+	cma_hdr->cma_version = CMA_VERSION;/*设置版本*/
 	if (cma_family(id_priv) == AF_INET) {
 		struct sockaddr_in *src4, *dst4;
 
@@ -4423,6 +4426,7 @@ out:
 	return ret;
 }
 
+/*IB connect处理*/
 static int cma_connect_ib(struct rdma_id_private *id_priv,
 			  struct rdma_conn_param *conn_param)
 {
@@ -4436,52 +4440,53 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 	memset(&req, 0, sizeof req);/*结构体清零*/
 	offset = cma_user_data_offset(id_priv);
 	if (check_add_overflow(offset, conn_param->private_data_len, &req.private_data_len))
-		return -EINVAL;
+		return -EINVAL;/*数字过大,发生overflow*/
 
 	if (req.private_data_len) {
-		/*申请私有数据长度*/
+		/*申请私有数据*/
 		private_data = kzalloc(req.private_data_len, GFP_ATOMIC);
 		if (!private_data)
 			return -ENOMEM;
 	} else {
-		private_data = NULL;
+		private_data = NULL;/*无私有数据*/
 	}
 
 	if (conn_param->private_data && conn_param->private_data_len)
 		memcpy(private_data + offset, conn_param->private_data,
-		       conn_param->private_data_len);/*填写私有数据*/
+		       conn_param->private_data_len);/*复制私有数据到新申请的位置*/
 
+	/*创建ib_cm_id*/
 	id = ib_create_cm_id(id_priv->id.device, cma_ib_handler, id_priv);
 	if (IS_ERR(id)) {
 		ret = PTR_ERR(id);
 		goto out;
 	}
-	id_priv->cm_id.ib = id;
+	id_priv->cm_id.ib = id;/*设置其对应的ib_cm_id*/
 
 	route = &id_priv->id.route;
 	if (private_data) {
-		ret = cma_format_hdr(private_data, id_priv);
+		ret = cma_format_hdr(private_data, id_priv);/*设置私有数据中的cma_hdr*/
 		if (ret)
 			goto out;
-		req.private_data = private_data;
+		req.private_data = private_data;/*设置私有数据*/
 	}
 
 	req.primary_path = &route->path_rec[0];
 	req.primary_path_inbound = route->path_rec_inbound;
 	req.primary_path_outbound = route->path_rec_outbound;
 	if (route->num_pri_alt_paths == 2)
-		req.alternate_path = &route->path_rec[1];
+		req.alternate_path = &route->path_rec[1];/*如果是2,则设置备选PATH*/
 
 	req.ppath_sgid_attr = id_priv->id.route.addr.dev_addr.sgid_attr;
 	/* Alternate path SGID attribute currently unsupported */
-	req.service_id = rdma_get_service_id(&id_priv->id, cma_dst_addr(id_priv));
-	req.qp_num = id_priv->qp_num;
-	req.qp_type = id_priv->id.qp_type;
-	req.starting_psn = id_priv->seq_num;
+	req.service_id = rdma_get_service_id(&id_priv->id, cma_dst_addr(id_priv));/*设置service_id*/
+	req.qp_num = id_priv->qp_num;/*设置QPN*/
+	req.qp_type = id_priv->id.qp_type;/*设置QP类型*/
+	req.starting_psn = id_priv->seq_num;/*设置起始psn*/
 	req.responder_resources = conn_param->responder_resources;
 	req.initiator_depth = conn_param->initiator_depth;
 	req.flow_control = conn_param->flow_control;
-	req.retry_count = min_t(u8, 7, conn_param->retry_count);
+	req.retry_count = min_t(u8, 7, conn_param->retry_count);/*设置重试次数*/
 	req.rnr_retry_count = min_t(u8, 7, conn_param->rnr_retry_count);
 	req.remote_cm_response_timeout = CMA_CM_RESPONSE_TIMEOUT;
 	req.local_cm_response_timeout = CMA_CM_RESPONSE_TIMEOUT;
@@ -4491,7 +4496,7 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 	req.ece.attr_mod = id_priv->ece.attr_mod;
 
 	trace_cm_send_req(id_priv);
-	/*发送cm请求*/
+	/*发送cm 连接请求*/
 	ret = ib_send_cm_req(id_priv->cm_id.ib, &req);
 out:
 	if (ret && !IS_ERR(id)) {
@@ -4569,6 +4574,7 @@ int rdma_connect_locked(struct rdma_cm_id *id,
 	/*上一个状态为RDMA_CM_ROUTE_RESOLVED,当前状态更新为RDMA_CM_CONNECT*/
 
 	if (!id->qp) {
+		/*id还未设置QP,先设置QPN*/
 		id_priv->qp_num = conn_param->qp_num;
 		id_priv->srq = conn_param->srq;
 	}
@@ -4581,6 +4587,7 @@ int rdma_connect_locked(struct rdma_cm_id *id,
 			/*其它类型的QP连接处理*/
 			ret = cma_connect_ib(id_priv, conn_param);
 	} else if (rdma_cap_iw_cm(id->device, id->port_num)) {
+		/*IWARP支持处理*/
 		ret = cma_connect_iw(id_priv, conn_param);
 	} else {
 		ret = -ENOSYS;

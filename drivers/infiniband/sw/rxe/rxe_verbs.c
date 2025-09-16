@@ -1007,12 +1007,13 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 		/* Utilize process context to do protocol processing */
 		rxe_sched_task(&qp->send_task);
 	} else {
+		/*kernel中直接调用post_send*/
 		err = rxe_post_send_kernel(qp, wr, bad_wr);
 		if (err)
 			return err;
 	}
 
-	return 0;
+	return 0;/*成功发送*/
 }
 
 /* recv wr */

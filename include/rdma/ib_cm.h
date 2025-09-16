@@ -291,7 +291,7 @@ typedef int (*ib_cm_handler)(struct ib_cm_id *cm_id,
 			     const struct ib_cm_event *event);
 
 struct ib_cm_id {
-	ib_cm_handler		cm_handler;
+	ib_cm_handler		cm_handler;/*cm处理函数,例如:cma_ib_handler*/
 	void			*context;
 	struct ib_device	*device;
 	__be64			service_id;
@@ -348,17 +348,17 @@ struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
 				     __be64 service_id);
 
 struct ib_cm_req_param {
-	struct sa_path_rec	*primary_path;
+	struct sa_path_rec	*primary_path;/*主路径*/
 	struct sa_path_rec	*primary_path_inbound;
 	struct sa_path_rec	*primary_path_outbound;
-	struct sa_path_rec	*alternate_path;
+	struct sa_path_rec	*alternate_path;/*备选路径*/
 	const struct ib_gid_attr *ppath_sgid_attr;
 	__be64			service_id;
 	u32			qp_num;
 	enum ib_qp_type		qp_type;
 	u32			starting_psn;
-	const void		*private_data;
-	u8			private_data_len;/*私有数据长度*/
+	const void		*private_data;/*私有数据(非IB时,会有一个cma_hdr结构体在最前面)*/
+	u8			private_data_len;/*私有数据长度(如为0,则无私有数据)*/
 	u8			responder_resources;
 	u8			initiator_depth;
 	u8			remote_cm_response_timeout;

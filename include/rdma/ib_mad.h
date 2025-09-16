@@ -463,7 +463,7 @@ struct ib_mad_notice_attr {
  * beyond data_len is padding.
  */
 struct ib_mad_send_buf {
-	struct ib_mad_send_buf	*next;
+	struct ib_mad_send_buf	*next;/*指向下一个待发送的buf*/
 	void			*mad;
 	struct ib_mad_agent	*mad_agent;
 	struct ib_ah		*ah;

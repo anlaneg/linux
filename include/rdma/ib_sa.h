@@ -162,7 +162,7 @@ struct sa_path_rec_opa {
 
 struct sa_path_rec {
 	union ib_gid dgid;
-	union ib_gid sgid;
+	union ib_gid sgid;/*源gid*/
 	__be64       service_id;
 	/* reserved */
 	__be32       flow_label;
@@ -185,7 +185,7 @@ struct sa_path_rec {
 		struct sa_path_rec_roce roce;
 		struct sa_path_rec_opa opa;
 	};
-	enum sa_path_rec_type rec_type;/*roce类型*/
+	enum sa_path_rec_type rec_type;/*协议封装类型,例如roceV1,rocev2,ib*/
 	u32 flags;
 };
 

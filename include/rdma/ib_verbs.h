@@ -153,7 +153,7 @@ struct ib_gid_attr {
 	union ib_gid		gid;/*gid*/
 	enum ib_gid_type	gid_type;/*gid的类型，ib传输类型（ib,rocev1,rocev2)*/
 	u16			index;/*gid对应的索引*/
-	u32			port_num;
+	u32			port_num;/*ib设备对应的port number*/
 };
 
 enum {
@@ -1421,7 +1421,7 @@ struct ib_send_wr {
     /*用于串连wr，构体wrlist*/
 	struct ib_send_wr      *next;
 	union {
-	    /*所属的wrlist*/
+	    /*指明此wr对应的ID*/
 		u64		wr_id;
 		struct ib_cqe	*wr_cqe;
 	};
@@ -1464,7 +1464,7 @@ static inline const struct ib_atomic_wr *atomic_wr(const struct ib_send_wr *wr)
 }
 
 struct ib_ud_wr {
-	struct ib_send_wr	wr;
+	struct ib_send_wr	wr;/*将来直接由post_send发送的wr*/
 	struct ib_ah		*ah;
 	void			*header;
 	int			hlen;
@@ -2269,7 +2269,7 @@ struct ib_port_cache {
 	u64		      subnet_prefix;
 	/*pkey表,各index有一个对应的pkey*/
 	struct ib_pkey_cache  *pkey;
-	/*gid表*/
+	/*此PORT对应的gid表*/
 	struct ib_gid_table   *gid;
 	u8                     lmc;
 	enum ib_port_state     port_state;
@@ -3274,7 +3274,7 @@ static inline u32 rdma_start_port(const struct ib_device *device)
  * @device - The struct ib_device * to iterate over
  * @iter - The unsigned int to store the port number
  */
-//遍历ib device的所有port
+//遍历ib_device的所有port
 #define rdma_for_each_port(device, iter/*索引变量*/)                                       \
 	for (iter = rdma_start_port(device +				       \
 				    BUILD_BUG_ON_ZERO(!__same_type(u32,	       \
@@ -3459,7 +3459,7 @@ static inline bool rdma_cap_ib_smi(const struct ib_device *device, u32 port_num)
  */
 static inline bool rdma_cap_ib_cm(const struct ib_device *device, u32 port_num)
 {
-	/*检查此ib是否有ib-cm能力*/
+	/*检查此ib的port_num是否有ib-cm能力*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 	       RDMA_CORE_CAP_IB_CM;
 }
@@ -3479,7 +3479,7 @@ static inline bool rdma_cap_ib_cm(const struct ib_device *device, u32 port_num)
 static inline bool rdma_cap_iw_cm(const struct ib_device *device, u32 port_num)
 {
 	return device->port_data[port_num].immutable.core_cap_flags &
-	       RDMA_CORE_CAP_IW_CM;
+	       RDMA_CORE_CAP_IW_CM;/*是否支持IWARP*/
 }
 
 /**

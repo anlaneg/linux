@@ -1078,12 +1078,13 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 		list = &qp_info->send_queue.list;
 	} else {
 		ret = 0;
-		list = &qp_info->overflow_list;
+		list = &qp_info->overflow_list;/*send_queue中长度过大,存在overflow_list中*/
 	}
 
 	if (!ret) {
+		/*成功提交到queue中*/
 		qp_info->send_queue.count++;
-		list_add_tail(&mad_send_wr->mad_list.list, list);
+		list_add_tail(&mad_send_wr->mad_list.list, list);/*加入到list中*/
 	}
 	spin_unlock_irqrestore(&qp_info->send_queue.lock, flags);
 	if (ret) {
@@ -1276,7 +1277,7 @@ static bool mad_is_for_backlog(struct ib_mad_send_wr_private *mad_send_wr)
  *  with the registered client
  */
 int ib_post_send_mad(struct ib_mad_send_buf *send_buf/*待发送的消息*/,
-		     struct ib_mad_send_buf **bad_send_buf)
+		     struct ib_mad_send_buf **bad_send_buf/*出参,发送失败的buffer*/)
 {
 	struct ib_mad_agent_private *mad_agent_priv;
 	struct ib_mad_send_buf *next_send_buf;
@@ -1286,6 +1287,7 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf/*待发送的消息*/,
 
 	/* Walk list of send WRs and post each on send list */
 	for (; send_buf; send_buf = next_send_buf) {
+		/*由ib_mad_send_buf指针,获得ib_mad_send_wr_private指针*/
 		mad_send_wr = container_of(send_buf,
 					   struct ib_mad_send_wr_private,
 					   send_buf);
@@ -1352,7 +1354,7 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf/*待发送的消息*/,
 			if (ret >= 0 && ret != IB_RMPP_RESULT_CONSUMED)
 				ret = ib_send_mad(mad_send_wr);
 		} else
-			ret = ib_send_mad(mad_send_wr);/*发送此mad*/
+			ret = ib_send_mad(mad_send_wr);/*发送此mad_send_wr*/
 		if (ret < 0) {
 			/* Fail send request */
 			spin_lock_irqsave(&mad_agent_priv->lock, flags);

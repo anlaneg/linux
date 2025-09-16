@@ -60,10 +60,10 @@ union ib_gid zgid;
 EXPORT_SYMBOL(zgid);
 
 enum gid_attr_find_mask {
-	GID_ATTR_FIND_MASK_GID          = 1UL << 0,
-	GID_ATTR_FIND_MASK_NETDEV	= 1UL << 1,
-	GID_ATTR_FIND_MASK_DEFAULT	= 1UL << 2,
-	GID_ATTR_FIND_MASK_GID_TYPE	= 1UL << 3,
+	GID_ATTR_FIND_MASK_GID          = 1UL << 0,/*按gid进行比对*/
+	GID_ATTR_FIND_MASK_NETDEV	= 1UL << 1,/*按ndev进行比对*/
+	GID_ATTR_FIND_MASK_DEFAULT	= 1UL << 2,/*依据是否default进行对比*/
+	GID_ATTR_FIND_MASK_GID_TYPE	= 1UL << 3,/*按gid_type进行对比*/
 };
 
 enum gid_table_entry_state {
@@ -94,7 +94,7 @@ struct ib_gid_table_entry {
 	 * ndev_storage is freed by rcu callback.
 	 */
 	struct roce_gid_ndev_storage	*ndev_storage;
-	enum gid_table_entry_state	state;
+	enum gid_table_entry_state	state;/*gid状态*/
 };
 
 struct ib_gid_table {
@@ -120,9 +120,8 @@ struct ib_gid_table {
 	rwlock_t			rwlock;
 	/*entry指针数组，sz指定了数组大小*/
 	struct ib_gid_table_entry	**data_vec;
-	/*一个port支持多种roce封装，这里每个bit指出各封装的index*/
 	/* bit field, each bit indicates the index of default GID */
-	u32				default_gid_indices;
+	u32				default_gid_indices;/*利用bit指明哪个INDEX GID是默认gid*/
 };
 
 static void dispatch_gid_change_event(struct ib_device *ib_dev, u32 port)
@@ -174,6 +173,7 @@ EXPORT_SYMBOL(rdma_is_zero_gid);
 static bool is_gid_index_default(const struct ib_gid_table *table,
 				 unsigned int index)
 {
+	/*检查INDEX号gid是否为default gid?*/
 	return index < 32 && (BIT(index) & table->default_gid_indices);
 }
 
@@ -480,15 +480,15 @@ done:
 
 /* rwlock should be read locked, or lock should be held */
 static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
-		    const struct ib_gid_attr *val, bool default_gid,
-		    unsigned long mask, int *pempty)
+		    const struct ib_gid_attr *val, bool default_gid/*是否查找default的*/,
+		    unsigned long mask/*匹配方式*/, int *pempty)
 {
 	int i = 0;
 	int found = -1;
 	int empty = pempty ? -1 : 0;
 
 	while (i < table->sz && (found < 0 || empty < 0)) {
-		struct ib_gid_table_entry *data = table->data_vec[i];
+		struct ib_gid_table_entry *data = table->data_vec[i];/*取I号表项*/
 		struct ib_gid_attr *attr;
 		int curr_index = i;
 
@@ -500,9 +500,10 @@ static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
 		 * so lookup free slot only if requested.
 		 */
 		if (pempty && empty < 0) {
-			if (is_gid_entry_free(data)/*不存在*/&&
+			/*需要找一个空的,且空的还未找到,则进行下面的检查*/
+			if (is_gid_entry_free(data)/*data为NULL时,指表项为空*/&&
 			    default_gid ==
-				is_gid_index_default(table, curr_index)) {
+				is_gid_index_default(table, curr_index)/*按是否default比对,两者相等*/) {
 				/*
 				 * Found an invalid (free) entry; allocate it.
 				 * If default GID is requested, then our
@@ -511,7 +512,7 @@ static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
 				 * This ensures that only DEFAULT reserved
 				 * slots are used for default property GIDs.
 				 */
-				empty = curr_index;
+				empty = curr_index;/*此项为空*/
 			}
 		}
 
@@ -522,29 +523,29 @@ static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
 		 * invalid.
 		 */
 		if (!is_gid_entry_valid(data))
-			continue;
+			continue;/*跳过无效gid*/
 
 		if (found >= 0)
-			continue;
+			continue;/*之前已有匹配*/
 
 		attr = &data->attr;
 		if (mask & GID_ATTR_FIND_MASK_GID_TYPE &&
 		    attr->gid_type != val->gid_type)
-			continue;
+			continue;/*以GID_TYPE方式匹配时,两者不相等,忽略*/
 
 		if (mask & GID_ATTR_FIND_MASK_GID &&
 		    memcmp(gid, &data->attr.gid, sizeof(*gid)))
-			continue;
+			continue;/*以GID方式匹配时,两者不相等,忽略*/
 
 		if (mask & GID_ATTR_FIND_MASK_NETDEV &&
 		    attr->ndev != val->ndev)
-			continue;
+			continue;/*以ndev匹配时,两者不相等,忽略*/
 
 		if (mask & GID_ATTR_FIND_MASK_DEFAULT &&
 		    is_gid_index_default(table, curr_index) != default_gid)
-			continue;
+			continue;/*以是否default来检查,不相等,忽略*/
 
-		found = curr_index;
+		found = curr_index;/*命中此项*/
 	}
 
 	if (pempty)
@@ -1042,9 +1043,9 @@ EXPORT_SYMBOL(rdma_read_gid_hw_context);
  *
  */
 const struct ib_gid_attr *rdma_find_gid(struct ib_device *device,
-					const union ib_gid *gid,
-					enum ib_gid_type gid_type,
-					struct net_device *ndev)
+					const union ib_gid *gid/*需要保证gid相等*/,
+					enum ib_gid_type gid_type/*需要保证gid_type相等*/,
+					struct net_device *ndev/*如不为空,则也需要保证ndev相等*/)
 {
 	unsigned long mask = GID_ATTR_FIND_MASK_GID |
 			     GID_ATTR_FIND_MASK_GID_TYPE;
@@ -1054,6 +1055,7 @@ const struct ib_gid_attr *rdma_find_gid(struct ib_device *device,
 	if (ndev)
 		mask |= GID_ATTR_FIND_MASK_NETDEV;
 
+	/*遍历此IB设备所有PORT*/
 	rdma_for_each_port(device, p) {
 		struct ib_gid_table *table;
 		unsigned long flags;
@@ -1061,8 +1063,10 @@ const struct ib_gid_attr *rdma_find_gid(struct ib_device *device,
 
 		table = device->port_data[p].cache.gid;/*取device中对应port的gid table*/
 		read_lock_irqsave(&table->rwlock, flags);
+		/*查gid,gid_type,ndev一致的索引*/
 		index = find_gid(table, gid, &gid_attr_val, false, mask, NULL);
 		if (index >= 0) {
+			/*有匹配,取命中的结果(attr),并返回*/
 			const struct ib_gid_attr *attr;
 
 			get_gid_entry(table->data_vec[index]);
@@ -1073,7 +1077,7 @@ const struct ib_gid_attr *rdma_find_gid(struct ib_device *device,
 		read_unlock_irqrestore(&table->rwlock, flags);
 	}
 
-	return ERR_PTR(-ENOENT);
+	return ERR_PTR(-ENOENT);/*无命中*/
 }
 EXPORT_SYMBOL(rdma_find_gid);
 
@@ -1127,11 +1131,11 @@ int ib_find_cached_pkey(struct ib_device *device, u32 port_num,
 	int partial_ix = -1;
 
 	if (!rdma_is_port_valid(device, port_num))
-		return -EINVAL;
+		return -EINVAL;/*无效port_num*/
 
 	read_lock_irqsave(&device->cache_lock, flags);
 
-	/*取得cache*/
+	/*取得cache的pkey*/
 	cache = device->port_data[port_num].cache.pkey;
 	if (!cache) {
 		ret = -EINVAL;

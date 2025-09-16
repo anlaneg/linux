@@ -82,7 +82,7 @@ struct rdma_id_private {
 	struct ib_sa_query	*query;
 	int			query_id;
 	union {
-		struct ib_cm_id	*ib;
+		struct ib_cm_id	*ib;/*关联对应的ib_cm_id结构体*/
 		struct iw_cm_id	*iw;
 	} cm_id;
 
@@ -90,7 +90,7 @@ struct rdma_id_private {
 	u32			qkey;
 	u32			qp_num;/*QP编号*/
 	u32			options;/*选项标记*/
-	u8			srq;
+	u8			srq;/*connect时指明是否share recv queue*/
 	u8			tos;/*配置的tos值*/
 	u8			tos_set:1;/*指明是否配置了tos值*/
 	u8                      timeout_set:1;/*指明是否配置了timeout*/
