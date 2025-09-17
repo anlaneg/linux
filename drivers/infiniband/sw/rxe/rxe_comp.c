@@ -458,7 +458,7 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	if (post)
 		make_send_cqe(qp, wqe, &cqe);/*构建cqe*/
 
-	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*消费者队列前移一位*/
+	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*此WQE已被确认,消费者队列前移一位(后续重传就不考虑这个wqe了)*/
 
 	if (post)
 		/*将构建的cqe入队到scq*/

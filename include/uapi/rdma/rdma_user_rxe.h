@@ -168,13 +168,13 @@ struct rxe_send_wqe {
 	__u32			status;
 	__u32			state;
 	__aligned_u64		iova;
-	__u32			mask;
+	__u32			mask;/*动态变化,在发送时记录opcode对应的mask*/
 	__u32			first_psn;/*此wqe被发送时首包对应的psn(packet send number)*/
 	__u32			last_psn;/*此wqe被发送时尾包对应的psn*/
 	__u32			ack_length;
 	__u32			ssn;/*此send wqe关联的全局唯一number*/
 	__u32			has_rd_atomic;
-	struct rxe_dma_info	dma;/*数据*/
+	struct rxe_dma_info	dma;/*记录数据发送过程中的位置情况*/
 };
 
 struct rxe_recv_wqe {

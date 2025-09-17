@@ -112,7 +112,7 @@ struct rxe_req_info {
 	atomic_t		rd_atomic;
 	int			wait_fence;
 	int			need_rd_atomic;
-	int			wait_psn;/*指明有等待psn(需要发送，但窗口已满）*/
+	int			wait_psn;/*指明在等待psn(有wqe需要发送，但未确认窗口已满）*/
 	int			need_retry;/*指明请求是否需要重传*/
 	int			wait_for_rnr_timer;
 	/*记录截止上次已没有添加ack报文的数目（实现每隔N个报文打一次ack标记)*/
@@ -244,7 +244,7 @@ struct rxe_qp {
 	struct ib_qp		ibqp;
 	struct rxe_pool_elem	elem;
 	struct ib_qp_attr	attr;
-	/*标记qp是否有效*/
+	/*标记qp是否有效(为1时有效)*/
 	unsigned int		valid;
 	unsigned int		mtu;
 	/*是否为用户态创建的qp（有些qp是kernel创建的，就好比有些socket是kernel创建的一样）*/

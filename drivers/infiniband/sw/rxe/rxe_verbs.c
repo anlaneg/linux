@@ -995,7 +995,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 	}
 
 	if (unlikely(qp_state(qp) < IB_QPS_RTS)) {
-		/*qp状态还未准备好，返回无效参数*/
+		/*qp状态还未准备好(不能发送)，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		*bad_wr = wr;
 		rxe_err_qp(qp, "qp not ready to send\n");
@@ -1005,9 +1005,9 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 
 	if (qp->is_user) {
 		/* Utilize process context to do protocol processing */
-		rxe_sched_task(&qp->send_task);
+		rxe_sched_task(&qp->send_task);/*用户态创建的QP,由系统调用进入,触发发包task*/
 	} else {
-		/*kernel中直接调用post_send*/
+		/*kernel space创建的qp,此时send_wqe还未入队,采用直接调用post_send*/
 		err = rxe_post_send_kernel(qp, wr, bad_wr);
 		if (err)
 			return err;

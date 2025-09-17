@@ -299,6 +299,7 @@ struct ib_cm_id {
 	enum ib_cm_lap_state	lap_state;	/* internal CM/debug use */
 	__be32			local_id;
 	__be32			remote_id;
+	/*远端CM QPN为1*/
 	u32			remote_cm_qpn;  /* 1 unless redirected */
 };
 

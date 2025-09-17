@@ -408,7 +408,7 @@ int rxe_qp_from_init(struct rxe_dev *rxe, struct rxe_qp *qp, struct rxe_pd *pd,
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	qp->attr.qp_state = IB_QPS_RESET;
-	qp->valid = 1;
+	qp->valid = 1;/*标记此QP有效*/
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
 	return 0;

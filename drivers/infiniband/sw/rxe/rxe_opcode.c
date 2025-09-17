@@ -11,7 +11,7 @@
 /* useful information about work request opcodes and pkt opcodes in
  * table form
  */
-struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
+struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {/*记录不同OPCODE在不同qp TYPE下对应的MASK信息*/
 	[IB_WR_RDMA_WRITE]				= {
 		.name	= "IB_WR_RDMA_WRITE",
 		.mask	= {

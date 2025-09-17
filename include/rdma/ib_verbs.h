@@ -992,7 +992,7 @@ enum ib_wc_status {
 	IB_WC_LOC_QP_OP_ERR,
 	IB_WC_LOC_EEC_OP_ERR,
 	IB_WC_LOC_PROT_ERR,
-	IB_WC_WR_FLUSH_ERR,
+	IB_WC_WR_FLUSH_ERR,/*当前 Work Request 所在的发送队列（Send Queue）被强制刷新（flushed），导致该 WR 未能正常执行。*/
 	IB_WC_MW_BIND_ERR,
 	IB_WC_BAD_RESP_ERR,
 	IB_WC_LOC_ACCESS_ERR,
@@ -1399,7 +1399,7 @@ enum ib_send_flags {
 	IB_SEND_FENCE		= 1,
 	IB_SEND_SIGNALED	= (1<<1),
 	IB_SEND_SOLICITED	= (1<<2),
-	IB_SEND_INLINE		= (1<<3),
+	IB_SEND_INLINE		= (1<<3),/*标记wr中待发送的数据直接存在inline data中*/
 	IB_SEND_IP_CSUM		= (1<<4),
 
 	/* reserve bits 26-31 for low level drivers' internal use */
@@ -1470,7 +1470,7 @@ struct ib_ud_wr {
 	void			*header;
 	int			hlen;
 	int			mss;
-	u32			remote_qpn;
+	u32			remote_qpn;/*设置远端qpn*/
 	u32			remote_qkey;
 	u16			pkey_index; /* valid for GSI only */
 	u32			port_num; /* valid for DR SMPs on switch only */

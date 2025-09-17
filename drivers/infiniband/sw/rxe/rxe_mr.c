@@ -627,6 +627,7 @@ enum resp_states rxe_mr_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value)
 	return RESPST_NONE;
 }
 
+/*由于dma->sge[dma->cur_sge]位置的buffer已有length长度被发送了,更新dma->cur_sge,dma->sge_offset,dma->resid*/
 int advance_dma_data(struct rxe_dma_info *dma, unsigned int length)
 {
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
@@ -637,6 +638,7 @@ int advance_dma_data(struct rxe_dma_info *dma, unsigned int length)
 		unsigned int bytes;
 
 		if (offset >= sge->length) {
+			/*offset要大于sge->length,则跳sge索引*/
 			sge++;
 			dma->cur_sge++;
 			offset = 0;

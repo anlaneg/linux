@@ -728,7 +728,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	build_smp_wc(mad_agent_priv->agent.qp,
 		     send_wr->wr.wr_cqe, drslid,
 		     send_wr->pkey_index,
-		     send_wr->port_num, &mad_wc);
+		     send_wr->port_num, &mad_wc);/*设置mad_wc*/
 
 	if (opa && smp->base_version == OPA_MGMT_BASE_VERSION) {
 		mad_wc.byte_len = mad_send_wr->send_buf.hdr_len
@@ -884,7 +884,7 @@ struct ib_mad_send_buf *ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	bool opa;
 
 	mad_agent_priv = container_of(mad_agent, struct ib_mad_agent_private,
-				      agent);
+				      agent);/*由mad_agent获得对应的结构ib_mad_agent_private*/
 
 	opa = rdma_cap_opa_mad(mad_agent->device, mad_agent->port_num);
 
@@ -906,20 +906,21 @@ struct ib_mad_send_buf *ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	size = rmpp_active ? hdr_len : mad_size;
 	buf = kzalloc(sizeof *mad_send_wr + size, gfp_mask);
 	if (!buf)
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);/*申请buf*/
 
 	mad_send_wr = buf + size;
 	INIT_LIST_HEAD(&mad_send_wr->rmpp_list);
-	mad_send_wr->send_buf.mad = buf;
+	mad_send_wr->send_buf.mad = buf;/*设置消息起始位置*/
 	mad_send_wr->send_buf.hdr_len = hdr_len;
 	mad_send_wr->send_buf.data_len = data_len;
 	mad_send_wr->pad = pad;
 
 	mad_send_wr->mad_agent_priv = mad_agent_priv;
-	mad_send_wr->sg_list[0].length = hdr_len;
+	mad_send_wr->sg_list[0].length = hdr_len;/*第一片是header*/
 	mad_send_wr->sg_list[0].lkey = mad_agent->qp->pd->local_dma_lkey;
 
 	/* OPA MADs don't have to be the full 2048 bytes */
+	/*第二片长度*/
 	if (opa && base_version == OPA_MGMT_BASE_VERSION &&
 	    data_len < mad_size - hdr_len)
 		mad_send_wr->sg_list[1].length = data_len;
@@ -931,11 +932,11 @@ struct ib_mad_send_buf *ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	mad_send_wr->mad_list.cqe.done = ib_mad_send_done;
 
 	mad_send_wr->send_wr.wr.wr_cqe = &mad_send_wr->mad_list.cqe;
-	mad_send_wr->send_wr.wr.sg_list = mad_send_wr->sg_list;
-	mad_send_wr->send_wr.wr.num_sge = 2;
-	mad_send_wr->send_wr.wr.opcode = IB_WR_SEND;
-	mad_send_wr->send_wr.wr.send_flags = IB_SEND_SIGNALED;
-	mad_send_wr->send_wr.remote_qpn = remote_qpn;
+	mad_send_wr->send_wr.wr.sg_list = mad_send_wr->sg_list;/*设置待发送的列表*/
+	mad_send_wr->send_wr.wr.num_sge = 2;/*如上示,共有两个sge*/
+	mad_send_wr->send_wr.wr.opcode = IB_WR_SEND;/*采用send方式*/
+	mad_send_wr->send_wr.wr.send_flags = IB_SEND_SIGNALED;/*发送成功需要触发发送cqe*/
+	mad_send_wr->send_wr.remote_qpn = remote_qpn;/*设置远端qpn*/
 	mad_send_wr->send_wr.remote_qkey = IB_QP_SET_QKEY;
 	mad_send_wr->send_wr.pkey_index = pkey_index;
 
@@ -1047,19 +1048,20 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
 	sge = mad_send_wr->sg_list;
-	/*获得dma地址*/
+	/*获得第一片dma地址*/
 	sge[0].addr = ib_dma_map_single(mad_agent->device,
-					mad_send_wr->send_buf.mad,
-					sge[0].length,
+					mad_send_wr->send_buf.mad,/*第一片起始地址*/
+					sge[0].length,/*第一片长度*/
 					DMA_TO_DEVICE);
 	if (unlikely(ib_dma_mapping_error(mad_agent->device, sge[0].addr)))
 		return -ENOMEM;
 
 	mad_send_wr->header_mapping = sge[0].addr;
 
+	/*获得第二片dma地址(这样mad_send_wr->send_wr.wr就完全填充全了)*/
 	sge[1].addr = ib_dma_map_single(mad_agent->device,
-					ib_get_payload(mad_send_wr),
-					sge[1].length,
+					ib_get_payload(mad_send_wr),/*第二片起始地址*/
+					sge[1].length,/*第二片长度*/
 					DMA_TO_DEVICE);
 	if (unlikely(ib_dma_mapping_error(mad_agent->device, sge[1].addr))) {
 		ib_dma_unmap_single(mad_agent->device,
@@ -1071,6 +1073,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 
 	spin_lock_irqsave(&qp_info->send_queue.lock, flags);
 	if (qp_info->send_queue.count < qp_info->send_queue.max_active) {
+		/*未达到最大值,直接发送*/
 		trace_ib_mad_ib_send_mad(mad_send_wr, qp_info);
 		/*向qp准备需要发送的wr*/
 		ret = ib_post_send(mad_agent->qp, &mad_send_wr->send_wr.wr,
@@ -2811,7 +2814,7 @@ static void local_completions(struct work_struct *work)
 				     local->mad_send_wr->send_wr.wr.wr_cqe,
 				     be16_to_cpu(IB_LID_PERMISSIVE),
 				     local->mad_send_wr->send_wr.pkey_index,
-				     recv_mad_agent->agent.port_num, &wc);
+				     recv_mad_agent->agent.port_num, &wc);/*设置WC*/
 
 			local->mad_priv->header.recv_wc.wc = &wc;
 

@@ -464,7 +464,7 @@ struct ib_mad_notice_attr {
  */
 struct ib_mad_send_buf {
 	struct ib_mad_send_buf	*next;/*指向下一个待发送的buf*/
-	void			*mad;
+	void			*mad;/*待发送的内容*/
 	struct ib_mad_agent	*mad_agent;
 	struct ib_ah		*ah;
 	void			*context[2];

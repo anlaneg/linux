@@ -1302,6 +1302,7 @@ struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
 				struct ib_udata *udata,
 				struct ib_uqp_object *uobj, const char *caller)
 {
+	//注:用户态利用此函数创建QP
 	struct ib_qp *qp, *xrc_qp;
 
 	if (attr->qp_type == IB_QPT_XRC_TGT)
@@ -1354,7 +1355,7 @@ void ib_qp_usecnt_dec(struct ib_qp *qp)
 }
 EXPORT_SYMBOL(ib_qp_usecnt_dec);
 
-/*用于kernel创建qp*/
+/*用于kernel space创建qp*/
 struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 				  struct ib_qp_init_attr *qp_init_attr,
 				  const char *caller)
@@ -1372,8 +1373,8 @@ struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 	if (qp_init_attr->cap.max_rdma_ctxs)
 		rdma_rw_init_qp(device, qp_init_attr);
 
-	/*创建qp*/
-	qp = create_qp(device, pd, qp_init_attr, NULL, NULL, caller);
+	/*创建qp,注:置udata为空(当前通过此项来检查是否KERNEL创建的qp)*/
+	qp = create_qp(device, pd, qp_init_attr, NULL/*置udata为空*/, NULL, caller);
 	if (IS_ERR(qp))
 		return qp;
 

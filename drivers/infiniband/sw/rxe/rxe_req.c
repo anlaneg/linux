@@ -14,27 +14,30 @@ static int next_opcode(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       u32 opcode);
 
 static inline void retry_first_write_send(struct rxe_qp *qp,
-					  struct rxe_send_wqe *wqe, int npsn)
+					  struct rxe_send_wqe *wqe, int npsn/*报数*/)
 {
 	int i;
 
+	/*遍历已ACK的包,更新wqe->dma的重传位置*/
 	for (i = 0; i < npsn; i++) {
+		/*此WQE的待发送长度如果比MTU大,则此片长度必为mtu,否则此片长度为"待发送长度"*/
 		int to_send = (wqe->dma.resid > qp->mtu) ?
 				qp->mtu : wqe->dma.resid;
 
 		qp->req.opcode = next_opcode(qp, wqe,
-					     wqe->wr.opcode);
+					     wqe->wr.opcode);/*由于部分已被ACK,故更新opcode为next_opcode*/
 
 		if (wqe->wr.send_flags & IB_SEND_INLINE) {
+			/*inline型数据,直接更改*/
 			wqe->dma.resid -= to_send;
 			wqe->dma.sge_offset += to_send;
 		} else {
-			advance_dma_data(&wqe->dma, to_send);
+			advance_dma_data(&wqe->dma, to_send);/*to_send长度已被ack,更新wqe->dma重传起始位置*/
 		}
 	}
 }
 
-/*处理重传*/
+/*处理重传,针对ACK位置确定好重传的起始位置*/
 static void req_retry(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
@@ -47,23 +50,25 @@ static void req_retry(struct rxe_qp *qp)
 	unsigned int prod;
 
 	cons = queue_get_consumer(q, QUEUE_TYPE_FROM_CLIENT);/*从消费者首位置开始(此位置为首个未被ACK的WQE)*/
-	prod = queue_get_producer(q, QUEUE_TYPE_FROM_CLIENT);
+	prod = queue_get_producer(q, QUEUE_TYPE_FROM_CLIENT);/*结束位置为生产者开始位置*/
 
-	qp->req.wqe_index	= cons;/*待发送wqe位置设置从首个未ACK的位置开始重传*/
+	qp->req.wqe_index	= cons;/*重置待发送wqe位置,设置为从首个未ACK的位置开始重传*/
 	qp->req.psn		= qp->comp.psn;/*设置待重传的PSN编号*/
-	qp->req.opcode		= -1;/*上次OPCODE未知*/
+	qp->req.opcode		= -1;/*上次OPCODE更改为未知*/
 
+	/*我们是消费者,从消费者位置开始(收到ACK后消费者位置会更新,看do_complete),一直到生产者开始位置为止,均需要重传*/
 	for (wqe_index = cons; wqe_index != prod;
 			wqe_index = queue_next_index(q, wqe_index)) {
-		wqe = queue_addr_from_index(qp->sq.queue, wqe_index);/*取wqe*/
-		mask = wr_opcode_mask(wqe->wr.opcode, qp);
+		wqe = queue_addr_from_index(qp->sq.queue, wqe_index);/*取待重传的wqe*/
+		mask = wr_opcode_mask(wqe->wr.opcode, qp);/*取此wqe指明的opcode对应的mask*/
 
 		if (wqe->state == wqe_state_posted)
-			break;
+			break;/*需要重传的wqe一定是发送过的(),此wqe处于posted,则它还没有发送过,之后的wqe就不用都考虑重传了*/
 
 		if (wqe->state == wqe_state_done)
-			continue;
+			continue;/*这个WQE此时已被ACK,忽略,不重发它*/
 
+		/*设置wqe对应的iova地址*/
 		wqe->iova = (mask & WR_ATOMIC_MASK) ?
 			     wqe->wr.wr.atomic.remote_addr :
 			     (mask & WR_READ_OR_WRITE_MASK) ?
@@ -71,28 +76,30 @@ static void req_retry(struct rxe_qp *qp)
 			     0;
 
 		if (!first || (mask & WR_READ_MASK) == 0) {
+			/*是首个操作码(首片)或者为读操作,重置剩余长度,处理位置等*/
 			wqe->dma.resid = wqe->dma.length;
 			wqe->dma.cur_sge = 0;
 			wqe->dma.sge_offset = 0;
 		}
 
-		if (first) {
-			first = 0;
+		if (first) {/*首片还未处理*/
+			first = 0;/*指明首片接下来将被处理*/
 
 			if (mask & WR_WRITE_OR_SEND_MASK) {
 				npsn = (qp->comp.psn - wqe->first_psn) &
-					BTH_PSN_MASK;
-				retry_first_write_send(qp, wqe, npsn);
+					BTH_PSN_MASK;/*此wqe中可能一小片已收到了Ack,取已确认的长度*/
+				retry_first_write_send(qp, wqe, npsn);/*更新首片在wqe中的重传起始位置*/
 			}
 
 			if (mask & WR_READ_MASK) {
+				/*对于read操作,直接换算ACK包数*/
 				npsn = (wqe->dma.length - wqe->dma.resid) /
 					qp->mtu;
-				wqe->iova += npsn * qp->mtu;
+				wqe->iova += npsn * qp->mtu;/*变更IOVA地址*/
 			}
 		}
 
-		wqe->state = wqe_state_posted;
+		wqe->state = wqe_state_posted;/*重置成功,认定为此wqe入队完成时状态*/
 	}
 }
 
@@ -185,17 +192,17 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 	/*自qp中取一个rxe_send_wqe*/
 	wqe = __req_next_wqe(qp);
 	if (wqe == NULL)
-		return NULL;
+		return NULL;/*无可发送的wqe,返回NULL*/
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (unlikely((qp_state(qp) == IB_QPS_SQD) &&
 		     (wqe->state != wqe_state_processing))) {
 		spin_unlock_irqrestore(&qp->state_lock, flags);
-		return NULL;
+		return NULL;//????
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
-	wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
+	wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);/*取此opcode对应的mask*/
 	return wqe;
 }
 
@@ -690,23 +697,25 @@ int rxe_requester(struct rxe_qp *qp)
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if (unlikely(!qp->valid)) {
+		/*此QP无效,直接退出*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		goto exit;
 	}
 
 	if (unlikely(qp_state(qp) == IB_QPS_ERR)) {
-		/*QP状态有误*/
+		/*QP状态有误,取当前首个待发送的wqe,并置为*/
 		wqe = __req_next_wqe(qp);
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		if (wqe) {
-			wqe->status = IB_WC_WR_FLUSH_ERR;
+			wqe->status = IB_WC_WR_FLUSH_ERR;/*设置为flush err*/
 			goto err;
 		} else {
-			goto exit;
+			goto exit;/*队列为空,直接退出*/
 		}
 	}
 
 	if (unlikely(qp_state(qp) == IB_QPS_RESET)) {
+		/*QP处于reset状态,更新wqe索引等*/
 		qp->req.wqe_index = queue_get_consumer(q,
 						QUEUE_TYPE_FROM_CLIENT);
 		qp->req.opcode = -1;
@@ -735,7 +744,7 @@ int rxe_requester(struct rxe_qp *qp)
 	if (unlikely(!wqe))
 		goto exit;/*没有要发送的wqe,直接退出*/
 
-	if (rxe_wqe_is_fenced(qp, wqe)) {
+	if (rxe_wqe_is_fenced(qp, wqe)) {//???
 		qp->req.wait_fence = 1;
 		goto exit;
 	}
@@ -752,7 +761,7 @@ int rxe_requester(struct rxe_qp *qp)
 	if (unlikely(qp_type(qp) == IB_QPT_RC &&
 		psn_compare(qp->req.psn, (qp->comp.psn +
 				RXE_MAX_UNACKED_PSNS)) > 0)) {
-		/*超过最大未确认窗口大小，需要等待，退出*/
+		/*当前待发送的PSN超过最大未确认窗口大小，需要等待，退出*/
 		qp->req.wait_psn = 1;
 		goto exit;
 	}
@@ -797,10 +806,10 @@ int rxe_requester(struct rxe_qp *qp)
 			qp->req.psn = (qp->req.psn + 1) & BTH_PSN_MASK;
 			qp->req.opcode = IB_OPCODE_UD_SEND_ONLY;
 			qp->req.wqe_index = queue_next_index(qp->sq.queue,
-						       qp->req.wqe_index);
+						       qp->req.wqe_index);/*切到下个*/
 			wqe->state = wqe_state_done;
 			wqe->status = IB_WC_SUCCESS;
-			goto done;/*不实际发送,直接按成功处理*/
+			goto done;/*这个WQE待发送的数据长度超过MTU,不实际发送,直接按成功处理*/
 		}
 		payload = mtu;/*变更PAYLOAD为MTU*/
 	}
@@ -870,7 +879,7 @@ err:
 	/* update wqe_index for each wqe completion */
 	qp->req.wqe_index = queue_next_index(qp->sq.queue, qp->req.wqe_index);
 	wqe->state = wqe_state_error;
-	rxe_qp_error(qp);
+	rxe_qp_error(qp);/*QP状态置为ERROR*/
 exit:
 	ret = -EAGAIN;
 out:

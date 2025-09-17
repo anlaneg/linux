@@ -152,8 +152,8 @@ struct ib_mad_send_wr_private {
 	struct list_head agent_list;
 	struct ib_mad_agent_private *mad_agent_priv;
 	struct ib_mad_send_buf send_buf;
-	u64 header_mapping;
-	u64 payload_mapping;
+	u64 header_mapping;/*分两片发送时,sge[0]为header,此项记header映射的dma地址*/
+	u64 payload_mapping;/*分两片发送时,sge[1]为payload,此项记payload映射的dma地址*/
 	struct ib_ud_wr send_wr;/*发送用的wr*/
 	struct ib_sge sg_list[IB_MAD_SEND_REQ_MAX_SG];
 	__be64 tid;
@@ -169,7 +169,7 @@ struct ib_mad_send_wr_private {
 	int last_ack;
 	int seg_num;
 	int newwin;
-	int pad;
+	int pad;/*设置pad长度*/
 
 	enum ib_mad_state state;
 
