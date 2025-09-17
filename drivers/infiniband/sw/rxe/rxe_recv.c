@@ -211,12 +211,12 @@ static inline void rxe_rcv_pkt(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	if (pkt->mask & RXE_REQ_MASK)
 	    /*收到request类报文，添加报文至qp->req_pkts，
-	     * 触发qp->resp.task，即rxe_responder函数
+	     * 触发qp->resp.task（即rxe_receiver函数），处理这些报文（可能会回复ACK)
 	     **/
 		rxe_resp_queue_pkt(pkt->qp, skb);
 	else
 	    /*收到response类报文，添加报文至qp->resp_pkts，
-	     * 触发qp->comp.task，即rxe_completer函数*/
+	     * 触发qp->send_task（即rxe_sender函数），此task中会有rxe_completer处理这些报文*/
 		rxe_comp_queue_pkt(pkt->qp, skb);
 }
 

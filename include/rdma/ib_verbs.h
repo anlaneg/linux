@@ -1430,6 +1430,7 @@ struct ib_send_wr {
 	/*指明当前sg_list数组大小*/
 	int			num_sge;
 	enum ib_wr_opcode	opcode;
+	/*发送时提供的标记，例如发送完成后产生cqe事件的（IBV_SEND_SIGNALED）*/
 	int			send_flags;
 	union {
 		__be32		imm_data;

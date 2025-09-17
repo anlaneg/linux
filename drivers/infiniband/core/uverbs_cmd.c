@@ -1059,6 +1059,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 		return PTR_ERR(obj);
 
 	if (cmd->comp_channel >= 0) {
+		/*指明了comp_channel,通过comp_channel查询ev_file*/
 		ev_file = ib_uverbs_lookup_comp_file(cmd->comp_channel, attrs);
 		if (IS_ERR(ev_file)) {
 			ret = PTR_ERR(ev_file);
@@ -1082,9 +1083,9 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	}
 	cq->device        = ib_dev;
 	cq->uobject       = obj;
-	cq->comp_handler  = ib_uverbs_comp_handler;
+	cq->comp_handler  = ib_uverbs_comp_handler;/*指定comp_handler回调，其负责将entry放在ev_queue上*/
 	cq->event_handler = ib_uverbs_cq_event_handler;
-	cq->cq_context    = ev_file ? &ev_file->ev_queue : NULL;
+	cq->cq_context    = ev_file ? &ev_file->ev_queue : NULL;/*如有ev_file，设置ev_queue*/
 	atomic_set(&cq->usecnt, 0);
 
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);

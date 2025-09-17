@@ -70,10 +70,10 @@ struct rxe_cq {
 };
 
 enum wqe_state {
-	wqe_state_posted,
-	wqe_state_processing,
-	wqe_state_pending,
-	wqe_state_done,
+	wqe_state_posted,/*wqe填写进sq了*/
+	wqe_state_processing,/*wqe正在向外发送出去了（部分出去了，还没有全部出去）*/
+	wqe_state_pending,/*此wqe全部发送出去了，还未回应*/
+	wqe_state_done,/*发送出去了，且已回应（仅RC需要由pending变done)*/
 	wqe_state_error,
 };
 
@@ -82,7 +82,7 @@ struct rxe_sq {
 	int			max_sge;
 	int			max_inline;
 	spinlock_t		sq_lock; /* guard queue */
-	struct rxe_queue	*queue;/*sq队列*/
+	struct rxe_queue	*queue;/*sq队列（存储wqe)*/
 };
 
 struct rxe_rq {
@@ -121,7 +121,7 @@ struct rxe_req_info {
 };
 
 struct rxe_comp_info {
-	u32			psn;/*收到ack的psn*/
+	u32			psn;/*已确认收到的psn*/
 	int			opcode;
 	int			timeout;/*标1时,表示超时重传定时器被触发*/
 	int			timeout_retry;
@@ -285,8 +285,8 @@ struct rxe_qp {
 	 * qp->comp.task 对应的task负责处理这些报文(即rxe_completer函数）*/
 	struct sk_buff_head	resp_pkts;
 
-	struct rxe_task		send_task;/*此TASK负责向外发送请求.对应rxe_sender函数处理*/
-	struct rxe_task		recv_task;
+	struct rxe_task		send_task;/*此TASK负责向外发送请求及处理ACK.对应rxe_sender函数处理*/
+	struct rxe_task		recv_task;/*此TASK负责处理接收到的请求.对应rxe_receiver函数处理*/
 
 	/*处理发送请求，处理req_pkts*/
 	struct rxe_req_info	req;

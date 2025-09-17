@@ -757,7 +757,7 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		}
 		if (ibwr->send_flags & IB_SEND_INLINE) {
 			if (!(mask & WR_INLINE_MASK)) {
-				/*此操作不容许inline发送，但用户指定有inline发送标记*/
+				/*此操作（opcode)不容许inline发送，但用户指定有inline发送标记*/
 				rxe_err_qp(qp, "opcode doesn't support inline data\n");
 				break;
 			}

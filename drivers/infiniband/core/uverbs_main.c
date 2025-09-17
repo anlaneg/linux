@@ -302,6 +302,7 @@ static ssize_t ib_uverbs_comp_event_read(struct file *filp, char __user *buf,
 	struct ib_uverbs_completion_event_file *comp_ev_file =
 		filp->private_data;
 
+	/*读取event*/
 	return ib_uverbs_event_read(&comp_ev_file->ev_queue, filp, buf, count,
 				    pos,
 				    sizeof(struct ib_uverbs_comp_event_desc));
@@ -381,7 +382,7 @@ void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
 	unsigned long			flags;
 
 	if (!ev_queue)
-		return;/*ev_queue不得为空*/
+		return;/*ev_queue为空时，此回调直接返回*/
 
 	spin_lock_irqsave(&ev_queue->lock, flags);
 	if (ev_queue->is_closed) {

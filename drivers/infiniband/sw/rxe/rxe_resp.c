@@ -51,7 +51,7 @@ void rxe_resp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
 	/*将skb添加到qp->req_pkts队列*/
 	skb_queue_tail(&qp->req_pkts, skb);
-	/*触发调度*/
+	/*触发recv_task调度,使其处理qp->req_pkts上的报文*/
 	rxe_sched_task(&qp->recv_task);
 }
 

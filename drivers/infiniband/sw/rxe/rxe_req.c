@@ -574,9 +574,9 @@ static void update_wqe_state(struct rxe_qp *qp,
 		if (qp_type(qp) == IB_QPT_RC)
 			wqe->state = wqe_state_pending;/*RC情况,状态定为pending*/
 		else
-			wqe->state = wqe_state_done;
+			wqe->state = wqe_state_done;/*非RC，状态直接定为done*/
 	} else {
-		wqe->state = wqe_state_processing;
+		wqe->state = wqe_state_processing;/*无end标记，置为处理中*/
 	}
 }
 
@@ -599,10 +599,10 @@ static void update_wqe_psn(struct rxe_qp *qp,
 	}
 
 	if (pkt->mask & RXE_READ_MASK)
-		/*读情况，更新到尾包psn*/
+		/*读情况，更新到尾包psn包号*/
 		qp->req.psn = (wqe->first_psn + num_pkt) & BTH_PSN_MASK;
 	else
-		/*非读情况，更新psn*/
+		/*非读情况，更新psn到下一个包号*/
 		qp->req.psn = (qp->req.psn + 1) & BTH_PSN_MASK;
 }
 
@@ -611,7 +611,7 @@ static void update_state(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	qp->req.opcode = pkt->opcode;/*更新上次报文的OPCODE*/
 
 	if (pkt->mask & RXE_END_MASK)
-		/*此报文opcode的最后一个包,即此WQE被发送完成,更新wqe_index指针*/
+		/*仅此报文是本opcode的最后一个包,即此WQE被发送完成,更新wqe_index指针*/
 		qp->req.wqe_index = queue_next_index(qp->sq.queue,
 						     qp->req.wqe_index);
 
@@ -808,7 +808,7 @@ int rxe_requester(struct rxe_qp *qp)
 	pkt.rxe = rxe;
 	pkt.opcode = opcode;/*指明为next opcode*/
 	pkt.qp = qp;
-	pkt.psn = qp->req.psn;
+	pkt.psn = qp->req.psn;/*设置这个包对应的PSN*/
 	pkt.mask = rxe_opcode[opcode].mask;/*指明此opcode的标记信息(这个信息非常重要)*/
 	pkt.wqe = wqe;/*此报文要发送走的wqe*/
 
@@ -856,7 +856,7 @@ int rxe_requester(struct rxe_qp *qp)
 
 	/*到此报文已成功发送出去*/
 	update_wqe_state(qp, wqe, &pkt);
-	update_wqe_psn(qp, wqe, &pkt, payload);/*更新psn*/
+	update_wqe_psn(qp, wqe, &pkt, payload);/*更新qp psn*/
 	update_state(qp, &pkt);
 
 	/* A non-zero return value will cause rxe_do_task to

@@ -132,8 +132,8 @@ void retransmit_timer(struct timer_list *t)
 void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
 	rxe_counter_inc(SKB_TO_PKT(skb)->rxe, RXE_CNT_SENDER_SCHED);
-	skb_queue_tail(&qp->resp_pkts, skb);/*报文入队,后续ROCE协议栈会拿包处理*/
-	rxe_sched_task(&qp->send_task);/*促使send task运行*/
+	skb_queue_tail(&qp->resp_pkts, skb);/*响应报文入队*/
+	rxe_sched_task(&qp->send_task);/*促使send task运行(自sq上取wqe并发送）*/
 }
 
 static inline enum comp_state get_wqe(struct rxe_qp *qp,
@@ -145,13 +145,14 @@ static inline enum comp_state get_wqe(struct rxe_qp *qp,
 	/* we come here whether or not we found a response packet to see if
 	 * there are any posted WQEs
 	 */
-	/*自sq中获取首个wqe*/
+	/*自sq中获取首个未确认wqe*/
 	wqe = queue_head(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
 	*wqe_p = wqe;
 
 	/* no WQE or requester has not started it yet */
-	if (!wqe || wqe->state == wqe_state_posted)
-		return pkt ? COMPST_DONE : COMPST_EXIT;
+	if (!wqe/*没有对应的wqe*/ || wqe->state == wqe_state_posted/*此wqe刚填写进来，还没有向对端发送过*/)
+		/*没有查询到wqe或者有wqe但此wqe还未向外发送过*/
+		return pkt ? COMPST_DONE/*有报文，则直接忽略*/ : COMPST_EXIT;
 
 	/* WQE does not require an ack */
 	if (wqe->state == wqe_state_done)
@@ -183,6 +184,7 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 	 */
 	diff = psn_compare(pkt->psn, wqe->last_psn);
 	if (diff > 0) {
+		/*报文响应的psn比这个wqe的尾包psn还要大*/
 		if (wqe->state == wqe_state_pending) {
 			if (wqe->mask & WR_ATOMIC_OR_READ_MASK)
 				return COMPST_ERROR_RETRY;
@@ -196,7 +198,7 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 
 	/* compare response packet to expected response */
 	diff = psn_compare(pkt->psn, qp->comp.psn);
-	if (diff < 0) {
+	if (diff < 0) {/*此报文之前已确认收到了*/
 		/* response is most likely a retried packet if it matches an
 		 * uncompleted WQE go complete it else ignore it
 		 */
@@ -211,6 +213,7 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 	} else if ((diff > 0) && (wqe->mask & WR_ATOMIC_OR_READ_MASK)) {
 		return COMPST_DONE;
 	} else {
+		/*首次收到此ACK*/
 		return COMPST_CHECK_ACK;
 	}
 }
@@ -227,6 +230,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 	switch (qp->comp.opcode) {
 	case -1:
 		/* Will catch all *_ONLY cases. */
+		/*上次opcode已完成，本次opcode必有start标记，如无，则有误*/
 		if (!(mask & RXE_START_MASK))
 			return COMPST_ERROR;
 
@@ -406,7 +410,7 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		wc->status = wqe->status;/*设置wc状态*/
 		wc->qp = &qp->ibqp;
 	} else {
-		uwc->wr_id = wqe->wr.wr_id;
+		uwc->wr_id = wqe->wr.wr_id;/*设置cqe对应的wr_id*/
 		uwc->status = wqe->status;/*设置wc状态*/
 		uwc->qp_num = qp->ibqp.qp_num;
 	}
@@ -447,8 +451,8 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	bool post;
 
 	/* do we need to post a completion */
-	post = ((qp->sq_sig_type == IB_SIGNAL_ALL_WR) ||
-			(wqe->wr.send_flags & IB_SEND_SIGNALED) ||
+	post = ((qp->sq_sig_type == IB_SIGNAL_ALL_WR/*这个qp需要针对所有wr产生cqe*/) ||
+			(wqe->wr.send_flags & IB_SEND_SIGNALED)/*这个wqe需要针对sq产生cqe*/ ||
 			wqe->status != IB_WC_SUCCESS/*wqe操作不成功*/);
 
 	if (post)
@@ -457,13 +461,13 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*消费者队列前移一位*/
 
 	if (post)
-		/*触发cqe入队到scq*/
+		/*将构建的cqe入队到scq*/
 		rxe_cq_post(qp->scq, &cqe, 0);
 
 	if (wqe->wr.opcode == IB_WR_SEND ||
 	    wqe->wr.opcode == IB_WR_SEND_WITH_IMM ||
 	    wqe->wr.opcode == IB_WR_SEND_WITH_INV)
-		rxe_counter_inc(rxe, RXE_CNT_RDMA_SEND);
+		rxe_counter_inc(rxe, RXE_CNT_RDMA_SEND);/*send操作计数增加*/
 
 	/*
 	 * we completed something so let req run again
@@ -502,7 +506,7 @@ static void comp_check_sq_drain_done(struct rxe_qp *qp)
 
 static inline enum comp_state complete_ack(struct rxe_qp *qp,
 					   struct rxe_pkt_info *pkt,
-					   struct rxe_send_wqe *wqe)
+					   struct rxe_send_wqe *wqe/*这个wqe已被对端ACK*/)
 {
 	if (wqe->has_rd_atomic) {
 		wqe->has_rd_atomic = 0;
@@ -516,7 +520,8 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 
 	comp_check_sq_drain_done(qp);
 
-	do_complete(qp, wqe);/*指明这个wqe已被ACK*/
+	/*这个wqe已被对端ACK*/
+	do_complete(qp, wqe);
 
 	if (psn_compare(pkt->psn, qp->comp.psn) >= 0)
 		return COMPST_UPDATE_COMP;
@@ -550,7 +555,7 @@ static void drain_resp_pkts(struct rxe_qp *qp)
 {
 	struct sk_buff *skb;
 
-	/*清除qp->resp_pkts上所有skb*/
+	/*清除qp->resp_pkts上收到的所有响应类skb*/
 	while ((skb = skb_dequeue(&qp->resp_pkts))) {
 		rxe_put(qp);
 		kfree_skb(skb);
@@ -681,7 +686,7 @@ int rxe_completer(struct rxe_qp *qp)
 	state = COMPST_GET_ACK;
 
 	while (1) {
-		rxe_dbg_qp(qp, "state = %s\n", comp_state_name[state]);
+		rxe_dbg_qp(qp, "state = %s\n", comp_state_name[state]);/*显示当前状态*/
 		switch (state) {
 		case COMPST_GET_ACK:
 		    /*自resp_pkts队列上提取一个skb,变更状态：COMPST_GET_WQE*/
@@ -694,7 +699,7 @@ int rxe_completer(struct rxe_qp *qp)
 			break;
 
 		case COMPST_GET_WQE:
-			/*取首个send_queue上首个wqe*/
+			/*自send_queue上取首个wqe*/
 			state = get_wqe(qp, pkt, &wqe);
 			break;
 
@@ -717,14 +722,14 @@ int rxe_completer(struct rxe_qp *qp)
 		case COMPST_WRITE_SEND:
 			if (wqe->state == wqe_state_pending &&
 			    wqe->last_psn == pkt->psn)
-				/*此wqe处于pending,且其最后一个PSN即为当前ACK的.变状态*/
+				/*此wqe处于pending,且其最后一个PSN即为当前ACK的(即此wqe已全部ACK).变状态*/
 				state = COMPST_COMP_ACK;
 			else
 				state = COMPST_UPDATE_COMP;
 			break;
 
 		case COMPST_COMP_ACK:
-			state = complete_ack(qp, pkt, wqe);/*这个wqe被确认*/
+			state = complete_ack(qp, pkt, wqe);/*这个wqe已对端全部确认*/
 			break;
 
 		case COMPST_COMP_WQE:
@@ -738,7 +743,7 @@ int rxe_completer(struct rxe_qp *qp)
 				qp->comp.opcode = pkt->opcode;
 
 			if (psn_compare(pkt->psn, qp->comp.psn) >= 0)
-				qp->comp.psn = (pkt->psn + 1) & BTH_PSN_MASK;
+				qp->comp.psn = (pkt->psn + 1) & BTH_PSN_MASK;/*更新已确认收到的psn*/
 
 			if (qp->req.wait_psn) {
 				qp->req.wait_psn = 0;
