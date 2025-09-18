@@ -207,6 +207,7 @@ static int is_vendor_method_in_use(
 	return 0;
 }
 
+/*检查是否为响应mad消息*/
 int ib_response_mad(const struct ib_mad_hdr *hdr)
 {
 	return ((hdr->method & IB_MGMT_METHOD_RESP) ||
@@ -250,7 +251,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					   struct ib_mad_reg_req *mad_reg_req,
 					   u8 rmpp_version,
 					   ib_mad_send_handler send_handler,
-					   ib_mad_recv_handler recv_handler/*mad agent的报文接收回调*/,
+					   ib_mad_recv_handler recv_handler/*mad agent的响应报文处理回调*/,
 					   void *context,
 					   u32 registration_flags)
 {
@@ -1749,6 +1750,7 @@ out:
 	return;
 }
 
+/*利用消息查找mad_agent*/
 static struct ib_mad_agent_private *
 find_mad_agent(struct ib_mad_port_private *port_priv,
 	       const struct ib_mad_hdr *mad_hdr)
@@ -1763,9 +1765,9 @@ find_mad_agent(struct ib_mad_port_private *port_priv,
 		 * Routing is based on high 32 bits of transaction ID
 		 * of MAD.
 		 */
-		hi_tid = be64_to_cpu(mad_hdr->tid) >> 32;
+		hi_tid = be64_to_cpu(mad_hdr->tid) >> 32;/*取得事务ID*/
 		rcu_read_lock();
-		mad_agent = xa_load(&ib_mad_clients, hi_tid);
+		mad_agent = xa_load(&ib_mad_clients, hi_tid);/*利用事务ID查找agent*/
 		if (mad_agent && !refcount_inc_not_zero(&mad_agent->refcount))
 			mad_agent = NULL;
 		rcu_read_unlock();
@@ -1824,6 +1826,7 @@ out:
 	}
 
 	if (mad_agent && !mad_agent->agent.recv_handler) {
+		/*查找到mad_agent,但agent没有设置recv_handler,报错*/
 		dev_notice(&port_priv->device->dev,
 			   "No receive handler for client %p on port %u\n",
 			   &mad_agent->agent, port_priv->port_num);
@@ -1831,7 +1834,7 @@ out:
 		mad_agent = NULL;
 	}
 
-	return mad_agent;
+	return mad_agent;/*返回查找到的agent*/
 }
 
 static int validate_mad(const struct ib_mad_hdr *mad_hdr,
@@ -1951,6 +1954,7 @@ static inline int is_direct(u8 class)
 	return (class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE);
 }
 
+/*查找我们当时发送请求时对应的ib_mad_send_wr_private*/
 struct ib_mad_send_wr_private*
 ib_find_send_mad(const struct ib_mad_agent_private *mad_agent_priv,
 		 const struct ib_mad_recv_wc *wc)
@@ -1961,8 +1965,8 @@ ib_find_send_mad(const struct ib_mad_agent_private *mad_agent_priv,
 	mad_hdr = &wc->recv_buf.mad->mad_hdr;
 
 	list_for_each_entry(wr, &mad_agent_priv->wait_list, agent_list) {
-		if ((wr->tid == mad_hdr->tid) &&
-		    rcv_has_same_class(wr, wc) &&
+		if ((wr->tid == mad_hdr->tid)/*事务ID必须相等*/ &&
+		    rcv_has_same_class(wr, wc)/*MGMT CLASS必须相等*/ &&
 		    /*
 		     * Don't check GID for direct routed MADs.
 		     * These might have permissive LIDs.
@@ -2081,10 +2085,11 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 
 	/* Complete corresponding request */
 	if (ib_response_mad(&mad_recv_wc->recv_buf.mad->mad_hdr)) {
-		/*收到响应类mad报文*/
+		/*agent收到响应类mad报文*/
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
 		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
 		if (!mad_send_wr) {
+			/*收到响应,但我们没有找到发送过的wr*/
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 			if (!ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)
 			   && ib_is_mad_class_rmpp(mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
@@ -2114,7 +2119,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			mad_agent_priv->agent.recv_handler(
 					&mad_agent_priv->agent,
 					&mad_send_wr->send_buf,
-					mad_recv_wc);
+					mad_recv_wc);/*交给agent处理响应*/
 			deref_mad_agent(mad_agent_priv);
 
 			if (is_mad_done) {
@@ -2294,7 +2299,7 @@ handle_smi(struct ib_mad_port_private *port_priv,
 	return handle_ib_smi(port_priv, qp_info, wc, port_num, recv, response);
 }
 
-/*qp填充完成wc后，此回调将被触发*/
+/*qp填充完成wc后，此回调将被触发(收到远端发送过来的mad报文)*/
 static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 {
 	struct ib_mad_port_private *port_priv = cq->cq_context;
@@ -2318,7 +2323,7 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 		 * Receive errors indicate that the QP has entered the error
 		 * state - error handling/shutdown code will cleanup
 		 */
-		return;
+		return;/*状态有误,不处理*/
 	}
 
 	qp_info = mad_list->mad_queue->qp_info;
@@ -2343,11 +2348,11 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 		recv->header.recv_wc.mad_len = wc->byte_len - sizeof(struct ib_grh);
 		recv->header.recv_wc.mad_seg_size = sizeof(struct opa_mad);
 	} else {
-		recv->header.recv_wc.mad_len = sizeof(struct ib_mad);
+		recv->header.recv_wc.mad_len = sizeof(struct ib_mad);/*header长度*/
 		recv->header.recv_wc.mad_seg_size = sizeof(struct ib_mad);
 	}
 
-	recv->header.recv_wc.recv_buf.mad = (struct ib_mad *)recv->mad;
+	recv->header.recv_wc.recv_buf.mad = (struct ib_mad *)recv->mad;/*设置收到的内容*/
 	recv->header.recv_wc.recv_buf.grh = &recv->grh;
 
 	/* Validate MAD */
@@ -2377,6 +2382,7 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	/* Give driver "right of first refusal" on incoming MAD */
 	if (port_priv->device->ops.process_mad) {
+		/*设备实现了mad处理函数,将给设备处理*/
 		ret = port_priv->device->ops.process_mad(
 			port_priv->device, 0, port_priv->port_num, wc,
 			&recv->grh, (const struct ib_mad *)recv->mad,
@@ -2403,8 +2409,9 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	mad_agent = find_mad_agent(port_priv, (const struct ib_mad_hdr *)recv->mad);
 	if (mad_agent) {
-		/*查找到对应的agent,使agent处理接收到的报文*/
+		/*查找到对应的agent*/
 		trace_ib_mad_recv_done_agent(mad_agent);
+		/*使agent处理接收到的mad报文*/
 		ib_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*
 		 * recv is freed up in error cases in ib_mad_complete_recv

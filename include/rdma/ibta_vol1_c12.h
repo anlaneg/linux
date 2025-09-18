@@ -21,8 +21,8 @@
 #define CM_FIELD16_LOC(field_struct, byte_offset, width)                       \
 	IBA_FIELD16_LOC(field_struct,                                          \
 			(byte_offset + sizeof(struct ib_mad_hdr)), width)
-#define CM_FIELD32_LOC(field_struct, byte_offset, width)                       \
-	IBA_FIELD32_LOC(field_struct,                                          \
+#define CM_FIELD32_LOC(field_struct/*结构体类型名称*/, byte_offset/*到成员偏移量*/, width/*成员位长度*/)                       \
+	IBA_FIELD32_LOC(field_struct/*结构体类型名称*/,                                          \
 			(byte_offset + sizeof(struct ib_mad_hdr)), width)
 #define CM_FIELD64_LOC(field_struct, byte_offset)                              \
 	IBA_FIELD64_LOC(field_struct, (byte_offset + sizeof(struct ib_mad_hdr)))
@@ -33,13 +33,15 @@
 #define CM_STRUCT(field_struct, total_len/*总长度（单位为bit）需要以4字节对齐*/)                                     \
 	field_struct                                                           \
 	{                                                                      \
-		struct ib_mad_hdr hdr;                                         \
+		struct ib_mad_hdr hdr;/*公共头*/                                         \
 		u32 _data[(total_len) / 32 +                                   \
 			  BUILD_BUG_ON_ZERO((total_len) % 32 != 0)];           \
 	}
 
 /* Table 106 REQ Message Contents */
+/*定义comm_id的位置*/
 #define CM_REQ_LOCAL_COMM_ID CM_FIELD32_LOC(struct cm_req_msg, 0, 32)
+/*定义vendor_id的位置*/
 #define CM_REQ_VENDOR_ID CM_FIELD32_LOC(struct cm_req_msg, 5, 24)
 #define CM_REQ_SERVICE_ID CM_FIELD64_LOC(struct cm_req_msg, 8)
 #define CM_REQ_LOCAL_CA_GUID CM_FIELD64_LOC(struct cm_req_msg, 16)
@@ -51,7 +53,7 @@
 #define CM_REQ_REMOTE_EECN CM_FIELD32_LOC(struct cm_req_msg, 40, 24)
 #define CM_REQ_REMOTE_CM_RESPONSE_TIMEOUT                                      \
 	CM_FIELD8_LOC(struct cm_req_msg, 43, 5)
-/*指定传输服务类型，例如uc,rc*/
+/*指定传输服务类型的位置，例如uc,rc*/
 #define CM_REQ_TRANSPORT_SERVICE_TYPE CM_FIELD_BLOC(struct cm_req_msg, 43, 5, 2)
 #define CM_REQ_END_TO_END_FLOW_CONTROL                                         \
 	CM_FIELD_BLOC(struct cm_req_msg, 43, 7, 1)
@@ -99,6 +101,7 @@
 	CM_FIELD8_LOC(struct cm_req_msg, 139, 5)
 #define CM_REQ_SAP_SUPPORTED CM_FIELD_BLOC(struct cm_req_msg, 139, 5, 1)
 #define CM_REQ_PRIVATE_DATA CM_FIELD_MLOC(struct cm_req_msg, 140, 736, void)
+/*定义cm_req_msg消息结构体*/
 CM_STRUCT(struct cm_req_msg, 140 * 8 + 736);
 
 /* Table 107 MRA Message Contents */

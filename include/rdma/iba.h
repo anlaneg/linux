@@ -11,9 +11,10 @@
 
 static inline u32 _iba_get8(const u8 *ptr)
 {
-	return *ptr;
+	return *ptr;/*取u8类型对应的值*/
 }
 
+/*设置ptr指向的u8长度数据,保存掩码未指明的值,再"加上"要设置的value*/
 static inline void _iba_set8(u8 *ptr, u32 mask, u32 prep_value)
 {
 	*ptr = (*ptr & ~mask) | prep_value;
@@ -21,9 +22,10 @@ static inline void _iba_set8(u8 *ptr, u32 mask, u32 prep_value)
 
 static inline u16 _iba_get16(const __be16 *ptr)
 {
-	return be16_to_cpu(*ptr);
+	return be16_to_cpu(*ptr);/*取u16类型对应的值(存入的是大端,转为CPU序)*/
 }
 
+/*设置ptr指向的u16长度数据,保存掩码未指明的值,再"加上"要设置的value,需考虑大小端转换*/
 static inline void _iba_set16(__be16 *ptr, u16 mask, u16 prep_value)
 {
 	*ptr = cpu_to_be16((be16_to_cpu(*ptr) & ~mask) | prep_value);
@@ -53,17 +55,20 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
 	put_unaligned(cpu_to_be64((_iba_get64(ptr) & ~mask) | prep_value), ptr);
 }
 
-#define _IBA_SET(field_struct, field_offset, field_mask, num_bits, ptr, value) \
+#define _IBA_SET(field_struct/*结构体类型名称*/, field_offset/*到成员的偏移量*/, field_mask/*成员的掩码表示*/, num_bits/*成员占多少位*/, ptr/*field_struct类型指针*/, value/*要设置的值*/) \
 	({                                                                     \
 		field_struct *_ptr = ptr;                                      \
+		/*设置成员值*/\
 		_iba_set##num_bits((void *)_ptr + (field_offset), field_mask,  \
 				   FIELD_PREP(field_mask, value));             \
 	})
+/*如上示:_IBA_SET的参数不是3个,但IBA_SET定义为3个,在调用时field字段会展开为4个参数,总数会达到6参数*/
 #define IBA_SET(field, ptr, value) _IBA_SET(field, ptr, value)
 
 #define _IBA_GET_MEM_PTR(field_struct, field_offset, type, num_bits, ptr)      \
 	({                                                                     \
 		field_struct *_ptr = ptr;                                      \
+		/*返回成员指针*/\
 		(type *)((void *)_ptr + (field_offset));                       \
 	})
 #define IBA_GET_MEM_PTR(field, ptr) _IBA_GET_MEM_PTR(field, ptr)
@@ -129,11 +134,12 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
 			15 - (((byte_offset) % 2) * 8) - (num_bits - 1)),      \
 		16
 
-#define IBA_FIELD32_LOC(field_struct, byte_offset, num_bits)                   \
-	field_struct, (byte_offset)&0xFFFC,                                    \
-		GENMASK(31 - (((byte_offset) % 4) * 8),                        \
-			31 - (((byte_offset) % 4) * 8) - (num_bits - 1)),      \
-		32
+/*占用32位的成员位置信息*/
+#define IBA_FIELD32_LOC(field_struct/*结构体类型名称*/, byte_offset/*到成员需要的字节偏移量*/, num_bits/*成员占用的位数*/)                   \
+	field_struct/*结构体类型名称*/, (byte_offset)&0xFFFC/*32位成员按4字节对齐,故偏移量与0XFFFC与操作;最长不超过0xffff*/,                                    \
+		GENMASK(31 - (((byte_offset) % 4) * 8)/*高位*/,                        \
+			31 - (((byte_offset) % 4) * 8) - (num_bits - 1)/*低位*/),      \
+		32/*字段占32位*/
 
 #define IBA_FIELD64_LOC(field_struct, byte_offset)                             \
 	field_struct, byte_offset, GENMASK_ULL(63, 0), 64

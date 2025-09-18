@@ -11,6 +11,7 @@
 #define BIT_ULL_WORD(nr)	((nr) / BITS_PER_LONG_LONG)
 /*一个字节占用多少bits*/
 #define BITS_PER_BYTE		8
+/*类型type占用多少bits*/
 #define BITS_PER_TYPE(type)	(sizeof(type) * BITS_PER_BYTE)
 
 /*
@@ -47,12 +48,16 @@
  */
 #define GENMASK_TYPE(t, h, l)					\
 	((t)(GENMASK_INPUT_CHECK(h, l) +			\
+			/*t类型的最大值,左移l位,即l位以上均为'1'*/\
 	     (type_max(t) << (l) &				\
-	      type_max(t) >> (BITS_PER_TYPE(t) - 1 - (h)))))
+	       /*t类型的最大值,右移则h位以下均为1,h位以上均为'0'*/\
+	      type_max(t) >> (BITS_PER_TYPE(t) - 1 - (h)))))/*相互得到h,l两位间全为'1'的掩码*/
 
+/*无符号long类型中h,l位间采用全'1'的掩码,下同*/
 #define GENMASK(h, l)		GENMASK_TYPE(unsigned long, h, l)
 #define GENMASK_ULL(h, l)	GENMASK_TYPE(unsigned long long, h, l)
 
+/*U8类型中h,l位间采用全'1'的掩码,下同*/
 #define GENMASK_U8(h, l)	GENMASK_TYPE(u8, h, l)
 #define GENMASK_U16(h, l)	GENMASK_TYPE(u16, h, l)
 #define GENMASK_U32(h, l)	GENMASK_TYPE(u32, h, l)

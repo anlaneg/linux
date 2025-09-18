@@ -261,6 +261,7 @@ struct ib_cm_event {
 /*cm request消息*/
 #define CM_REQ_ATTR_ID		cpu_to_be16(0x0010)
 #define CM_MRA_ATTR_ID		cpu_to_be16(0x0011)
+/*cm拒绝消息*/
 #define CM_REJ_ATTR_ID		cpu_to_be16(0x0012)
 #define CM_REP_ATTR_ID		cpu_to_be16(0x0013)
 #define CM_RTU_ATTR_ID		cpu_to_be16(0x0014)

@@ -42,7 +42,8 @@
  *  FIELD_MODIFY(REG_FIELD_C, &reg, c);
  */
 
-#define __bf_shf(x) (__builtin_ffsll(x) - 1)
+/*__builtin_ffsll用于查找一个64位整数中从最低位（LSB）开始的第一个值为'1'的位的索引*/
+#define __bf_shf(x) (__builtin_ffsll(x) - 1)/*此索引值需左移多少位数*/
 
 #define __scalar_type_to_unsigned_cases(type)				\
 		unsigned type:	(unsigned type)0,			\
@@ -113,6 +114,7 @@
 #define FIELD_PREP(_mask, _val)						\
 	({								\
 		__BF_FIELD_CHECK(_mask, 0ULL, _val, "FIELD_PREP: ");	\
+		/*MASK是一组连续的标记为'1'的位,使value和这段连续位的右侧对齐后再与MASK,清除掉mask未指明的数*/\
 		((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask);	\
 	})
 

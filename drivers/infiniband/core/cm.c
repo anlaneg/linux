@@ -1320,6 +1320,7 @@ struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
 }
 EXPORT_SYMBOL(ib_cm_insert_listen);
 
+/*取事务ID*/
 static __be64 cm_form_tid(struct cm_id_private *cm_id_priv)
 {
 	u64 hi_tid = 0, low_tid;
@@ -1337,24 +1338,27 @@ static __be64 cm_form_tid(struct cm_id_private *cm_id_priv)
 	return cpu_to_be64(hi_tid | low_tid);
 }
 
+/*设置CM MAD header*/
 static void cm_format_mad_hdr(struct ib_mad_hdr *hdr,
-			      __be16 attr_id, __be64 tid)
+			      __be16 attr_id/*消息类型*/, __be64 tid/*事务ID*/)
 {
-	hdr->base_version  = IB_MGMT_BASE_VERSION;
+	hdr->base_version  = IB_MGMT_BASE_VERSION;/*版本为1*/
 	hdr->mgmt_class	   = IB_MGMT_CLASS_CM;
-	hdr->class_version = IB_CM_CLASS_VERSION;
-	hdr->method	   = IB_MGMT_METHOD_SEND;
+	hdr->class_version = IB_CM_CLASS_VERSION;/*class版本采用2*/
+	hdr->method	   = IB_MGMT_METHOD_SEND;/*指明为"发起连接建立"*/
 	hdr->attr_id	   = attr_id;
-	hdr->tid	   = tid;
+	hdr->tid	   = tid;/*事务 ID，用于匹配请求与响应报文，确保通信一致性。*/
 }
 
 static void cm_format_mad_ece_hdr(struct ib_mad_hdr *hdr, __be16 attr_id,
-				  __be64 tid, u32 attr_mod)
+				  __be64 tid, u32 attr_mod/*消息类型*/)
 {
+	/*填充公共头*/
 	cm_format_mad_hdr(hdr, attr_id, tid);
 	hdr->attr_mod = cpu_to_be32(attr_mod);
 }
 
+/*填充cm req消息*/
 static void cm_format_req(struct cm_req_msg *req_msg,
 			  struct cm_id_private *cm_id_priv,
 			  struct ib_cm_req_param *param)
@@ -1368,42 +1372,43 @@ static void cm_format_req(struct cm_req_msg *req_msg,
 		pri_ext = opa_is_extended_lid(pri_path->opa.dlid,
 					      pri_path->opa.slid);
 
-	cm_format_mad_ece_hdr(&req_msg->hdr, CM_REQ_ATTR_ID,
+	/*填充公共头(ECE属性)*/
+	cm_format_mad_ece_hdr(&req_msg->hdr, CM_REQ_ATTR_ID/*请求消息*/,
 			      cm_form_tid(cm_id_priv), param->ece.attr_mod);
 
 	IBA_SET(CM_REQ_LOCAL_COMM_ID, req_msg,
-		be32_to_cpu(cm_id_priv->id.local_id));
-	IBA_SET(CM_REQ_SERVICE_ID, req_msg, be64_to_cpu(param->service_id));
+		be32_to_cpu(cm_id_priv->id.local_id));/*填写id*/
+	IBA_SET(CM_REQ_SERVICE_ID, req_msg, be64_to_cpu(param->service_id));/*填充service_id*/
 	IBA_SET(CM_REQ_LOCAL_CA_GUID, req_msg,
-		be64_to_cpu(cm_id_priv->id.device->node_guid));
-	IBA_SET(CM_REQ_LOCAL_QPN, req_msg, param->qp_num);
-	IBA_SET(CM_REQ_INITIATOR_DEPTH, req_msg, param->initiator_depth);
+		be64_to_cpu(cm_id_priv->id.device->node_guid));/*填写ca_guid*/
+	IBA_SET(CM_REQ_LOCAL_QPN, req_msg, param->qp_num);/*填写qpn*/
+	IBA_SET(CM_REQ_INITIATOR_DEPTH, req_msg, param->initiator_depth);/*填写initiator_depth*/
 	IBA_SET(CM_REQ_REMOTE_CM_RESPONSE_TIMEOUT, req_msg,
-		param->remote_cm_response_timeout);
-	cm_req_set_qp_type(req_msg, param->qp_type);
-	IBA_SET(CM_REQ_END_TO_END_FLOW_CONTROL, req_msg, param->flow_control);
-	IBA_SET(CM_REQ_STARTING_PSN, req_msg, param->starting_psn);
+		param->remote_cm_response_timeout);/*填写remote_cm_response_timeout*/
+	cm_req_set_qp_type(req_msg, param->qp_type);/*填写remote_cm_response_timeout*/
+	IBA_SET(CM_REQ_END_TO_END_FLOW_CONTROL, req_msg, param->flow_control);/*填写flow_control*/
+	IBA_SET(CM_REQ_STARTING_PSN, req_msg, param->starting_psn);/*填写starting_psn*/
 	IBA_SET(CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT, req_msg,
-		param->local_cm_response_timeout);
+		param->local_cm_response_timeout);/*填写local_cm_response_timeout*/
 	IBA_SET(CM_REQ_PARTITION_KEY, req_msg,
-		be16_to_cpu(param->primary_path->pkey));
+		be16_to_cpu(param->primary_path->pkey));/*填写PARTITION_KEY*/
 	IBA_SET(CM_REQ_PATH_PACKET_PAYLOAD_MTU, req_msg,
-		param->primary_path->mtu);
-	IBA_SET(CM_REQ_MAX_CM_RETRIES, req_msg, param->max_cm_retries);
+		param->primary_path->mtu);/*填写PAYLOAD MTU*/
+	IBA_SET(CM_REQ_MAX_CM_RETRIES, req_msg, param->max_cm_retries);/*填写max_cm_retries*/
 
 	if (param->qp_type != IB_QPT_XRC_INI) {
 		IBA_SET(CM_REQ_RESPONDER_RESOURCES, req_msg,
-			param->responder_resources);
-		IBA_SET(CM_REQ_RETRY_COUNT, req_msg, param->retry_count);
+			param->responder_resources);/*填写responder_resources*/
+		IBA_SET(CM_REQ_RETRY_COUNT, req_msg, param->retry_count);/*填写retry_count*/
 		IBA_SET(CM_REQ_RNR_RETRY_COUNT, req_msg,
-			param->rnr_retry_count);
-		IBA_SET(CM_REQ_SRQ, req_msg, param->srq);
+			param->rnr_retry_count);/*填写rnr_retry_count*/
+		IBA_SET(CM_REQ_SRQ, req_msg, param->srq);/*填写srq*/
 	}
 
 	*IBA_GET_MEM_PTR(CM_REQ_PRIMARY_LOCAL_PORT_GID, req_msg) =
-		pri_path->sgid;
+		pri_path->sgid;/*设置primary local_port_gid*/
 	*IBA_GET_MEM_PTR(CM_REQ_PRIMARY_REMOTE_PORT_GID, req_msg) =
-		pri_path->dgid;
+		pri_path->dgid;/*设置primary remote port_gid*/
 	if (pri_ext) {
 		IBA_GET_MEM_PTR(CM_REQ_PRIMARY_LOCAL_PORT_GID, req_msg)
 			->global.interface_id =
@@ -1499,11 +1504,11 @@ static void cm_format_req(struct cm_req_msg *req_msg,
 			cm_ack_timeout(cm_id_priv->av.port->cm_dev->ack_delay,
 				       alt_path->packet_life_time));
 	}
-	IBA_SET(CM_REQ_VENDOR_ID, req_msg, param->ece.vendor_id);
+	IBA_SET(CM_REQ_VENDOR_ID, req_msg, param->ece.vendor_id);/*设置vendor_id*/
 
 	if (param->private_data && param->private_data_len)
 		IBA_SET_MEM(CM_REQ_PRIVATE_DATA, req_msg, param->private_data,
-			    param->private_data_len);
+			    param->private_data_len);/*设置私有数据*/
 }
 
 static int cm_validate_req_param(struct ib_cm_req_param *param)
@@ -1601,12 +1606,13 @@ int ib_send_cm_req(struct ib_cm_id *cm_id,
 		goto out_unlock;
 	}
 
+	/*填充req msg*/
 	req_msg = (struct cm_req_msg *)msg->mad;
-	cm_format_req(req_msg, cm_id_priv, param);
-	cm_id_priv->tid = req_msg->hdr.tid;
+	cm_format_req(req_msg, cm_id_priv, param);/*完成具体填充*/
+	cm_id_priv->tid = req_msg->hdr.tid;/*取事务id*/
 
-	cm_id_priv->local_qpn = cpu_to_be32(IBA_GET(CM_REQ_LOCAL_QPN, req_msg));
-	cm_id_priv->rq_psn = cpu_to_be32(IBA_GET(CM_REQ_STARTING_PSN, req_msg));
+	cm_id_priv->local_qpn = cpu_to_be32(IBA_GET(CM_REQ_LOCAL_QPN, req_msg));/*自消息体中取出local_qpn*/
+	cm_id_priv->rq_psn = cpu_to_be32(IBA_GET(CM_REQ_STARTING_PSN, req_msg));/*自消息体中取出starting_psn*/
 
 	trace_icm_send_req(&cm_id_priv->id);
 	ret = ib_post_send_mad(msg, NULL);/*发送此msg*/
@@ -1624,6 +1630,7 @@ out_unlock:
 }
 EXPORT_SYMBOL(ib_send_cm_req);
 
+/*填充cm rej消息*/
 static int cm_issue_rej(struct cm_port *port,
 			struct ib_mad_recv_wc *mad_recv_wc,
 			enum ib_cm_rej_reason reason,
@@ -1642,7 +1649,7 @@ static int cm_issue_rej(struct cm_port *port,
 	rcv_msg = (struct cm_rej_msg *) mad_recv_wc->recv_buf.mad;
 	rej_msg = (struct cm_rej_msg *) msg->mad;
 
-	cm_format_mad_hdr(&rej_msg->hdr, CM_REJ_ATTR_ID, rcv_msg->hdr.tid);
+	cm_format_mad_hdr(&rej_msg->hdr, CM_REJ_ATTR_ID/*REJ类型消息*/, rcv_msg->hdr.tid);
 	IBA_SET(CM_REJ_REMOTE_COMM_ID, rej_msg,
 		IBA_GET(CM_REJ_LOCAL_COMM_ID, rcv_msg));
 	IBA_SET(CM_REJ_LOCAL_COMM_ID, rej_msg,
@@ -4023,6 +4030,7 @@ int ib_cm_notify(struct ib_cm_id *cm_id, enum ib_event_type event)
 }
 EXPORT_SYMBOL(ib_cm_notify);
 
+/*当CM响应消息被收到后,此回调将被调用*/
 static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 			    struct ib_mad_send_buf *send_buf,
 			    struct ib_mad_recv_wc *mad_recv_wc)
@@ -4048,6 +4056,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 		event = IB_CM_MRA_RECEIVED;
 		break;
 	case CM_REJ_ATTR_ID:
+		/*收到拒绝消息*/
 		event = IB_CM_REJ_RECEIVED;
 		break;
 	case CM_REP_ATTR_ID:
@@ -4423,6 +4432,7 @@ static int cm_add_one(struct ib_device *ib_device)
 		if (ret)
 			goto error1;
 
+		/*注册ib_qpt_gsi对应的mad处理agent*/
 		port->mad_agent = ib_register_mad_agent(ib_device, i/*port编号*/,
 							IB_QPT_GSI,
 							&reg_req,
@@ -4441,7 +4451,7 @@ static int cm_add_one(struct ib_device *ib_device)
 							NULL,
 							0,
 							cm_send_handler,
-							NULL,
+							NULL,/*接收回调为空*/
 							port,
 							0);
 		if (IS_ERR(port->rep_agent)) {

@@ -30,8 +30,15 @@
  * https://mail-index.netbsd.org/tech-misc/2007/02/05/0000.html -
  * credit to Christian Biere.
  */
+/*
+ * 帅,
+ * 如果无符号,则1 << (8*sizeof(type) -1) 即获得此类型高位为'1'的数;
+ * 如果有符号,则1 << (8*sizeof(type) -2),则获得此类型高位为'1'的数
+ * */
 #define __type_half_max(type) ((type)1 << (8*sizeof(type) - 1 - is_signed_type(type)))
+/*两个__type_half_max的数,一个减去1,得高位为0,其余位为'1'的数,再加上另一个,恰好合并成此类型的最大值*/
 #define __type_max(T) ((T)((__type_half_max(T) - 1) + __type_half_max(T)))
+/*帅,人才啊! 取此类型的最大值*/
 #define type_max(t)	__type_max(typeof(t))
 #define __type_min(T) ((T)((T)-type_max(T)-(T)1))
 #define type_min(t)	__type_min(typeof(t))

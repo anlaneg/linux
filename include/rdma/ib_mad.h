@@ -135,13 +135,13 @@ enum {
 };
 
 struct ib_mad_hdr {
-	u8	base_version;
-	u8	mgmt_class;
-	u8	class_version;
-	u8	method;
-	__be16	status;
+	u8	base_version;//
+	u8	mgmt_class;//mgmt_class（1 字节）：管理类别
+	u8	class_version;//class_version（1 字节）：类别版本
+	u8	method;//操作方法
+	__be16	status;//status（1 字节）：状态码（响应报文使用，0x00 表示成功）；
 	__be16	class_specific;
-	__be64	tid;
+	__be64	tid;/*事务 ID，用于匹配请求与响应报文，确保通信一致性。*/
 	__be16	attr_id;/*消息类型*/
 	__be16	resv;
 	__be32	attr_mod;
