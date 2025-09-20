@@ -150,20 +150,20 @@ static inline enum comp_state get_wqe(struct rxe_qp *qp,
 	*wqe_p = wqe;
 
 	/* no WQE or requester has not started it yet */
-	if (!wqe/*没有对应的wqe*/ || wqe->state == wqe_state_posted/*此wqe刚填写进来，还没有向对端发送过*/)
-		/*没有查询到wqe或者有wqe但此wqe还未向外发送过*/
-		return pkt ? COMPST_DONE/*有报文，则直接忽略*/ : COMPST_EXIT;
+	if (!wqe/*没有待确认的wqe*/ || wqe->state == wqe_state_posted/*此wqe刚填写进来，还没有向对端发送过*/)
+		/*没有查询到wqe或者有wqe但此wqe还未向外发送过(即ack不可能针对此wqe)*/
+		return pkt ? COMPST_DONE/*有ACK报文，则跳DONE*/ : COMPST_EXIT/*无报文，跳EXIT*/;
 
 	/* WQE does not require an ack */
 	if (wqe->state == wqe_state_done)
-		return COMPST_COMP_WQE;
+		return COMPST_COMP_WQE;/*此WQE不要求ACK*/
 
 	/* WQE caused an error */
 	if (wqe->state == wqe_state_error)
-		return COMPST_ERROR;
+		return COMPST_ERROR;/*此WQE状态为error*/
 
 	/* we have a WQE, if we also have an ack check its PSN */
-	return pkt ? COMPST_CHECK_PSN : COMPST_EXIT;
+	return pkt ? COMPST_CHECK_PSN : COMPST_EXIT/*有待确认的wqe,但没有收到ack报文*/;
 }
 
 static inline void reset_retry_counters(struct rxe_qp *qp)
@@ -184,7 +184,7 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 	 */
 	diff = psn_compare(pkt->psn, wqe->last_psn);
 	if (diff > 0) {
-		/*报文响应的psn比这个wqe的尾包psn还要大*/
+		/*ACK报文的psn比这个wqe的尾包psn还要大*/
 		if (wqe->state == wqe_state_pending) {
 			if (wqe->mask & WR_ATOMIC_OR_READ_MASK)
 				return COMPST_ERROR_RETRY;
@@ -198,18 +198,18 @@ static inline enum comp_state check_psn(struct rxe_qp *qp,
 
 	/* compare response packet to expected response */
 	diff = psn_compare(pkt->psn, qp->comp.psn);
-	if (diff < 0) {/*此报文之前已确认收到了*/
+	if (diff < 0) {/*此ACK报文之前已确认收到了*/
 		/* response is most likely a retried packet if it matches an
 		 * uncompleted WQE go complete it else ignore it
 		 */
 		if (pkt->psn == wqe->last_psn)
-			return COMPST_COMP_ACK;
+			return COMPST_COMP_ACK;/*此wqe恰好整个被ACK*/
 		else if (pkt->opcode == IB_OPCODE_RC_ACKNOWLEDGE &&
 			 (qp->comp.opcode == IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST ||
 			  qp->comp.opcode == IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE))
 			return COMPST_CHECK_ACK;
 		else
-			return COMPST_DONE;
+			return COMPST_DONE;/*这种直接忽略*/
 	} else if ((diff > 0) && (wqe->mask & WR_ATOMIC_OR_READ_MASK)) {
 		return COMPST_DONE;
 	} else {
@@ -243,7 +243,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 			break;
 
 		if (pkt->opcode != IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE &&
-		    pkt->opcode != IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST) {
+		    pkt->opcode != IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST) {/*opcode不合预期*/
 			/* read retries of partial data may restart from
 			 * read response first or response only.
 			 */
@@ -253,9 +253,9 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 			    (wqe->first_psn == wqe->last_psn &&
 			     pkt->opcode ==
 			     IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY))
-				break;
+				break;/*排除恰好首尾时同一包*/
 
-			return COMPST_ERROR;
+			return COMPST_ERROR;/*出错*/
 		}
 		break;
 	default:
@@ -545,9 +545,9 @@ static inline enum comp_state complete_wqe(struct rxe_qp *qp,
 		}
 	}
 
-	do_complete(qp, wqe);
+	do_complete(qp, wqe);/*send queue前移，此wqe对端已确认收到*/
 
-	return COMPST_GET_WQE;
+	return COMPST_GET_WQE;/*再取获取WQE*/
 }
 
 /* drain incoming response packet queue */
@@ -573,7 +573,7 @@ static int flush_send_wqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 
 	if (qp->is_user) {
 		uwc->wr_id = wqe->wr.wr_id;
-		uwc->status = IB_WC_WR_FLUSH_ERR;
+		uwc->status = IB_WC_WR_FLUSH_ERR;/*指明flush err*/
 		uwc->qp_num = qp->ibqp.qp_num;
 	} else {
 		wc->wr_id = wqe->wr.wr_id;
@@ -605,11 +605,11 @@ static void flush_send_queue(struct rxe_qp *qp, bool notify)
 	/*知会send queue上所有wqe，状态变更为err*/
 	while ((wqe = queue_head(q, q->type))) {
 		if (notify) {
-			err = flush_send_wqe(qp, wqe);
+			err = flush_send_wqe(qp, wqe);/*产生flush error cqe*/
 			if (err)
 				notify = 0;
 		}
-		queue_advance_consumer(q, q->type);
+		queue_advance_consumer(q, q->type);/*移动游标*/
 	}
 }
 
@@ -660,14 +660,15 @@ int rxe_completer(struct rxe_qp *qp)
 	qp->req.again = 0;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
-	if (!qp->valid || qp_state(qp) == IB_QPS_ERR ||
-			  qp_state(qp) == IB_QPS_RESET) {
+	if (!qp->valid/*qp无效*/ || qp_state(qp) == IB_QPS_ERR/*qp状态出错*/ ||
+			  qp_state(qp) == IB_QPS_RESET/*qp状态达到reset*/) {
+		/*当前qp是有效的，但qp状态已达到error,则需要notify*/
 		bool notify = qp->valid && (qp_state(qp) == IB_QPS_ERR);
 
-		drain_resp_pkts(qp);
-		flush_send_queue(qp, notify);
+		drain_resp_pkts(qp);/*排空所有response报文*/
+		flush_send_queue(qp, notify);/*排空sq,如果需要notify，则产生cqe*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
-		goto exit;
+		goto exit;/*退出*/
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
@@ -676,11 +677,11 @@ int rxe_completer(struct rxe_qp *qp)
 		qp->comp.timeout_retry = 1;
 		qp->comp.timeout = 0;/*将TIMER用的标记清零*/
 	} else {
-		qp->comp.timeout_retry = 0;/*标记不需要超时重传*/
+		qp->comp.timeout_retry = 0;/*标记qp不需要超时重传*/
 	}
 
 	if (qp->req.need_retry)
-		goto exit;
+		goto exit;/*如果是因为重传进入本函数的，已在本函数之前处理，跳出*/
 
 	/*首先定为ack状态*/
 	state = COMPST_GET_ACK;
@@ -693,6 +694,10 @@ int rxe_completer(struct rxe_qp *qp)
 			skb = skb_dequeue(&qp->resp_pkts);
 			if (skb) {
 				pkt = SKB_TO_PKT(skb);
+				/*如果超时发生，现在我们收到了一个ack,
+				 * 如果ack就是我们要重传的报文，则不必再重传;
+				 * 如果不是，则通过乱序即可知道需要重传哪些报文;
+				 * 故置为0*/
 				qp->comp.timeout_retry = 0;
 			}
 			state = COMPST_GET_WQE;
@@ -704,7 +709,7 @@ int rxe_completer(struct rxe_qp *qp)
 			break;
 
 		case COMPST_CHECK_PSN:
-			state = check_psn(qp, pkt, wqe);
+			state = check_psn(qp, pkt, wqe);/*检查psn*/
 			break;
 
 		case COMPST_CHECK_ACK:
@@ -725,7 +730,7 @@ int rxe_completer(struct rxe_qp *qp)
 				/*此wqe处于pending,且其最后一个PSN即为当前ACK的(即此wqe已全部ACK).变状态*/
 				state = COMPST_COMP_ACK;
 			else
-				state = COMPST_UPDATE_COMP;
+				state = COMPST_UPDATE_COMP;/*此wqe中部分内容被ACK，变状态*/
 			break;
 
 		case COMPST_COMP_ACK:
@@ -738,7 +743,7 @@ int rxe_completer(struct rxe_qp *qp)
 
 		case COMPST_UPDATE_COMP:
 			if (pkt->mask & RXE_END_MASK)
-				qp->comp.opcode = -1;
+				qp->comp.opcode = -1;/*下一个opcode未知*/
 			else
 				qp->comp.opcode = pkt->opcode;
 
@@ -753,12 +758,13 @@ int rxe_completer(struct rxe_qp *qp)
 			state = COMPST_DONE;
 			break;
 
-		case COMPST_DONE:
+		case COMPST_DONE:/*函数返回，且返回值为0*/
 			goto done;
 
 		case COMPST_EXIT:
 			if (qp->comp.timeout_retry && wqe) {
-				/*标记有超时重传,且wqe不为空,进入error_reTry状态*/
+				/*没有收到ACK报文，且标记有超时重传（看COMPST_GET_ACK可知无报文）,
+				 * 且wqe不为空,进入error_retry状态,处理重传*/
 				state = COMPST_ERROR_RETRY;
 				break;
 			}
@@ -766,7 +772,7 @@ int rxe_completer(struct rxe_qp *qp)
 			reset_retry_timer(qp);
 			goto exit;
 
-		case COMPST_ERROR_RETRY:
+		case COMPST_ERROR_RETRY:/*重传处理*/
 			/* we come here if the retry timer fired and we did
 			 * not receive a response packet. try to retry the send
 			 * queue if that makes sense and the limits have not
@@ -776,8 +782,8 @@ int rxe_completer(struct rxe_qp *qp)
 			 */
 
 			/* there is nothing to retry in this case */
-			if (!wqe || (wqe->state == wqe_state_posted))
-				goto exit;
+			if (!wqe/*待确认的为空*/ || (wqe->state == wqe_state_posted/*首个为还未发送的*/))
+				goto exit;/*无事可做，直接离开*/
 
 			/* if we've started a retry, don't start another
 			 * retry sequence, unless this is a timeout.
@@ -796,7 +802,8 @@ int rxe_completer(struct rxe_qp *qp)
 				 * have caused
 				 */
 				if (psn_compare(qp->req.psn,
-						qp->comp.psn) > 0) {/*此时请求的PSN仍大于ACK的PSN,故仍未回复ACK,则启动重传*/
+						qp->comp.psn) > 0) {/*此时请求的PSN大于已ACK的PSN,
+						故超时触发且仍有未回复ACK的报文,启动重传。*/
 					/* tell the requester to retry the
 					 * send queue next time around
 					 */
@@ -842,9 +849,9 @@ int rxe_completer(struct rxe_qp *qp)
 			break;
 
 		case COMPST_ERROR:
-			WARN_ON_ONCE(wqe->status == IB_WC_SUCCESS);
-			do_complete(qp, wqe);
-			rxe_qp_error(qp);/*qp状态错误*/
+			WARN_ON_ONCE(wqe->status == IB_WC_SUCCESS);/*走此状态的wqe状态不可能为success*/
+			do_complete(qp, wqe);/*此wqe处理完成，产生cqe*/
+			rxe_qp_error(qp);/*qp状态置为error*/
 			goto exit;
 		}
 	}

@@ -286,18 +286,18 @@ int rdma_translate_ip(const struct sockaddr *addr,
 	struct net_device *dev;
 
 	if (dev_addr->bound_dev_if) {
-		/*通过dev_if获取netdev*/
+		/*如果bound_dev_if已设置，则通过dev_if获取netdev，校验是否存在*/
 		dev = dev_get_by_index(dev_addr->net, dev_addr->bound_dev_if);
 		if (!dev)
 			return -ENODEV;
-		/*设备存在，填充srcmac等*/
+		/*设备存在，填充srcmac等信息并直接返回*/
 		rdma_copy_src_l2_addr(dev_addr, dev);
 		dev_put(dev);
 		return 0;
 	}
 
 	rcu_read_lock();
-	/*通过ip查找其所属的netdev*/
+	/*bond_dev_if未设置，先通过ip查找其配置在哪个netdev上，再填充*/
 	dev = rdma_find_ndev_for_src_ip_rcu(dev_addr->net, addr);
 	if (!IS_ERR(dev))
 		/*设备存在，填充srcmac等*/

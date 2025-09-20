@@ -718,7 +718,7 @@ rdma_find_gid_by_port(struct ib_device *ib_dev,
 		/*port无效*/
 		return ERR_PTR(-ENOENT);
 
-	/*取此ib设备指定port对应的table*/
+	/*取此ib设备指定port对应的gid table*/
 	table = rdma_gid_table(ib_dev, port);
 
 	if (ndev)
@@ -926,7 +926,7 @@ static int _gid_table_setup_one(struct ib_device *ib_dev)
 	/*初始化每个port的gid表*/
 	rdma_for_each_port (ib_dev, rdma_port) {
 		table = alloc_gid_table(
-			ib_dev->port_data[rdma_port].immutable.gid_tbl_len);
+			ib_dev->port_data[rdma_port].immutable.gid_tbl_len/*此port gid table大小*/);
 		if (!table)
 			goto rollback_table_setup;
 

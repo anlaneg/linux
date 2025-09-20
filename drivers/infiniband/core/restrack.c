@@ -139,7 +139,7 @@ void rdma_restrack_set_name(struct rdma_restrack_entry *res, const char *caller)
 		return;
 	}
 
-	rdma_restrack_attach_task(res, current);
+	rdma_restrack_attach_task(res, current);/*否则关联到当前进程*/
 }
 EXPORT_SYMBOL(rdma_restrack_set_name);
 

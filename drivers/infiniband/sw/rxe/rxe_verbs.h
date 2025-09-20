@@ -296,8 +296,8 @@ struct rxe_qp {
 	struct rxe_resp_info	resp;
 
 	atomic_t		ssn;/*此qp上全局id,用于为发送分配id*/
-	atomic_t		skb_out;
-	int			need_req_skb;
+	atomic_t		skb_out;/*当前共占用了多少skb*/
+	int			need_req_skb;/*当skb_out数量超限，将阻塞req报文发送，此标记将被置1，表示当前处于阻塞中*/
 
 	/* Timer for retranmitting packet when ACKs have been lost. RC
 	 * only. The requester sets it when it is not already

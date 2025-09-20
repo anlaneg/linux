@@ -64,6 +64,7 @@ struct rdma_id_private {
 		struct list_head listen_item;
 		struct list_head listen_list;
 	};
+	/*用于添加至id_table.rb_node树上（用于处理邻居表项变更后的更新）*/
 	struct list_head        id_list_entry;
 	struct cma_device	*cma_dev;/*关联的cma设备*/
 	struct list_head	mc_list;

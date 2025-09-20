@@ -25,7 +25,7 @@ enum rdma_cm_event_type {
 	RDMA_CM_EVENT_CONNECT_REQUEST,
 	RDMA_CM_EVENT_CONNECT_RESPONSE,
 	RDMA_CM_EVENT_CONNECT_ERROR,
-	RDMA_CM_EVENT_UNREACHABLE,
+	RDMA_CM_EVENT_UNREACHABLE,/*网络不可达事件，例如发送用的目的mac发生变更*/
 	RDMA_CM_EVENT_REJECTED,
 	RDMA_CM_EVENT_ESTABLISHED,
 	RDMA_CM_EVENT_DISCONNECTED,
@@ -111,14 +111,16 @@ typedef int (*rdma_cm_event_handler)(struct rdma_cm_id *id,
 
 struct rdma_cm_id {
 	struct ib_device	*device;/*关联的ib设备*/
-	void			*context;/*关联的ucma_context*/
+	void			*context;/*关联的ucma_context或其它私有数据*/
 	struct ib_qp		*qp;
-	/*KERNEL产生cm event后的处理函数，例如ucma_event_hadler*/
+	/*kernel产生cm event后的处理函数，
+	 * 例如:ucma_event_hadler,用于将cm事件处理权提供给用户*/
 	rdma_cm_event_handler	 event_handler;
 	struct rdma_route	 route;/*路由信息*/
 	enum rdma_ucm_port_space ps;/*port space*/
 	enum ib_qp_type		 qp_type;/*qp类型*/
 	u32			 port_num;/*关联的ib设备port*/
+	/*此work负责处理网络事件变更（当前仅邻居表项变更后，需要更新qp中缓存的目的mac)*/
 	struct work_struct net_work;
 };
 
@@ -147,7 +149,7 @@ struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler,
  * The event handler callback serializes on the id's mutex and is
  * allowed to sleep.
  */
-#define rdma_create_id(net, event_handler, context, ps, qp_type)               \
+#define rdma_create_id(net/*net namespace*/, event_handler, context, ps/*port space空间*/, qp_type/*qp类型*/)               \
 	__rdma_create_kernel_id(net, event_handler, context, ps, qp_type,      \
 				KBUILD_MODNAME)
 

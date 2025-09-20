@@ -991,7 +991,7 @@ struct net_device *dev_get_by_index(struct net *net, int ifindex)
 	struct net_device *dev;
 
 	rcu_read_lock();
-	dev = dev_get_by_index_rcu(net, ifindex);
+	dev = dev_get_by_index_rcu(net, ifindex);/*通过ifindex在netns中查找netdev*/
 	dev_hold(dev);
 	rcu_read_unlock();
 	return dev;

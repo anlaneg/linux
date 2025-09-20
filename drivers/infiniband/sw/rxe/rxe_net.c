@@ -392,6 +392,7 @@ static void rxe_skb_tx_dtor(struct sk_buff *skb)
 
 	skb_out = atomic_dec_return(&qp->skb_out);
 	if (qp->need_req_skb && skb_out < RXE_INFLIGHT_SKBS_PER_QP_LOW)
+		/*qp当前处于req_skb发送但skb数量超限，现在限制解除，重新尝试发送*/
 		rxe_sched_task(&qp->send_task);
 
 	rxe_put(qp);

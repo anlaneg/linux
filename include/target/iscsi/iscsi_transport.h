@@ -6,7 +6,7 @@ struct sockaddr_storage;
 struct iscsit_transport {
 #define ISCSIT_TRANSPORT_NAME	16
 	char name[ISCSIT_TRANSPORT_NAME];
-	int transport_type;
+	int transport_type;/*类型*/
 	bool rdma_shutdown;
 	int priv_size;
 	struct module *owner;

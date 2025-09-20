@@ -2220,9 +2220,10 @@ isert_setup_id(struct isert_np *isert_np)
 	struct sockaddr *sa;
 	int ret;
 
-	sa = (struct sockaddr *)&np->np_sockaddr;
+	sa = (struct sockaddr *)&np->np_sockaddr;/*源地址*/
 	isert_dbg("ksockaddr: %p, sa: %p\n", &np->np_sockaddr, sa);
 
+	/*创建rdma_cm_id*/
 	id = rdma_create_id(&init_net, isert_cma_handler, isert_np,
 			    RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(id)) {
@@ -2236,13 +2237,13 @@ isert_setup_id(struct isert_np *isert_np)
 	 * Allow both IPv4 and IPv6 sockets to bind a single port
 	 * at the same time.
 	 */
-	ret = rdma_set_afonly(id, 1);
+	ret = rdma_set_afonly(id, 1);/*此端口上ipv4,ipv6流量均可收取*/
 	if (ret) {
 		isert_err("rdma_set_afonly() failed: %d\n", ret);
 		goto out_id;
 	}
 
-	ret = rdma_bind_addr(id, sa);
+	ret = rdma_bind_addr(id, sa);/*绑定源地址*/
 	if (ret) {
 		isert_err("rdma_bind_addr() failed: %d\n", ret);
 		goto out_id;

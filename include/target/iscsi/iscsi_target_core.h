@@ -782,7 +782,7 @@ struct iscsi_tpg_attrib {
 };
 
 struct iscsi_np {
-	int			np_network_transport;
+	int			np_network_transport;/*transport类型*/
 	int			np_ip_proto;
 	int			np_sock_type;
 	enum np_thread_state_table np_thread_state;

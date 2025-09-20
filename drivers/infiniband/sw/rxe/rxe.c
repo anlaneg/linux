@@ -122,7 +122,7 @@ static void rxe_init_port_param(struct rxe_port *port)
 	port->attr.state		= IB_PORT_DOWN;
 	port->attr.max_mtu		= IB_MTU_4096;
 	port->attr.active_mtu		= IB_MTU_256;
-	port->attr.gid_tbl_len		= RXE_PORT_GID_TBL_LEN;
+	port->attr.gid_tbl_len		= RXE_PORT_GID_TBL_LEN;/*gid table表大小*/
 	port->attr.port_cap_flags	= RXE_PORT_PORT_CAP_FLAGS;
 	port->attr.max_msg_sz		= RXE_PORT_MAX_MSG_SZ;
 	port->attr.bad_pkey_cntr	= RXE_PORT_BAD_PKEY_CNTR;

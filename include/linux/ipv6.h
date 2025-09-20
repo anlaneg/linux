@@ -327,6 +327,7 @@ static inline struct ipv6_pinfo *inet6_sk(const struct sock *__sk)
 
 #define raw6_sk(ptr) container_of_const(ptr, struct raw6_sock, inet.sk)
 
+/*如果一个socket是ipv6 only的，则其只收取ipv6报文*/
 #define ipv6_only_sock(sk)	(sk->sk_ipv6only)
 #define ipv6_sk_rxinfo(sk)	((sk)->sk_family == PF_INET6 && \
 				 inet6_sk(sk)->rxopt.bits.rxinfo)

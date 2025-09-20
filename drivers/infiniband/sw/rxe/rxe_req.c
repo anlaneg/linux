@@ -439,7 +439,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	int			paylen;
 	int			solicited;
 	u32			qp_num;
-	int			ack_req = 0;
+	int			ack_req = 0;/*默认不要求ACK标记*/
 
 	/*报文总长度*/
 	/* length from start of bth to end of icrc */
@@ -593,7 +593,7 @@ static void update_wqe_psn(struct rxe_qp *qp,
 			   u32 payload)
 {
 	/* number of packets left to send including current one */
-	int num_pkt = (wqe->dma.resid + payload + qp->mtu - 1) / qp->mtu;
+	int num_pkt = (wqe->dma.resid + payload + qp->mtu - 1) / qp->mtu;/*剩余长度还需要发送多少个包*/
 
 	/* handle zero length packet case */
 	if (num_pkt == 0)
@@ -769,7 +769,7 @@ int rxe_requester(struct rxe_qp *qp)
 	/* Limit the number of inflight SKBs per QP */
 	if (unlikely(atomic_read(&qp->skb_out) >
 		     RXE_INFLIGHT_SKBS_PER_QP_HIGH)) {
-		qp->need_req_skb = 1;
+		qp->need_req_skb = 1;/*占用skb超限，标记请求被阻塞*/
 		goto exit;
 	}
 
@@ -782,12 +782,12 @@ int rxe_requester(struct rxe_qp *qp)
 
 	mask = rxe_opcode[opcode].mask;/*得到此opcode对应的标记数据*/
 	if (unlikely(mask & (RXE_READ_OR_ATOMIC_MASK |
-			RXE_ATOMIC_WRITE_MASK))) {
+			RXE_ATOMIC_WRITE_MASK))) {//????
 		if (check_init_depth(qp, wqe))
 			goto exit;
 	}
 
-	mtu = get_mtu(qp);
+	mtu = get_mtu(qp);/*取应用的mtu*/
 	/*依据OPCODE确定报文payload长度*/
 	payload = (mask & (RXE_WRITE_OR_SEND_MASK | RXE_ATOMIC_WRITE_MASK)) ?
 			wqe->dma.resid : 0;
@@ -864,9 +864,9 @@ int rxe_requester(struct rxe_qp *qp)
 	}
 
 	/*到此报文已成功发送出去*/
-	update_wqe_state(qp, wqe, &pkt);
-	update_wqe_psn(qp, wqe, &pkt, payload);/*更新qp psn*/
-	update_state(qp, &pkt);
+	update_wqe_state(qp, wqe, &pkt);/*更新wqe状态*/
+	update_wqe_psn(qp, wqe, &pkt, payload);/*更新qp psn，以便下次发送*/
+	update_state(qp, &pkt);/*更新其它状态*/
 
 	/* A non-zero return value will cause rxe_do_task to
 	 * exit its loop and end the work item. A zero return

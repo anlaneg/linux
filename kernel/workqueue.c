@@ -5902,7 +5902,7 @@ struct workqueue_struct *alloc_workqueue_noprof(const char *fmt,
 	va_list args;
 
 	va_start(args, max_active);
-	wq = __alloc_workqueue(fmt, flags, max_active, args);
+	wq = __alloc_workqueue(fmt, flags, max_active, args);/*创建工作队列*/
 	va_end(args);
 	if (!wq)
 		return NULL;

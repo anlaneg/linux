@@ -330,7 +330,8 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 		 * makes no sense
 		 */
 		if (ipv6_only_sock(sk)) {
-			/*socket被指定为v6 only,报错*/
+			/*这个socket即可以处理ipv4流量也可以处理ipv6流量。
+			 * 绑定的是v4 mapping的地址，这里处理为报错*/
 			err = -EINVAL;
 			goto out;
 		}

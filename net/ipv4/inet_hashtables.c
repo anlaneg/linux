@@ -322,7 +322,7 @@ static inline int compute_score(struct sock *sk, const struct net *net,
 
 	if (net_eq(sock_net(sk), net) && sk->sk_num == hnum &&
 			!ipv6_only_sock(sk)) {
-	    //监听的端口号必须一致且非ipv6 only socket,否则继续匹配
+	    //监听的端口号必须一致且非ipv6 only socket（即可以收v4报文）,则继续匹配
 		if (sk->sk_rcv_saddr != daddr)
 			return -1;/*目的地址与接收地址不相等，忽略*/
 

@@ -128,6 +128,7 @@ static inline
 void ibdev_dbg_ratelimited(const struct ib_device *ibdev, const char *format, ...) {}
 #endif
 
+/*结构体共16字节长度*/
 union ib_gid {
 	u8	raw[16];
 	struct {
@@ -1398,7 +1399,7 @@ enum ib_wr_opcode {
 enum ib_send_flags {
 	IB_SEND_FENCE		= 1,
 	IB_SEND_SIGNALED	= (1<<1),
-	IB_SEND_SOLICITED	= (1<<2),
+	IB_SEND_SOLICITED	= (1<<2),/*???*/
 	IB_SEND_INLINE		= (1<<3),/*标记wr中待发送的数据直接存在inline data中*/
 	IB_SEND_IP_CSUM		= (1<<4),
 
@@ -3321,7 +3322,7 @@ static inline bool rdma_protocol_ib(const struct ib_device *device,
 static inline bool rdma_protocol_roce(const struct ib_device *device,
 				      u32 port_num)
 {
-    /*检查此port是否支持roce*/
+    /*检查此port是否支持rocev1,rocev2*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 	       (RDMA_CORE_CAP_PROT_ROCE | RDMA_CORE_CAP_PROT_ROCE_UDP_ENCAP);
 }
@@ -4084,7 +4085,7 @@ static inline int ib_post_send(struct ib_qp *qp,
 {
 	const struct ib_send_wr *dummy;
 
-	/*应用设备的post_send向外发送数据*/
+	/*调用设备的post_send向外发送数据*/
 	return qp->device->ops.post_send(qp, send_wr, bad_send_wr ? : &dummy);
 }
 

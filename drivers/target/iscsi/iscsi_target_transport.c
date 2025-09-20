@@ -4,9 +4,10 @@
 #include <linux/module.h>
 #include <target/iscsi/iscsi_transport.h>
 
-static LIST_HEAD(g_transport_list);
+static LIST_HEAD(g_transport_list);/*用于注册所有transport*/
 static DEFINE_MUTEX(transport_mutex);
 
+/*通过type查找transport*/
 struct iscsit_transport *iscsit_get_transport(int type)
 {
 	struct iscsit_transport *t;
@@ -14,6 +15,7 @@ struct iscsit_transport *iscsit_get_transport(int type)
 	mutex_lock(&transport_mutex);
 	list_for_each_entry(t, &g_transport_list, t_node) {
 		if (t->transport_type == type) {
+			/*类型命中，返回对应的transport*/
 			if (t->owner && !try_module_get(t->owner)) {
 				t = NULL;
 			}
@@ -36,7 +38,7 @@ void iscsit_register_transport(struct iscsit_transport *t)
 	INIT_LIST_HEAD(&t->t_node);
 
 	mutex_lock(&transport_mutex);
-	list_add_tail(&t->t_node, &g_transport_list);
+	list_add_tail(&t->t_node, &g_transport_list);/*注册icsci transport*/
 	mutex_unlock(&transport_mutex);
 
 	pr_debug("Registered iSCSI transport: %s\n", t->name);

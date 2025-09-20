@@ -635,6 +635,7 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 		if (optlen < sizeof(int) ||
 		    inet_sk(sk)->inet_num)
 			goto e_inval;
+		/*当valbool为0时，此socket可同时处理 IPv4 和 IPv6 流量*/
 		sk->sk_ipv6only = valbool;
 		retv = 0;
 		break;

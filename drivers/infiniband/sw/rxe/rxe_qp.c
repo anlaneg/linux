@@ -283,7 +283,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->req.opcode		= -1;
 	qp->comp.opcode		= -1;
 
-	rxe_init_task(&qp->send_task, qp, rxe_sender);
+	rxe_init_task(&qp->send_task, qp, rxe_sender/*负责发送及complete处理*/);
 
 	qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
 	if (init->qp_type == IB_QPT_RC) {
