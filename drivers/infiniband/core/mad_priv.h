@@ -91,14 +91,14 @@ struct ib_rmpp_segment {
 struct ib_mad_agent_private {
 	struct ib_mad_agent agent;
 	struct ib_mad_reg_req *reg_req;
-	struct ib_mad_qp_info *qp_info;
+	struct ib_mad_qp_info *qp_info;/*要操作的qp信息,它指向的信息是mad提前创建好的qp_info*/
 
 	spinlock_t lock;
 	struct list_head send_list;
 	unsigned int sol_fc_send_count;
 	struct list_head wait_list;
 	unsigned int sol_fc_wait_count;
-	struct delayed_work timed_work;
+	struct delayed_work timed_work;/*长时间未收到对端响应时work*/
 	unsigned long timeout;
 	struct list_head local_list;
 	struct work_struct local_work;
@@ -157,9 +157,9 @@ struct ib_mad_send_wr_private {
 	struct ib_ud_wr send_wr;/*发送用的wr*/
 	struct ib_sge sg_list[IB_MAD_SEND_REQ_MAX_SG];
 	__be64 tid;
-	unsigned long timeout;
+	unsigned long timeout;/*发送后,等待响应的超时时间*/
 	int max_retries;
-	int retries_left;
+	int retries_left;/*剩余的超时重发次数*/
 	int retry;
 
 	/* RMPP control */
@@ -171,7 +171,7 @@ struct ib_mad_send_wr_private {
 	int newwin;
 	int pad;/*设置pad长度*/
 
-	enum ib_mad_state state;
+	enum ib_mad_state state;/*此send_wr的状态*/
 
 	/* Solicited MAD flow control */
 	bool is_solicited_fc;
@@ -251,11 +251,11 @@ struct ib_mad_queue {
 };
 
 struct ib_mad_qp_info {
-	struct ib_mad_port_private *port_priv;
-	struct ib_qp *qp;/*对应的qp*/
+	struct ib_mad_port_private *port_priv;/*对应的mad port私有结构*/
+	struct ib_qp *qp;/*对应的MAD qp*/
 	struct ib_mad_queue send_queue;/*mad qp的收送队列*/
 	struct ib_mad_queue recv_queue;/*mad qp的接收队列*/
-	struct list_head overflow_list;
+	struct list_head overflow_list;/*发送时,超限的消息被会置在此链上,等有配额时会在ib_mad_send_done中发送*/
 	spinlock_t snoop_lock;
 	struct ib_mad_snoop_private **snoop_table;
 	int snoop_table_size;
@@ -266,7 +266,7 @@ struct ib_mad_port_private {
 	struct list_head port_list;
 	struct ib_device *device;/*相对应的ib设备*/
 	int port_num;/*对应ib设备对应的port_num*/
-	struct ib_cq *cq;
+	struct ib_cq *cq;/*mad qp的scq,rcq会共用此cq,故此CQ的长度是实际需要长度的2倍*/
 	struct ib_pd *pd;
 
 	spinlock_t reg_lock;

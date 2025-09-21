@@ -2504,14 +2504,14 @@ EXPORT_SYMBOL(ib_device_get_by_netdev);
  * device for which filter() function returns non zero.
  */
 void ib_enum_roce_netdev(struct ib_device *ib_dev,
-			 roce_netdev_filter filter,
-			 void *filter_cookie,
-			 roce_netdev_callback cb,
-			 void *cookie)
+			 roce_netdev_filter filter/*负责检查ib_dev的某个port是否需要执行cb回调*/,
+			 void *filter_cookie/*filter函数参数*/,
+			 roce_netdev_callback cb/*动作回调*/,
+			 void *cookie/*CB回调函数参数*/)
 {
 	u32 port;
 
-	/*遍历ib_dev的每个port*/
+	/*遍历此ib_dev的每个port*/
 	rdma_for_each_port (ib_dev, port)
 		if (rdma_protocol_roce(ib_dev, port)) {
 		    /*此port支持roce,取此port对应的net_device*/
@@ -2537,17 +2537,17 @@ void ib_enum_roce_netdev(struct ib_device *ib_dev,
  * filter() function returns non zero.
  */
 void ib_enum_all_roce_netdevs(roce_netdev_filter filter,
-			      void *filter_cookie,
+			      void *filter_cookie/*filter函数参数*/,
 			      roce_netdev_callback cb/*回调函数*/,
-			      void *cookie)
+			      void *cookie/*cb函数参数*/)
 {
 	struct ib_device *dev;
 	unsigned long index;
 
 	down_read(&devices_rwsem);
-	/*利用index遍历系统中所有ib设备*/
+	/*利用index遍历系统中所有ib设备,通过filter找到满足要求的ib_dev并对其执行cb回调*/
 	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED)
-		ib_enum_roce_netdev(dev, filter, filter_cookie, cb, cookie);
+		ib_enum_roce_netdev(dev/*ib设备*/, filter, filter_cookie, cb, cookie);
 	up_read(&devices_rwsem);
 }
 
@@ -3154,11 +3154,13 @@ static int __init ib_core_init(void)
 	if (!ib_unreg_wq)
 		goto err;
 
+	/*申请wq,此wq用于处理cq事件且CQ poll方式要求IB_POLL_WORKQUEUE时*/
 	ib_comp_wq = alloc_workqueue("ib-comp-wq",
 			WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
 	if (!ib_comp_wq)
 		goto err_unbound;
 
+	/*申请unbound wq,此wq用于处理cq事件且CQ poll方式要求unbound wq时*/
 	ib_comp_unbound_wq =
 		alloc_workqueue("ib-comp-unb-wq",
 				WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM |

@@ -1008,7 +1008,7 @@ enum ib_wc_status {
 	IB_WC_INV_EECN_ERR,
 	IB_WC_INV_EEC_STATE_ERR,
 	IB_WC_FATAL_ERR,
-	IB_WC_RESP_TIMEOUT_ERR,
+	IB_WC_RESP_TIMEOUT_ERR,/*当前work request超时未响应*/
 	IB_WC_GENERAL_ERR
 };
 
@@ -1049,7 +1049,7 @@ enum ib_wc_flags {
 struct ib_wc {
 	union {
 		u64		wr_id;
-		struct ib_cqe	*wr_cqe;
+		struct ib_cqe	*wr_cqe;/*如果指明有cqe,则自CQ中取得此wc完成通知时,cqe->done将被调用*/
 	};
 	enum ib_wc_status	status;
 	enum ib_wc_opcode	opcode;
@@ -1073,8 +1073,9 @@ struct ib_wc {
 };
 
 enum ib_cq_notify_flags {
-	IB_CQ_SOLICITED			= 1 << 0,
-	IB_CQ_NEXT_COMP			= 1 << 1,
+	IB_CQ_SOLICITED			= 1 << 0,/*仅当有cqe,且指明solicited时才执行comp_handler通知*/
+	IB_CQ_NEXT_COMP			= 1 << 1,/*每个cqe都执行comp_handler通知*/
+	/*如上示,当前支持两种通知标记*/
 	IB_CQ_SOLICITED_MASK		= IB_CQ_SOLICITED | IB_CQ_NEXT_COMP,
 	IB_CQ_REPORT_MISSED_EVENTS	= 1 << 2,
 };
@@ -1126,8 +1127,8 @@ struct ib_srq_init_attr {
 struct ib_qp_cap {
 	u32	max_send_wr;/*send work request最大数目*/
 	u32	max_recv_wr;/*recv work request最大数目*/
-	u32	max_send_sge;
-	u32	max_recv_sge;
+	u32	max_send_sge;/*发送时最大sge的数目*/
+	u32	max_recv_sge;/*接收时最大sge的数目*/
 	u32	max_inline_data;
 
 	/*
@@ -1650,7 +1651,7 @@ struct ib_cq {
 	struct ib_device       *device;
 	/*对应的ucq object*/
 	struct ib_ucq_object   *uobject;
-	/*回调*/
+	/*当cq中增加cqe,且需要向上通知时,此回调将被触发*/
 	ib_comp_handler   	comp_handler;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void                   *cq_context;
@@ -1663,9 +1664,9 @@ struct ib_cq {
 	struct list_head        pool_entry;
 	union {
 		struct irq_poll		iop;
-		struct work_struct	work;
+		struct work_struct	work;/*CQ WORK,负责poll cqe*/
 	};
-	struct workqueue_struct *comp_wq;
+	struct workqueue_struct *comp_wq;/*WQ指针,此wq用于处理CQ WORK*/
 	struct dim *dim;
 
 	/* updated only by trace points */
@@ -2455,6 +2456,7 @@ struct ib_device_ops {
 	void (*drain_sq)(struct ib_qp *qp);
 	int (*poll_cq)(struct ib_cq *cq, int num_entries, struct ib_wc *wc);
 	int (*peek_cq)(struct ib_cq *cq, int wc_cnt);
+	/*设置cq->notify*/
 	int (*req_notify_cq)(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 	int (*post_srq_recv)(struct ib_srq *srq,
 			     const struct ib_recv_wr *recv_wr,
@@ -4112,7 +4114,7 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 			    const char *caller);
 static inline struct ib_cq *ib_alloc_cq(struct ib_device *dev, void *private,
 					int nr_cqe, int comp_vector,
-					enum ib_poll_context poll_ctx)
+					enum ib_poll_context poll_ctx/*指明cq poll的方式*/)
 {
 	/*申请并创建cq*/
 	return __ib_alloc_cq(dev, private, nr_cqe, comp_vector, poll_ctx,

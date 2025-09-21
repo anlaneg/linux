@@ -41,7 +41,7 @@ struct rdma_dev_addr {
 	int bound_dev_if;/*设置的目的接口IFINDEX*/
 	enum rdma_transport_type transport;/*使用哪种transport类型，例如udp,iwrap*/
 	struct net *net;/*当前所属net namespace*/
-	const struct ib_gid_attr *sgid_attr;/*使用的gid信息*/
+	const struct ib_gid_attr *sgid_attr;/*sgid的属性信息*/
 	enum rdma_network_type network;/*使用哪种网络:ipv4,ipv6,ib*/
 	/*指定的报文hop limit,来源于路由*/
 	int hoplimit;

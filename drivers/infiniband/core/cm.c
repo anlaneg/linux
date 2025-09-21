@@ -113,10 +113,10 @@ static struct ib_client cm_client = {
 
 static struct ib_cm {
 	spinlock_t lock;
-	/*用于串连cm_device*/
+	/*用于串连系统所有cm_device*/
 	struct list_head device_list;
 	rwlock_t device_lock;
-	struct rb_root listen_service_table;
+	struct rb_root listen_service_table;/*用于保存SERVICE*/
 	u64 listen_service_id;
 	/* struct rb_root peer_service_table; todo: fix peer to peer */
 	struct rb_root remote_qp_table;
@@ -172,11 +172,11 @@ struct cm_device {
 	struct kref kref;
 	struct list_head list;
 	rwlock_t mad_agent_lock;
-	/*对应的ib_device*/
+	/*CM关联的ib_device*/
 	struct ib_device *ib_device;
 	u8 ack_delay;
 	int going_down;
-	/*每个port对应一个cm_port结构体，见cm_add_one函数*/
+	/*CM_DEVICE有哪些cm port;每个port对应一个cm_port结构体，见cm_add_one函数*/
 	struct cm_port *port[];
 };
 
@@ -500,7 +500,7 @@ get_cm_port_from_path(struct sa_path_rec *path, const struct ib_gid_attr *attr/*
 		/*遍历所有cm_device*/
 		list_for_each_entry(cm_dev, &cm.device_list, list) {
 			if (cm_dev->ib_device == attr->device) {
-				/*找到对应的cm_device,取对应的port*/
+				/*通过device找到对应的cm_device,再取对应的cm_port*/
 				port = cm_dev->port[attr->port_num - 1];
 				break;
 			}
@@ -546,7 +546,7 @@ static int cm_init_av_by_path(struct sa_path_rec *path,
 	port = get_cm_port_from_path(path, sgid_attr);
 	if (!port)
 		return -EINVAL;
-	cm_dev = port->cm_dev;/*此port对应的cm_dev*/
+	cm_dev = port->cm_dev;/*取此cm_port对应的cm_dev*/
 
 	ret = ib_find_cached_pkey(cm_dev->ib_device, port->port_num,
 				  be16_to_cpu(path->pkey), &av->pkey_index);
@@ -642,7 +642,7 @@ static int be64_gt(__be64 a, __be64 b)
 static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 					      ib_cm_handler shared_handler)
 {
-	struct rb_node **link = &cm.listen_service_table.rb_node;
+	struct rb_node **link = &cm.listen_service_table.rb_node;/*取根节点*/
 	struct rb_node *parent = NULL;
 	struct cm_id_private *cur_cm_id_priv;
 	__be64 service_id = cm_id_priv->id.service_id;
@@ -671,17 +671,17 @@ static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 			    cur_cm_id_priv->id.context ||
 			    WARN_ON(!cur_cm_id_priv->id.cm_handler)) {
 				spin_unlock_irqrestore(&cm.lock, flags);
-				return NULL;
+				return NULL;/*两者不相等*/
 			}
 			refcount_inc(&cur_cm_id_priv->refcount);
 			cur_cm_id_priv->listen_sharecount++;
 			spin_unlock_irqrestore(&cm.lock, flags);
-			return cur_cm_id_priv;
+			return cur_cm_id_priv;/*匹配,不需要插入*/
 		}
 	}
 	cm_id_priv->listen_sharecount++;
 	rb_link_node(&cm_id_priv->service_node, parent, link);
-	/*向service table中添加service*/
+	/*向service table中添加新的service*/
 	rb_insert_color(&cm_id_priv->service_node, &cm.listen_service_table);
 	spin_unlock_irqrestore(&cm.lock, flags);
 	return cm_id_priv;
@@ -1000,7 +1000,7 @@ static struct cm_timewait_info *cm_create_timewait_info(__be32 local_id)
 
 	/*设置timewait_info->work*/
 	timewait_info->work.local_id = local_id;
-	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);
+	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);/*初始化cm消息处理handler*/
 	timewait_info->work.cm_event.event = IB_CM_TIMEWAIT_EXIT;/*对应exit事件*/
 	return timewait_info;
 }
@@ -1217,7 +1217,7 @@ static int cm_init_listen(struct cm_id_private *cm_id_priv, __be64 service_id)
 	if (service_id == IB_CM_ASSIGN_SERVICE_ID)
 		cm_id_priv->id.service_id = cpu_to_be64(cm.listen_service_id++);
 	else
-		cm_id_priv->id.service_id = service_id;
+		cm_id_priv->id.service_id = service_id;/*设置普通service_id*/
 
 	return 0;
 }
@@ -1248,12 +1248,13 @@ int ib_cm_listen(struct ib_cm_id *cm_id, __be64 service_id)
 	if (ret)
 		goto out;
 
+	/*添加cm_id_priv到cm.listen_service_table*/
 	if (!cm_insert_listen(cm_id_priv, NULL)) {
 		ret = -EBUSY;
 		goto out;
 	}
 
-	cm_id_priv->id.state = IB_CM_LISTEN;
+	cm_id_priv->id.state = IB_CM_LISTEN;/*置listen状态*/
 	ret = 0;
 
 out:
@@ -1288,18 +1289,18 @@ struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
 	int err = 0;
 
 	/* Create an ID in advance, since the creation may sleep */
-	cm_id_priv = cm_alloc_id_priv(device, cm_handler, NULL);
+	cm_id_priv = cm_alloc_id_priv(device, cm_handler, NULL);/*来一个新的cm_id_private*/
 	if (IS_ERR(cm_id_priv))
 		return ERR_CAST(cm_id_priv);
 
-	err = cm_init_listen(cm_id_priv, service_id);
+	err = cm_init_listen(cm_id_priv, service_id);/*初始化service_id*/
 	if (err) {
 		ib_destroy_cm_id(&cm_id_priv->id);
 		return ERR_PTR(err);
 	}
 
 	spin_lock_irq(&cm_id_priv->lock);
-	listen_id_priv = cm_insert_listen(cm_id_priv, cm_handler);
+	listen_id_priv = cm_insert_listen(cm_id_priv, cm_handler);/*添加此cm_id_priv*/
 	if (listen_id_priv != cm_id_priv) {
 		spin_unlock_irq(&cm_id_priv->lock);
 		ib_destroy_cm_id(&cm_id_priv->id);
@@ -1307,7 +1308,7 @@ struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
 			return ERR_PTR(-EINVAL);
 		return &listen_id_priv->id;
 	}
-	cm_id_priv->id.state = IB_CM_LISTEN;
+	cm_id_priv->id.state = IB_CM_LISTEN;/*置此cm_id_private状态为listen*/
 	spin_unlock_irq(&cm_id_priv->lock);
 
 	/*
@@ -1335,7 +1336,7 @@ static __be64 cm_form_tid(struct cm_id_private *cm_id_priv)
 	if (cm_id_priv->av.port->mad_agent)
 		hi_tid = ((u64)cm_id_priv->av.port->mad_agent->hi_tid) << 32;
 	read_unlock(&cm_id_priv->av.port->cm_dev->mad_agent_lock);
-	return cpu_to_be64(hi_tid | low_tid);
+	return cpu_to_be64(hi_tid | low_tid);/*注意:这里将agent id放在了报文tid上了*/
 }
 
 /*设置CM MAD header*/
@@ -3972,7 +3973,7 @@ static int cm_establish(struct ib_cm_id *cm_id)
 	 * we need to find the cm_id once we're in the context of the
 	 * worker thread, rather than holding a reference on it.
 	 */
-	INIT_DELAYED_WORK(&work->work, cm_work_handler);
+	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*初始化cm消息处理handler*/
 	work->local_id = cm_id->local_id;
 	work->remote_id = cm_id->remote_id;
 	work->mad_recv_wc = NULL;
@@ -4046,7 +4047,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	/*依据消息的attr_id确定event*/
 	switch (mad_recv_wc->recv_buf.mad->mad_hdr.attr_id) {
 	case CM_REQ_ATTR_ID:
-		/*收到req消息*/
+		/*收到发送过来的req消息*/
 		alt_path = cm_req_has_alt_path((struct cm_req_msg *)
 						mad_recv_wc->recv_buf.mad);
 		paths = 1 + (alt_path != 0);
@@ -4101,15 +4102,15 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 		return;
 	}
 
-	INIT_DELAYED_WORK(&work->work, cm_work_handler);
-	work->cm_event.event = event;
+	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*初始化cm消息处理handler*/
+	work->cm_event.event = event;/*event类型*/
 	work->mad_recv_wc = mad_recv_wc;
 	work->port = port;
 
 	/* Check if the device started its remove_one */
 	spin_lock_irq(&cm.lock);
 	if (!port->cm_dev->going_down)
-		/*port没有被标记为down,触发此work,处理event*/
+		/*port没有被标记为down,触发此work,处理这个event*/
 		queue_delayed_work(cm.wq, &work->work, 0);
 	else
 		going_down = 1;
@@ -4397,6 +4398,7 @@ static int cm_add_one(struct ib_device *ib_device)
 	int count = 0;
 	u32 i;
 
+	/*申请cm设备*/
 	cm_dev = kzalloc(struct_size(cm_dev, port, ib_device->phys_port_cnt),
 			 GFP_KERNEL);
 	if (!cm_dev)
@@ -4412,18 +4414,20 @@ static int cm_add_one(struct ib_device *ib_device)
 	ib_set_client_data(ib_device, &cm_client, cm_dev);
 
 	set_bit(IB_MGMT_METHOD_SEND, reg_req.method_mask);
+	/*遍历此设备上所有port*/
 	rdma_for_each_port (ib_device, i) {
 		if (!rdma_cap_ib_cm(ib_device, i))
 			/*此port不支持cm*/
 			continue;
 
+		/*创建cm port*/
 		port = kzalloc(sizeof *port, GFP_KERNEL);
 		if (!port) {
 			ret = -ENOMEM;
 			goto error1;
 		}
 
-		cm_dev->port[i-1] = port;
+		cm_dev->port[i-1] = port;/*设置此cm port*/
 		port->cm_dev = cm_dev;
 		port->port_num = i;
 
@@ -4434,11 +4438,11 @@ static int cm_add_one(struct ib_device *ib_device)
 
 		/*注册ib_qpt_gsi对应的mad处理agent*/
 		port->mad_agent = ib_register_mad_agent(ib_device, i/*port编号*/,
-							IB_QPT_GSI,
+							IB_QPT_GSI,/*gsi qp*/
 							&reg_req,
 							0,
-							cm_send_handler,/*发送消息*/
-							cm_recv_handler,/*接收消息*/
+							cm_send_handler,/*CM消息发送完成处理*/
+							cm_recv_handler,/*接收到CM消息*/
 							port,
 							0);
 		if (IS_ERR(port->mad_agent)) {

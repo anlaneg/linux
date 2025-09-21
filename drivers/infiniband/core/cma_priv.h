@@ -50,8 +50,9 @@ enum rdma_cm_state {
 	RDMA_CM_DESTROYING
 };
 
+/*rdma_id_private是直接面向用户的*/
 struct rdma_id_private {
-	struct rdma_cm_id	id;/*包含基类rdma_cm_id*/
+	struct rdma_cm_id	id;/*包含基类rdma_cm_id(用户看到的是这个结构)*/
 
 	struct rdma_bind_list	*bind_list;/*指明使用的源PORT*/
 	struct hlist_node	node;
@@ -78,7 +79,7 @@ struct rdma_id_private {
 	refcount_t refcount;
 	struct mutex		handler_mutex;
 
-	int			backlog;
+	int			backlog;/*listen时传入的backlog*/
 	int			timeout_ms;
 	struct ib_sa_query	*query;
 	int			query_id;
@@ -97,11 +98,11 @@ struct rdma_id_private {
 	u8                      timeout_set:1;/*指明是否配置了timeout*/
 	u8			min_rnr_timer_set:1;
 	u8			reuseaddr;/*配置是否重用地址*/
-	u8			afonly;/*配置的afonly*/
+	u8			afonly;/*配置的afonly,为1时此端口上ipv4,ipv6流量均可收取*/
 	u8			timeout;/*配置的timeout*/
 	u8			min_rnr_timer;
 	u8 used_resolve_ip;
-	enum ib_gid_type	gid_type;
+	enum ib_gid_type	gid_type;/*GID的类型.例如是roceV1,还是v2*/
 
 	/*
 	 * Internal to RDMA/core, don't use in the drivers

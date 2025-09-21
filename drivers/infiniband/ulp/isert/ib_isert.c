@@ -509,10 +509,11 @@ isert_connect_release(struct isert_conn *isert_conn)
 		kfree(isert_conn);
 }
 
+/*修改conn状态,并添加此conn到isert_np->pending状态*/
 static void
 isert_connected_handler(struct rdma_cm_id *cma_id)
 {
-	struct isert_conn *isert_conn = cma_id->qp->qp_context;
+	struct isert_conn *isert_conn = cma_id->qp->qp_context;/*取isert_conn*/
 	struct isert_np *isert_np = cma_id->context;
 
 	isert_info("conn %p\n", isert_conn);
@@ -523,7 +524,7 @@ isert_connected_handler(struct rdma_cm_id *cma_id)
 	mutex_unlock(&isert_conn->mutex);
 
 	mutex_lock(&isert_np->mutex);
-	list_move_tail(&isert_conn->node, &isert_np->pending);
+	list_move_tail(&isert_conn->node, &isert_np->pending);/*将连接加入到pending链上*/
 	mutex_unlock(&isert_np->mutex);
 
 	isert_info("np %p: Allow accept_np to continue\n", isert_np);
@@ -688,6 +689,7 @@ isert_cma_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 			isert_err("failed handle connect request %d\n", ret);
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
+		/*达到est状态*/
 		isert_connected_handler(cma_id);
 		break;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
@@ -2224,7 +2226,7 @@ isert_setup_id(struct isert_np *isert_np)
 	isert_dbg("ksockaddr: %p, sa: %p\n", &np->np_sockaddr, sa);
 
 	/*创建rdma_cm_id*/
-	id = rdma_create_id(&init_net, isert_cma_handler, isert_np,
+	id = rdma_create_id(&init_net, isert_cma_handler/*指明cm消息处理函数*/, isert_np,
 			    RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(id)) {
 		isert_err("rdma_create_id() failed: %ld\n", PTR_ERR(id));
@@ -2243,13 +2245,13 @@ isert_setup_id(struct isert_np *isert_np)
 		goto out_id;
 	}
 
-	ret = rdma_bind_addr(id, sa);/*绑定源地址*/
+	ret = rdma_bind_addr(id, sa);/*绑定源地址,绑定cm设备*/
 	if (ret) {
 		isert_err("rdma_bind_addr() failed: %d\n", ret);
 		goto out_id;
 	}
 
-	ret = rdma_listen(id, 0);
+	ret = rdma_listen(id, 0);/*监听*/
 	if (ret) {
 		isert_err("rdma_listen() failed: %d\n", ret);
 		goto out_id;
@@ -2287,7 +2289,7 @@ isert_setup_np(struct iscsi_np *np,
 	memcpy(&np->np_sockaddr, ksockaddr,
 	       sizeof(struct sockaddr_storage));
 
-	isert_lid = isert_setup_id(isert_np);
+	isert_lid = isert_setup_id(isert_np);/*创建rdma_cm_id结构体*/
 	if (IS_ERR(isert_lid)) {
 		ret = PTR_ERR(isert_lid);
 		goto out;
@@ -2378,8 +2380,8 @@ isert_set_conn_info(struct iscsi_np *np, struct iscsit_conn *conn,
 
 	conn->login_family = np->np_sockaddr.ss_family;
 
-	conn->login_sockaddr = cm_route->addr.dst_addr;
-	conn->local_sockaddr = cm_route->addr.src_addr;
+	conn->login_sockaddr = cm_route->addr.dst_addr;/*目的地址*/
+	conn->local_sockaddr = cm_route->addr.src_addr;/*本地地址*/
 }
 
 static int
@@ -2595,7 +2597,7 @@ static struct iscsit_transport iser_target_transport = {
 	.rdma_shutdown		= true,
 	.priv_size		= sizeof(struct isert_cmd),
 	.owner			= THIS_MODULE,
-	.iscsit_setup_np	= isert_setup_np,
+	.iscsit_setup_np	= isert_setup_np,/*CM监听地址*/
 	.iscsit_accept_np	= isert_accept_np,
 	.iscsit_free_np		= isert_free_np,
 	.iscsit_wait_conn	= isert_wait_conn,

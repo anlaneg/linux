@@ -75,7 +75,7 @@ enum gid_table_entry_state {
 	 * When last user of the GID entry releases reference to it,
 	 * GID entry is detached from the table.
 	 */
-	GID_TABLE_ENTRY_PENDING_DEL	= 3,
+	GID_TABLE_ENTRY_PENDING_DEL	= 3,/*指明正在被删除*/
 };
 
 struct roce_gid_ndev_storage {
@@ -329,6 +329,7 @@ alloc_gid_entry(const struct ib_gid_attr *attr)
 	return entry;
 }
 
+/*在table中添加GID元素,放置在entry->attr.index处*/
 static void store_gid_entry(struct ib_gid_table *table,
 			    struct ib_gid_table_entry *entry)
 {
@@ -367,11 +368,13 @@ static int add_roce_gid(struct ib_gid_table_entry *entry)
 	int ret;
 
 	if (!attr->ndev) {
+		/*必须指明网络设备*/
 		dev_err(&attr->device->dev, "%s NULL netdev port=%u index=%u\n",
 			__func__, attr->port_num, attr->index);
 		return -EINVAL;
 	}
 	if (rdma_cap_roce_gid_table(attr->device, attr->port_num)) {
+		/*有回调,通过回调处理*/
 		ret = attr->device->ops.add_gid(attr, &entry->context);
 		if (ret) {
 			dev_err(&attr->device->dev,
@@ -393,7 +396,7 @@ static int add_roce_gid(struct ib_gid_table_entry *entry)
  *
  */
 static void del_gid(struct ib_device *ib_dev, u32 port,
-		    struct ib_gid_table *table, int ix)
+		    struct ib_gid_table *table, int ix/*要移除的gid位置*/)
 {
 	struct roce_gid_ndev_storage *ndev_storage;
 	struct ib_gid_table_entry *entry;
@@ -410,10 +413,11 @@ static void del_gid(struct ib_device *ib_dev, u32 port,
 	 * For non RoCE protocol, GID entry slot is ready to use.
 	 */
 	if (!rdma_protocol_roce(ib_dev, port))
-		table->data_vec[ix] = NULL;
+		table->data_vec[ix] = NULL;/*非roce直接删除*/
 	write_unlock_irq(&table->rwlock);
 
 	if (rdma_cap_roce_gid_table(ib_dev, port))
+		/*支持roce,则有gid操作回调的,采用回调处理*/
 		ib_dev->ops.del_gid(&entry->attr, &entry->context);
 
 	ndev_storage = entry->ndev_storage;
@@ -464,7 +468,7 @@ static int add_modify_gid(struct ib_gid_table *table,
 		return -ENOMEM;
 
 	if (rdma_protocol_roce(attr->device, attr->port_num)) {
-		ret = add_roce_gid(entry);
+		ret = add_roce_gid(entry);/*ROCE类GID添加*/
 		if (ret)
 			goto done;
 	}
@@ -479,7 +483,7 @@ done:
 }
 
 /* rwlock should be read locked, or lock should be held */
-static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
+static int find_gid(struct ib_gid_table *table, const union ib_gid *gid/*要查询的gid*/,
 		    const struct ib_gid_attr *val, bool default_gid/*是否查找default的*/,
 		    unsigned long mask/*匹配方式*/, int *pempty)
 {
@@ -702,8 +706,8 @@ int ib_cache_gid_del_all_netdev_gids(struct ib_device *ib_dev, u32 port,
  */
 const struct ib_gid_attr *
 rdma_find_gid_by_port(struct ib_device *ib_dev,
-		      const union ib_gid *gid,
-		      enum ib_gid_type gid_type,
+		      const union ib_gid *gid/*要查找的gid*/,
+		      enum ib_gid_type gid_type/*协议类型*/,
 		      u32 port, struct net_device *ndev)
 {
 	int local_index;
@@ -726,9 +730,9 @@ rdma_find_gid_by_port(struct ib_device *ib_dev,
 
 	read_lock_irqsave(&table->rwlock, flags);
 	/*查询此table,检查gid是否在此table中存在*/
-	local_index = find_gid(table, gid, &val, false, mask, NULL);
+	local_index = find_gid(table, gid, &val, false, mask, NULL/*不关心empty*/);
 	if (local_index >= 0) {
-		/*此table中有此gid,返回相应attr*/
+		/*此table中有此gid,返回此gid相应attr*/
 		get_gid_entry(table->data_vec[local_index]);
 		attr = &table->data_vec[local_index]->attr;
 		read_unlock_irqrestore(&table->rwlock, flags);
@@ -736,7 +740,7 @@ rdma_find_gid_by_port(struct ib_device *ib_dev,
 	}
 
 	read_unlock_irqrestore(&table->rwlock, flags);
-	return ERR_PTR(-ENOENT);
+	return ERR_PTR(-ENOENT);/*此gid不存在*/
 }
 EXPORT_SYMBOL(rdma_find_gid_by_port);
 

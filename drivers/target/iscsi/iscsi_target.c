@@ -359,19 +359,19 @@ struct iscsi_np *iscsit_add_np(
 	}
 
 	np->np_flags |= NPF_IP_NETWORK;
-	np->np_network_transport = network_transport;
+	np->np_network_transport = network_transport;/*设置传输协议*/
 	spin_lock_init(&np->np_thread_lock);
 	init_completion(&np->np_restart_comp);
 	INIT_LIST_HEAD(&np->np_list);
 
-	ret = iscsi_target_setup_login_socket(np, sockaddr);
+	ret = iscsi_target_setup_login_socket(np, sockaddr);/*setup target*/
 	if (ret != 0) {
 		kfree(np);
 		mutex_unlock(&np_lock);
 		return ERR_PTR(ret);
 	}
 
-	np->np_thread = kthread_run(iscsi_target_login_thread, np, "iscsi_np");
+	np->np_thread = kthread_run(iscsi_target_login_thread, np, "iscsi_np");/*创建内核线程*/
 	if (IS_ERR(np->np_thread)) {
 		pr_err("Unable to create kthread: iscsi_np\n");
 		ret = PTR_ERR(np->np_thread);

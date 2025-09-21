@@ -843,16 +843,16 @@ fail:
 
 int iscsi_target_setup_login_socket(
 	struct iscsi_np *np,
-	struct sockaddr_storage *sockaddr)
+	struct sockaddr_storage *sockaddr/*源地址*/)
 {
 	struct iscsit_transport *t;
 	int rc;
 
-	t = iscsit_get_transport(np->np_network_transport);
+	t = iscsit_get_transport(np->np_network_transport);/*取此类型的transport*/
 	if (!t)
 		return -EINVAL;
 
-	rc = t->iscsit_setup_np(np, sockaddr);
+	rc = t->iscsit_setup_np(np, sockaddr);/*cm监听*/
 	if (rc < 0) {
 		iscsit_put_transport(t);
 		return rc;
@@ -978,6 +978,7 @@ int iscsit_put_login_tx(struct iscsit_conn *conn, struct iscsi_login *login,
 	return 0;
 }
 
+/*设置conn对应的transport*/
 static int
 iscsit_conn_set_transport(struct iscsit_conn *conn, struct iscsit_transport *t)
 {
@@ -998,11 +999,12 @@ iscsit_conn_set_transport(struct iscsit_conn *conn, struct iscsit_transport *t)
 	return 0;
 }
 
+/*申请并初始化conn*/
 static struct iscsit_conn *iscsit_alloc_conn(struct iscsi_np *np)
 {
 	struct iscsit_conn *conn;
 
-	conn = kzalloc(sizeof(struct iscsit_conn), GFP_KERNEL);
+	conn = kzalloc(sizeof(struct iscsit_conn), GFP_KERNEL);/*创建connection*/
 	if (!conn) {
 		pr_err("Could not allocate memory for new connection\n");
 		return NULL;

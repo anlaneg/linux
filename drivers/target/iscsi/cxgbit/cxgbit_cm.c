@@ -429,7 +429,7 @@ int cxgbit_setup_np(struct iscsi_np *np, struct sockaddr_storage *ksockaddr)
 
 	if ((ksockaddr->ss_family != AF_INET) &&
 	    (ksockaddr->ss_family != AF_INET6))
-		return -EINVAL;
+		return -EINVAL;/*只支持ipv4,ipv6*/
 
 	cnp = kzalloc(sizeof(*cnp), GFP_KERNEL);
 	if (!cnp)

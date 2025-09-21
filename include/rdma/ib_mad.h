@@ -474,7 +474,7 @@ struct ib_mad_send_buf {
 	int			seg_size;
 	int			seg_rmpp_size;
 	int			timeout_ms;
-	int			retries;
+	int			retries;/*此buf重发的次数*/
 };
 
 /**
@@ -570,9 +570,11 @@ enum {
 struct ib_mad_agent {
 	struct ib_device	*device;/*关联的ib设备*/
 	struct ib_qp		*qp;/*此mad agent关联的qp*/
-	ib_mad_recv_handler	recv_handler;/*接收处理*/
+	ib_mad_recv_handler	recv_handler;/*接收处理函数*/
 	ib_mad_send_handler	send_handler;/*发送处理*/
 	void			*context;
+	/*为此mad agent分配的唯一ID,发送时此ID会附在tid上发出(如:cm_form_tid);
+	 * 当一个MAD消息收到后,通过tid上附着的ID确认是哪个mad agent处理MAD消息(如:find_mad_agent)*/
 	u32			hi_tid;
 	u32			flags;
 	void			*security;

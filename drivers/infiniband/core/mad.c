@@ -86,7 +86,7 @@ MODULE_PARM_DESC(recv_queue_size, "Size of receive queue in number of work reque
 
 static DEFINE_XARRAY_ALLOC1(ib_mad_clients);
 static u32 ib_mad_client_next;
-static struct list_head ib_mad_port_list;
+static struct list_head ib_mad_port_list;/*用于系统记录mad port针对每个ib_port创建的私有结构*/
 
 /* Port list lock */
 static DEFINE_SPINLOCK(ib_mad_port_list_lock);
@@ -140,7 +140,7 @@ ib_get_mad_port(struct ib_device *device, u32 port_num)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ib_mad_port_list_lock, flags);
-	entry = __ib_get_mad_port(device, port_num);
+	entry = __ib_get_mad_port(device, port_num);/*取此ib设备的指定port对应的mad_port私有结构*/
 	spin_unlock_irqrestore(&ib_mad_port_list_lock, flags);
 
 	return entry;
@@ -272,7 +272,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 		return ERR_PTR(-EPROTONOSUPPORT);
 
 	/* Validate parameters */
-	qpn = get_spl_qp_index(qp_type);/*按qp_type映射qp nubmer*/
+	qpn = get_spl_qp_index(qp_type);/*根据qp_type映射qp nubmer*/
 	if (qpn == -1) {
 		/*当前只支持smi,gsi两种类型的qp调用*/
 		dev_dbg_ratelimited(&device->dev, "%s: invalid QP Type %d\n",
@@ -372,12 +372,12 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 		/* No registration request supplied */
 		if (!send_handler)
 			goto error1;
-		if (registration_flags & IB_MAD_USER_RMPP)
+		if (registration_flags & IB_MAD_USER_ib_register_mad_agentRMPP)
 			goto error1;
 	}
 
 	/* Validate device and port */
-	/*取此device,port_num对应的ib_map_port*/
+	/*取此device,port_num对应的ib_mad_port,这个mad_port中记录了操作mad qp的方法*/
 	port_priv = ib_get_mad_port(device, port_num);
 	if (!port_priv) {
 		/*这个port由mad_client.add产生，这里不存在，故报错*/
@@ -391,7 +391,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	 * will not have QP0.
 	 */
 	if (!port_priv->qp_info[qpn].qp) {
-		/*此qp没有被创建，故说明不支持此qp*/
+		/*此MAD qp没有被创建(当设备添加到系统时即会创建此qp)，故这里说明此设备不支持此qp*/
 		dev_dbg_ratelimited(&device->dev, "%s: QP %d not supported\n",
 				    __func__, qpn);
 		ret = ERR_PTR(-EPROTONOSUPPORT);
@@ -415,22 +415,22 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	}
 
 	/* Now, fill in the various structures */
-	mad_agent_priv->qp_info = &port_priv->qp_info[qpn];
+	mad_agent_priv->qp_info = &port_priv->qp_info[qpn];/*指向我们接下来要操作的qp信息*/
 	mad_agent_priv->reg_req = reg_req;
 	mad_agent_priv->agent.rmpp_version = rmpp_version;
 	mad_agent_priv->agent.device = device;
-	mad_agent_priv->agent.recv_handler = recv_handler;/*设置recv回调*/
+	mad_agent_priv->agent.recv_handler = recv_handler;/*设置agent消息recv回调*/
 	mad_agent_priv->agent.send_handler = send_handler;/*设置send回调*/
 	mad_agent_priv->agent.context = context;
-	mad_agent_priv->agent.qp = port_priv->qp_info[qpn].qp;/*设置这类client对应的qp*/
-	mad_agent_priv->agent.port_num = port_num;
+	mad_agent_priv->agent.qp = port_priv->qp_info[qpn].qp;/*设置对应的qp*/
+	mad_agent_priv->agent.port_num = port_num;/*设置关联的ib port*/
 	mad_agent_priv->agent.flags = registration_flags;
 	spin_lock_init(&mad_agent_priv->lock);
 	INIT_LIST_HEAD(&mad_agent_priv->send_list);
 	INIT_LIST_HEAD(&mad_agent_priv->wait_list);
 	INIT_LIST_HEAD(&mad_agent_priv->rmpp_list);
 	INIT_LIST_HEAD(&mad_agent_priv->backlog_list);
-	INIT_DELAYED_WORK(&mad_agent_priv->timed_work, timeout_sends);
+	INIT_DELAYED_WORK(&mad_agent_priv->timed_work, timeout_sends);/*设置超时重发*/
 	INIT_LIST_HEAD(&mad_agent_priv->local_list);
 	INIT_WORK(&mad_agent_priv->local_work, local_completions);
 	refcount_set(&mad_agent_priv->refcount, 1);
@@ -505,7 +505,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	return &mad_agent_priv->agent;
 error6:
 	spin_unlock_irq(&port_priv->reg_lock);
-	xa_erase(&ib_mad_clients, mad_agent_priv->agent.hi_tid);
+	xa_erase(&ib_mad_clients, mad_agent_priv->agent.hi_tid);/*删除此MAD AGENT*/
 error5:
 	ib_mad_agent_security_cleanup(&mad_agent_priv->agent);
 error4:
@@ -930,7 +930,7 @@ struct ib_mad_send_buf *ib_create_send_mad(struct ib_mad_agent *mad_agent,
 
 	mad_send_wr->sg_list[1].lkey = mad_agent->qp->pd->local_dma_lkey;
 
-	mad_send_wr->mad_list.cqe.done = ib_mad_send_done;
+	mad_send_wr->mad_list.cqe.done = ib_mad_send_done;/*cqe产生后(SQ+RQ均是),此回调将被调用;重要流程:用于发送信息处理*/
 
 	mad_send_wr->send_wr.wr.wr_cqe = &mad_send_wr->mad_list.cqe;
 	mad_send_wr->send_wr.wr.sg_list = mad_send_wr->sg_list;/*设置待发送的列表*/
@@ -1044,7 +1044,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	/* Set WR ID to find mad_send_wr upon completion */
 	qp_info = mad_send_wr->mad_agent_priv->qp_info;
 	mad_send_wr->mad_list.mad_queue = &qp_info->send_queue;
-	mad_send_wr->mad_list.cqe.done = ib_mad_send_done;
+	mad_send_wr->mad_list.cqe.done = ib_mad_send_done;/*cqe产生后(SQ),此回调将被调用;重要流程:用于发送信息处理*/
 	mad_send_wr->send_wr.wr.wr_cqe = &mad_send_wr->mad_list.cqe;
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
@@ -1220,7 +1220,7 @@ void change_mad_state(struct ib_mad_send_wr_private *mad_send_wr,
 	case IB_MAD_STATE_SEND_START:
 		handle_send_state(mad_send_wr, mad_agent_priv);
 		break;
-	case IB_MAD_STATE_WAIT_RESP:
+	case IB_MAD_STATE_WAIT_RESP:/*变更状态为wiat_resp*/
 		handle_wait_state(mad_send_wr, mad_agent_priv);
 		if (mad_send_wr->state == IB_MAD_STATE_CANCELED)
 			return;
@@ -1750,7 +1750,7 @@ out:
 	return;
 }
 
-/*利用消息查找mad_agent*/
+/*利用消息查找处理此消息的mad_agent*/
 static struct ib_mad_agent_private *
 find_mad_agent(struct ib_mad_port_private *port_priv,
 	       const struct ib_mad_hdr *mad_hdr)
@@ -1767,11 +1767,12 @@ find_mad_agent(struct ib_mad_port_private *port_priv,
 		 */
 		hi_tid = be64_to_cpu(mad_hdr->tid) >> 32;/*取得事务ID*/
 		rcu_read_lock();
-		mad_agent = xa_load(&ib_mad_clients, hi_tid);/*利用事务ID查找agent*/
+		mad_agent = xa_load(&ib_mad_clients, hi_tid);/*利用agent ID查找agent*/
 		if (mad_agent && !refcount_inc_not_zero(&mad_agent->refcount))
-			mad_agent = NULL;
+			mad_agent = NULL;/*没有找到mad agent*/
 		rcu_read_unlock();
 	} else {
+		/*收到对端主动发送过来的MAD 报文*/
 		struct ib_mad_mgmt_class_table *class;
 		struct ib_mad_mgmt_method_table *method;
 		struct ib_mad_mgmt_vendor_class_table *vendor;
@@ -1798,7 +1799,7 @@ find_mad_agent(struct ib_mad_port_private *port_priv,
 							mad_hdr->mgmt_class)];
 			if (method)
 				mad_agent = method->agent[mad_hdr->method &
-							  ~IB_MGMT_METHOD_RESP];
+							  ~IB_MGMT_METHOD_RESP];/*由class通过method确定哪个agent应处理此消息*/
 		} else {
 			vendor = port_priv->version[
 					mad_hdr->class_version].vendor;
@@ -1816,7 +1817,7 @@ find_mad_agent(struct ib_mad_port_private *port_priv,
 			method = vendor_class->method_table[index];
 			if (method) {
 				mad_agent = method->agent[mad_hdr->method &
-							  ~IB_MGMT_METHOD_RESP];
+							  ~IB_MGMT_METHOD_RESP];/*由vendor通过method确定哪个agent应处理此消息*/
 			}
 		}
 		if (mad_agent)
@@ -2050,7 +2051,7 @@ void ib_mark_mad_done(struct ib_mad_send_wr_private *mad_send_wr)
 	mad_send_wr->timeout = 0;
 	if (mad_send_wr->state == IB_MAD_STATE_WAIT_RESP ||
 	    mad_send_wr->state == IB_MAD_STATE_QUEUED)
-		change_mad_state(mad_send_wr, IB_MAD_STATE_DONE);
+		change_mad_state(mad_send_wr, IB_MAD_STATE_DONE);/*变更其状态*/
 	else
 		change_mad_state(mad_send_wr, IB_MAD_STATE_EARLY_RESP);
 }
@@ -2087,7 +2088,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 	if (ib_response_mad(&mad_recv_wc->recv_buf.mad->mad_hdr)) {
 		/*agent收到响应类mad报文*/
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
-		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
+		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);/*查找此响应对应的send_mad_wr*/
 		if (!mad_send_wr) {
 			/*收到响应,但我们没有找到发送过的wr*/
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
@@ -2111,8 +2112,8 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 				return;
 			}
 		} else {
-			ib_mark_mad_done(mad_send_wr);
-			is_mad_done = (mad_send_wr->state == IB_MAD_STATE_DONE);
+			ib_mark_mad_done(mad_send_wr);/*标记此send_wr被响应*/
+			is_mad_done = (mad_send_wr->state == IB_MAD_STATE_DONE);/*此消息是否已置为done状态*/
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 
 			/* Defined behavior is to complete response before request */
@@ -2123,6 +2124,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			deref_mad_agent(mad_agent_priv);
 
 			if (is_mad_done) {
+				/*触发此消息complete处理*/
 				mad_send_wc.status = IB_WC_SUCCESS;
 				mad_send_wc.vendor_err = 0;
 				mad_send_wc.send_buf = &mad_send_wr->send_buf;
@@ -2382,7 +2384,7 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	/* Give driver "right of first refusal" on incoming MAD */
 	if (port_priv->device->ops.process_mad) {
-		/*设备实现了mad处理函数,将给设备处理*/
+		/*设备实现了mad处理函数,交给设备处理*/
 		ret = port_priv->device->ops.process_mad(
 			port_priv->device, 0, port_priv->port_num, wc,
 			&recv->grh, (const struct ib_mad *)recv->mad,
@@ -2465,12 +2467,12 @@ static void wait_for_response(struct ib_mad_send_wr_private *mad_send_wr)
 
 	mad_agent_priv = mad_send_wr->mad_agent_priv;
 	delay = mad_send_wr->timeout;
-	change_mad_state(mad_send_wr, IB_MAD_STATE_WAIT_RESP);
+	change_mad_state(mad_send_wr, IB_MAD_STATE_WAIT_RESP);/*状态变理为"wait resp"*/
 
 	/* Reschedule a work item if we have a shorter timeout */
 	if (mad_agent_priv->wait_list.next == &mad_send_wr->agent_list)
 		mod_delayed_work(mad_agent_priv->qp_info->port_priv->wq,
-				 &mad_agent_priv->timed_work, delay);
+				 &mad_agent_priv->timed_work, delay);/*启动延迟worker(超时后触发),回调:timeout_sends*/
 }
 
 void ib_reset_mad_timeout(struct ib_mad_send_wr_private *mad_send_wr,
@@ -2484,7 +2486,7 @@ void ib_reset_mad_timeout(struct ib_mad_send_wr_private *mad_send_wr,
  * Process a send work completion
  */
 void ib_mad_complete_send_wr(struct ib_mad_send_wr_private *mad_send_wr,
-			     struct ib_mad_send_wc *mad_send_wc)
+			     struct ib_mad_send_wc *mad_send_wc/*被complete 的send_wr*/)
 {
 	struct ib_mad_agent_private	*mad_agent_priv;
 	unsigned long			flags;
@@ -2500,10 +2502,10 @@ void ib_mad_complete_send_wr(struct ib_mad_send_wr_private *mad_send_wr,
 		ret = IB_RMPP_RESULT_UNHANDLED;
 
 	if (mad_send_wr->state == IB_MAD_STATE_CANCELED)
-		mad_send_wc->status = IB_WC_WR_FLUSH_ERR;
+		mad_send_wc->status = IB_WC_WR_FLUSH_ERR;/*被取消,置error*/
 	else if (mad_send_wr->state == IB_MAD_STATE_SEND_START &&
 		 mad_send_wr->timeout) {
-		wait_for_response(mad_send_wr);
+		wait_for_response(mad_send_wr);/*已发送,启动等待响应超时处理*/
 		goto done;
 	}
 
@@ -2529,6 +2531,7 @@ done:
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 }
 
+/*将sq产生cqe后,在cqe被消费时,此回调将被调用*/
 static void ib_mad_send_done(struct ib_cq *cq, struct ib_wc *wc)
 {
 	struct ib_mad_port_private *port_priv = cq->cq_context;
@@ -2545,6 +2548,7 @@ static void ib_mad_send_done(struct ib_cq *cq, struct ib_wc *wc)
 		return;
 
 	if (wc->status != IB_WC_SUCCESS) {
+		/*发送未成功*/
 		if (!ib_mad_send_error(port_priv, wc))
 			return;
 	}
@@ -2558,6 +2562,7 @@ static void ib_mad_send_done(struct ib_cq *cq, struct ib_wc *wc)
 	trace_ib_mad_send_done_handler(mad_send_wr, wc);
 
 retry:
+	/*dma地址回收*/
 	ib_dma_unmap_single(mad_send_wr->send_buf.mad_agent->device,
 			    mad_send_wr->header_mapping,
 			    mad_send_wr->sg_list[0].length, DMA_TO_DEVICE);
@@ -2570,7 +2575,7 @@ retry:
 
 	/* Move queued send to the send queue */
 	if (send_queue->count-- > send_queue->max_active) {
-		/*转换为queued_send_wr*/
+		/*自overflow_list上取mad_list,转换为queued_send_wr,放在send_queue上*/
 		mad_list = container_of(qp_info->overflow_list.next,
 					struct ib_mad_list_head, list);
 		queued_send_wr = container_of(mad_list,
@@ -2583,11 +2588,11 @@ retry:
 	mad_send_wc.send_buf = &mad_send_wr->send_buf;
 	mad_send_wc.status = wc->status;
 	mad_send_wc.vendor_err = wc->vendor_err;
-	ib_mad_complete_send_wr(mad_send_wr, &mad_send_wc);
+	ib_mad_complete_send_wr(mad_send_wr, &mad_send_wc);/*回退到上一层,通知mad_send_wc处理成功*/
 
 	if (queued_send_wr) {
 		trace_ib_mad_send_done_resend(queued_send_wr, qp_info);
-		/*提供待发送的buffer*/
+		/*之前此wr因为超限被放在overflow链上了,现在可以入队发送了,这里发送*/
 		ret = ib_post_send(qp_info->qp, &queued_send_wr->send_wr.wr,
 				   NULL);
 		if (ret) {
@@ -2595,7 +2600,7 @@ retry:
 				"ib_post_send failed: %d\n", ret);
 			mad_send_wr = queued_send_wr;
 			wc->status = IB_WC_LOC_QP_OP_ERR;
-			goto retry;
+			goto retry;/*执行出错处理*/
 		}
 	}
 }
@@ -2871,12 +2876,12 @@ static int retry_send(struct ib_mad_send_wr_private *mad_send_wr)
 	int ret;
 
 	if (!mad_send_wr->retries_left)
-		return -ETIMEDOUT;
+		return -ETIMEDOUT;/*重发次数超限,超时*/
 
-	mad_send_wr->retries_left--;
+	mad_send_wr->retries_left--;/*重发次数减1*/
 	mad_send_wr->send_buf.retries++;
 
-	mad_send_wr->timeout = msecs_to_jiffies(mad_send_wr->send_buf.timeout_ms);
+	mad_send_wr->timeout = msecs_to_jiffies(mad_send_wr->send_buf.timeout_ms);/*重发后等待响应的门限时间*/
 	if (mad_send_wr->is_solicited_fc &&
 	    !list_empty(&mad_send_wr->mad_agent_priv->backlog_list)) {
 		change_mad_state(mad_send_wr, IB_MAD_STATE_QUEUED);
@@ -2897,14 +2902,15 @@ static int retry_send(struct ib_mad_send_wr_private *mad_send_wr)
 			break;
 		}
 	} else
-		ret = ib_send_mad(mad_send_wr);
+		ret = ib_send_mad(mad_send_wr);/*重发此send_wr*/
 
 	if (!ret)
-		change_mad_state(mad_send_wr, IB_MAD_STATE_SEND_START);
+		change_mad_state(mad_send_wr, IB_MAD_STATE_SEND_START);/*变更状态*/
 
 	return ret;
 }
 
+/*长时间未收到mad_send_wr响应消息,执行重发*/
 static void timeout_sends(struct work_struct *work)
 {
 	struct ib_mad_send_wr_private *mad_send_wr;
@@ -2926,30 +2932,33 @@ static void timeout_sends(struct work_struct *work)
 					 agent_list);
 
 		if (time_after(mad_send_wr->timeout, jiffies)) {
+			/*此send_wr未超时,取得还需要的超时间隔*/
 			delay = mad_send_wr->timeout - jiffies;
 			if ((long)delay <= 0)
 				delay = 1;
 			queue_delayed_work(mad_agent_priv->qp_info->
 					   port_priv->wq,
-					   &mad_agent_priv->timed_work, delay);
-			break;
+					   &mad_agent_priv->timed_work, delay);/*重置此消息超时间隔*/
+			break;/*其它不用重置,它们超时不会早于这个*/
 		}
 
 		if (mad_send_wr->state == IB_MAD_STATE_CANCELED)
-			list_item = &cancel_list;
-		else if (retry_send(mad_send_wr))
-			list_item = &timeout_list;
+			list_item = &cancel_list;/*此send_wr已被标记为取消,需挂在取消链表上*/
+		else if (retry_send(mad_send_wr)/*执行重发*/)
+			list_item = &timeout_list;/*重发失败,需挂在超时链上*/
 		else
 			continue;
 
 		change_mad_state(mad_send_wr, IB_MAD_STATE_DONE);
-		list_add_tail(&mad_send_wr->agent_list, list_item);
+		list_add_tail(&mad_send_wr->agent_list, list_item);/*挂链*/
 	}
 
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 	process_backlog_mads(mad_agent_priv);
+	/*清空超时链*/
 	clear_mad_error_list(&timeout_list, IB_WC_RESP_TIMEOUT_ERR,
 			     mad_agent_priv);
+	/*清空取消链*/
 	clear_mad_error_list(&cancel_list, IB_WC_WR_FLUSH_ERR, mad_agent_priv);
 }
 
@@ -2997,8 +3006,8 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 		}
 		mad_priv->header.mapping = sg_list.addr;
 		mad_priv->header.mad_list.mad_queue = recv_queue;
-		/*此sg_list收取完成后要触发的cqe done回调,见__ib_process_cq*/
-		mad_priv->header.mad_list.cqe.done = ib_mad_recv_done;
+		/*此sg_list收取完成后要触发的cqe done回调,见__ib_process_cq(注:MAD将scq,rcq合两为一了)*/
+		mad_priv->header.mad_list.cqe.done = ib_mad_recv_done;/*cqe产生后(RQ),此回调将被调用;重要流程:用于接收信息处理*/
 		recv_wr.wr_cqe = &mad_priv->header.mad_list.cqe;
 		spin_lock_irqsave(&recv_queue->lock, flags);
 		/*是否达到recv_queue的最大值*/
@@ -3188,6 +3197,7 @@ static void init_mad_qp(struct ib_mad_port_private *port_priv,
 	INIT_LIST_HEAD(&qp_info->overflow_list);
 }
 
+/*创建mad qp*/
 static int create_mad_qp(struct ib_mad_qp_info *qp_info,
 			 enum ib_qp_type qp_type)
 {
@@ -3196,9 +3206,9 @@ static int create_mad_qp(struct ib_mad_qp_info *qp_info,
 
 	/*初始化指定qp_type的qp_init_attr属性*/
 	memset(&qp_init_attr, 0, sizeof qp_init_attr);
-	qp_init_attr.send_cq = qp_info->port_priv->cq;/*设置cq*/
-	qp_init_attr.recv_cq = qp_info->port_priv->cq;
-	qp_init_attr.sq_sig_type = IB_SIGNAL_ALL_WR;
+	qp_init_attr.send_cq = qp_info->port_priv->cq;/*设置scq,这些CQ均为此PORT提前申请的cq,因为故用,故其size为实际长度两倍*/
+	qp_init_attr.recv_cq = qp_info->port_priv->cq;/*设置rcq*/
+	qp_init_attr.sq_sig_type = IB_SIGNAL_ALL_WR;/*所有WR均需要触发cq通知*/
 	qp_init_attr.cap.max_send_wr = mad_sendq_size;
 	qp_init_attr.cap.max_recv_wr = mad_recvq_size;
 	qp_init_attr.cap.max_send_sge = IB_MAD_SEND_REQ_MAX_SG;
@@ -3208,7 +3218,7 @@ static int create_mad_qp(struct ib_mad_qp_info *qp_info,
 	qp_init_attr.qp_context = qp_info;
 	qp_init_attr.event_handler = qp_event_handler;
 
-	/*利用qp_init_attr创建qp*/
+	/*利用qp_init_attr创建MD qp*/
 	qp_info->qp = ib_create_qp(qp_info->port_priv->pd, &qp_init_attr);
 	if (IS_ERR(qp_info->qp)) {
 		/*创建qp失败*/
@@ -3267,7 +3277,7 @@ static int ib_mad_port_open(struct ib_device *device,
 	init_mad_qp(port_priv, &port_priv->qp_info[0]);/*初始化qp_info*/
 	init_mad_qp(port_priv, &port_priv->qp_info[1]);
 
-	cq_size = mad_sendq_size + mad_recvq_size;/*cq长度*/
+	cq_size = mad_sendq_size + mad_recvq_size;/*cq长度(由于共用两者相加)*/
 	has_smi = rdma_cap_ib_smi(device, port_num);
 	if (has_smi)
 		/*支持smi,cq长度翻倍*/
@@ -3283,7 +3293,7 @@ static int ib_mad_port_open(struct ib_device *device,
 
 	/*创建cq*/
 	port_priv->cq = ib_alloc_cq(port_priv->device, port_priv, cq_size, 0,
-			IB_POLL_UNBOUND_WORKQUEUE);
+			IB_POLL_UNBOUND_WORKQUEUE/*采用Wq方式POLL CQ*/);
 	if (IS_ERR(port_priv->cq)) {
 		dev_err(&device->dev, "Couldn't create ib_mad CQ\n");
 		ret = PTR_ERR(port_priv->cq);
@@ -3299,7 +3309,8 @@ static int ib_mad_port_open(struct ib_device *device,
 	}
 
 	if (rdma_cap_ib_cm(device, port_num)) {
-		ret = create_mad_qp(&port_priv->qp_info[1], IB_QPT_GSI);
+		/*支持cm,创建GSI QP*/
+		ret = create_mad_qp(&port_priv->qp_info[1], IB_QPT_GSI);/*为此port创建1号QP类型为gsi*/
 		if (ret)
 			goto error7;
 	}
@@ -3357,7 +3368,7 @@ static int ib_mad_port_close(struct ib_device *device, u32 port_num)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ib_mad_port_list_lock, flags);
-	port_priv = __ib_get_mad_port(device, port_num);
+	port_priv = __ib_get_mad_port(device, port_num);/*取得此IB_port的mad_port私有结构*/
 	if (port_priv == NULL) {
 		spin_unlock_irqrestore(&ib_mad_port_list_lock, flags);
 		dev_err(&device->dev, "Port %u not found\n", port_num);
@@ -3369,7 +3380,7 @@ static int ib_mad_port_close(struct ib_device *device, u32 port_num)
 	destroy_workqueue(port_priv->wq);
 	destroy_mad_qp(&port_priv->qp_info[1]);
 	destroy_mad_qp(&port_priv->qp_info[0]);
-	ib_free_cq(port_priv->cq);/*释放cq*/
+	ib_free_cq(port_priv->cq);/*释放MAD PORT创建的cq*/
 	ib_dealloc_pd(port_priv->pd);
 	cleanup_recv_queue(&port_priv->qp_info[1]);
 	cleanup_recv_queue(&port_priv->qp_info[0]);

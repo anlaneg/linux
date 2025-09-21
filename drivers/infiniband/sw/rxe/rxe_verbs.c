@@ -1269,10 +1269,10 @@ static int rxe_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 
 	spin_lock_irqsave(&cq->cq_lock, irq_flags);
 	cq->notify |= flags & IB_CQ_SOLICITED_MASK;
-	empty = queue_empty(cq->queue, QUEUE_TYPE_TO_ULP);
+	empty = queue_empty(cq->queue, QUEUE_TYPE_TO_ULP);/*取队列当前是否为空*/
 
 	if ((flags & IB_CQ_REPORT_MISSED_EVENTS) && !empty/*队列不为空*/)
-		ret = 1;
+		ret = 1;/*标记指明了miss且当前不为空,返回1*/
 
 	spin_unlock_irqrestore(&cq->cq_lock, irq_flags);
 
@@ -1605,7 +1605,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
 	.reg_user_mr = rxe_reg_user_mr,/*rxe注册用户态mr*/
-	.req_notify_cq = rxe_req_notify_cq,
+	.req_notify_cq = rxe_req_notify_cq,/*设置cq->notify*/
 	.rereg_user_mr = rxe_rereg_user_mr,
 	.resize_cq = rxe_resize_cq,
 

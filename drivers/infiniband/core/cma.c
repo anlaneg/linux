@@ -203,10 +203,10 @@ struct id_table_entry {
 
 struct cma_device {
 	struct list_head	list;
-	struct ib_device	*device;
+	struct ib_device	*device;/*cma设备关联的ib设备*/
 	struct completion	comp;
-	refcount_t refcount;
-	struct list_head	id_list;
+	refcount_t refcount;/*引用计数*/
+	struct list_head	id_list;/*链表,记录此cma_device上关联有哪些rdma_id_private*/
 	enum ib_gid_type	*default_gid_type;
 	u8			*default_roce_tos;
 };
@@ -592,7 +592,7 @@ static void _cma_attach_to_dev(struct rdma_id_private *id_priv,
 	id_priv->id.device = cma_dev->device;
 	id_priv->id.route.addr.dev_addr.transport =
 		rdma_node_get_transport(cma_dev->device->node_type);
-	list_add_tail(&id_priv->device_item, &cma_dev->id_list);
+	list_add_tail(&id_priv->device_item, &cma_dev->id_list);/*id关联到cma_dev*/
 
 	trace_cm_id_attach(id_priv, cma_dev->device);
 }
@@ -683,6 +683,7 @@ static int cma_translate_addr(struct sockaddr *addr, struct rdma_dev_addr *dev_a
 	return ret;
 }
 
+/*校验并返回gid对应的属性*/
 static const struct ib_gid_attr *
 cma_validate_port(struct ib_device *device, u32 port,
 		  enum ib_gid_type gid_type,
@@ -713,6 +714,7 @@ cma_validate_port(struct ib_device *device, u32 port,
 	 * Other driver classes might be included in the future.
 	 */
 	if (rdma_protocol_iwarp(device, port)) {
+		/*iwarp类型*/
 		sgid_attr = rdma_get_gid_attr(device, port, 0);
 		if (IS_ERR(sgid_attr))
 			goto out;
@@ -767,12 +769,14 @@ cma_validate_port(struct ib_device *device, u32 port,
 		}
 	}
 
+	/*查询此gid对应的属性*/
 	sgid_attr = rdma_find_gid_by_port(device, gid, gid_type, port, ndev);
 	dev_put(ndev);
 out:
-	return sgid_attr;
+	return sgid_attr;/*返回源gid属性*/
 }
 
+/*绑定sgid属性信息*/
 static void cma_bind_sgid_attr(struct rdma_id_private *id_priv,
 			       const struct ib_gid_attr *sgid_attr)
 {
@@ -823,7 +827,7 @@ static int cma_acquire_dev_by_src_ip(struct rdma_id_private *id_priv)
 			sgid_attr = cma_validate_port(cma_dev->device, port,
 						      gid_type, gidp, id_priv);
 			if (!IS_ERR(sgid_attr)) {
-				/*此gid与此ib设备的这个port匹配，*/
+				/*此gid与此ib设备的这个port匹配，绑定此sgid*/
 				id_priv->id.port_num = port;
 				cma_bind_sgid_attr(id_priv, sgid_attr);
 				cma_attach_to_dev(id_priv, cma_dev);
@@ -2438,6 +2442,7 @@ static int cma_ib_check_req_qp_type(const struct rdma_cm_id *id,
 		(!id->qp_type));
 }
 
+/*服务端listen时收到cm事件回调处理*/
 static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 			      const struct ib_cm_event *ib_event)
 {
@@ -2519,6 +2524,7 @@ net_dev_put:
 	return ret;
 }
 
+/*返回service_id*/
 __be64 rdma_get_service_id(struct rdma_cm_id *id, struct sockaddr *addr)
 {
 	if (addr->sa_family == AF_IB)
@@ -2690,19 +2696,20 @@ out:
 	return ret;
 }
 
+/*指明由cma_ib_req_handler函数处理cm请求*/
 static int cma_ib_listen(struct rdma_id_private *id_priv)
 {
 	struct sockaddr *addr;
 	struct ib_cm_id	*id;
 	__be64 svc_id;
 
-	addr = cma_src_addr(id_priv);
-	svc_id = rdma_get_service_id(&id_priv->id, addr);
+	addr = cma_src_addr(id_priv);/*取源地址*/
+	svc_id = rdma_get_service_id(&id_priv->id, addr);/*取service_id*/
 	id = ib_cm_insert_listen(id_priv->id.device,
 				 cma_ib_req_handler/*cm请求处理函数*/, svc_id);
 	if (IS_ERR(id))
 		return PTR_ERR(id);
-	id_priv->cm_id.ib = id;
+	id_priv->cm_id.ib = id;/*设置cm_id_private*/
 
 	return 0;
 }
@@ -3577,7 +3584,7 @@ static void addr_handler(int status/*解析结果*/, struct sockaddr *src_addr/*
 	memcpy(&old_addr, addr, rdma_addr_size(addr));/*保存old_addr*/
 	memcpy(addr, src_addr, rdma_addr_size(src_addr));/*利用src_addr更新addr*/
 	if (!status && !id_priv->cma_dev) {
-		/*解析成功,未设置cma_dev*/
+		/*解析成功,未设置cma_dev,通过src_ip设置sgid并绑定*/
 		status = cma_acquire_dev_by_src_ip(id_priv);
 		if (status)
 			pr_debug_ratelimited("RDMA CM: ADDR_ERROR: failed to acquire device. status %d\n",
@@ -3868,27 +3875,27 @@ static int cma_check_port(struct rdma_bind_list *bind_list,
 
 	lockdep_assert_held(&lock);
 
-	addr = cma_src_addr(id_priv);
+	addr = cma_src_addr(id_priv);/*取源地址*/
 	/*遍历此bind_list关联的rdma_id_private*/
 	hlist_for_each_entry(cur_id, &bind_list->owners, node) {
 		if (id_priv == cur_id)
 			continue;/*跳过自身*/
 
 		if (reuseaddr && cur_id->reuseaddr)
-			continue;
+			continue;/*跳过reuseaddr与自身配置一致且均为true的*/
 
 		cur_addr = cma_src_addr(cur_id);
 		if (id_priv->afonly && cur_id->afonly &&
 		    (addr->sa_family != cur_addr->sa_family))
-			continue;
+			continue;/*两者reuseaddr匹配不一致,但两者FAMILLY不一样,且配置了afonly,这种也不冲突*/
 
 		if (cma_any_addr(addr) || cma_any_addr(cur_addr))
-			return -EADDRNOTAVAIL;
+			return -EADDRNOTAVAIL;/*两者中有一方配置了any,冲突*/
 
 		if (!cma_addr_cmp(addr, cur_addr))
-			return -EADDRINUSE;
+			return -EADDRINUSE;/*两者地址不相等,冲突*/
 	}
-	return 0;
+	return 0;/*检查通过,可reuse*/
 }
 
 static int cma_use_port(enum rdma_ucm_port_space ps,
@@ -4018,38 +4025,42 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 	int ret;
 
 	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND, RDMA_CM_LISTEN)) {
+		/*前一状态不是RDMA_CM_ADDR_BOUND,未变更成功*/
 		struct sockaddr_in any_in = {
 			.sin_family = AF_INET,
 			.sin_addr.s_addr = htonl(INADDR_ANY),
 		};
 
 		/* For a well behaved ULP state will be RDMA_CM_IDLE */
-		ret = rdma_bind_addr(id, (struct sockaddr *)&any_in);
+		ret = rdma_bind_addr(id, (struct sockaddr *)&any_in);/*绑定源地址any*/
 		if (ret)
 			return ret;
 		if (WARN_ON(!cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND,
 					   RDMA_CM_LISTEN)))
-			return -EINVAL;
+			return -EINVAL;/*变更状态失败*/
 	}
 
+	//此时状态为RDMA_CM_LISTEN
 	/*
 	 * Once the ID reaches RDMA_CM_LISTEN it is not allowed to be reusable
 	 * any more, and has to be unique in the bind list.
 	 */
 	if (id_priv->reuseaddr) {
 		mutex_lock(&lock);
+		/*配置了reuseaddr,检查是否冲突*/
 		ret = cma_check_port(id_priv->bind_list, id_priv, 0);
 		if (!ret)
-			id_priv->reuseaddr = 0;
+			id_priv->reuseaddr = 0;/*不冲突,置为0,不再容许和其它的重用*/
 		mutex_unlock(&lock);
 		if (ret)
-			goto err;
+			goto err;/*冲突,报错*/
 	}
 
 	id_priv->backlog = backlog;
 	if (id_priv->cma_dev) {
+		/*绑定了某一个cma设备*/
 		if (rdma_cap_ib_cm(id->device, 1)) {
-			ret = cma_ib_listen(id_priv);
+			ret = cma_ib_listen(id_priv);/*创建监听处理所需的cm_id*/
 			if (ret)
 				goto err;
 		} else if (rdma_cap_iw_cm(id->device, 1)) {
@@ -4108,21 +4119,21 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 		if (ret)
 			goto err1;
 
-		/*通过srcip获得设备*/
+		/*通过srcip获得设备并绑定,设置sgid*/
 		ret = cma_acquire_dev_by_src_ip(id_priv);
 		if (ret)
 			goto err1;
 	}
 
-	/*用户态没有指定源ip*/
 	if (!(id_priv->options & (1 << CMA_OPTION_AFONLY))) {
+		/*用户没有指定afonly值,如果源地址为V4,则指明afonly为1,V4,V6都可以处理*/
 		if (addr->sa_family == AF_INET)
 			id_priv->afonly = 1;
 #if IS_ENABLED(CONFIG_IPV6)
 		else if (addr->sa_family == AF_INET6) {
 			struct net *net = id_priv->id.route.addr.dev_addr.net;
 
-			id_priv->afonly = net->ipv6.sysctl.bindv6only;
+			id_priv->afonly = net->ipv6.sysctl.bindv6only;/*v6情况,以V6的默认配置为准*/
 		}
 #endif
 	}
@@ -4130,7 +4141,7 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 	/*设置目的地址及其协议族为addr*/
 	id_daddr = cma_dst_addr(id_priv);
 	if (daddr != id_daddr)
-		memcpy(id_daddr, daddr, rdma_addr_size(addr));
+		memcpy(id_daddr, daddr, rdma_addr_size(addr));/*设置目的地址*/
 	id_daddr->sa_family = addr->sa_family;
 
 	/*占用源port*/
@@ -5446,7 +5457,7 @@ static bool cma_supported(struct ib_device *device)
 	return false;
 }
 
-static int cma_add_one(struct ib_device *device)
+static int cma_add_one(struct ib_device *device/*要增加的ib设备*/)
 {
 	struct rdma_id_private *to_destroy;
 	struct cma_device *cma_dev;

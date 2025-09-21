@@ -87,11 +87,11 @@ static int __poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc)
 
 	rc = ib_poll_cq(cq, num_entries, wc);
 	trace_cq_poll(cq, num_entries, rc);
-	return rc;
+	return rc;/*出队的元素数*/
 }
 
-/*自cq中最多出budget个元素，按batch批量进行出队*/
-static int __ib_process_cq(struct ib_cq *cq, int budget/*最多出budget个*/, struct ib_wc *wcs/*用于cqe填充*/,
+/*自cq中最多出budget个元素，按batch批量进行出队,如有wr_cqe->done的直接触发*/
+static int __ib_process_cq(struct ib_cq *cq, int budget/*最多出budget个,如为-1,则需排空*/, struct ib_wc *wcs/*用于cqe填充*/,
 			   int batch/*一批次数*/)
 {
 	int i, n, completed = 0;
@@ -162,7 +162,7 @@ static int ib_poll_handler(struct irq_poll *iop, int budget)
 
 	completed = __ib_process_cq(cq, budget/*最多出budget个*/, cq->wc, IB_POLL_BATCH/*一个批次出多少个wc*/);
 	if (completed < budget) {
-		/*cq中的元素不足，此iop已将cq poll完*/
+		/*cq中的元素不足，此iop已将cq poll完,不必再poll,移除*/
 		irq_poll_complete(&cq->iop);
 		if (ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0) {
 			trace_cq_reschedule(cq);
@@ -192,8 +192,8 @@ static void ib_cq_poll_work(struct work_struct *work)
 	completed = __ib_process_cq(cq, IB_POLL_BUDGET_WORKQUEUE, cq->wc,
 				    IB_POLL_BATCH);
 	if (completed >= IB_POLL_BUDGET_WORKQUEUE ||
-	    ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0)
-		/*仍有数据在cq中，work再次加入wq*/
+	    ib_req_notify_cq(cq, IB_POLL_FLAGS)/*再次设置通知标记*/ > 0)
+		/*仍有数据在cq中，此CQ出队work再次加入wq,以便继续收取*/
 		queue_work(cq->comp_wq, &cq->work);
 	else if (cq->dim)
 		rdma_dim(cq->dim, completed);
@@ -272,9 +272,10 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe/*�
 	case IB_POLL_UNBOUND_WORKQUEUE:
 		cq->comp_handler = ib_cq_completion_workqueue;/*处理为:将cq->work入队到wq*/
 		INIT_WORK(&cq->work, ib_cq_poll_work);/*初始化work处理cq*/
-		ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
+		ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);/*指明每个cqe都通知*/
+		/*WQ初始化*/
 		cq->comp_wq = (cq->poll_ctx == IB_POLL_WORKQUEUE) ?
-				ib_comp_wq : ib_comp_unbound_wq;
+				ib_comp_wq : ib_comp_unbound_wq/*unbound情况下采用此wq*/;
 		break;
 	default:
 		ret = -EINVAL;

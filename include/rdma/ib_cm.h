@@ -295,7 +295,7 @@ struct ib_cm_id {
 	ib_cm_handler		cm_handler;/*cm处理函数,例如:cma_ib_handler*/
 	void			*context;
 	struct ib_device	*device;
-	__be64			service_id;
+	__be64			service_id;/*由port及地址生成的service_id(listen时设置)*/
 	enum ib_cm_state	state;		/* internal CM/debug use */
 	enum ib_cm_lap_state	lap_state;	/* internal CM/debug use */
 	__be32			local_id;

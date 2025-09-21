@@ -122,7 +122,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe/*cqe中要填充的内容
 	if ((cq->notify & IB_CQ_NEXT_COMP) ||
 	    (cq->notify & IB_CQ_SOLICITED && solicited)) {
 		cq->notify = 0;
-		/*触发complete回调*/
+		/*触发complete回调处理*/
 		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 	}
 

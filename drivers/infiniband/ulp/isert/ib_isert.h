@@ -205,7 +205,7 @@ struct isert_device {
 struct isert_np {
 	struct iscsi_np         *np;
 	struct semaphore	sem;
-	struct rdma_cm_id	*cm_id;
+	struct rdma_cm_id	*cm_id;/*对应的RDMA CM ID*/
 	struct mutex		mutex;
 	struct list_head	accepted;
 	struct list_head	pending;

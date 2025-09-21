@@ -1249,7 +1249,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 	qp->resp.wqe = NULL;
 
 	/*填充cqe*/
-	if (rxe_cq_post(qp->rcq, &cqe, pkt ? bth_se(pkt)/*报文是否有se标记*/ : 1))
+	if (rxe_cq_post(qp->rcq, &cqe, pkt ? bth_se(pkt)/*报文是否有se标记*/ : 1/*按有se标记处理*/))
 		return RESPST_ERR_CQ_OVERFLOW;
 
 finish:
