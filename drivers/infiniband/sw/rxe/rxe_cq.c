@@ -99,7 +99,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe/*cqe中要填充的内容
 
 	full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
 	if (unlikely(full)) {
-		/*取cqe时发现cq队列为满，产生一个cq_err event*/
+		/*添加cqe时发现cq队列为满，产生一个cq_err event*/
 		rxe_err_cq(cq, "queue full\n");
 		spin_unlock_irqrestore(&cq->cq_lock, flags);
 		if (cq->ibcq.event_handler) {
@@ -121,8 +121,8 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe/*cqe中要填充的内容
 
 	if ((cq->notify & IB_CQ_NEXT_COMP) ||
 	    (cq->notify & IB_CQ_SOLICITED && solicited)) {
-		cq->notify = 0;
-		/*触发complete回调处理*/
+		cq->notify = 0;/*已通知（关闭）*/
+		/*触发complete回调处理（用于通知等待cqe event者）*/
 		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 	}
 

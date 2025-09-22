@@ -246,7 +246,7 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 
 		spin_unlock_irq(&ev_queue->lock);
 		if (filp->f_flags & O_NONBLOCK)
-			return -EAGAIN;
+			return -EAGAIN;/*队列为空，且不阻塞，返回again*/
 
 		/*list为空，阻塞等待*/
 		if (wait_event_interruptible(ev_queue->poll_wait,
@@ -267,8 +267,8 @@ static ssize_t ib_uverbs_event_read(struct ib_uverbs_event_queue *ev_queue,
 		/*移除将被拿走到的event(移除首个）*/
 		list_del(ev_queue->event_list.next);
 		if (event->counter) {
-			++(*event->counter);
-			list_del(&event->obj_list);
+			++(*event->counter);/*计数增加*/
+			list_del(&event->obj_list);/*断开obj_list，表明已收取*/
 		}
 	}
 
@@ -318,7 +318,8 @@ static __poll_t ib_uverbs_event_poll(struct ib_uverbs_event_queue *ev_queue,
 
 	spin_lock_irq(&ev_queue->lock);
 	if (!list_empty(&ev_queue->event_list))
-		pollflags = EPOLLIN | EPOLLRDNORM;/*列表不为空，返回事件*/
+		/*列表不为空，返回pollin事件*/
+		pollflags = EPOLLIN | EPOLLRDNORM;
 	else if (ev_queue->is_closed)
 		pollflags = EPOLLERR;
 	spin_unlock_irq(&ev_queue->lock);
@@ -360,7 +361,7 @@ static int ib_uverbs_comp_event_fasync(int fd, struct file *filp, int on)
 
 const struct file_operations uverbs_event_fops = {
 	.owner	 = THIS_MODULE,
-	.read	 = ib_uverbs_comp_event_read,
+	.read	 = ib_uverbs_comp_event_read,/*实现read读取事件*/
 	.poll    = ib_uverbs_comp_event_poll,/*实现event的poll*/
 	.release = uverbs_uobject_fd_release,
 	.fasync  = ib_uverbs_comp_event_fasync,
@@ -374,7 +375,8 @@ const struct file_operations uverbs_async_event_fops = {
 	.fasync  = ib_uverbs_async_event_fasync,
 };
 
-void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
+/*用户态情况下，使用此回调，其负责将entry放在ev_queue上*/
+void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context/*对应ib_uverbs_event_queue类型*/)
 {
 	struct ib_uverbs_event_queue   *ev_queue = cq_context;
 	struct ib_ucq_object	       *uobj;
@@ -400,15 +402,18 @@ void ib_uverbs_comp_handler(struct ib_cq *cq, void *cq_context)
 
 	uobj = cq->uobject;
 
-	entry->desc.comp.cq_handle = cq->uobject->uevent.uobject.user_handle;
+	entry->desc.comp.cq_handle = cq->uobject->uevent.uobject.user_handle;/*填写用户指定的handle*/
 	entry->counter		   = &uobj->comp_events_reported;
 
-	list_add_tail(&entry->list, &ev_queue->event_list);/*将event挂接在event_list上*/
+	/*将event挂接在event_list上,ib_uverbs_event_read会自此链表取元素*/
+	list_add_tail(&entry->list, &ev_queue->event_list);
+	/*挂在comp_list上（目标销毁时可能event_list上有event未被完全取光，用于释放，
+	 * 见ib_uverbs_event_read与ib_uverbs_release_ucq处理）*/
 	list_add_tail(&entry->obj_list, &uobj->comp_list);
 	spin_unlock_irqrestore(&ev_queue->lock, flags);
 
 	wake_up_interruptible(&ev_queue->poll_wait);/*唤醒等待进程程*/
-	kill_fasync(&ev_queue->async_queue, SIGIO, POLL_IN);
+	kill_fasync(&ev_queue->async_queue, SIGIO, POLL_IN);/*指定poll_in事件*/
 }
 
 void ib_uverbs_async_handler(struct ib_uverbs_async_event_file *async_file,
@@ -443,7 +448,7 @@ void ib_uverbs_async_handler(struct ib_uverbs_async_event_file *async_file,
 		list_add_tail(&entry->obj_list, obj_list);
 	spin_unlock_irqrestore(&async_file->ev_queue.lock, flags);
 
-	wake_up_interruptible(&async_file->ev_queue.poll_wait);
+	wake_up_interruptible(&async_file->ev_queue.poll_wait);/*唤醒等待者*/
 	kill_fasync(&async_file->ev_queue.async_queue, SIGIO, POLL_IN);
 }
 

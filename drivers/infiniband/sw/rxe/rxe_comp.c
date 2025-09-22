@@ -88,6 +88,7 @@ static inline unsigned long rnrnak_jiffies(u8 timeout)
 		usecs_to_jiffies(rnrnak_usec[timeout]), 1);
 }
 
+/*由wr的opcode生成对应的wc的opcode*/
 static enum ib_wc_opcode wr_to_wc_opcode(enum ib_wr_opcode opcode)
 {
 	switch (opcode) {
@@ -406,6 +407,7 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 	memset(cqe, 0, sizeof(*cqe));
 
 	if (!qp->is_user) {
+		/*kernel qp*/
 		wc->wr_id = wqe->wr.wr_id;
 		wc->status = wqe->status;/*设置wc状态*/
 		wc->qp = &qp->ibqp;
@@ -423,6 +425,7 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 				wc->wc_flags = IB_WC_WITH_IMM;
 			wc->byte_len = wqe->dma.length;
 		} else {
+			/*wqe成功，通过wqe->opcode生成cqe的opcode*/
 			uwc->opcode = wr_to_wc_opcode(wqe->wr.opcode);
 			if (wqe->wr.opcode == IB_WR_RDMA_WRITE_WITH_IMM ||
 			    wqe->wr.opcode == IB_WR_SEND_WITH_IMM)
@@ -430,6 +433,7 @@ static void make_send_cqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 			uwc->byte_len = wqe->dma.length;
 		}
 	} else {
+		/*如果生败，则当前rxe仅有这一种*/
 		if (wqe->status != IB_WC_WR_FLUSH_ERR)
 			rxe_err_qp(qp, "non-flush error status = %d\n",
 				wqe->status);
@@ -456,7 +460,7 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 			wqe->status != IB_WC_SUCCESS/*wqe操作不成功*/);
 
 	if (post)
-		make_send_cqe(qp, wqe, &cqe);/*构建cqe*/
+		make_send_cqe(qp, wqe, &cqe);/*构建send cqe*/
 
 	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);/*此WQE已被确认,消费者队列前移一位(后续重传就不考虑这个wqe了)*/
 
@@ -577,7 +581,7 @@ static int flush_send_wqe(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 		uwc->qp_num = qp->ibqp.qp_num;
 	} else {
 		wc->wr_id = wqe->wr.wr_id;
-		wc->status = IB_WC_WR_FLUSH_ERR;
+		wc->status = IB_WC_WR_FLUSH_ERR;/*指明flush err*/
 		wc->qp = &qp->ibqp;
 	}
 
@@ -602,7 +606,7 @@ static void flush_send_queue(struct rxe_qp *qp, bool notify)
 	if (!qp->sq.queue)
 		return;
 
-	/*知会send queue上所有wqe，状态变更为err*/
+	/*排空send queue中所有wqe,如需通知则仅产生一个flush error cqe*/
 	while ((wqe = queue_head(q, q->type))) {
 		if (notify) {
 			err = flush_send_wqe(qp, wqe);/*产生flush error cqe*/
@@ -666,7 +670,7 @@ int rxe_completer(struct rxe_qp *qp)
 		bool notify = qp->valid && (qp_state(qp) == IB_QPS_ERR);
 
 		drain_resp_pkts(qp);/*排空所有response报文*/
-		flush_send_queue(qp, notify);/*排空sq,如果需要notify，则产生cqe*/
+		flush_send_queue(qp, notify);/*排空sq上所有wqe,如果需要notify，则仅产生一个cqe*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		goto exit;/*退出*/
 	}

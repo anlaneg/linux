@@ -79,7 +79,7 @@ struct rxe_send_wr {
 	__u32			opcode;/*操作码，见enum ib_wr_opcode*/
 	__u32			send_flags;
 	union {
-		__be32		imm_data;/*包含的立即数*/
+		__be32		imm_data;/*wr包含的立即数*/
 		__u32		invalidate_rkey;
 	} ex;
 	union {

@@ -525,7 +525,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 /*构造报文，并填充报文负载,更新wqe上待发送的剩余长度*/
 static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 			 struct rxe_send_wqe *wqe/*待发送的buffer*/, struct rxe_pkt_info *pkt,
-			 struct sk_buff *skb/*报文buffer*/, u32 payload)
+			 struct sk_buff *skb/*报文buffer*/, u32 payload/*待填充到skb buffer中的数据的长度*/)
 {
 	int err;
 
@@ -536,7 +536,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 
 	if (pkt->mask & RXE_WRITE_OR_SEND_MASK) {
 		if (wqe->wr.send_flags & IB_SEND_INLINE) {
-		    /*填写负载报文：op_code暂为空*/
+		    /*inline情况下填写负载报文*/
 			u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
 
 			memcpy(payload_addr(pkt), tmp, payload);/*inline数据填充到payload*/
@@ -544,7 +544,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 			wqe->dma.resid -= payload;
 			wqe->dma.sge_offset += payload;/*更新offset*/
 		} else {
-		    /*填写负载报文：op_code暂为空*/
+		    /*非inline情况下填写负载报文*/
 			err = copy_data(qp->pd, 0, &wqe->dma,
 					payload_addr(pkt)/*待填充的PAYLOAD首地址*/, payload/*待填充内容长度*/,
 					RXE_FROM_MR_OBJ/*从mr中复制数据到payload*/);
@@ -564,6 +564,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 	}
 
 	if (pkt->mask & RXE_ATOMIC_WRITE_MASK) {
+		/*原子写，复制数据到skb buffer*/
 		memcpy(payload_addr(pkt), wqe->dma.atomic_wr, payload);
 		wqe->dma.resid -= payload;
 	}

@@ -64,7 +64,7 @@ struct rxe_cq {
 	/*cq队列*/
 	struct rxe_queue	*queue;
 	spinlock_t		cq_lock;
-	u8			notify;
+	u8			notify;/*是否通知cqe，如果为0，则不通知；具体看rxe_req_notify_cq实现*/
 	bool			is_user;
 	atomic_t		num_wq;
 };

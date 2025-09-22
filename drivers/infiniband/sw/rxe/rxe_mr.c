@@ -379,7 +379,7 @@ int copy_data(
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
 	/*取此sge的起点偏移量*/
 	int			offset	= dma->sge_offset;
-	/*资源可用长度*/
+	/*总可用长度*/
 	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
 	u64			iova;
@@ -443,7 +443,7 @@ int copy_data(
 			bytes = sge->length - offset;
 
 		if (bytes > 0) {
-			/*确认mr中复制/读取起始地址iova,需复制/读取的bytes字节*/
+			/*这种自mr中读写，确认mr中复制/读取起始地址iova,需复制/读取的bytes字节*/
 			iova = sge->addr + offset;
 			err = rxe_mr_copy(mr, iova/*mr中的地址*/, addr/*buffer中地址*/, bytes/*复制字节数*/, dir);
 			if (err)

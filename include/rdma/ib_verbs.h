@@ -993,7 +993,8 @@ enum ib_wc_status {
 	IB_WC_LOC_QP_OP_ERR,
 	IB_WC_LOC_EEC_OP_ERR,
 	IB_WC_LOC_PROT_ERR,
-	IB_WC_WR_FLUSH_ERR,/*当前 Work Request 所在的发送队列（Send Queue）被强制刷新（flushed），导致该 WR 未能正常执行。*/
+	/*当前Work Request所在的发送队列（Send Queue）被强制刷新（flushed），该 WR 未能正常执行,置此状态*/
+	IB_WC_WR_FLUSH_ERR,
 	IB_WC_MW_BIND_ERR,
 	IB_WC_BAD_RESP_ERR,
 	IB_WC_LOC_ACCESS_ERR,
@@ -1075,7 +1076,7 @@ struct ib_wc {
 enum ib_cq_notify_flags {
 	IB_CQ_SOLICITED			= 1 << 0,/*仅当有cqe,且指明solicited时才执行comp_handler通知*/
 	IB_CQ_NEXT_COMP			= 1 << 1,/*每个cqe都执行comp_handler通知*/
-	/*如上示,当前支持两种通知标记*/
+	/*如上示,当前仅支持以上两种通知标记*/
 	IB_CQ_SOLICITED_MASK		= IB_CQ_SOLICITED | IB_CQ_NEXT_COMP,
 	IB_CQ_REPORT_MISSED_EVENTS	= 1 << 2,
 };
@@ -1435,7 +1436,7 @@ struct ib_send_wr {
 	/*发送时提供的标记，例如发送完成后产生cqe事件的（IBV_SEND_SIGNALED）*/
 	int			send_flags;
 	union {
-		__be32		imm_data;
+		__be32		imm_data;/*操作附带的立即数*/
 		u32		invalidate_rkey;
 	} ex;
 };
@@ -1466,6 +1467,7 @@ static inline const struct ib_atomic_wr *atomic_wr(const struct ib_send_wr *wr)
 	return container_of(wr, struct ib_atomic_wr, wr);
 }
 
+/*ud类型的wr*/
 struct ib_ud_wr {
 	struct ib_send_wr	wr;/*将来直接由post_send发送的wr*/
 	struct ib_ah		*ah;
@@ -1480,7 +1482,7 @@ struct ib_ud_wr {
 
 static inline const struct ib_ud_wr *ud_wr(const struct ib_send_wr *wr)
 {
-	return container_of(wr, struct ib_ud_wr, wr);
+	return container_of(wr, struct ib_ud_wr, wr);/*由wr转ib_ud_wr*/
 }
 
 struct ib_reg_wr {
@@ -1654,7 +1656,7 @@ struct ib_cq {
 	/*当cq中增加cqe,且需要向上通知时,此回调将被触发*/
 	ib_comp_handler   	comp_handler;
 	void                  (*event_handler)(struct ib_event *, void *);
-	void                   *cq_context;
+	void                   *cq_context;/*cq保存的私有数据*/
 	/*cqe数目*/
 	int               	cqe;
 	unsigned int		cqe_used;
@@ -4112,8 +4114,8 @@ static inline int ib_post_recv(struct ib_qp *qp,
 struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 			    int comp_vector, enum ib_poll_context poll_ctx,
 			    const char *caller);
-static inline struct ib_cq *ib_alloc_cq(struct ib_device *dev, void *private,
-					int nr_cqe, int comp_vector,
+static inline struct ib_cq *ib_alloc_cq(struct ib_device *dev, void *private/*cq关联的私有数据*/,
+					int nr_cqe/*cqe数目*/, int comp_vector,
 					enum ib_poll_context poll_ctx/*指明cq poll的方式*/)
 {
 	/*申请并创建cq*/
@@ -4252,6 +4254,7 @@ static inline int ib_poll_cq(struct ib_cq *cq, int num_entries,
 static inline int ib_req_notify_cq(struct ib_cq *cq,
 				   enum ib_cq_notify_flags flags)
 {
+	/*由各驱动自行实现notify_cq*/
 	return cq->device->ops.req_notify_cq(cq, flags);
 }
 

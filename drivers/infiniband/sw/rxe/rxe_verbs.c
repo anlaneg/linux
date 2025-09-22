@@ -746,11 +746,13 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		}
 
 		if (mask & WR_ATOMIC_MASK) {
+			/*原子操作，长度不得大于8*/
 			if (length != 8) {
 				rxe_err_qp(qp, "atomic length != 8\n");
 				break;
 			}
 			if (atomic_wr(ibwr)->remote_addr & 0x7) {
+				/*原子操作，地址必须按8字节对齐*/
 				rxe_err_qp(qp, "misaligned atomic address\n");
 				break;
 			}
@@ -829,7 +831,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 		case IB_WR_ATOMIC_CMP_AND_SWP:
 		case IB_WR_ATOMIC_FETCH_AND_ADD:
 			wr->wr.atomic.remote_addr =
-				atomic_wr(ibwr)->remote_addr;
+				atomic_wr(ibwr)->remote_addr;/*原子操作地址*/
 			wr->wr.atomic.compare_add =
 				atomic_wr(ibwr)->compare_add;
 			wr->wr.atomic.swap = atomic_wr(ibwr)->swap;
@@ -1605,7 +1607,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
 	.reg_user_mr = rxe_reg_user_mr,/*rxe注册用户态mr*/
-	.req_notify_cq = rxe_req_notify_cq,/*设置cq->notify*/
+	.req_notify_cq = rxe_req_notify_cq,/*设置cq->notify方式*/
 	.rereg_user_mr = rxe_rereg_user_mr,
 	.resize_cq = rxe_resize_cq,
 

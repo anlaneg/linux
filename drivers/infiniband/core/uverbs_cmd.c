@@ -1067,7 +1067,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 		}
 	}
 
-	obj->uevent.uobject.user_handle = cmd->user_handle;
+	obj->uevent.uobject.user_handle = cmd->user_handle;/*填写用户指明的handle*/
 	INIT_LIST_HEAD(&obj->comp_list);
 	INIT_LIST_HEAD(&obj->uevent.event_list);
 
@@ -1083,7 +1083,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	}
 	cq->device        = ib_dev;
 	cq->uobject       = obj;
-	cq->comp_handler  = ib_uverbs_comp_handler;/*指定comp_handler回调，其负责将entry放在ev_queue上*/
+	cq->comp_handler  = ib_uverbs_comp_handler;/*用户态情况下，使用此回调，其负责将entry放在ev_queue上*/
 	cq->event_handler = ib_uverbs_cq_event_handler;
 	cq->cq_context    = ev_file ? &ev_file->ev_queue : NULL;/*如有ev_file，设置ev_queue*/
 	atomic_set(&cq->usecnt, 0);
@@ -1281,10 +1281,12 @@ static int ib_uverbs_req_notify_cq(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
+	/*取得cq*/
 	cq = uobj_get_obj_read(cq, UVERBS_OBJECT_CQ, cmd.cq_handle, attrs);
 	if (IS_ERR(cq))
 		return PTR_ERR(cq);
 
+	/*如示，如设置为仅solicited时通知，则设置IB_CQ_SOLICITED，否则IB_CQ_NEXT_COMP*/
 	ib_req_notify_cq(cq, cmd.solicited_only ?
 			 IB_CQ_SOLICITED : IB_CQ_NEXT_COMP);
 
@@ -3869,7 +3871,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_METHOD_NEEDS_FN(poll_cq)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_REQ_NOTIFY_CQ,
-			ib_uverbs_req_notify_cq,
+			ib_uverbs_req_notify_cq,/*设置cq通知方式*/
 			UAPI_DEF_WRITE_I(struct ib_uverbs_req_notify_cq),
 			UAPI_DEF_METHOD_NEEDS_FN(req_notify_cq)),
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_RESIZE_CQ,
