@@ -192,6 +192,7 @@ struct cm_work {
 	struct delayed_work work;
 	struct list_head list;
 	struct cm_port *port;/*消息关联的cm port*/
+	/*收到的mad消息内容*/
 	struct ib_mad_recv_wc *mad_recv_wc;	/* Received MADs */
 	__be32 local_id;			/* Established / timewait */
 	__be32 remote_id;
@@ -234,19 +235,19 @@ struct cm_id_private {
 	void *private_data;
 	__be64 tid;
 	__be32 local_qpn;
-	__be32 remote_qpn;
+	__be32 remote_qpn;/*远端qpn*/
 	enum ib_qp_type qp_type;
-	__be32 sq_psn;
+	__be32 sq_psn;/*发送端(即请求方)PSN*/
 	__be32 rq_psn;
-	int timeout_ms;
+	int timeout_ms;/*CM响应超时时间*/
 	enum ib_mtu path_mtu;
 	__be16 pkey;
 	u8 private_data_len;
-	u8 max_cm_retries;
+	u8 max_cm_retries;/*取CM最大重试次数*/
 	u8 responder_resources;
 	u8 initiator_depth;
 	u8 retry_count;
-	u8 rnr_retry_count;
+	u8 rnr_retry_count;/*RNR重试最大数*/
 	u8 target_ack_delay;
 
 	struct list_head work_list;/*用于串连待执行的cm消息对应的work*/
@@ -2068,7 +2069,7 @@ static struct cm_id_private *cm_match_req(struct cm_work *work,
 		spin_unlock_irq(&cm.lock);
 		cm_issue_rej(work->port, work->mad_recv_wc,
 			     IB_CM_REJ_STALE_CONN, CM_MSG_RESPONSE_REQ,
-			     NULL, 0);
+			     NULL, 0);/*响应拒绝*/
 		if (cur_cm_id_priv) {
 			ib_send_cm_dreq(&cur_cm_id_priv->id, NULL, 0);
 			cm_deref_id(cur_cm_id_priv);
@@ -2137,6 +2138,7 @@ static int cm_req_handler(struct cm_work *work)
 	const struct ib_gid_attr *gid_attr;
 	int ret;
 
+	/*收到的消息*/
 	req_msg = (struct cm_req_msg *)work->mad_recv_wc->recv_buf.mad;
 
 	cm_id_priv =
@@ -2146,26 +2148,25 @@ static int cm_req_handler(struct cm_work *work)
 
 	/*解析报文中的内容，填充cm_id_priv*/
 	cm_id_priv->id.remote_id =
-		cpu_to_be32(IBA_GET(CM_REQ_LOCAL_COMM_ID, req_msg));
+		cpu_to_be32(IBA_GET(CM_REQ_LOCAL_COMM_ID, req_msg));/*取local_comm_id*/
 	cm_id_priv->id.service_id =
-		cpu_to_be64(IBA_GET(CM_REQ_SERVICE_ID, req_msg));
+		cpu_to_be64(IBA_GET(CM_REQ_SERVICE_ID, req_msg));/*取service_id*/
 	cm_id_priv->tid = req_msg->hdr.tid;
-	/*取超时时间*/
 	cm_id_priv->timeout_ms = cm_convert_to_ms(
-		IBA_GET(CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT, req_msg));
-	cm_id_priv->max_cm_retries = IBA_GET(CM_REQ_MAX_CM_RETRIES, req_msg);
+		IBA_GET(CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT, req_msg));/*取CM响应超时时间*/
+	cm_id_priv->max_cm_retries = IBA_GET(CM_REQ_MAX_CM_RETRIES, req_msg);/*取CM最大重试次数*/
 	cm_id_priv->remote_qpn =
-		cpu_to_be32(IBA_GET(CM_REQ_LOCAL_QPN, req_msg));
+		cpu_to_be32(IBA_GET(CM_REQ_LOCAL_QPN, req_msg));/*取远端qpn*/
 	cm_id_priv->initiator_depth =
-		IBA_GET(CM_REQ_RESPONDER_RESOURCES, req_msg);
+		IBA_GET(CM_REQ_RESPONDER_RESOURCES, req_msg);/*这个成员写反了?*/
 	cm_id_priv->responder_resources =
-		IBA_GET(CM_REQ_INITIATOR_DEPTH, req_msg);
-	cm_id_priv->path_mtu = IBA_GET(CM_REQ_PATH_PACKET_PAYLOAD_MTU, req_msg);
-	cm_id_priv->pkey = cpu_to_be16(IBA_GET(CM_REQ_PARTITION_KEY, req_msg));
-	cm_id_priv->sq_psn = cpu_to_be32(IBA_GET(CM_REQ_STARTING_PSN, req_msg));
+		IBA_GET(CM_REQ_INITIATOR_DEPTH, req_msg);/*这个成员也写反了?*/
+	cm_id_priv->path_mtu = IBA_GET(CM_REQ_PATH_PACKET_PAYLOAD_MTU, req_msg);/*取PATH mtu*/
+	cm_id_priv->pkey = cpu_to_be16(IBA_GET(CM_REQ_PARTITION_KEY, req_msg));/*取partition key*/
+	cm_id_priv->sq_psn = cpu_to_be32(IBA_GET(CM_REQ_STARTING_PSN, req_msg));/*取发送端(即请求方)PSN*/
 	cm_id_priv->retry_count = IBA_GET(CM_REQ_RETRY_COUNT, req_msg);
 	cm_id_priv->rnr_retry_count = IBA_GET(CM_REQ_RNR_RETRY_COUNT, req_msg);
-	cm_id_priv->qp_type = cm_req_get_qp_type(req_msg);
+	cm_id_priv->qp_type = cm_req_get_qp_type(req_msg);/*取QP类型*/
 
 	ret = cm_init_av_for_response(work->port, work->mad_recv_wc->wc,
 				      work->mad_recv_wc->recv_buf.grh,
@@ -3878,7 +3879,7 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 		cm_free_msg(msg);
 }
 
-/*cm event处理（上文已按照收到的报文产生了事件，现在处理这些事件）*/
+/*cm event work处理（上文cm_recv_handler已按照收到的报文产生了事件，现在处理这些事件）*/
 static void cm_work_handler(struct work_struct *_work)
 {
 	struct cm_work *work = container_of(_work, struct cm_work, work.work);
@@ -4037,7 +4038,7 @@ int ib_cm_notify(struct ib_cm_id *cm_id, enum ib_event_type event)
 }
 EXPORT_SYMBOL(ib_cm_notify);
 
-/*当CM响应消息被收到后,此回调将被调用*/
+/*当CM响应消息被收到后,此回调将被调用(分类产生work,交给cm_work_handler处理)*/
 static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 			    struct ib_mad_send_buf *send_buf,
 			    struct ib_mad_recv_wc *mad_recv_wc)
@@ -4097,11 +4098,12 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 		return;
 	}
 
+	/*取消息类型*/
 	attr_id = be16_to_cpu(mad_recv_wc->recv_buf.mad->mad_hdr.attr_id);
-	/*增加此attr的统计计数*/
+	/*增加此消息类型的统计计数*/
 	atomic_long_inc(&port->counters[CM_RECV][attr_id - CM_ATTR_ID_OFFSET]);
 
-	/*申请work,填充event*/
+	/*申请work(需要paths个path成员),填充event*/
 	work = kmalloc(struct_size(work, path, paths), GFP_KERNEL);
 	if (!work) {
 		ib_free_recv_mad(mad_recv_wc);
@@ -4110,19 +4112,20 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 
 	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*指定为cm消息处理handler*/
 	work->cm_event.event = event;/*event类型*/
-	work->mad_recv_wc = mad_recv_wc;
-	work->port = port;
+	work->mad_recv_wc = mad_recv_wc;/*收到的消息内容*/
+	work->port = port;/*自哪个cm_port收到的*/
 
 	/* Check if the device started its remove_one */
 	spin_lock_irq(&cm.lock);
 	if (!port->cm_dev->going_down)
-		/*port没有被标记为down,触发此work,处理这个event*/
+		/*cm device没有被标记为down,触发此work,处理这个event*/
 		queue_delayed_work(cm.wq, &work->work, 0);
 	else
 		going_down = 1;
 	spin_unlock_irq(&cm.lock);
 
 	if (going_down) {
+		/*需要going down,释放*/
 		kfree(work);
 		ib_free_recv_mad(mad_recv_wc);
 	}

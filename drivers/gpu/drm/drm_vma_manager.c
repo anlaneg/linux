@@ -200,7 +200,7 @@ EXPORT_SYMBOL(drm_vma_offset_lookup_locked);
  * 0 on success, negative error code on failure.
  */
 int drm_vma_offset_add(struct drm_vma_offset_manager *mgr,
-		       struct drm_vma_offset_node *node, unsigned long pages)
+		       struct drm_vma_offset_node *node/*要添加的VMA*/, unsigned long pages/*页数*/)
 {
 	int ret = 0;
 

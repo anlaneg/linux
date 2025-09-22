@@ -422,7 +422,7 @@ struct drm_gem_object {
 	 * New drivers should use this.
 	 *
 	 */
-	const struct drm_gem_object_funcs *funcs;
+	const struct drm_gem_object_funcs *funcs;/*GEM函数表*/
 
 	/**
 	 * @lru_node:

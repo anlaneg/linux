@@ -64,14 +64,17 @@ int drm_mode_create_dumb(struct drm_device *dev,
 	u32 cpp, stride, size;
 
 	if (!dev->driver->dumb_create)
+		/*驱动未提供相应回调,报错*/
 		return -ENOSYS;
 	if (!args->width || !args->height || !args->bpp)
+		/*参数未提供以上三数组,报错*/
 		return -EINVAL;
 
 	/* overflow checks for 32bit size calculations */
 	if (args->bpp > U32_MAX - 8)
+		/*bpp过大*/
 		return -EINVAL;
-	cpp = DIV_ROUND_UP(args->bpp, 8);
+	cpp = DIV_ROUND_UP(args->bpp, 8);/*对齐*/
 	if (cpp > U32_MAX / args->width)
 		return -EINVAL;
 	stride = cpp * args->width;
@@ -93,9 +96,11 @@ int drm_mode_create_dumb(struct drm_device *dev,
 	args->pitch = 0;
 	args->size = 0;
 
+	/*依赖驱动创建傻瓜式显存*/
 	return dev->driver->dumb_create(file_priv, dev, args);
 }
 
+/*响应ioctl,创建显存*/
 int drm_mode_create_dumb_ioctl(struct drm_device *dev,
 			       void *data, struct drm_file *file_priv)
 {

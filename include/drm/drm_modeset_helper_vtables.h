@@ -849,6 +849,7 @@ struct drm_encoder_helper_funcs {
 static inline void drm_encoder_helper_add(struct drm_encoder *encoder,
 					  const struct drm_encoder_helper_funcs *funcs)
 {
+	/*设置encoder针对GPU对应的辅助函数*/
 	encoder->helper_private = funcs;
 }
 
@@ -1189,7 +1190,7 @@ struct drm_connector_helper_funcs {
 static inline void drm_connector_helper_add(struct drm_connector *connector,
 					    const struct drm_connector_helper_funcs *funcs)
 {
-	connector->helper_private = funcs;
+	connector->helper_private = funcs;/*设置connector的辅助函数(用于驱动定制)*/
 }
 
 /**

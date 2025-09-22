@@ -250,7 +250,7 @@ static const struct drm_connector_funcs virtio_gpu_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
-static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index)
+static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index/*crtc索引*/)
 {
 	struct drm_device *dev = vgdev->ddev;
 	struct virtio_gpu_output *output = vgdev->outputs + index;
@@ -276,18 +276,22 @@ static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index)
 				  &virtio_gpu_crtc_funcs, NULL);
 	drm_crtc_helper_add(crtc, &virtio_gpu_crtc_helper_funcs);
 
+	/*初始化drm_connector*/
 	drm_connector_init(dev, connector, &virtio_gpu_connector_funcs,
 			   DRM_MODE_CONNECTOR_VIRTUAL);
+	/*设置virtio-gpu connector对应的辅助函数*/
 	drm_connector_helper_add(connector, &virtio_gpu_conn_helper_funcs);
 	if (vgdev->has_edid)
 		drm_connector_attach_edid_property(connector);
 
+	/*初始化encoder*/
 	drm_simple_encoder_init(dev, encoder, DRM_MODE_ENCODER_VIRTUAL);
+	/*设置encoder针对virtio-gpu对应的辅助函数*/
 	drm_encoder_helper_add(encoder, &virtio_gpu_enc_helper_funcs);
 	encoder->possible_crtcs = 1 << index;
 
 	drm_connector_attach_encoder(connector, encoder);
-	drm_connector_register(connector);
+	drm_connector_register(connector);/*注册connector*/
 	return 0;
 }
 

@@ -46,7 +46,7 @@ int __drm_mode_object_add(struct drm_device *dev, struct drm_mode_object *obj,
 
 	mutex_lock(&dev->mode_config.idr_mutex);
 	ret = idr_alloc(&dev->mode_config.object_idr, register_obj ? obj : NULL,
-			1, 0, GFP_KERNEL);
+			1, 0, GFP_KERNEL);/*申请id并关联obj*/
 	if (ret >= 0) {
 		/*
 		 * Set up the object linking under the protection of the idr
@@ -79,6 +79,7 @@ int __drm_mode_object_add(struct drm_device *dev, struct drm_mode_object *obj,
 int drm_mode_object_add(struct drm_device *dev,
 			struct drm_mode_object *obj, uint32_t obj_type)
 {
+	/*添加指定类型的obj*/
 	return __drm_mode_object_add(dev, obj, obj_type, true, NULL);
 }
 EXPORT_SYMBOL_FOR_TESTS_ONLY(drm_mode_object_add);
@@ -87,6 +88,7 @@ void drm_mode_object_register(struct drm_device *dev,
 			      struct drm_mode_object *obj)
 {
 	mutex_lock(&dev->mode_config.idr_mutex);
+	/*替换obj*/
 	idr_replace(&dev->mode_config.object_idr, obj, obj->id);
 	mutex_unlock(&dev->mode_config.idr_mutex);
 }
@@ -109,6 +111,7 @@ void drm_mode_object_unregister(struct drm_device *dev,
 
 	mutex_lock(&dev->mode_config.idr_mutex);
 	if (object->id) {
+		/*移除obj*/
 		idr_remove(&dev->mode_config.object_idr, object->id);
 		object->id = 0;
 	}
@@ -141,11 +144,11 @@ struct drm_mode_object *__drm_mode_object_find(struct drm_device *dev,
 	struct drm_mode_object *obj = NULL;
 
 	mutex_lock(&dev->mode_config.idr_mutex);
-	obj = idr_find(&dev->mode_config.object_idr, id);
+	obj = idr_find(&dev->mode_config.object_idr, id);/*通过ID获取OBJ*/
 	if (obj && type != DRM_MODE_OBJECT_ANY && obj->type != type)
-		obj = NULL;
+		obj = NULL;/*类型不匹配,置为NULL*/
 	if (obj && obj->id != id)
-		obj = NULL;
+		obj = NULL;/*这个检查看起来有点多此一举*/
 
 	if (obj && drm_mode_object_lease_required(obj->type) &&
 	    !_drm_lease_held(file_priv, obj->id)) {
@@ -179,6 +182,7 @@ struct drm_mode_object *drm_mode_object_find(struct drm_device *dev,
 {
 	struct drm_mode_object *obj = NULL;
 
+	/*通过ID,type获取OBJ*/
 	obj = __drm_mode_object_find(dev, file_priv, id, type);
 	return obj;
 }
@@ -232,8 +236,8 @@ EXPORT_SYMBOL(drm_mode_object_get);
  * registered and accessible from userspace.
  */
 void drm_object_attach_property(struct drm_mode_object *obj,
-				struct drm_property *property,
-				uint64_t init_val)
+				struct drm_property *property/*属性变量*/,
+				uint64_t init_val/*此属性初始值*/)
 {
 	int count = obj->properties->count;
 	struct drm_device *dev = property->dev;
@@ -257,8 +261,8 @@ void drm_object_attach_property(struct drm_mode_object *obj,
 	}
 
 	obj->properties->properties[count] = property;
-	obj->properties->values[count] = init_val;
-	obj->properties->count++;
+	obj->properties->values[count] = init_val;/*设置初始值*/
+	obj->properties->count++;/*属性总数增加*/
 }
 EXPORT_SYMBOL(drm_object_attach_property);
 

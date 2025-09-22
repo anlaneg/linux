@@ -861,7 +861,7 @@ static const struct pci_device_id pciidlist[] = {
 	INTEL_ADLP_IDS(INTEL_VGA_DEVICE, &adl_p_info),
 	INTEL_ADLN_IDS(INTEL_VGA_DEVICE, &adl_p_info),
 	INTEL_DG1_IDS(INTEL_VGA_DEVICE, &dg1_info),
-	INTEL_RPLS_IDS(INTEL_VGA_DEVICE, &adl_s_info),
+	INTEL_RPLS_IDS(INTEL_VGA_DEVICE, &adl_s_info),/*台式机则采用此device ID*/
 	INTEL_RPLU_IDS(INTEL_VGA_DEVICE, &adl_p_info),
 	INTEL_RPLP_IDS(INTEL_VGA_DEVICE, &adl_p_info),
 	INTEL_DG2_IDS(INTEL_VGA_DEVICE, &dg2_info),
@@ -952,6 +952,7 @@ static bool intel_mmio_bar_valid(struct pci_dev *pdev, struct intel_device_info 
 	return i915_pci_resource_valid(pdev, intel_mmio_bar(intel_info->__runtime.graphics.ip.ver));
 }
 
+/*驱动探测设备pdev,设备对应的设备ID为ent*/
 static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct intel_device_info *intel_info =
@@ -1026,6 +1027,7 @@ static void i915_pci_shutdown(struct pci_dev *pdev)
 	i915_driver_shutdown(i915);
 }
 
+/*pci驱动*/
 static struct pci_driver i915_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = pciidlist,
@@ -1037,7 +1039,7 @@ static struct pci_driver i915_pci_driver = {
 
 int i915_pci_register_driver(void)
 {
-	return pci_register_driver(&i915_pci_driver);
+	return pci_register_driver(&i915_pci_driver);/*注册PCI驱动*/
 }
 
 void i915_pci_unregister_driver(void)

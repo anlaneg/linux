@@ -30,10 +30,10 @@ static const char *video_options[FB_MAX] __read_mostly;
 static const char *video_option __read_mostly;
 static int video_of_only __read_mostly;
 
-static const char *__video_get_option_string(const char *name)
+static const char *__video_get_option_string(const char *name/*选项名称及选顶值,以':'分隔*/)
 {
 	const char *options = NULL;
-	size_t name_len = 0;
+	size_t name_len = 0;/*名称长度*/
 
 	if (name)
 		name_len = strlen(name);
@@ -44,17 +44,19 @@ static const char *__video_get_option_string(const char *name)
 
 		for (i = 0; i < ARRAY_SIZE(video_options); ++i) {
 			if (!video_options[i])
-				continue;
+				continue;/*选项名称为空指针,跳过*/
 			if (video_options[i][0] == '\0')
-				continue;
-			opt = video_options[i];
+				continue;/*选项名称为空串,跳过*/
+			opt = video_options[i];/*取选项名称*/
 			if (!strncmp(opt, name, name_len) && opt[name_len] == ':')
+				/*选项匹配 ,且选项名称后为':',使options指向选项值*/
 				options = opt + name_len + 1;
 		}
 	}
 
 	/* No match, return global options */
 	if (!options)
+		/*没有找到此选项,使用video_option*/
 		options = video_option;
 
 	return options;

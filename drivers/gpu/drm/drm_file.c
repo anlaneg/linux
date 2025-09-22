@@ -174,7 +174,7 @@ struct drm_file *drm_file_alloc(struct drm_minor *minor)
 		drm_debugfs_clients_add(file);
 
 	if (dev->driver->open) {
-		ret = dev->driver->open(dev, file);
+		ret = dev->driver->open(dev, file);/*驱动如果提供了OPEN函数,则调用*/
 		if (ret < 0)
 			goto out_prime_destroy;
 	}
@@ -386,7 +386,7 @@ int drm_open(struct inode *inode, struct file *filp)
 	/* share address_space across all char-devs of a single device */
 	filp->f_mapping = dev->anon_inode->i_mapping;
 
-	retcode = drm_open_helper(filp, minor);
+	retcode = drm_open_helper(filp, minor);/*用于打开drm字符文件*/
 	if (retcode)
 		goto err_undo;
 
@@ -1065,6 +1065,7 @@ struct file *mock_drm_getfile(struct drm_minor *minor, unsigned int flags)
 	if (IS_ERR(priv))
 		return ERR_CAST(priv);
 
+	/*创建drm文件 并设置文件 对应的fops*/
 	file = anon_inode_getfile("drm", dev->driver->fops, priv, flags);
 	if (IS_ERR(file)) {
 		drm_file_free(priv);

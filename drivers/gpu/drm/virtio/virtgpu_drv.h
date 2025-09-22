@@ -231,7 +231,7 @@ struct virtio_gpu_device {
 	struct virtio_device *vdev;
 
 	struct virtio_gpu_output outputs[VIRTIO_GPU_MAX_SCANOUTS];
-	uint32_t num_scanouts;
+	uint32_t num_scanouts;/*crtcs数目总数*/
 
 	struct virtio_gpu_queue ctrlq;
 	struct virtio_gpu_queue cursorq;

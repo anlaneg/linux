@@ -2046,7 +2046,7 @@ int uvc_register_video_device(struct uvc_device *dev,
 	 */
 	video_set_drvdata(vdev, stream);
 
-	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);/*注册video设备*/
 	if (ret < 0) {
 		dev_err(&stream->intf->dev,
 			"Failed to register %s device (%d).\n",
@@ -2082,7 +2082,7 @@ static int uvc_register_video(struct uvc_device *dev,
 	/* Register the device with V4L. */
 	return uvc_register_video_device(dev, stream, &stream->vdev,
 					 &stream->queue, stream->type,
-					 &uvc_fops, &uvc_ioctl_ops);
+					 &uvc_fops/*指明此video文件的ops*/, &uvc_ioctl_ops);
 }
 
 /*
@@ -3244,7 +3244,7 @@ static int __init uvc_init(void)
 
 	uvc_debugfs_init();
 
-	ret = usb_register(&uvc_driver);
+	ret = usb_register(&uvc_driver);/*USB注册uvc驱动*/
 	if (ret < 0) {
 		uvc_debugfs_cleanup();
 		return ret;

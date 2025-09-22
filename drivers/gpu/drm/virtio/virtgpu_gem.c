@@ -43,6 +43,7 @@ static int virtio_gpu_gem_create(struct drm_file *file,
 	if (ret < 0)
 		return ret;
 
+	/*创建 此gem obj对应的handle*/
 	ret = drm_gem_handle_create(file, &obj->base.base, &handle);
 	if (ret) {
 		drm_gem_object_release(&obj->base.base);
@@ -54,7 +55,7 @@ static int virtio_gpu_gem_create(struct drm_file *file,
 	/* drop reference from allocate - handle holds it now */
 	drm_gem_object_put(&obj->base.base);
 
-	*handle_p = handle;
+	*handle_p = handle;/*返回此handle*/
 	return 0;
 }
 
@@ -69,11 +70,12 @@ int virtio_gpu_mode_dumb_create(struct drm_file *file_priv,
 	uint32_t pitch;
 
 	if (args->bpp != 32)
+		/*只支持bpp为32的情况*/
 		return -EINVAL;
 
 	pitch = args->width * 4;
 	args->size = pitch * args->height;
-	args->size = ALIGN(args->size, PAGE_SIZE);
+	args->size = ALIGN(args->size, PAGE_SIZE);/*按页对齐*/
 
 	params.format = virtio_gpu_translate_format(DRM_FORMAT_HOST_XRGB8888);
 	params.width = args->width;
@@ -88,7 +90,7 @@ int virtio_gpu_mode_dumb_create(struct drm_file *file_priv,
 	}
 
 	ret = virtio_gpu_gem_create(file_priv, dev, &params, &gobj,
-				    &args->handle);
+				    &args->handle);/*创建GEM,并返回其关联的handle*/
 	if (ret)
 		goto fail;
 

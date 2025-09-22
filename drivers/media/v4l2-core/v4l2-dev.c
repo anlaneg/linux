@@ -231,7 +231,7 @@ static void v4l2_device_release(struct device *cd)
 }
 
 static const struct class video_class = {
-	.name = VIDEO_NAME,
+	.name = VIDEO_NAME,/*video设备类型名称*/
 	.dev_groups = video_device_groups,
 };
 
@@ -909,9 +909,10 @@ static int video_register_media_controller(struct video_device *vdev)
 	return 0;
 }
 
+/*注册video设备*/
 int __video_register_device(struct video_device *vdev,
-			    enum vfl_devnode_type type,
-			    int nr, int warn_if_nr_in_use,
+			    enum vfl_devnode_type type/*设备类型*/,
+			    int nr/*设备数目*/, int warn_if_nr_in_use,
 			    struct module *owner)
 {
 	int i = 0;
@@ -942,7 +943,7 @@ int __video_register_device(struct video_device *vdev,
 	/* Part 1: check device type */
 	switch (type) {
 	case VFL_TYPE_VIDEO:
-		name_base = "video";
+		name_base = "video";/*视频设备*/
 		break;
 	case VFL_TYPE_VBI:
 		name_base = "vbi";
@@ -1070,7 +1071,7 @@ int __video_register_device(struct video_device *vdev,
 	}
 
 	/* Part 4: register the device with sysfs */
-	vdev->dev.class = &video_class;
+	vdev->dev.class = &video_class;/*此类设备关联的class*/
 	vdev->dev.devt = MKDEV(VIDEO_MAJOR, vdev->minor);
 	vdev->dev.parent = vdev->dev_parent;
 	vdev->dev.release = v4l2_device_release;

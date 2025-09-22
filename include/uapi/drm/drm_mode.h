@@ -260,18 +260,18 @@ struct drm_mode_modeinfo {
 };
 
 struct drm_mode_card_res {
-	__u64 fb_id_ptr;
+	__u64 fb_id_ptr;/*如果count_fbs大于0,则用于采集count_fbs个FB的ID,并将其保存在此数组中(下同)*/
 	__u64 crtc_id_ptr;
 	__u64 connector_id_ptr;
 	__u64 encoder_id_ptr;
-	__u32 count_fbs;
-	__u32 count_crtcs;
-	__u32 count_connectors;
-	__u32 count_encoders;
-	__u32 min_width;
-	__u32 max_width;
-	__u32 min_height;
-	__u32 max_height;
+	__u32 count_fbs;/*framebuffer总数*/
+	__u32 count_crtcs;/*CRTC总数*/
+	__u32 count_connectors;/*connector总数目*/
+	__u32 count_encoders;/*编码器(encoder)总数*/
+	__u32 min_width;/*最小的宽*/
+	__u32 max_width;/*最大的宽*/
+	__u32 min_height;/*最小的长*/
+	__u32 max_height;/*最大的长*/
 };
 
 struct drm_mode_crtc {
@@ -415,6 +415,7 @@ enum drm_mode_subconnector {
 #define DRM_MODE_CONNECTOR_HDMIB	12
 #define DRM_MODE_CONNECTOR_TV		13
 #define DRM_MODE_CONNECTOR_eDP		14
+/*虚拟的connector类型*/
 #define DRM_MODE_CONNECTOR_VIRTUAL      15
 #define DRM_MODE_CONNECTOR_DSI		16
 #define DRM_MODE_CONNECTOR_DPI		17
@@ -470,12 +471,12 @@ struct drm_mode_get_connector {
 	/** @count_props: Number of properties. */
 	__u32 count_props;
 	/** @count_encoders: Number of encoders. */
-	__u32 count_encoders;
+	__u32 count_encoders;/*连接器中encoder数目*/
 
 	/** @encoder_id: Object ID of the current encoder. */
 	__u32 encoder_id;
 	/** @connector_id: Object ID of the connector. */
-	__u32 connector_id;
+	__u32 connector_id;/*连接器编号*/
 	/**
 	 * @connector_type: Type of the connector.
 	 *

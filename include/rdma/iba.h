@@ -128,7 +128,8 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
 #define IBA_FIELD8_LOC(field_struct, byte_offset, num_bits)                    \
 	IBA_FIELD_BLOC(field_struct, byte_offset, 0, num_bits)
 
-#define IBA_FIELD16_LOC(field_struct, byte_offset, num_bits)                   \
+/*占用16位的成员位置信息*/
+#define IBA_FIELD16_LOC(field_struct, byte_offset/*到成员需要的字节偏移量*/, num_bits)                   \
 	field_struct, (byte_offset)&0xFFFE,                                    \
 		GENMASK(15 - (((byte_offset) % 2) * 8),                        \
 			15 - (((byte_offset) % 2) * 8) - (num_bits - 1)),      \

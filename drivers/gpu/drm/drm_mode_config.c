@@ -92,7 +92,7 @@ void drm_modeset_unregister_all(struct drm_device *dev)
 int drm_mode_getresources(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)
 {
-	struct drm_mode_card_res *card_res = data;
+	struct drm_mode_card_res *card_res = data;/*要填充的内容*/
 	struct drm_framebuffer *fb;
 	struct drm_connector *connector;
 	struct drm_crtc *crtc;
@@ -105,9 +105,10 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	struct drm_connector_list_iter conn_iter;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*不支持modeset,报错*/
 
 	mutex_lock(&file_priv->fbs_lock);
+	/*遍历fbs链表,获取FRAMEBUFFER数目*/
 	count = 0;
 	fb_id = u64_to_user_ptr(card_res->fb_id_ptr);
 	list_for_each_entry(fb, &file_priv->fbs, filp_head) {
@@ -118,7 +119,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 		}
 		count++;
 	}
-	card_res->count_fbs = count;
+	card_res->count_fbs = count;/*设置framebuffer的数目*/
 	mutex_unlock(&file_priv->fbs_lock);
 
 	card_res->max_height = dev->mode_config.max_height;
@@ -126,6 +127,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	card_res->max_width = dev->mode_config.max_width;
 	card_res->min_width = dev->mode_config.min_width;
 
+	/*遍历CRTC链表,获取CRTC数目*/
 	count = 0;
 	crtc_id = u64_to_user_ptr(card_res->crtc_id_ptr);
 	drm_for_each_crtc(crtc, dev) {
@@ -138,6 +140,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	}
 	card_res->count_crtcs = count;
 
+	/*遍历encoder链表,获取encoder数目*/
 	count = 0;
 	encoder_id = u64_to_user_ptr(card_res->encoder_id_ptr);
 	drm_for_each_encoder(encoder, dev) {
@@ -148,6 +151,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	}
 	card_res->count_encoders = count;
 
+	/*遍历connector链表,获取connector数目*/
 	drm_connector_list_iter_begin(dev, &conn_iter);
 	count = 0;
 	connector_id = u64_to_user_ptr(card_res->connector_id_ptr);

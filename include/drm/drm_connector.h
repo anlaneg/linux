@@ -1914,7 +1914,7 @@ struct drm_connector {
 	 * &drm_mode_config.connector_list_lock, but please only use
 	 * &drm_connector_list_iter to walk this list.
 	 */
-	struct list_head head;
+	struct list_head head;/*用于链接到dev->mode_config->connector_list链表*/
 
 	/**
 	 * @global_connector_list_entry:
@@ -1922,13 +1922,13 @@ struct drm_connector {
 	 * Connector entry in the global connector-list, used by
 	 * drm_connector_find_by_fwnode().
 	 */
-	struct list_head global_connector_list_entry;
+	struct list_head global_connector_list_entry;/*用于挂接到global链表*/
 
 	/** @base: base KMS object */
 	struct drm_mode_object base;
 
 	/** @name: human readable name, can be overwritten by the driver */
-	char *name;
+	char *name;/*连接器名称,由连接器类型名称+索引构成,例如card1-HDMI-A-1,card1-DP-2*/
 
 	/**
 	 * @mutex: Lock for general connector state, but currently only protects
@@ -1949,9 +1949,9 @@ struct drm_connector {
 	 * @connector_type:
 	 * one of the DRM_MODE_CONNECTOR_<foo> types from drm_mode.h
 	 */
-	int connector_type;
+	int connector_type;/*连接器类型*/
 	/** @connector_type_id: index into connector type enum */
-	int connector_type_id;
+	int connector_type_id;/*连接器类型编号*/
 	/**
 	 * @interlace_allowed:
 	 * Can this connector handle interlaced modes? Only used by
@@ -2167,7 +2167,7 @@ struct drm_connector {
 	 * connector, drm_encoder_index() determines the index into the bitfield
 	 * and the bits are set with drm_connector_attach_encoder().
 	 */
-	u32 possible_encoders;
+	u32 possible_encoders;/*以所有encoder索引列出的掩码,每个encoder占用一个bit位*/
 
 	/**
 	 * @encoder: Currently bound encoder driving this connector, if any.
@@ -2307,6 +2307,7 @@ struct drm_connector {
 	struct drm_connector_cec cec;
 };
 
+/*由OBJ获取drm_connector结构体*/
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)
 
 int drm_connector_init(struct drm_device *dev,
@@ -2370,7 +2371,7 @@ static inline struct drm_connector *drm_connector_lookup(struct drm_device *dev,
 		uint32_t id)
 {
 	struct drm_mode_object *mo;
-	mo = drm_mode_object_find(dev, file_priv, id, DRM_MODE_OBJECT_CONNECTOR);
+	mo = drm_mode_object_find(dev/*connector关联的设备*/, file_priv, id/*查找的元素ID*/, DRM_MODE_OBJECT_CONNECTOR/*指明查找的是connector类型的OBJ*/);
 	return mo ? obj_to_connector(mo) : NULL;
 }
 

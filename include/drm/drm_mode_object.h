@@ -53,10 +53,10 @@ struct drm_file;
  *   counting wrappers.
  */
 struct drm_mode_object {
-	uint32_t id;
-	uint32_t type;
+	uint32_t id;/*obj编号*/
+	uint32_t type;/*obj类型*/
 	struct drm_object_properties *properties;
-	struct kref refcount;
+	struct kref refcount;/*引用计数*/
 	void (*free_cb)(struct kref *kref);
 };
 
@@ -70,7 +70,7 @@ struct drm_object_properties {
 	 * DRM_OBJECT_MAX_PROPERTY.
 	 */
 
-	int count;
+	int count;/*properties元素总数*/
 	/**
 	 * @properties: Array of pointers to &drm_property.
 	 *
@@ -79,7 +79,7 @@ struct drm_object_properties {
 	 * a better job of detaching property from mode objects to avoid
 	 * dangling property pointers:
 	 */
-	struct drm_property *properties[DRM_OBJECT_MAX_PROPERTY];
+	struct drm_property *properties[DRM_OBJECT_MAX_PROPERTY];/*记录属性*/
 
 	/**
 	 * @values: Array to store the property values, matching @properties. Do
@@ -103,7 +103,7 @@ struct drm_object_properties {
 	 * array, so drm_object_property_get_default_value can be used to
 	 * retrieve it.
 	 */
-	uint64_t values[DRM_OBJECT_MAX_PROPERTY];
+	uint64_t values[DRM_OBJECT_MAX_PROPERTY];/*用于存储属性初始值及属性实值*/
 };
 
 /* Avoid boilerplate.  I'm tired of typing. */

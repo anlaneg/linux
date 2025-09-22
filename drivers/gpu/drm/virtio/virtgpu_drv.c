@@ -228,10 +228,10 @@ static const struct drm_driver driver = {
 	 */
 	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_RENDER | DRIVER_ATOMIC |
 			   DRIVER_SYNCOBJ | DRIVER_SYNCOBJ_TIMELINE | DRIVER_CURSOR_HOTSPOT,
-	.open = virtio_gpu_driver_open,
+	.open = virtio_gpu_driver_open,/*DRM文件被打开时调用*/
 	.postclose = virtio_gpu_driver_postclose,
 
-	.dumb_create = virtio_gpu_mode_dumb_create,
+	.dumb_create = virtio_gpu_mode_dumb_create,/*创建dumb*/
 
 	DRM_FBDEV_SHMEM_DRIVER_OPS,
 
@@ -241,10 +241,10 @@ static const struct drm_driver driver = {
 	.gem_prime_import = virtgpu_gem_prime_import,
 	.gem_prime_import_sg_table = virtgpu_gem_prime_import_sg_table,
 
-	.gem_create_object = virtio_gpu_create_object,
+	.gem_create_object = virtio_gpu_create_object,/*创建gem shmem object*/
 	.fops = &virtio_gpu_driver_fops,
 
-	.ioctls = virtio_gpu_ioctls,
+	.ioctls = virtio_gpu_ioctls,/*VIRTIOGPU支持的IOCTL命令*/
 	.num_ioctls = DRM_VIRTIO_NUM_IOCTLS,
 
 	.name = DRIVER_NAME,

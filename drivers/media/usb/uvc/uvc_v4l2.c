@@ -1296,7 +1296,7 @@ const struct v4l2_file_operations uvc_fops = {
 	.owner		= THIS_MODULE,
 	.open		= uvc_v4l2_open,
 	.release	= uvc_v4l2_release,
-	.unlocked_ioctl	= uvc_v4l2_unlocked_ioctl,
+	.unlocked_ioctl	= uvc_v4l2_unlocked_ioctl,/*响应v4l2文件的IOCTL处理*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32	= uvc_v4l2_compat_ioctl32,
 #endif

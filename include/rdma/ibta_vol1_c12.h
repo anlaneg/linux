@@ -18,7 +18,7 @@
 #define CM_FIELD8_LOC(field_struct, byte_offset, width)                        \
 	IBA_FIELD8_LOC(field_struct,                                           \
 		       (byte_offset + sizeof(struct ib_mad_hdr)), width)
-#define CM_FIELD16_LOC(field_struct, byte_offset, width)                       \
+#define CM_FIELD16_LOC(field_struct/*结构体类型名称*/, byte_offset/*到成员偏移量*/, width/*成员位长度*/)                       \
 	IBA_FIELD16_LOC(field_struct,                                          \
 			(byte_offset + sizeof(struct ib_mad_hdr)), width)
 #define CM_FIELD32_LOC(field_struct/*结构体类型名称*/, byte_offset/*到成员偏移量*/, width/*成员位长度*/)                       \
@@ -39,13 +39,15 @@
 	}
 
 /* Table 106 REQ Message Contents */
-/*定义comm_id的位置*/
+/*定义Local Communication ID的位置*/
 #define CM_REQ_LOCAL_COMM_ID CM_FIELD32_LOC(struct cm_req_msg, 0, 32)
 /*定义vendor_id的位置*/
 #define CM_REQ_VENDOR_ID CM_FIELD32_LOC(struct cm_req_msg, 5, 24)
+/*定义service_ID的位置*/
 #define CM_REQ_SERVICE_ID CM_FIELD64_LOC(struct cm_req_msg, 8)
 #define CM_REQ_LOCAL_CA_GUID CM_FIELD64_LOC(struct cm_req_msg, 16)
 #define CM_REQ_LOCAL_Q_KEY CM_FIELD32_LOC(struct cm_req_msg, 28, 32)
+/*定义本端qpn的位置*/
 #define CM_REQ_LOCAL_QPN CM_FIELD32_LOC(struct cm_req_msg, 32, 24)
 #define CM_REQ_RESPONDER_RESOURCES CM_FIELD8_LOC(struct cm_req_msg, 35, 8)
 #define CM_REQ_LOCAL_EECN CM_FIELD32_LOC(struct cm_req_msg, 36, 24)
@@ -57,13 +59,17 @@
 #define CM_REQ_TRANSPORT_SERVICE_TYPE CM_FIELD_BLOC(struct cm_req_msg, 43, 5, 2)
 #define CM_REQ_END_TO_END_FLOW_CONTROL                                         \
 	CM_FIELD_BLOC(struct cm_req_msg, 43, 7, 1)
+/*取起始的PSN编号*/
 #define CM_REQ_STARTING_PSN CM_FIELD32_LOC(struct cm_req_msg, 44, 24)
-#define CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT CM_FIELD8_LOC(struct cm_req_msg, 47, 5)
+/*定义本端cm响应超时时间*/
+#define CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT CM_FIELD8_LOC(struct cm_req_msg, 47, 5/*占5位*/)
 #define CM_REQ_RETRY_COUNT CM_FIELD_BLOC(struct cm_req_msg, 47, 5, 3)
 #define CM_REQ_PARTITION_KEY CM_FIELD16_LOC(struct cm_req_msg, 48, 16)
+/*定义PATH 负载MTU*/
 #define CM_REQ_PATH_PACKET_PAYLOAD_MTU CM_FIELD8_LOC(struct cm_req_msg, 50, 4)
 #define CM_REQ_RDC_EXISTS CM_FIELD_BLOC(struct cm_req_msg, 50, 4, 1)
 #define CM_REQ_RNR_RETRY_COUNT CM_FIELD_BLOC(struct cm_req_msg, 50, 5, 3)
+/*定义CM最大尝试次数(占用4bit)*/
 #define CM_REQ_MAX_CM_RETRIES CM_FIELD8_LOC(struct cm_req_msg, 51, 4)
 #define CM_REQ_SRQ CM_FIELD_BLOC(struct cm_req_msg, 51, 4, 1)
 /*此字段指明扩展的传输类型，例如IB_QPT_XRC_TGT*/

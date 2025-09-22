@@ -430,7 +430,7 @@ struct drm_mode_config {
 	 * @num_connector: Number of connectors on this device. Protected by
 	 * @connector_list_lock.
 	 */
-	int num_connector;
+	int num_connector;/*指出connector数目*/
 	/**
 	 * @connector_ida: ID allocator for connector indices.
 	 */
@@ -442,7 +442,7 @@ struct drm_mode_config {
 	 * by @connector_list_lock. Only use drm_for_each_connector_iter() and
 	 * &struct drm_connector_list_iter to walk this list.
 	 */
-	struct list_head connector_list;
+	struct list_head connector_list;/*链接所有connector(链接器)*/
 	/**
 	 * @connector_free_list:
 	 *
@@ -464,7 +464,7 @@ struct drm_mode_config {
 	 * Number of encoders on this device. This is invariant over the
 	 * lifetime of a device and hence doesn't need any locks.
 	 */
-	int num_encoder;
+	int num_encoder;/*负责分配encoder索引;指明encoder总数*/
 	/**
 	 * @encoder_list:
 	 *
@@ -472,7 +472,7 @@ struct drm_mode_config {
 	 * invariant over the lifetime of a device and hence doesn't need any
 	 * locks.
 	 */
-	struct list_head encoder_list;
+	struct list_head encoder_list;/*用于链接所有编码器(encoder)*/
 
 	/**
 	 * @num_total_plane:
@@ -513,7 +513,7 @@ struct drm_mode_config {
 	 * List of CRTC objects linked with &drm_crtc.head. This is invariant
 	 * over the lifetime of a device and hence doesn't need any locks.
 	 */
-	struct list_head crtc_list;
+	struct list_head crtc_list;/*链表所有的CRTC*/
 
 	/**
 	 * @property_list:
@@ -533,8 +533,8 @@ struct drm_mode_config {
 	 */
 	struct list_head privobj_list;
 
-	unsigned int min_width, min_height;
-	unsigned int max_width, max_height;
+	unsigned int min_width, min_height;/*设置的最小的宽,长*/
+	unsigned int max_width, max_height;/*设置的最大的宽,长*/
 	const struct drm_mode_config_funcs *funcs;
 
 	/* output poll support */

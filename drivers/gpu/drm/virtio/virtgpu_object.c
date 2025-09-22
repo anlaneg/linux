@@ -153,7 +153,7 @@ struct drm_gem_object *virtio_gpu_create_object(struct drm_device *dev,
 
 	dshmem = &shmem->base.base;
 	dshmem->base.funcs = &virtio_gpu_shmem_funcs;
-	return &dshmem->base;
+	return &dshmem->base;/*返回drm_gem_shmem_object结构体(即drm_gem_object结构体)*/
 }
 
 static int virtio_gpu_object_shmem_init(struct virtio_gpu_device *vgdev,
@@ -214,7 +214,7 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 
 	*bo_ptr = NULL;
 
-	params->size = roundup(params->size, PAGE_SIZE);
+	params->size = roundup(params->size, PAGE_SIZE);/*按页对齐*/
 	shmem_obj = drm_gem_shmem_create(vgdev->ddev, params->size);
 	if (IS_ERR(shmem_obj))
 		return PTR_ERR(shmem_obj);

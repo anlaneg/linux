@@ -743,7 +743,7 @@ i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct drm_i915_private *i915;
 	struct intel_display *display;
 
-	i915 = devm_drm_dev_alloc(&pdev->dev, &i915_drm_driver,
+	i915 = devm_drm_dev_alloc(&pdev->dev, &i915_drm_driver/*设备要关联的驱动*/,
 				  struct drm_i915_private, drm);
 	if (IS_ERR(i915))
 		return i915;
@@ -1818,7 +1818,7 @@ static const struct drm_driver i915_drm_driver = {
 	.ioctls = i915_ioctls,
 	.num_ioctls = ARRAY_SIZE(i915_ioctls),
 	.fops = &i915_driver_fops,
-	.name = DRIVER_NAME,
+	.name = DRIVER_NAME,/*驱动名称*/
 	.desc = DRIVER_DESC,
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,

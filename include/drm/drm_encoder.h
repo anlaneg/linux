@@ -103,7 +103,7 @@ struct drm_encoder_funcs {
  * appropriate for a given connector or set of connectors.
  */
 struct drm_encoder {
-	struct drm_device *dev;
+	struct drm_device *dev;/*所属的dev*/
 	struct list_head head;
 
 	struct drm_mode_object base;
@@ -271,7 +271,7 @@ void *__drmm_encoder_alloc(struct drm_device *dev,
  */
 static inline unsigned int drm_encoder_index(const struct drm_encoder *encoder)
 {
-	return encoder->index;
+	return encoder->index;/*返回encoder索引*/
 }
 
 /**
@@ -283,7 +283,7 @@ static inline unsigned int drm_encoder_index(const struct drm_encoder *encoder)
  */
 static inline u32 drm_encoder_mask(const struct drm_encoder *encoder)
 {
-	return 1 << drm_encoder_index(encoder);
+	return 1 << drm_encoder_index(encoder);/*encoder索引转MASK*/
 }
 
 /**

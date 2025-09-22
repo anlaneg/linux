@@ -101,14 +101,16 @@ __printf(5, 0)
 static int __drm_encoder_init(struct drm_device *dev,
 			      struct drm_encoder *encoder,
 			      const struct drm_encoder_funcs *funcs,
-			      int encoder_type, const char *name, va_list ap)
+			      int encoder_type, const char *name/*encoder名称*/, va_list ap)
 {
 	int ret;
 
 	/* encoder index is used with 32bit bitmasks */
 	if (WARN_ON(dev->mode_config.num_encoder >= 32))
+		/*encoder索引不得大于32*/
 		return -EINVAL;
 
+	/*添加encoder obj到dev->mode_config.object_idr*/
 	ret = drm_mode_object_add(dev, &encoder->base, DRM_MODE_OBJECT_ENCODER);
 	if (ret)
 		return ret;
@@ -129,8 +131,8 @@ static int __drm_encoder_init(struct drm_device *dev,
 	}
 
 	INIT_LIST_HEAD(&encoder->bridge_chain);
-	list_add_tail(&encoder->head, &dev->mode_config.encoder_list);
-	encoder->index = dev->mode_config.num_encoder++;
+	list_add_tail(&encoder->head, &dev->mode_config.encoder_list);/*添加encoder到encoder_list*/
+	encoder->index = dev->mode_config.num_encoder++;/*分配index*/
 
 out_put:
 	if (ret)
@@ -163,7 +165,7 @@ out_put:
 int drm_encoder_init(struct drm_device *dev,
 		     struct drm_encoder *encoder,
 		     const struct drm_encoder_funcs *funcs,
-		     int encoder_type, const char *name, ...)
+		     int encoder_type, const char *name/*encoder名称格式*/, ...)
 {
 	va_list ap;
 	int ret;

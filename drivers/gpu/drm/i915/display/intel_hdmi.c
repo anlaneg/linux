@@ -3064,7 +3064,7 @@ bool intel_hdmi_init_connector(struct intel_digital_port *dig_port,
 
 	drm_connector_init_with_ddc(dev, connector,
 				    &intel_hdmi_connector_funcs,
-				    DRM_MODE_CONNECTOR_HDMIA,
+				    DRM_MODE_CONNECTOR_HDMIA/*指明hdmi-a连接*/,
 				    intel_gmbus_get_adapter(display, ddc_pin));
 
 	drm_connector_helper_add(connector, &intel_hdmi_connector_helper_funcs);

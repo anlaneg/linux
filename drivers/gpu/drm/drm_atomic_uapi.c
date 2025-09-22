@@ -1007,6 +1007,7 @@ static int drm_atomic_check_prop_changes(int ret, uint64_t old_val, uint64_t pro
 	return 0;
 }
 
+/*更新drm obj属性*/
 int drm_atomic_set_property(struct drm_atomic_state *state,
 			    struct drm_file *file_priv,
 			    struct drm_mode_object *obj,

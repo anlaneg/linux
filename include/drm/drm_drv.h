@@ -218,7 +218,7 @@ struct drm_driver {
 	 * 0 on success, a negative error code on failure, which will be
 	 * promoted to userspace as the result of the open() system call.
 	 */
-	int (*open) (struct drm_device *, struct drm_file *);
+	int (*open) (struct drm_device *, struct drm_file *);/*DRM文件被打开时调用*/
 
 	/**
 	 * @postclose:
@@ -292,7 +292,7 @@ struct drm_driver {
 	 * ERR_PTR()-encoded error code otherwise.
 	 */
 	struct drm_gem_object *(*gem_create_object)(struct drm_device *dev,
-						    size_t size);
+						    size_t size);/*创建并初始化gem shmem objects*/
 
 	/**
 	 * @prime_handle_to_fd:
@@ -396,13 +396,13 @@ struct drm_driver {
 	void (*show_fdinfo)(struct drm_printer *p, struct drm_file *f);
 
 	/** @major: driver major number */
-	int major;
+	int major;/*驱动主版本*/
 	/** @minor: driver minor number */
-	int minor;
+	int minor;/*驱动小版本*/
 	/** @patchlevel: driver patch level */
-	int patchlevel;
+	int patchlevel;/*驱动patch版本*/
 	/** @name: driver name */
-	char *name;
+	char *name;/*驱动名称*/
 	/** @desc: driver description */
 	char *desc;
 
@@ -422,7 +422,7 @@ struct drm_driver {
 	 * chapter<drm_driver_ioctl>` for the full details.
 	 */
 
-	const struct drm_ioctl_desc *ioctls;
+	const struct drm_ioctl_desc *ioctls;/*driver定义的处理不同IOCTL CMD的函数*/
 	/** @num_ioctls: Number of entries in @ioctls. */
 	int num_ioctls;
 
@@ -433,7 +433,7 @@ struct drm_driver {
 	 * :ref:`file operations<drm_driver_fops>` for in-depth coverage and
 	 * some examples.
 	 */
-	const struct file_operations *fops;
+	const struct file_operations *fops;/*driver定义的DRM文件处理操作集*/
 };
 
 void *__devm_drm_dev_alloc(struct device *parent,
@@ -532,9 +532,15 @@ static inline bool drm_dev_is_unplugged(struct drm_device *dev)
 static inline bool drm_core_check_all_features(const struct drm_device *dev,
 					       u32 features)
 {
+<<<<<<< Updated upstream
 	u32 supported = dev->driver->driver_features & dev->driver_features;/*驱动与设备均支持的features*/
 
 	return features && (supported & features) == features;/*检查给定的features是否被支持*/
+=======
+	u32 supported = dev->driver->driver_features & dev->driver_features;/*取支持的功能列表*/
+
+	return features && (supported & features) == features;/*检查此功能是否支持*/
+>>>>>>> Stashed changes
 }
 
 /**

@@ -79,7 +79,7 @@
  * take the connector_list_lock.
  */
 static DEFINE_MUTEX(connector_list_lock);
-static LIST_HEAD(connector_list);
+static LIST_HEAD(connector_list);/*用于串连系统中所有connector*/
 
 struct drm_conn_prop_enum_list {
 	int type;
@@ -118,6 +118,7 @@ void drm_connector_ida_init(void)
 {
 	int i;
 
+	/*connector有多种连接类型,每种连接类型分配一个ida,负责id分配,初始化IDA*/
 	for (i = 0; i < ARRAY_SIZE(drm_connector_enum_list); i++)
 		ida_init(&drm_connector_enum_list[i].ida);
 }
@@ -223,21 +224,22 @@ void drm_connector_free_work_fn(struct work_struct *work)
 static int drm_connector_init_only(struct drm_device *dev,
 				   struct drm_connector *connector,
 				   const struct drm_connector_funcs *funcs,
-				   int connector_type,
+				   int connector_type/*连接类型*/,
 				   struct i2c_adapter *ddc)
 {
 	struct drm_mode_config *config = &dev->mode_config;
 	int ret;
 	struct ida *connector_ida =
-		&drm_connector_enum_list[connector_type].ida;
+		&drm_connector_enum_list[connector_type].ida;/*取此连接类型对应的ida*/
 
 	WARN_ON(drm_drv_uses_atomic_modeset(dev) &&
 		(!funcs->atomic_destroy_state ||
 		 !funcs->atomic_duplicate_state));
 
+	/*添加connector*/
 	ret = __drm_mode_object_add(dev, &connector->base,
 				    DRM_MODE_OBJECT_CONNECTOR,
-				    false, drm_connector_free);
+				    false, drm_connector_free/*connector释放函数*/);
 	if (ret)
 		return ret;
 
@@ -258,10 +260,10 @@ static int drm_connector_init_only(struct drm_device *dev,
 
 	connector->connector_type = connector_type;
 	connector->connector_type_id =
-		ida_alloc_min(connector_ida, 1, GFP_KERNEL);
+		ida_alloc_min(connector_ida, 1, GFP_KERNEL);/*分配id,每种connector的TYPE维护自已的连接索引*/
 	if (connector->connector_type_id < 0) {
 		ret = connector->connector_type_id;
-		goto out_put_id;
+		goto out_put_id;/*分配失败*/
 	}
 	connector->name =
 		kasprintf(GFP_KERNEL, "%s-%d",
@@ -296,23 +298,24 @@ static int drm_connector_init_only(struct drm_device *dev,
 
 	if (connector_type != DRM_MODE_CONNECTOR_VIRTUAL &&
 	    connector_type != DRM_MODE_CONNECTOR_WRITEBACK)
-		drm_connector_attach_edid_property(connector);
+		drm_connector_attach_edid_property(connector);/*添加edid属性*/
 
 	drm_object_attach_property(&connector->base,
-				      config->dpms_property, 0);
+				      config->dpms_property, 0);/*添加dpms属性*/
 
 	drm_object_attach_property(&connector->base,
 				   config->link_status_property,
-				   0);
+				   0);/*添加link_status属性*/
 
 	drm_object_attach_property(&connector->base,
 				   config->non_desktop_property,
-				   0);
+				   0);/*添加non_desktop属性*/
 	drm_object_attach_property(&connector->base,
 				   config->tile_property,
-				   0);
+				   0);/*添加tile属性*/
 
 	if (drm_core_check_feature(dev, DRIVER_ATOMIC)) {
+		/*添加prop_crtc属性*/
 		drm_object_attach_property(&connector->base, config->prop_crtc_id, 0);
 	}
 
@@ -521,7 +524,7 @@ static void drm_connector_cleanup_action(struct drm_device *dev,
 int drmm_connector_init(struct drm_device *dev,
 			struct drm_connector *connector,
 			const struct drm_connector_funcs *funcs,
-			int connector_type,
+			int connector_type/*连接器类型*/,
 			struct i2c_adapter *ddc)
 {
 	int ret;
@@ -828,18 +831,18 @@ EXPORT_SYMBOL(drm_connector_cleanup);
  * Returns:
  * Zero on success, error code on failure.
  */
-int drm_connector_register(struct drm_connector *connector)
+int drm_connector_register(struct drm_connector *connector/*要注册的connector*/)
 {
 	int ret = 0;
 
 	if (!connector->dev->registered)
-		return 0;
+		return 0;/*设备未注册*/
 
 	mutex_lock(&connector->mutex);
 	if (connector->registration_state != DRM_CONNECTOR_INITIALIZING)
 		goto unlock;
 
-	ret = drm_sysfs_connector_add(connector);
+	ret = drm_sysfs_connector_add(connector);/*添加connector*/
 	if (ret)
 		goto unlock;
 
@@ -855,18 +858,19 @@ int drm_connector_register(struct drm_connector *connector)
 	if (ret)
 		goto err_late_register;
 
-	drm_mode_object_register(connector->dev, &connector->base);
+	drm_mode_object_register(connector->dev, &connector->base);/*注册connector*/
 
 	connector->registration_state = DRM_CONNECTOR_REGISTERED;
 
 	/* Let userspace know we have a new connector */
-	drm_sysfs_connector_hotplug_event(connector);
+	drm_sysfs_connector_hotplug_event(connector);/*使用户态收到uevent*/
 
 	if (connector->privacy_screen)
 		drm_privacy_screen_register_notifier(connector->privacy_screen,
 					   &connector->privacy_screen_notifier);
 
 	mutex_lock(&connector_list_lock);
+	/*串连到connector_list*/
 	list_add_tail(&connector->global_connector_list_entry, &connector_list);
 	mutex_unlock(&connector_list_lock);
 	goto unlock;
@@ -3310,7 +3314,7 @@ drm_mode_expose_to_userspace(const struct drm_display_mode *mode,
 int drm_mode_getconnector(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)
 {
-	struct drm_mode_get_connector *out_resp = data;
+	struct drm_mode_get_connector *out_resp = data;/*入出参*/
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
 	struct drm_display_mode *mode;
@@ -3324,21 +3328,24 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 	bool is_current_master;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*设备不支持DRIVER_MODESET,无法处理*/
 
 	memset(&u_mode, 0, sizeof(struct drm_mode_modeinfo));
 
+	/*通过connector_id查找此设备关联的connector*/
 	connector = drm_connector_lookup(dev, file_priv, out_resp->connector_id);
 	if (!connector)
 		return -ENOENT;
 
-	encoders_count = hweight32(connector->possible_encoders);
+	encoders_count = hweight32(connector->possible_encoders);/*计算掩码中'1'的数目,即encoder数目*/
 
 	if ((out_resp->count_encoders >= encoders_count) && encoders_count) {
+		/*指明了要填充的encoders数目,执行填充*/
 		copied = 0;
 		encoder_ptr = (uint32_t __user *)(unsigned long)(out_resp->encoders_ptr);
 
 		drm_connector_for_each_possible_encoder(connector, encoder) {
+			/*填充encoder到用户态buffer*/
 			if (put_user(encoder->base.id, encoder_ptr + copied)) {
 				ret = -EFAULT;
 				goto out;
@@ -3346,11 +3353,11 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 			copied++;
 		}
 	}
-	out_resp->count_encoders = encoders_count;
+	out_resp->count_encoders = encoders_count;/*encoders数目*/
 
-	out_resp->connector_id = connector->base.id;
-	out_resp->connector_type = connector->connector_type;
-	out_resp->connector_type_id = connector->connector_type_id;
+	out_resp->connector_id = connector->base.id;/*取连接器编号*/
+	out_resp->connector_type = connector->connector_type;/*取连接器类型*/
+	out_resp->connector_type_id = connector->connector_type_id;/*取连接器类型编号*/
 
 	is_current_master = drm_is_current_master(file_priv);
 
@@ -3470,6 +3477,7 @@ struct drm_connector *drm_connector_find_by_fwnode(struct fwnode_handle *fwnode)
 
 	mutex_lock(&connector_list_lock);
 
+	/*遍历系统中所有connector,通过fwnode查找对应的connector*/
 	list_for_each_entry(connector, &connector_list, global_connector_list_entry) {
 		if (connector->fwnode == fwnode ||
 		    (connector->fwnode && connector->fwnode->secondary == fwnode)) {

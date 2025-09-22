@@ -148,7 +148,7 @@ static int drm_minor_alloc(struct drm_device *dev, enum drm_minor_type type)
 	if (!minor)
 		return -ENOMEM;
 
-	minor->type = type;
+	minor->type = type;/*设置类别*/
 	minor->dev = dev;
 
 	r = xa_alloc(drm_minor_get_xa(type), &minor->index,
@@ -624,6 +624,7 @@ static int drm_fs_init_fs_context(struct fs_context *fc)
 	return init_pseudo(fc, 0x010203ff) ? 0 : -ENOMEM;
 }
 
+/*drm文件系统*/
 static struct file_system_type drm_fs_type = {
 	.name		= "drm",
 	.owner		= THIS_MODULE,
@@ -631,6 +632,7 @@ static struct file_system_type drm_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 
+/*申请inode*/
 static struct inode *drm_fs_inode_new(void)
 {
 	struct inode *inode;
@@ -700,7 +702,7 @@ static void drm_dev_init_release(struct drm_device *dev, void *res)
 }
 
 static int drm_dev_init(struct drm_device *dev,
-			const struct drm_driver *driver,
+			const struct drm_driver *driver/*设备关联的driver*/,
 			struct device *parent)
 {
 	struct inode *inode;
@@ -769,7 +771,7 @@ static int drm_dev_init(struct drm_device *dev,
 				goto err;
 		}
 
-		ret = drm_minor_alloc(dev, DRM_MINOR_PRIMARY);
+		ret = drm_minor_alloc(dev, DRM_MINOR_PRIMARY);/*申请primary类型DRM字符设备*/
 		if (ret)
 			goto err;
 	}
@@ -819,7 +821,7 @@ static int devm_drm_dev_init(struct device *parent,
 
 void *__devm_drm_dev_alloc(struct device *parent,
 			   const struct drm_driver *driver,
-			   size_t size, size_t offset)
+			   size_t size/*私有数据长度*/, size_t offset/*drm在私有结构体中偏移量*/)
 {
 	void *container;
 	struct drm_device *drm;
@@ -1107,6 +1109,7 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 	}
 	drm_panic_register(dev);
 
+	/*显示设备对应的驱动*/
 	DRM_INFO("Initialized %s %d.%d.%d for %s on minor %d\n",
 		 driver->name, driver->major, driver->minor,
 		 driver->patchlevel,
@@ -1200,7 +1203,7 @@ static int drm_stub_open(struct inode *inode, struct file *filp)
 	if (IS_ERR(minor))
 		return PTR_ERR(minor);
 
-	new_fops = fops_get(minor->dev->driver->fops);
+	new_fops = fops_get(minor->dev->driver->fops);/*取driver提供的fops*/
 	if (!new_fops) {
 		err = -ENODEV;
 		goto out;
@@ -1208,7 +1211,7 @@ static int drm_stub_open(struct inode *inode, struct file *filp)
 
 	replace_fops(filp, new_fops);
 	if (filp->f_op->open)
-		err = filp->f_op->open(inode, filp);
+		err = filp->f_op->open(inode, filp);/*调用ops对应的open函数*/
 	else
 		err = 0;
 
@@ -1252,6 +1255,7 @@ static int __init drm_core_init(void)
 	drm_debugfs_init_root();
 	drm_debugfs_bridge_params();
 
+	/*注册字符设备drm*/
 	ret = register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops);
 	if (ret < 0)
 		goto error;

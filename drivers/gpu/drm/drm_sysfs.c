@@ -358,6 +358,7 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 	kdev->release = drm_sysfs_release;
 	dev_set_drvdata(kdev, connector);
 
+	/*设置设备名称,例如card0-Virtual-1,card1-HDMI-A-1,card1-DP-2,card1-DP-1等*/
 	r = dev_set_name(kdev, "card%d-%s", dev->primary->index, connector->name);
 	if (r)
 		goto err_free;
@@ -464,12 +465,13 @@ void drm_sysfs_connector_hotplug_event(struct drm_connector *connector)
 	char *envp[] = { hotplug_str, conn_id, NULL };
 
 	snprintf(conn_id, sizeof(conn_id),
-		 "CONNECTOR=%u", connector->base.id);
+		 "CONNECTOR=%u", connector->base.id);/*设置connect-id*/
 
 	drm_dbg_kms(connector->dev,
 		    "[CONNECTOR:%d:%s] generating connector hotplug event\n",
 		    connector->base.id, connector->name);
 
+	/*触发uevent事件*/
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 }
 EXPORT_SYMBOL(drm_sysfs_connector_hotplug_event);
@@ -529,7 +531,7 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 		else
 			minor_str = "card%d";
 
-		kdev->devt = MKDEV(DRM_MAJOR, minor->index);
+		kdev->devt = MKDEV(DRM_MAJOR, minor->index);/*设置对应的devt,对此设备操作会引发drm设备OPS*/
 		kdev->class = drm_class;
 		kdev->type = &drm_sysfs_device_minor;
 	}
@@ -538,7 +540,7 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 	kdev->release = drm_sysfs_release;
 	dev_set_drvdata(kdev, minor);
 
-	r = dev_set_name(kdev, minor_str, minor->index);
+	r = dev_set_name(kdev, minor_str, minor->index);/*设置设备名称*/
 	if (r < 0)
 		goto err_free;
 

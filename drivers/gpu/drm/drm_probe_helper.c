@@ -558,7 +558,7 @@ static int __drm_helper_update_and_validate(struct drm_connector *connector,
 int drm_helper_probe_single_connector_modes(struct drm_connector *connector,
 					    uint32_t maxX, uint32_t maxY)
 {
-	struct drm_device *dev = connector->dev;
+	struct drm_device *dev = connector->dev;/*取关联的drm设备*/
 	struct drm_display_mode *mode;
 	int count = 0, ret;
 	enum drm_connector_status old_status;

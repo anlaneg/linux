@@ -56,14 +56,17 @@ __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private,
 	struct drm_gem_object *obj;
 	int ret = 0;
 
-	size = PAGE_ALIGN(size);
+	size = PAGE_ALIGN(size);/*按页对齐*/
 
 	if (dev->driver->gem_create_object) {
+		/*创建gem shmem object*/
 		obj = dev->driver->gem_create_object(dev, size);
 		if (IS_ERR(obj))
 			return ERR_CAST(obj);
+		/*由gem obj转gem shmem obj*/
 		shmem = to_drm_gem_shmem_obj(obj);
 	} else {
+		/*驱动未提供,直接申请*/
 		shmem = kzalloc(sizeof(*shmem), GFP_KERNEL);
 		if (!shmem)
 			return ERR_PTR(-ENOMEM);
@@ -71,6 +74,7 @@ __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private,
 	}
 
 	if (!obj->funcs)
+		/*如未提供,设置回调*/
 		obj->funcs = &drm_gem_shmem_funcs;
 
 	if (private) {
@@ -84,7 +88,7 @@ __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private,
 		goto err_free;
 	}
 
-	ret = drm_gem_create_mmap_offset(obj);
+	ret = drm_gem_create_mmap_offset(obj);/*添加此vma到进程*/
 	if (ret)
 		goto err_release;
 

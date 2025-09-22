@@ -1090,6 +1090,7 @@ static void v4l_sanitize_format(struct v4l2_format *fmt)
 	}
 }
 
+/*CMD VIDIOC_QUERYCAP响应函数入口*/
 static int v4l_querycap(const struct v4l2_ioctl_ops *ops,
 				struct file *file, void *fh, void *arg)
 {
@@ -3006,6 +3007,7 @@ static const struct v4l2_ioctl_info v4l2_ioctls[] = {
 static bool v4l2_is_known_ioctl(unsigned int cmd)
 {
 	if (_IOC_NR(cmd) >= V4L2_IOCTLS)
+		/*这个CMD是未知的*/
 		return false;
 	return v4l2_ioctls[_IOC_NR(cmd)].ioctl == cmd;
 }
@@ -3121,6 +3123,7 @@ static long __video_do_ioctl(struct file *file,
 
 	if (v4l2_is_known_ioctl(cmd)) {
 		/*已知的v4l2 cmd，由v4l2_ioctls具体指明cmd的响应方法*/
+		/*此CMD是已知的,取此CMD对应的处理函数信息*/
 		info = &v4l2_ioctls[_IOC_NR(cmd)];
 
 		if (!is_valid_ioctl(vfd, cmd) &&
@@ -3545,6 +3548,7 @@ out:
 long video_ioctl2(struct file *file,
 	       unsigned int cmd, unsigned long arg)
 {
+	/*video的IOCTL函数入口*/
 	return video_usercopy(file, cmd, arg, __video_do_ioctl/*video_device的ioctl回调实现*/);
 }
 EXPORT_SYMBOL(video_ioctl2);

@@ -387,6 +387,7 @@ static inline int __must_check video_register_device(struct video_device *vdev,
 						     enum vfl_devnode_type type,
 						     int nr)
 {
+	/*注册video设备*/
 	return __video_register_device(vdev, type, nr, 1, vdev->fops->owner);
 }
 

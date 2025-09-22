@@ -321,7 +321,7 @@ int virtio_gpu_driver_open(struct drm_device *dev, struct drm_file *file)
 
 	mutex_init(&vfpriv->context_lock);
 
-	handle = ida_alloc(&vgdev->ctx_id_ida, GFP_KERNEL);
+	handle = ida_alloc(&vgdev->ctx_id_ida, GFP_KERNEL);/*分配id*/
 	if (handle < 0) {
 		kfree(vfpriv);
 		return handle;
