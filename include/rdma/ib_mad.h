@@ -609,7 +609,7 @@ struct ib_mad_recv_buf {
 	struct list_head	list;
 	struct ib_grh		*grh;
 	union {
-		struct ib_mad	*mad;
+		struct ib_mad	*mad;/*收到的mad报文*/
 		struct opa_mad	*opa_mad;
 	};
 };

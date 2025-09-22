@@ -249,7 +249,7 @@ struct cm_id_private {
 	u8 rnr_retry_count;
 	u8 target_ack_delay;
 
-	struct list_head work_list;
+	struct list_head work_list;/*用于串连待执行的cm消息对应的work*/
 	atomic_t work_count;
 
 	struct rdma_ucm_ece ece;
@@ -906,10 +906,11 @@ static struct cm_work *cm_dequeue_work(struct cm_id_private *cm_id_priv)
 	struct cm_work *work;
 
 	if (list_empty(&cm_id_priv->work_list))
-		return NULL;
+		return NULL;/*队列为空,返回NULL*/
 
+	/*取出队首的work*/
 	work = list_entry(cm_id_priv->work_list.next, struct cm_work, list);
-	list_del(&work->list);
+	list_del(&work->list);/*自队中移除*/
 	return work;
 }
 
@@ -920,6 +921,7 @@ static void cm_free_work(struct cm_work *work)
 	kfree(work);
 }
 
+/*将cm work入队并解锁*/
 static void cm_queue_work_unlock(struct cm_id_private *cm_id_priv,
 				 struct cm_work *work)
 	__releases(&cm_id_priv->lock)
@@ -933,9 +935,10 @@ static void cm_queue_work_unlock(struct cm_id_private *cm_id_priv,
 	 * already events being processed then thread new events onto a list,
 	 * the thread currently processing will pick them up.
 	 */
-	immediate = atomic_inc_and_test(&cm_id_priv->work_count);
+	immediate = atomic_inc_and_test(&cm_id_priv->work_count);/*无正在执行的WORK,则立即执行*/
 	if (!immediate) {
-		list_add_tail(&work->list, &cm_id_priv->work_list);
+		/*无法立即执行加入队列*/
+		list_add_tail(&work->list, &cm_id_priv->work_list);/*将work加入到链表*/
 		/*
 		 * This routine always consumes incoming reference. Once queued
 		 * to the work_list then a reference is held by the thread
@@ -944,9 +947,10 @@ static void cm_queue_work_unlock(struct cm_id_private *cm_id_priv,
 		 */
 		cm_deref_id(cm_id_priv);
 	}
-	spin_unlock_irq(&cm_id_priv->lock);
+	spin_unlock_irq(&cm_id_priv->lock);/*解锁*/
 
 	if (immediate)
+		/*立即执行*/
 		cm_process_work(cm_id_priv, work);
 }
 
@@ -1000,7 +1004,7 @@ static struct cm_timewait_info *cm_create_timewait_info(__be32 local_id)
 
 	/*设置timewait_info->work*/
 	timewait_info->work.local_id = local_id;
-	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);/*初始化cm消息处理handler*/
+	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);/*指定为cm消息处理handler*/
 	timewait_info->work.cm_event.event = IB_CM_TIMEWAIT_EXIT;/*对应exit事件*/
 	return timewait_info;
 }
@@ -1895,9 +1899,10 @@ static void cm_process_work(struct cm_id_private *cm_id_priv,
 	int ret;
 
 	/* We will typically only have the current event to report. */
-	ret = cm_id_priv->id.cm_handler(&cm_id_priv->id, &work->cm_event);
+	ret = cm_id_priv->id.cm_handler(&cm_id_priv->id, &work->cm_event);/*先执行当前work*/
 	cm_free_work(work);
 
+	/*继续执行,直接出错或者work_count减为-1*/
 	while (!ret && !atomic_add_negative(-1, &cm_id_priv->work_count)) {
 		spin_lock_irq(&cm_id_priv->lock);
 		work = cm_dequeue_work(cm_id_priv);
@@ -1906,7 +1911,7 @@ static void cm_process_work(struct cm_id_private *cm_id_priv,
 			return;
 
 		ret = cm_id_priv->id.cm_handler(&cm_id_priv->id,
-						&work->cm_event);
+						&work->cm_event);/*执行worker*/
 		cm_free_work(work);
 	}
 	cm_deref_id(cm_id_priv);
@@ -2265,7 +2270,7 @@ static int cm_req_handler(struct cm_work *work)
 
 	/* Refcount belongs to the event, pairs with cm_process_work() */
 	refcount_inc(&cm_id_priv->refcount);
-	cm_queue_work_unlock(cm_id_priv, work);
+	cm_queue_work_unlock(cm_id_priv, work);/*work入队并解锁*/
 	/*
 	 * Since this ID was just created and was not made visible to other MAD
 	 * handlers until the cm_finalize_id() above we know that the
@@ -3888,6 +3893,7 @@ static void cm_work_handler(struct work_struct *_work)
 		ret = cm_mra_handler(work);
 		break;
 	case IB_CM_REJ_RECEIVED:
+		/*收到拒绝消息*/
 		ret = cm_rej_handler(work);
 		break;
 	case IB_CM_REP_RECEIVED:
@@ -3973,7 +3979,7 @@ static int cm_establish(struct ib_cm_id *cm_id)
 	 * we need to find the cm_id once we're in the context of the
 	 * worker thread, rather than holding a reference on it.
 	 */
-	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*初始化cm消息处理handler*/
+	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*指定为cm消息处理handler*/
 	work->local_id = cm_id->local_id;
 	work->remote_id = cm_id->remote_id;
 	work->mad_recv_wc = NULL;
@@ -4102,7 +4108,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 		return;
 	}
 
-	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*初始化cm消息处理handler*/
+	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*指定为cm消息处理handler*/
 	work->cm_event.event = event;/*event类型*/
 	work->mad_recv_wc = mad_recv_wc;
 	work->port = port;
