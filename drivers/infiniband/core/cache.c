@@ -982,7 +982,7 @@ static int gid_table_setup_one(struct ib_device *ib_dev)
  *
  */
 int rdma_query_gid(struct ib_device *device, u32 port_num,
-		   int index/*gid索引*/, union ib_gid *gid)
+		   int index/*gid索引*/, union ib_gid *gid/*出参,取对应在的gid*/)
 {
 	struct ib_gid_table *table;
 	unsigned long flags;
@@ -992,16 +992,17 @@ int rdma_query_gid(struct ib_device *device, u32 port_num,
 		/*port_num无效*/
 		return -EINVAL;
 
-	table = rdma_gid_table(device, port_num);
+	table = rdma_gid_table(device, port_num);/*取gid表*/
 	read_lock_irqsave(&table->rwlock, flags);
 
 	if (index < 0 || index >= table->sz) {
-		/*index无效*/
+		/*gid index无效*/
 		res = -EINVAL;
 		goto done;
 	}
 
 	if (!is_gid_entry_valid(table->data_vec[index])) {
+		/*gid index对应的表项是无效的*/
 		res = -ENOENT;
 		goto done;
 	}

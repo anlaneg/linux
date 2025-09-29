@@ -86,7 +86,7 @@ const char *__attribute_const__ rdma_reject_msg(struct rdma_cm_id *id,
 						int reason)
 {
 	if (rdma_ib_or_roce(id->device, id->port_num))
-		return ibcm_reject_msg(reason);
+		return ibcm_reject_msg(reason);/*返回reject原因*/
 
 	if (rdma_protocol_iwarp(id->device, id->port_num))
 		return iwcm_reject_msg(reason);
@@ -1162,7 +1162,7 @@ int rdma_create_qp(struct rdma_cm_id *id, struct ib_pd *pd,
 	}
 
 	qp_init_attr->port_num = id->port_num;
-	qp = ib_create_qp(pd, qp_init_attr);
+	qp = ib_create_qp(pd, qp_init_attr);/*创建qp*/
 	if (IS_ERR(qp)) {
 		ret = PTR_ERR(qp);
 		goto out_err;
@@ -1624,10 +1624,10 @@ static int cma_save_req_info(const struct ib_cm_event *ib_event,
 	return 0;
 }
 
-/*检查地址是否合理，检查反向路由是否指向net_dev*/
+/*检查地址是否合理，检查路由是否指向net_dev*/
 static bool validate_ipv4_net_dev(struct net_device *net_dev,
-				  const struct sockaddr_in *dst_addr,
-				  const struct sockaddr_in *src_addr)
+				  const struct sockaddr_in *dst_addr/*目的地址*/,
+				  const struct sockaddr_in *src_addr/*源地址*/)
 {
 	__be32 daddr = dst_addr->sin_addr.s_addr,
 	       saddr = src_addr->sin_addr.s_addr;
@@ -1643,7 +1643,7 @@ static bool validate_ipv4_net_dev(struct net_device *net_dev,
 	    ipv4_is_loopback(saddr))
 		return false;
 
-	/*指定入接口，反转src/dst ip进行路由查询*/
+	/*指定出接口，路由查询*/
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.flowi4_oif = net_dev->ifindex;
 	fl4.daddr = daddr;
@@ -1667,14 +1667,14 @@ static bool validate_ipv6_net_dev(struct net_device *net_dev,
 	const int strict = ipv6_addr_type(&dst_addr->sin6_addr) &
 			   IPV6_ADDR_LINKLOCAL;
 	struct rt6_info *rt = rt6_lookup(dev_net(net_dev), &dst_addr->sin6_addr,
-					 &src_addr->sin6_addr, net_dev->ifindex,
+					 &src_addr->sin6_addr, net_dev->ifindex/*出接口*/,
 					 NULL, strict);
 	bool ret;
 
 	if (!rt)
 		return false;
 
-	ret = rt->rt6i_idev->dev == net_dev;
+	ret = rt->rt6i_idev->dev == net_dev;/*设备是否相等*/
 	ip6_rt_put(rt);
 
 	return ret;
@@ -1684,11 +1684,13 @@ static bool validate_ipv6_net_dev(struct net_device *net_dev,
 }
 
 static bool validate_net_dev(struct net_device *net_dev,
-			     const struct sockaddr *daddr,
-			     const struct sockaddr *saddr)
+			     const struct sockaddr *daddr/*目的地址*/,
+			     const struct sockaddr *saddr/*源地址*/)
 {
+	/*ipv4类型地址*/
 	const struct sockaddr_in *daddr4 = (const struct sockaddr_in *)daddr;
 	const struct sockaddr_in *saddr4 = (const struct sockaddr_in *)saddr;
+	/*ipv6类型地址*/
 	const struct sockaddr_in6 *daddr6 = (const struct sockaddr_in6 *)daddr;
 	const struct sockaddr_in6 *saddr6 = (const struct sockaddr_in6 *)saddr;
 
@@ -1721,7 +1723,7 @@ roce_get_net_dev_by_cm_event(const struct ib_cm_event *ib_event)
 		return NULL;
 
 	rcu_read_lock();
-	ndev = rdma_read_gid_attr_ndev_rcu(sgid_attr);
+	ndev = rdma_read_gid_attr_ndev_rcu(sgid_attr);/*取此sgid对应的netdev*/
 	if (IS_ERR(ndev))
 		ndev = NULL;
 	else
@@ -1862,7 +1864,7 @@ static struct rdma_id_private *cma_find_listener(
 
 	hlist_for_each_entry(id_priv, &bind_list->owners, node) {
 		if (cma_match_private_data(id_priv, ib_event->private_data)) {
-			if (id_priv->id.device == cm_id->device &&
+			if (id_priv->id.device == cm_id->device/*设备相等*/ &&
 			    cma_match_net_dev(&id_priv->id, net_dev, req))
 				return id_priv;
 			list_for_each_entry(id_priv_dev,
@@ -1928,12 +1930,13 @@ cma_ib_id_from_event(struct ib_cm_id *cm_id,
 		 */
 		if (((*net_dev)->flags & IFF_UP) == 0) {
 			id_priv = ERR_PTR(-EHOSTUNREACH);
-			goto err;
+			goto err;/*网络设备未up*/
 		}
 
 		if (!validate_net_dev(*net_dev,
 				 (struct sockaddr *)&req->src_addr_storage,
 				 (struct sockaddr *)&req->listen_addr_storage)) {
+			/*路由校验后出设备是否为net_dev*/
 			id_priv = ERR_PTR(-EHOSTUNREACH);
 			goto err;
 		}
@@ -1942,6 +1945,7 @@ cma_ib_id_from_event(struct ib_cm_id *cm_id,
 	bind_list = cma_ps_find(*net_dev ? dev_net(*net_dev) : &init_net,
 				rdma_ps_from_service_id(req->service_id),
 				cma_port_from_service_id(req->service_id));
+	/*查询得到相应rdma_id_private*/
 	id_priv = cma_find_listener(bind_list, cm_id, ib_event, req, *net_dev);
 err:
 	rcu_read_unlock();
@@ -2453,6 +2457,7 @@ static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 	u8 offset;
 	int ret;
 
+	/*取得event对应的listen id*/
 	listen_id = cma_ib_id_from_event(cm_id, ib_event, &req, &net_dev);
 	if (IS_ERR(listen_id))
 		return PTR_ERR(listen_id);

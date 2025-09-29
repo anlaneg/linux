@@ -67,24 +67,26 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
 
 #define _IBA_GET_MEM_PTR(field_struct, field_offset, type, num_bits, ptr)      \
 	({                                                                     \
-		field_struct *_ptr = ptr;                                      \
+		field_struct *_ptr = ptr;/*结构体指针*/                                      \
 		/*返回成员指针*/\
 		(type *)((void *)_ptr + (field_offset));                       \
 	})
 #define IBA_GET_MEM_PTR(field, ptr) _IBA_GET_MEM_PTR(field, ptr)
 
 /* FIXME: A set should always set the entire field, meaning we should zero the trailing bytes */
-#define _IBA_SET_MEM(field_struct, field_offset, type, num_bits, ptr, in,      \
+#define _IBA_SET_MEM(field_struct/*结构体名称*/, field_offset/*到成员的偏移量*/, type/*成员类型*/, num_bits/*占用位宽*/, ptr, in,      \
 		     bytes)                                                    \
 	({                                                                     \
 		const type *_in_ptr = in;                                      \
 		WARN_ON(bytes * 8 > num_bits);                                 \
-		if (in && bytes)                                               \
+		if (in/*in不为NULL*/ && bytes)                                               \
+		/*复制in中的内容到结构体成员中*/\
 			memcpy(_IBA_GET_MEM_PTR(field_struct, field_offset,    \
-						type, num_bits, ptr),          \
-			       _in_ptr, bytes);                                \
+						type, num_bits, ptr)/*成员指针*/,          \
+			       _in_ptr/*复制源*/, bytes/*字节长度*/);                                \
 	})
-#define IBA_SET_MEM(field, ptr, in, bytes) _IBA_SET_MEM(field, ptr, in, bytes)
+/*将in指向的内容bytes字节,复制到field说明的位置*/
+#define IBA_SET_MEM(field, ptr/*结构体指针*/, in/*数据来源*/, bytes/*数组长度*/) _IBA_SET_MEM(field, ptr, in, bytes)
 
 #define _IBA_GET(field_struct, field_offset, field_mask, num_bits, ptr)        \
 	({                                                                     \
@@ -148,7 +150,7 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
  * In IBTA spec, everything that is more than 64bits is multiple
  * of bytes without leftover bits.
  */
-#define IBA_FIELD_MLOC(field_struct, byte_offset, num_bits, type)              \
+#define IBA_FIELD_MLOC(field_struct/*结构体类型名称*/, byte_offset/*到成员需要的字节偏移量*/, num_bits/*成员占用的位数*/, type)              \
 	field_struct, byte_offset, type, num_bits
 
 #endif /* _IBA_DEFS_H_ */

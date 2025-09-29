@@ -1338,7 +1338,7 @@ static ssize_t sys_image_guid_show(struct device *device,
 }
 static DEVICE_ATTR_RO(sys_image_guid);
 
-/*显示dev->node_guid*/
+/*显示IB设备全局ID dev->node_guid*/
 static ssize_t node_guid_show(struct device *device,
 			      struct device_attribute *attr, char *buf)
 {

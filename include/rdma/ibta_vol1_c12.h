@@ -26,7 +26,7 @@
 			(byte_offset + sizeof(struct ib_mad_hdr)), width)
 #define CM_FIELD64_LOC(field_struct, byte_offset)                              \
 	IBA_FIELD64_LOC(field_struct, (byte_offset + sizeof(struct ib_mad_hdr)))
-#define CM_FIELD_MLOC(field_struct, byte_offset, width, type)                  \
+#define CM_FIELD_MLOC(field_struct/*结构体类型名称*/, byte_offset/*到成员偏移量(不含ib_mad_hdr)*/, width/*成员位长度*/, type)                  \
 	IBA_FIELD_MLOC(field_struct,                                           \
 		       (byte_offset + sizeof(struct ib_mad_hdr)), width, type)
 /*定义结构体field_struct,其会包含一个ib_mad_hdr结构体，同时也指明了它的负载（通过总长度指定）*/

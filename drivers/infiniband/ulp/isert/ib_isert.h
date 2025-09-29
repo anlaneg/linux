@@ -182,7 +182,7 @@ struct isert_conn {
 	struct ib_qp		*qp;
 	struct ib_cq		*cq;
 	u32			cq_size;
-	struct isert_device	*device;
+	struct isert_device	*device;/*关联的isert设备*/
 	struct mutex		mutex;
 	struct kref		kref;
 	struct work_struct	release_work;
@@ -195,7 +195,7 @@ struct isert_conn {
 struct isert_device {
 	bool			pi_capable;
 	int			refcount;
-	struct ib_device	*ib_device;
+	struct ib_device	*ib_device;/*关联的ib设备*/
 	struct ib_pd		*pd;
 	struct isert_comp	*comps;
 	int                     comps_used;

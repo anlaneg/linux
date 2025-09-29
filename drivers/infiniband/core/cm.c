@@ -82,7 +82,7 @@ const char *__attribute_const__ ibcm_reject_msg(int reason)
 
 	if (index < ARRAY_SIZE(ibcm_rej_reason_strs) &&
 	    ibcm_rej_reason_strs[index])
-		return ibcm_rej_reason_strs[index];
+		return ibcm_rej_reason_strs[index];/*返回rej报文对应的reson字符串*/
 	else
 		return "unrecognized reason";
 }
@@ -1286,7 +1286,7 @@ EXPORT_SYMBOL(ib_cm_listen);
  * Callers should call ib_destroy_cm_id when done with the listener ID.
  */
 struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
-				     ib_cm_handler cm_handler,
+				     ib_cm_handler cm_handler/*listen CM对应的CM事件处理回调*/,
 				     __be64 service_id)
 {
 	struct cm_id_private *listen_id_priv;
@@ -1857,8 +1857,8 @@ static void cm_format_req_event(struct cm_work *work,
 	struct cm_req_msg *req_msg;
 	struct ib_cm_req_event_param *param;
 
-	req_msg = (struct cm_req_msg *)work->mad_recv_wc->recv_buf.mad;
-	param = &work->cm_event.param.req_rcvd;
+	req_msg = (struct cm_req_msg *)work->mad_recv_wc->recv_buf.mad;/*请求消息*/
+	param = &work->cm_event.param.req_rcvd;/*自消息中解出的参数存入此处*/
 	param->listen_id = listen_id;
 	param->bth_pkey = cm_get_bth_pkey(work);
 	param->port = cm_id_priv->av.port->port_num;
@@ -1871,9 +1871,9 @@ static void cm_format_req_event(struct cm_work *work,
 		param->alternate_path = NULL;
 	}
 	param->remote_ca_guid =
-		cpu_to_be64(IBA_GET(CM_REQ_LOCAL_CA_GUID, req_msg));
-	param->remote_qkey = IBA_GET(CM_REQ_LOCAL_Q_KEY, req_msg);
-	param->remote_qpn = IBA_GET(CM_REQ_LOCAL_QPN, req_msg);
+		cpu_to_be64(IBA_GET(CM_REQ_LOCAL_CA_GUID, req_msg));/*解local_ca_guid*/
+	param->remote_qkey = IBA_GET(CM_REQ_LOCAL_Q_KEY, req_msg);/*取remote_qkey*/
+	param->remote_qpn = IBA_GET(CM_REQ_LOCAL_QPN, req_msg);/*取local_qpn*/
 	param->qp_type = cm_req_get_qp_type(req_msg);
 	param->starting_psn = IBA_GET(CM_REQ_STARTING_PSN, req_msg);
 	param->responder_resources = IBA_GET(CM_REQ_INITIATOR_DEPTH, req_msg);
@@ -1938,6 +1938,7 @@ static void cm_format_mra(struct cm_mra_msg *mra_msg,
 			    private_data_len);
 }
 
+/*填写CM REJ报文*/
 static void cm_format_rej(struct cm_rej_msg *rej_msg,
 			  struct cm_id_private *cm_id_priv,
 			  enum ib_cm_rej_reason reason/*建连失败的原因*/, void *ari,
@@ -1953,7 +1954,7 @@ static void cm_format_rej(struct cm_rej_msg *rej_msg,
 	switch (state) {
 	case IB_CM_REQ_RCVD:
 		IBA_SET(CM_REJ_LOCAL_COMM_ID, rej_msg, be32_to_cpu(0));
-		IBA_SET(CM_REJ_MESSAGE_REJECTED, rej_msg, CM_MSG_RESPONSE_REQ);
+		IBA_SET(CM_REJ_MESSAGE_REJECTED, rej_msg, CM_MSG_RESPONSE_REQ);/*填写cm_rej_message_rejected*/
 		break;
 	case IB_CM_MRA_REQ_SENT:
 		IBA_SET(CM_REJ_LOCAL_COMM_ID, rej_msg,
@@ -1978,13 +1979,13 @@ static void cm_format_rej(struct cm_rej_msg *rej_msg,
 	IBA_SET(CM_REJ_REASON, rej_msg, reason);
 	if (ari && ari_length) {
 		IBA_SET(CM_REJ_REJECTED_INFO_LENGTH, rej_msg, ari_length);
-		IBA_SET_MEM(CM_REJ_ARI, rej_msg, ari, ari_length);
+		IBA_SET_MEM(CM_REJ_ARI, rej_msg, ari, ari_length);/*采用ari填充cm_rej_ari*/
 	}
 
 	/*设置拒绝报文的私有数据*/
 	if (private_data && private_data_len)
 		IBA_SET_MEM(CM_REJ_PRIVATE_DATA, rej_msg, private_data,
-			    private_data_len);
+			    private_data_len);/*利用private_data填充cm_rej_private_data*/
 }
 
 static void cm_dup_req_handler(struct cm_work *work,
@@ -2230,15 +2231,18 @@ static int cm_req_handler(struct cm_work *work)
 	cm_destroy_av(&cm_id_priv->av);
 	ret = cm_init_av_by_path(&work->path[0], gid_attr, &cm_id_priv->av);
 	if (ret) {
+		/*初始化主路径失败,发拒绝消息*/
 		int err;
 
 		err = rdma_query_gid(work->port->cm_dev->ib_device,
 				     work->port->port_num, 0,
-				     &work->path[0].sgid);
+				     &work->path[0].sgid);/*取此设备0号gid*/
 		if (err)
+			/*0号gid无效,响应rej报文*/
 			ib_send_cm_rej(&cm_id_priv->id, IB_CM_REJ_INVALID_GID,
 				       NULL, 0, NULL, 0);
 		else
+			/*0号gid有效,响应rej报文*/
 			ib_send_cm_rej(&cm_id_priv->id, IB_CM_REJ_INVALID_GID,
 				       &work->path[0].sgid,
 				       sizeof(work->path[0].sgid),
@@ -2253,6 +2257,7 @@ static int cm_req_handler(struct cm_work *work)
 		ret = cm_init_av_by_path(&work->path[1], NULL,
 					 &cm_id_priv->alt_av);
 		if (ret) {
+			/*备路径初始化失败,发送拒绝消息*/
 			ib_send_cm_rej(&cm_id_priv->id,
 				       IB_CM_REJ_INVALID_ALT_GID,
 				       &work->path[0].sgid,
@@ -2261,9 +2266,9 @@ static int cm_req_handler(struct cm_work *work)
 		}
 	}
 
-	cm_id_priv->id.cm_handler = listen_cm_id_priv->id.cm_handler;
+	cm_id_priv->id.cm_handler = listen_cm_id_priv->id.cm_handler;/*指明事件触发函数*/
 	cm_id_priv->id.context = listen_cm_id_priv->id.context;
-	cm_format_req_event(work, cm_id_priv, &listen_cm_id_priv->id);
+	cm_format_req_event(work, cm_id_priv, &listen_cm_id_priv->id);/*产生事件*/
 
 	/* Now MAD handlers can see the new ID */
 	spin_lock_irq(&cm_id_priv->lock);
@@ -3008,7 +3013,7 @@ static int cm_send_rej_locked(struct cm_id_private *cm_id_priv,
 	case IB_CM_REP_RCVD:
 	case IB_CM_MRA_REP_SENT:
 		cm_reset_to_idle(cm_id_priv);
-		msg = cm_alloc_msg(cm_id_priv);
+		msg = cm_alloc_msg(cm_id_priv);/*申请消息BUFFER*/
 		if (IS_ERR(msg))
 			return PTR_ERR(msg);
 		cm_format_rej((struct cm_rej_msg *)msg->mad, cm_id_priv, reason,
@@ -3050,7 +3055,7 @@ int ib_send_cm_rej(struct ib_cm_id *cm_id, enum ib_cm_rej_reason reason/*建连�
 
 	spin_lock_irqsave(&cm_id_priv->lock, flags);
 	ret = cm_send_rej_locked(cm_id_priv, reason, ari, ari_length,
-				 private_data, private_data_len);
+				 private_data, private_data_len);/*发送拒绝消息*/
 	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
 	return ret;
 }

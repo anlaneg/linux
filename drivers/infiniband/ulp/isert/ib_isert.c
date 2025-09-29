@@ -41,7 +41,7 @@ MODULE_PARM_DESC(sg_tablesize,
 		 "Number of gather/scatter entries in a single scsi command, should >= 128 (default: 128, max: 4096)");
 
 static DEFINE_MUTEX(device_list_mutex);
-static LIST_HEAD(device_list);
+static LIST_HEAD(device_list);/*系统用于串连所有isert_device列表*/
 static struct workqueue_struct *isert_login_wq;
 static struct workqueue_struct *isert_comp_wq;
 static struct workqueue_struct *isert_release_wq;
@@ -108,6 +108,7 @@ isert_create_qp(struct isert_conn *isert_conn,
 
 	isert_conn->cq = ib_cq_pool_get(ib_dev, cq_size, -1, IB_POLL_WORKQUEUE);
 	if (IS_ERR(isert_conn->cq)) {
+		/*创建cq失败*/
 		isert_err("Unable to allocate cq\n");
 		ret = PTR_ERR(isert_conn->cq);
 		return ERR_PTR(ret);
@@ -117,7 +118,7 @@ isert_create_qp(struct isert_conn *isert_conn,
 	memset(&attr, 0, sizeof(struct ib_qp_init_attr));
 	attr.event_handler = isert_qp_event_callback;
 	attr.qp_context = isert_conn;
-	attr.send_cq = isert_conn->cq;
+	attr.send_cq = isert_conn->cq;/*send_cq与recv_cq共用此cq*/
 	attr.recv_cq = isert_conn->cq;
 	attr.cap.max_send_wr = ISERT_QP_MAX_REQ_DTOS + 1;
 	attr.cap.max_recv_wr = ISERT_QP_MAX_RECV_DTOS + 1;
@@ -127,7 +128,7 @@ isert_create_qp(struct isert_conn *isert_conn,
 	attr.cap.max_send_sge = device->ib_device->attrs.max_send_sge;
 	attr.cap.max_recv_sge = 1;
 	attr.sq_sig_type = IB_SIGNAL_REQ_WR;
-	attr.qp_type = IB_QPT_RC;
+	attr.qp_type = IB_QPT_RC;/*创建rc类型QP*/
 	if (device->pi_capable)
 		attr.create_flags |= IB_QP_CREATE_INTEGRITY_EN;
 
@@ -219,7 +220,7 @@ isert_create_device_ib_res(struct isert_device *device)
 		  ib_dev->attrs.max_send_sge, ib_dev->attrs.max_recv_sge);
 	isert_dbg("devattr->max_sge_rd: %d\n", ib_dev->attrs.max_sge_rd);
 
-	device->pd = ib_alloc_pd(ib_dev, 0);
+	device->pd = ib_alloc_pd(ib_dev, 0);/*创建pd*/
 	if (IS_ERR(device->pd)) {
 		ret = PTR_ERR(device->pd);
 		isert_err("failed to allocate pd, device %p, ret=%d\n",
@@ -267,14 +268,16 @@ isert_device_get(struct rdma_cm_id *cma_id)
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(device, &device_list, dev_node) {
 		if (device->ib_device->node_guid == cma_id->device->node_guid) {
+			/*设备匹配,此isert设备已创建,计数增加*/
 			device->refcount++;
 			isert_info("Found iser device %p refcount %d\n",
 				   device, device->refcount);
 			mutex_unlock(&device_list_mutex);
-			return device;
+			return device;/*可引用,直接返回此设备*/
 		}
 	}
 
+	/*创建isert设备*/
 	device = kzalloc(sizeof(struct isert_device), GFP_KERNEL);
 	if (!device) {
 		mutex_unlock(&device_list_mutex);
@@ -292,7 +295,7 @@ isert_device_get(struct rdma_cm_id *cma_id)
 	}
 
 	device->refcount++;
-	list_add_tail(&device->dev_node, &device_list);
+	list_add_tail(&device->dev_node, &device_list);/*串连到系统*/
 	isert_info("Created a new iser device %p refcount %d\n",
 		   device, device->refcount);
 	mutex_unlock(&device_list_mutex);
@@ -300,6 +303,7 @@ isert_device_get(struct rdma_cm_id *cma_id)
 	return device;
 }
 
+/*初始化并置状态为iser_conn_init*/
 static void
 isert_init_conn(struct isert_conn *isert_conn)
 {
@@ -340,7 +344,7 @@ isert_alloc_login_buf(struct isert_conn *isert_conn,
 
 	isert_conn->login_desc->dma_addr = ib_dma_map_single(ib_dev,
 				isert_conn->login_desc->buf,
-				ISER_RX_SIZE, DMA_FROM_DEVICE);
+				ISER_RX_SIZE, DMA_FROM_DEVICE);/*映射login_desc->buf对应的dma_addr*/
 	ret = ib_dma_mapping_error(ib_dev, isert_conn->login_desc->dma_addr);
 	if (ret) {
 		isert_err("login_desc dma mapping error: %d\n", ret);
@@ -356,7 +360,7 @@ isert_alloc_login_buf(struct isert_conn *isert_conn,
 
 	isert_conn->login_rsp_dma = ib_dma_map_single(ib_dev,
 					isert_conn->login_rsp_buf,
-					ISER_RX_PAYLOAD_SIZE, DMA_TO_DEVICE);
+					ISER_RX_PAYLOAD_SIZE, DMA_TO_DEVICE);/*映射isert_conn->login_rsp_buf对应的dma_addr*/
 	ret = ib_dma_mapping_error(ib_dev, isert_conn->login_rsp_dma);
 	if (ret) {
 		isert_err("login_rsp_dma mapping error: %d\n", ret);
@@ -429,6 +433,7 @@ isert_connect_request(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 	isert_dbg("cma_id: %p, portal: %p\n",
 		 cma_id, cma_id->context);
 
+	/*申请内存*/
 	isert_conn = kzalloc(sizeof(struct isert_conn), GFP_KERNEL);
 	if (!isert_conn)
 		return -ENOMEM;
@@ -441,7 +446,7 @@ isert_connect_request(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 		ret = PTR_ERR(device);
 		goto out;
 	}
-	isert_conn->device = device;
+	isert_conn->device = device;/*关联isert设备*/
 
 	ret = isert_alloc_login_buf(isert_conn, cma_id->device);
 	if (ret)
@@ -449,7 +454,7 @@ isert_connect_request(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 
 	isert_set_nego_params(isert_conn, &event->param.conn);
 
-	isert_conn->qp = isert_create_qp(isert_conn, cma_id);
+	isert_conn->qp = isert_create_qp(isert_conn, cma_id);/*创建QP*/
 	if (IS_ERR(isert_conn->qp)) {
 		ret = PTR_ERR(isert_conn->qp);
 		goto out_rsp_dma_map;
@@ -711,7 +716,7 @@ isert_cma_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 		return 1;
 	case RDMA_CM_EVENT_REJECTED:
 		isert_info("Connection rejected: %s\n",
-			   rdma_reject_msg(cma_id, event->status));
+			   rdma_reject_msg(cma_id, event->status));/*显示rej原因*/
 		fallthrough;
 	case RDMA_CM_EVENT_UNREACHABLE:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
@@ -905,7 +910,7 @@ isert_login_post_recv(struct isert_conn *isert_conn)
 	rx_wr.sg_list = &sge;
 	rx_wr.num_sge = 1;
 
-	ret = ib_post_recv(isert_conn->qp, &rx_wr, NULL);
+	ret = ib_post_recv(isert_conn->qp, &rx_wr, NULL);/*填写收缓存地址*/
 	if (ret)
 		isert_err("ib_post_recv() failed: %d\n", ret);
 
@@ -2414,6 +2419,8 @@ accept_wait:
 		mutex_unlock(&isert_np->mutex);
 		goto accept_wait;
 	}
+
+	/*取pending上首个元素*/
 	isert_conn = list_first_entry(&isert_np->pending,
 			struct isert_conn, node);
 	list_del_init(&isert_conn->node);

@@ -389,8 +389,8 @@ void ib_cq_pool_cleanup(struct ib_device *dev)
 	}
 }
 
-static int ib_alloc_cqs(struct ib_device *dev, unsigned int nr_cqes,
-			enum ib_poll_context poll_ctx)
+static int ib_alloc_cqs(struct ib_device *dev, unsigned int nr_cqes/*cqe数目*/,
+			enum ib_poll_context poll_ctx/*poll类型*/)
 {
 	LIST_HEAD(tmp_list);
 	unsigned int nr_cqs, i;
@@ -408,20 +408,20 @@ static int ib_alloc_cqs(struct ib_device *dev, unsigned int nr_cqes,
 	 * multiple users instead of allocating a larger number of CQs.
 	 */
 	nr_cqes = min_t(unsigned int, dev->attrs.max_cqe,
-			max(nr_cqes, IB_MAX_SHARED_CQ_SZ));
-	nr_cqs = min_t(unsigned int, dev->num_comp_vectors, num_online_cpus());
+			max(nr_cqes, IB_MAX_SHARED_CQ_SZ));/*取要创建的cqe数目*/
+	nr_cqs = min_t(unsigned int, dev->num_comp_vectors, num_online_cpus());/*取要创建的cq数目*/
 	for (i = 0; i < nr_cqs; i++) {
-		cq = ib_alloc_cq(dev, NULL, nr_cqes, i, poll_ctx);
+		cq = ib_alloc_cq(dev, NULL, nr_cqes/*cqe数目*/, i, poll_ctx);/*创建cq*/
 		if (IS_ERR(cq)) {
 			ret = PTR_ERR(cq);
 			goto out_free_cqs;
 		}
 		cq->shared = true;
-		list_add_tail(&cq->pool_entry, &tmp_list);
+		list_add_tail(&cq->pool_entry, &tmp_list);/*CQ串连进tmp_list*/
 	}
 
 	spin_lock_irq(&dev->cq_pools_lock);
-	list_splice(&tmp_list, &dev->cq_pools[poll_ctx]);
+	list_splice(&tmp_list, &dev->cq_pools[poll_ctx]);/*按poll类型串连CQ*/
 	spin_unlock_irq(&dev->cq_pools_lock);
 
 	return 0;
@@ -490,7 +490,7 @@ struct ib_cq *ib_cq_pool_get(struct ib_device *dev, unsigned int nr_cqe,
 				continue;
 			if (cq->cqe_used + nr_cqe > cq->cqe)
 				continue;
-			found = cq;
+			found = cq;/*记录查找到的cq*/
 			break;
 		}
 
@@ -498,7 +498,7 @@ struct ib_cq *ib_cq_pool_get(struct ib_device *dev, unsigned int nr_cqe,
 			found->cqe_used += nr_cqe;
 			spin_unlock_irq(&dev->cq_pools_lock);
 
-			return found;
+			return found;/*返回查找到的cq*/
 		}
 		spin_unlock_irq(&dev->cq_pools_lock);
 

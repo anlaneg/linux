@@ -1354,7 +1354,7 @@ struct ib_qp_attr {
 	u32			alt_port_num;
 	u8			alt_timeout;
 	u32			rate_limit;
-	struct net_device	*xmit_slave;
+	struct net_device	*xmit_slave;/*发包设备*/
 };
 
 /*api看到的rdma操作符*/
@@ -1674,7 +1674,7 @@ struct ib_cq {
 	/* updated only by trace points */
 	ktime_t timestamp;
 	u8 interrupt:1;
-	u8 shared:1;
+	u8 shared:1;/*是否share cq*/
 	unsigned int comp_vector;
 
 	/*
@@ -2926,7 +2926,7 @@ struct ib_device {
 
 	/*设备描述信息*/
 	char			     node_desc[IB_DEVICE_NODE_DESC_MAX];
-	/*node的全局唯一id*/
+	/*生成的node的全局唯一id*/
 	__be64			     node_guid;
 	u32			     local_dma_lkey;
 	/*是否为ib switch*/
@@ -2951,6 +2951,7 @@ struct ib_device {
 	u32                          index;/*设备索引*/
 
 	spinlock_t                   cq_pools_lock;
+	/*按poll方式划分从属于此ib_device的所有cq*/
 	struct list_head             cq_pools[IB_POLL_LAST_POOL_TYPE + 1];
 
 	struct rdma_restrack_root *res;

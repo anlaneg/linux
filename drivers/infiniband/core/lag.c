@@ -20,7 +20,7 @@ static struct sk_buff *rdma_build_skb(struct net_device *netdev,
 	bool is_ipv4;
 	int hdr_len;
 
-	is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)ah_attr->grh.dgid.raw);
+	is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)ah_attr->grh.dgid.raw);/*是否ipv4*/
 	hdr_len = ETH_HLEN + sizeof(struct udphdr) + LL_RESERVED_SPACE(netdev);
 	hdr_len += is_ipv4 ? sizeof(struct iphdr) : sizeof(struct ipv6hdr);
 
@@ -34,7 +34,7 @@ static struct sk_buff *rdma_build_skb(struct net_device *netdev,
 	skb_reset_transport_header(skb);
 	uh = udp_hdr(skb);
 	uh->source =
-		htons(rdma_flow_label_to_udp_sport(ah_attr->grh.flow_label));
+		htons(rdma_flow_label_to_udp_sport(ah_attr->grh.flow_label));/*由flow label生成UDP port*/
 	uh->dest = htons(ROCE_V2_UDP_DPORT);
 	uh->len = htons(sizeof(struct udphdr));
 
@@ -49,9 +49,9 @@ static struct sk_buff *rdma_build_skb(struct net_device *netdev,
 		iph->tot_len = htons(sizeof(struct udphdr) + sizeof(struct
 								    iphdr));
 		memcpy(&iph->saddr, ah_attr->grh.sgid_attr->gid.raw + 12,
-		       sizeof(struct in_addr));
+		       sizeof(struct in_addr));/*设置源地址*/
 		memcpy(&iph->daddr, ah_attr->grh.dgid.raw + 12,
-		       sizeof(struct in_addr));
+		       sizeof(struct in_addr));/*设置目的地址*/
 	} else {
 		skb_push(skb, sizeof(struct ipv6hdr));
 		skb_reset_network_header(skb);
@@ -85,19 +85,20 @@ static struct net_device *rdma_get_xmit_slave_udp(struct ib_device *device,
 	struct net_device *slave;
 	struct sk_buff *skb;
 
-	/*构造一个skb,并针对此skb选择slave接口*/
+	/*构造一个skb,并针对此skb选择slave接口(仅构造到l4)*/
 	skb = rdma_build_skb(master, ah_attr, flags);
 	if (!skb)
 		return ERR_PTR(-ENOMEM);
 
 	rcu_read_lock();
+	/*选择此报文对应的slave*/
 	slave = netdev_get_xmit_slave(master, skb,
 				      !!(device->lag_flags &
 					 RDMA_LAG_FLAGS_HASH_ALL_SLAVES));
 	dev_hold(slave);
 	rcu_read_unlock();
 	kfree_skb(skb);
-	return slave;
+	return slave;/*返回slave设备*/
 }
 
 void rdma_lag_put_ah_roce_slave(struct net_device *xmit_slave)
@@ -118,7 +119,7 @@ struct net_device *rdma_lag_get_ah_roce_slave(struct ib_device *device,
 		return NULL;
 
 	rcu_read_lock();
-	master = rdma_read_gid_attr_ndev_rcu(ah_attr->grh.sgid_attr);
+	master = rdma_read_gid_attr_ndev_rcu(ah_attr->grh.sgid_attr);/*取sgid对应的是设备*/
 	if (IS_ERR(master)) {
 		rcu_read_unlock();
 		return master;
@@ -127,9 +128,10 @@ struct net_device *rdma_lag_get_ah_roce_slave(struct ib_device *device,
 	rcu_read_unlock();
 
 	if (!netif_is_bond_master(master))
+		/*netdev不是bond,直接返回*/
 		goto put;
 
-	slave = rdma_get_xmit_slave_udp(device, master, ah_attr, flags);
+	slave = rdma_get_xmit_slave_udp(device, master, ah_attr, flags);/*取此QP发包时选取的slave设备*/
 put:
 	dev_put(master);
 	return slave;

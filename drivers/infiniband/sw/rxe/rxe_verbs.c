@@ -1634,7 +1634,7 @@ int rxe_register_device(struct rxe_dev *rxe/*要注册的rxe设备*/, const char
 	dev->phys_port_cnt = 1;
 	dev->num_comp_vectors = num_possible_cpus();
 	dev->local_dma_lkey = 0;
-	/*利用底层设备的mac做node的全局唯一id*/
+	/*利用底层设备的mac为ib设备生成node的全局唯一id*/
 	addrconf_addr_eui48((unsigned char *)&dev->node_guid,
 			    rxe->raw_gid);
 
