@@ -863,8 +863,8 @@ struct mlx5_cqe64 {
 			__be32	data_offset;
 		} shampo;
 	};
-	__be32		rss_hash_result;
-	u8		rss_hash_type;
+	__be32		rss_hash_result;/*收方向rss hash*/
+	u8		rss_hash_type;/*hash类型*/
 	u8		ml_path;
 	u8		rsvd20[2];
 	__be16		check_sum;
@@ -882,8 +882,8 @@ struct mlx5_cqe64 {
 	};
 	u8		rsvd40[4];
 	__be32		byte_cnt;
-	__be32		timestamp_h;
-	__be32		timestamp_l;
+	__be32		timestamp_h;/*高32位timestamp*/
+	__be32		timestamp_l;/*低32位timestamp*/
 	__be32		sop_drop_qpn;
 	__be16		wqe_counter;
 	union {
@@ -969,6 +969,7 @@ static inline bool cqe_has_vlan(const struct mlx5_cqe64 *cqe)
 	return cqe->l4_l3_hdr_type & 0x1;
 }
 
+/*取得ceq上带的timestamp*/
 static inline u64 get_cqe_ts(struct mlx5_cqe64 *cqe)
 {
 	u32 hi, lo;

@@ -10,7 +10,7 @@
 #include <asm/elf.h>
 #include <linux/init.h>
 
-static unsigned int __read_mostly vdso_enabled = 1;
+static unsigned int __read_mostly vdso_enabled = 1;/*默认是开启的*/
 unsigned long um_vdso_addr;
 static struct page *um_vdso;
 
@@ -23,10 +23,11 @@ static int __init init_vdso(void)
 
 	um_vdso_addr = task_size - PAGE_SIZE;
 
-	um_vdso = alloc_page(GFP_KERNEL);
+	um_vdso = alloc_page(GFP_KERNEL);/*申请一页*/
 	if (!um_vdso)
 		goto oom;
 
+	/*从vdso_start开始（见vdso.S)，将内容复制到申请的页*/
 	copy_page(page_address(um_vdso), vdso_start);
 
 	return 0;
@@ -45,11 +46,11 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	struct mm_struct *mm = current->mm;
 	static struct vm_special_mapping vdso_mapping = {
 		.name = "[vdso]",
-		.pages = &um_vdso,
+		.pages = &um_vdso,/*vdso对应的页*/
 	};
 
 	if (!vdso_enabled)
-		return 0;
+		return 0;/*如不开启，直接返回*/
 
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;

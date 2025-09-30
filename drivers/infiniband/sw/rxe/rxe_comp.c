@@ -271,7 +271,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 		syn = aeth_syn(pkt);
 
 		if ((syn & AETH_TYPE_MASK) != AETH_ACK)
-			return COMPST_ERROR;
+			return COMPST_ERROR;/*必须为AETH_ACK*/
 
 		if (wqe->wr.opcode == IB_WR_ATOMIC_WRITE)
 			return COMPST_WRITE_SEND;
@@ -284,7 +284,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 		    wqe->wr.opcode != IB_WR_RDMA_READ_WITH_INV &&
 		    wqe->wr.opcode != IB_WR_FLUSH) {
 			wqe->status = IB_WC_FATAL_ERR;
-			return COMPST_ERROR;
+			return COMPST_ERROR;/*响应与请求的opcode不一致*/
 		}
 		reset_retry_counters(qp);
 		return COMPST_READ;
@@ -374,9 +374,9 @@ static inline enum comp_state do_read(struct rxe_qp *qp,
 	}
 
 	if (wqe->dma.resid == 0 && (pkt->mask & RXE_END_MASK))
-		return COMPST_COMP_ACK;
+		return COMPST_COMP_ACK;/*read处理完成*/
 
-	return COMPST_UPDATE_COMP;
+	return COMPST_UPDATE_COMP;/*read未处理完，仅更新psn,远端会继续响应*/
 }
 
 static inline enum comp_state do_atomic(struct rxe_qp *qp,
@@ -721,6 +721,7 @@ int rxe_completer(struct rxe_qp *qp)
 			break;
 
 		case COMPST_READ:
+			/*处理read操作响应*/
 			state = do_read(qp, pkt, wqe);
 			break;
 

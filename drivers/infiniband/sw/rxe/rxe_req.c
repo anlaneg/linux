@@ -453,6 +453,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 		return NULL;
 
 	/* init bth */
+	/*如果send_wr标记指明；或者opcode是last one；或者write附带immdt,则添加solicited标记*/
 	solicited = (ibwr->send_flags & IB_SEND_SOLICITED) &&
 			(pkt->mask & RXE_END_MASK) &&
 			((pkt->mask & (RXE_SEND_MASK)) ||
@@ -560,7 +561,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 		}
 	} else if (pkt->mask & RXE_FLUSH_MASK) {
 		/* oA19-2: shall have no payload. */
-		wqe->dma.resid = 0;
+		wqe->dma.resid = 0;/*有flush标记，此wqe认定为发完*/
 	}
 
 	if (pkt->mask & RXE_ATOMIC_WRITE_MASK) {

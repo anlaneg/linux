@@ -36,7 +36,7 @@ static inline void update_vdso_time_data(struct vdso_time_data *vdata, struct ti
 	fill_clock_configuration(&vc[CS_RAW],		&tk->tkr_raw);
 
 	/* CLOCK_MONOTONIC */
-	vdso_ts		= &vc[CS_HRES_COARSE].basetime[CLOCK_MONOTONIC];
+	vdso_ts		= &vc[CS_HRES_COARSE].basetime[CLOCK_MONOTONIC];/*更新CLOCK_MONOTONIC对应的vdso_ts*/
 	vdso_ts->sec	= tk->xtime_sec + tk->wall_to_monotonic.tv_sec;
 
 	nsec = tk->tkr_mono.xtime_nsec;

@@ -4750,9 +4750,9 @@ int mlx5e_hwstamp_set(struct mlx5e_priv *priv, struct ifreq *ifr)
 
 	/* TX HW timestamp */
 	switch (config.tx_type) {
-	case HWTSTAMP_TX_OFF:
-	case HWTSTAMP_TX_ON:
-		break;
+	case HWTSTAMP_TX_OFF:/*关*/
+	case HWTSTAMP_TX_ON:/*开*/
+		break;/*仅支持以上二种配置*/
 	default:
 		return -ERANGE;
 	}
@@ -4799,7 +4799,7 @@ int mlx5e_hwstamp_set(struct mlx5e_priv *priv, struct ifreq *ifr)
 	if (err)
 		goto err_unlock;
 
-	memcpy(&priv->tstamp, &config, sizeof(config));
+	memcpy(&priv->tstamp, &config, sizeof(config));/*设置stamp配置*/
 	mutex_unlock(&priv->state_lock);
 
 	/* might need to fix some features */

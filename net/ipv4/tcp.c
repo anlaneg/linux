@@ -1808,12 +1808,12 @@ void tcp_update_recv_tstamps(struct sk_buff *skb,
 	if (skb->tstamp)
 		tss->ts[0] = ktime_to_timespec64(skb->tstamp);
 	else
-		tss->ts[0] = (struct timespec64) {0};
+		tss->ts[0] = (struct timespec64) {0};/*无软件时间签*/
 
 	if (skb_hwtstamps(skb)->hwtstamp)
 		tss->ts[2] = ktime_to_timespec64(skb_hwtstamps(skb)->hwtstamp);
 	else
-		tss->ts[2] = (struct timespec64) {0};
+		tss->ts[2] = (struct timespec64) {0};/*无硬件时间签*/
 }
 
 #ifdef CONFIG_MMU
@@ -2314,13 +2314,15 @@ void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 		if (sock_flag(sk, SOCK_RCVTSTAMP)) {
 			if (sock_flag(sk, SOCK_RCVTSTAMPNS)) {
 				if (new_tstamp) {
+					/*new tstamp填充方式*/
 					struct __kernel_timespec kts = {
 						.tv_sec = tss->ts[0].tv_sec,
-						.tv_nsec = tss->ts[0].tv_nsec,
+						.tv_nsec = tss->ts[0].tv_nsec,/*精度ns*/
 					};
 					put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMPNS_NEW,
 						 sizeof(kts), &kts);
 				} else {
+					/*旧tstamp填充方式*/
 					struct __kernel_old_timespec ts_old = {
 						.tv_sec = tss->ts[0].tv_sec,
 						.tv_nsec = tss->ts[0].tv_nsec,
@@ -2332,14 +2334,14 @@ void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 				if (new_tstamp) {
 					struct __kernel_sock_timeval stv = {
 						.tv_sec = tss->ts[0].tv_sec,
-						.tv_usec = tss->ts[0].tv_nsec / 1000,
+						.tv_usec = tss->ts[0].tv_nsec / 1000,/*精度us*/
 					};
 					put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMP_NEW,
 						 sizeof(stv), &stv);
 				} else {
 					struct __kernel_old_timeval tv = {
 						.tv_sec = tss->ts[0].tv_sec,
-						.tv_usec = tss->ts[0].tv_nsec / 1000,
+						.tv_usec = tss->ts[0].tv_nsec / 1000,/*精度us*/
 					};
 					put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMP_OLD,
 						 sizeof(tv), &tv);
@@ -2616,7 +2618,7 @@ out:
  */
 //tcp层报文收取
 static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
-			      int flags, struct scm_timestamping_internal *tss,
+			      int flags, struct scm_timestamping_internal *tss/*出参，来源于skb的时间签信息*/,
 			      int *cmsg_flags)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2869,6 +2871,7 @@ skip_copy:
 		}
 
 		if (TCP_SKB_CB(skb)->has_rxtstamp) {
+			/*rx方向有时间签，填充tss*/
 			tcp_update_recv_tstamps(skb, tss);
 			*cmsg_flags |= TCP_CMSG_TS;
 		}
@@ -2931,7 +2934,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int flags,
 
 	if ((cmsg_flags || msg->msg_get_inq) && ret >= 0) {
 		if (cmsg_flags & TCP_CMSG_TS)
-			tcp_recv_timestamp(msg, sk, &tss);
+			tcp_recv_timestamp(msg, sk, &tss);/*为msg中添加时间签*/
 		if (msg->msg_get_inq) {
 			msg->msg_inq = tcp_inq_hint(sk);
 			if (cmsg_flags & TCP_CMSG_INQ)

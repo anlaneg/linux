@@ -2424,6 +2424,7 @@ static void netstamp_clear(struct work_struct *work)
 static DECLARE_WORK(netstamp_work, netstamp_clear);
 #endif
 
+/*开启时间签设置*/
 void net_enable_timestamp(void)
 {
 #ifdef CONFIG_JUMP_LABEL
@@ -2431,9 +2432,9 @@ void net_enable_timestamp(void)
 
 	while (wanted > 0) {
 		if (atomic_try_cmpxchg(&netstamp_wanted, &wanted, wanted + 1))
-			return;
+			return;/*已大于零，再增加，只计数不触发，直接返回*/
 	}
-	atomic_inc(&netstamp_needed_deferred);
+	atomic_inc(&netstamp_needed_deferred);/*标记触发*/
 	schedule_work(&netstamp_work);
 #else
 	static_branch_inc(&netstamp_needed_key);
@@ -2448,9 +2449,9 @@ void net_disable_timestamp(void)
 
 	while (wanted > 1) {
 		if (atomic_try_cmpxchg(&netstamp_wanted, &wanted, wanted - 1))
-			return;
+			return;/*已大于1，再减少，只计数不触发，直接返回*/
 	}
-	atomic_dec(&netstamp_needed_deferred);
+	atomic_dec(&netstamp_needed_deferred);/*标记触发*/
 	schedule_work(&netstamp_work);
 #else
 	static_branch_dec(&netstamp_needed_key);
@@ -2467,10 +2468,10 @@ static inline void net_timestamp_set(struct sk_buff *skb)
 		skb->tstamp = ktime_get_real();
 }
 
-/*检查条件如果为真，则对报文进行时间签设置*/
+/*检查条件如果为真，则对报文进行软件时间签设置*/
 #define net_timestamp_check(COND, SKB)				\
 	if (static_branch_unlikely(&netstamp_needed_key)) {	\
-		if ((COND) && !(SKB)->tstamp)			\
+		if ((COND)/*条件需要为真*/ && !(SKB)->tstamp)			\
 			(SKB)->tstamp = ktime_get_real();	\
 	}							\
 
@@ -2632,7 +2633,7 @@ again:
 		if (!skb2)
 			goto out_unlock;
 
-		net_timestamp_set(skb2);
+		net_timestamp_set(skb2);/*设置skb2的时间签*/
 
 		/* skb->nh should be correctly
 		 * set by sender, so that the second statement is

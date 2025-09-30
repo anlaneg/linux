@@ -676,7 +676,7 @@ static void tcp_options_write(struct tcphdr *th, struct tcp_sock *tp,
 			      struct tcp_out_options *opts/*待填充tcp选项*/,
 			      struct tcp_key *key)
 {
-	__be32 *ptr = (__be32 *)(th + 1);
+	__be32 *ptr = (__be32 *)(th + 1);/*指向选项起始位置*/
 	u16 options = opts->options;	/* mungable copy */
 
 	if (tcp_key_is_md5(key)) {
@@ -702,6 +702,8 @@ static void tcp_options_write(struct tcphdr *th, struct tcp_sock *tp,
 				       TCPOLEN_TIMESTAMP);
 			options &= ~OPTION_SACK_ADVERTISE;
 		} else {
+			/*先写两个NOP,再填写1个字节的Type(TCPOPT_TIMESTAMP),
+			 * 再写1个字节的长度(10,TCPOLEN_TIMESTAMP)*/
 			*ptr++ = htonl((TCPOPT_NOP << 24) |
 				       (TCPOPT_NOP << 16) |
 				       (TCPOPT_TIMESTAMP << 8) |
@@ -1003,7 +1005,7 @@ static unsigned int tcp_synack_options(const struct sock *sk,
  * final wire format yet.
  */
 static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb,
-					struct tcp_out_options *opts,
+					struct tcp_out_options *opts/*出参，tcp选项*/,
 					struct tcp_key *key)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -1025,8 +1027,8 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 	    /*接收的报文中有时间签，选项中必包含*/
 		opts->options |= OPTION_TS;
 		opts->tsval = skb ? tcp_skb_timestamp_ts(tp->tcp_usec_ts, skb) +
-				tp->tsoffset : 0;
-		opts->tsecr = tp->rx_opt.ts_recent;
+				tp->tsoffset : 0;/*本端本次ts val*/
+		opts->tsecr = tp->rx_opt.ts_recent;/*为对端回传ts echo relay*/
 		size += TCPOLEN_TSTAMP_ALIGNED;
 	}
 

@@ -117,9 +117,9 @@ struct tcp_options_received {
 /*	PAWS/RTTM data	*/
 	int	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
 	u32	ts_recent;	/* Time stamp to echo next		*/
-	//对方给报文的时间签
+	//发送：本端给报文的时间签；接收：对端给报文的时间签；
 	u32	rcv_tsval;	/* Time stamp value             	*/
-	//本端收到对方echo回来的时间签
+	//发送：本端回传接收到的rcv_tsval;接收：对方echo回来的我们之前发送的时间签
 	u32	rcv_tsecr;	/* Time stamp echo reply        	*/
 	//标记是否有时间签选项，(如有，则rcv_tsval，rcv_tsecr数据有效）
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
@@ -311,7 +311,9 @@ struct tcp_sock {
  *	0x5?10 << 16 + snd_wnd in net byte order
  */
 	__be32	pred_flags;
+	/*通过tcp_mstamp_refresh获得当前时间（单位ns)*/
 	u64	tcp_clock_cache; /* cache last tcp_clock_ns() (see tcp_mstamp_refresh()) */
+	/*通过tcp_mstamp_refresh获得当前时间（单位us)*/
 	u64	tcp_mstamp;	/* most recent packet received/sent */
 	/*我们期望收到的下一个seq*/
 	u32	rcv_nxt;	/* What we want to receive next		*/
@@ -351,7 +353,7 @@ struct tcp_sock {
 	u32	cwnd_usage_seq;  /* right edge of cwnd usage tracking flight */
 	u32	rate_delivered;    /* saved rate sample: packets delivered */
 	u32	rate_interval_us;  /* saved rate sample: time elapsed */
-	u32	rcv_rtt_last_tsecr;
+	u32	rcv_rtt_last_tsecr;/*最后一次收到的ts echo relay数值*/
 	u64	first_tx_mstamp;  /* start of window send phase */
 	u64	delivered_mstamp; /* time we reached "delivered" */
 	u64	bytes_acked;	/* RFC4898 tcpEStatsAppHCThruOctetsAcked

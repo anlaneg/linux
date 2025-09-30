@@ -961,12 +961,12 @@ static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
 }
 
 /* Provide skb TSval in usec or ms unit */
-static inline u32 tcp_skb_timestamp_ts(bool usec_ts, const struct sk_buff *skb)
+static inline u32 tcp_skb_timestamp_ts(bool usec_ts/*是否使用微秒*/, const struct sk_buff *skb)
 {
 	if (usec_ts)
 		return tcp_skb_timestamp_us(skb);
 
-	return div_u64(skb->skb_mstamp_ns, NSEC_PER_MSEC);
+	return div_u64(skb->skb_mstamp_ns, NSEC_PER_MSEC);/*使用毫秒*/
 }
 
 static inline u32 tcp_tw_tsval(const struct tcp_timewait_sock *tcptw)

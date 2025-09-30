@@ -382,6 +382,7 @@ struct static_key_false {
 #define DECLARE_STATIC_KEY_TRUE(name)	\
 	extern struct static_key_true name
 
+/*定义静态变量且置为false*/
 #define DEFINE_STATIC_KEY_FALSE(name)	\
 	struct static_key_false name = STATIC_KEY_FALSE_INIT
 

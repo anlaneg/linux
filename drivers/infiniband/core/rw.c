@@ -558,7 +558,7 @@ int rdma_rw_ctx_post(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u32 port_num,
 	struct ib_send_wr *first_wr;
 
 	first_wr = rdma_rw_ctx_wrs(ctx, qp, port_num, cqe, chain_wr);
-	return ib_post_send(qp, first_wr, NULL);
+	return ib_post_send(qp, first_wr, NULL);/*填充first_wr*/
 }
 EXPORT_SYMBOL(rdma_rw_ctx_post);
 

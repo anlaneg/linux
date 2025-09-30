@@ -522,6 +522,7 @@ EXPORT_SYMBOL(set_normalized_timespec64);
  */
 struct timespec64 ns_to_timespec64(s64 nsec)
 {
+	/*ns转timespec64结构*/
 	struct timespec64 ts = { 0, 0 };
 	s32 rem;
 

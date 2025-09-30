@@ -717,7 +717,7 @@ static s32 tcp_rtt_tsopt_us(const struct tcp_sock *tp, u32 min_delta)
 {
 	u32 delta, delta_us;
 
-	delta = tcp_time_stamp_ts(tp) - tp->rx_opt.rcv_tsecr;
+	delta = tcp_time_stamp_ts(tp) - tp->rx_opt.rcv_tsecr;/*当前时间减去对方echo回来的时间,即一个来回的时间*/
 	if (tp->tcp_usec_ts)
 		return delta;
 
@@ -736,8 +736,8 @@ static inline void tcp_rcv_rtt_measure_ts(struct sock *sk,
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	if (tp->rx_opt.rcv_tsecr == tp->rcv_rtt_last_tsecr)
-		return;
-	tp->rcv_rtt_last_tsecr = tp->rx_opt.rcv_tsecr;
+		return;/*这个时间之前已收到过一次，不更新*/
+	tp->rcv_rtt_last_tsecr = tp->rx_opt.rcv_tsecr;/*更新*/
 
 	if (TCP_SKB_CB(skb)->end_seq -
 	    TCP_SKB_CB(skb)->seq >= inet_csk(sk)->icsk_ack.rcv_mss) {
@@ -3686,7 +3686,7 @@ send_ack:
 
 static void tcp_store_ts_recent(struct tcp_sock *tp)
 {
-	tp->rx_opt.ts_recent = tp->rx_opt.rcv_tsval;
+	tp->rx_opt.ts_recent = tp->rx_opt.rcv_tsval;/*记录对方传来的tsval*/
 	tp->rx_opt.ts_recent_stamp = ktime_get_seconds();
 }
 
@@ -4174,7 +4174,7 @@ void tcp_parse_options(const struct net *net,
 				     (!estab && READ_ONCE(net->ipv4.sysctl_tcp_timestamps))/*非est情况下，必须开启tcp时间签*/)) {
 					//时间签处理（收到的是大端4字节）
 					opt_rx->saw_tstamp = 1;
-					/*设置rcv_tsval,rcv_tsecr*/
+					/*取报文中提供的值，设置rcv_tsval,rcv_tsecr*/
 					opt_rx->rcv_tsval = get_unaligned_be32(ptr);
 					opt_rx->rcv_tsecr = get_unaligned_be32(ptr + 4);
 				}
@@ -6177,9 +6177,8 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 		}
 
 		if (len <= tcp_header_len) {
-			/*报文实际长度不大于tcp header长度*/
 			/* Bulk data transfer: sender */
-			if (len == tcp_header_len) {
+			if (len == tcp_header_len) {/*报文实际长度等于tcp header（无负载）*/
 				/* Predicted packet is in window by definition.
 				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 				 * Hence, check seq<=rcv_wup reduces to:

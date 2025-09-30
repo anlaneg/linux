@@ -511,6 +511,7 @@ static int gdrom_bdops_ioctl(struct block_device *bdev, blk_mode_t mode,
 	return ret;
 }
 
+/*gdrom块设备操作集*/
 static const struct block_device_operations gdrom_bdops = {
 	.owner			= THIS_MODULE,
 	.open			= gdrom_bdops_open,

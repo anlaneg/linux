@@ -235,6 +235,7 @@ static bool check_qp_attr_access(struct rxe_qp *qp,
 		return false;
 
 	if (pkt->mask & RXE_FLUSH_MASK) {
+		/*flush操作*/
 		u32 flush_type = feth_plt(pkt);
 
 		if ((flush_type & IB_FLUSH_GLOBAL &&
@@ -374,6 +375,7 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	 * length checks are performed in check_rkey.
 	 */
 	if ((qp_type(qp) == IB_QPT_GSI) || (qp_type(qp) == IB_QPT_UD)) {
+		/*UD类型QP*/
 		unsigned int payload = payload_size(pkt);
 		unsigned int recv_buffer_len = 0;
 		int i;
@@ -645,8 +647,8 @@ static enum resp_states write_data_in(struct rxe_qp *qp,
 		goto out;
 	}
 
-	qp->resp.va += data_len;
-	qp->resp.resid -= data_len;
+	qp->resp.va += data_len;/*更新va位置*/
+	qp->resp.resid -= data_len;/*更新剩余可写长度*/
 
 out:
 	return rc;
@@ -1101,19 +1103,20 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 		if (err)
 			return err;
 	} else if (pkt->mask & RXE_WRITE_MASK) {
-		/*将pkt payload内容填充到qp->resp.mr*/
+		/*收到write操作：将pkt payload内容填充到qp->resp.mr*/
 		err = write_data_in(qp, pkt);
 		if (err)
-			return err;
+			return err;/*注：如果非RESPST_NONE状态，则自此返回*/
 	} else if (pkt->mask & RXE_READ_MASK) {
 		/* For RDMA Read we can increment the msn now. See C9-148. */
-		qp->resp.msn++;/*收到read操作，我们增加msn编号，跳RESPST_READ_REPLY*/
+		qp->resp.msn++;/*收到read操作：我们增加msn编号，跳RESPST_READ_REPLY*/
 		return RESPST_READ_REPLY;
 	} else if (pkt->mask & RXE_ATOMIC_MASK) {
 		return RESPST_ATOMIC_REPLY;
 	} else if (pkt->mask & RXE_ATOMIC_WRITE_MASK) {
 		return RESPST_ATOMIC_WRITE_REPLY;
 	} else if (pkt->mask & RXE_FLUSH_MASK) {
+		/*收到flush操作，跳flush处理*/
 		return RESPST_PROCESS_FLUSH;
 	} else {
 		/*没有其它标记了。*/
@@ -1144,7 +1147,7 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	qp->resp.status = IB_WC_SUCCESS;/*opcde执行成功*/
 
 	if (pkt->mask & RXE_COMP_MASK)
-		return RESPST_COMPLETE;
+		return RESPST_COMPLETE;/*达到此opcode最后一个包*/
 	else if (qp_type(qp) == IB_QPT_RC)
 		/*针对rc需要进行ack*/
 		return RESPST_ACKNOWLEDGE;
@@ -1693,6 +1696,7 @@ int rxe_receiver(struct rxe_qp *qp)
 			state = atomic_write_reply(qp, pkt);
 			break;
 		case RESPST_PROCESS_FLUSH:
+			/*收到flush请求*/
 			state = process_flush(qp, pkt);
 			break;
 		case RESPST_ACKNOWLEDGE:

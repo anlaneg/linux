@@ -173,7 +173,7 @@ static int __init vdso_init(void)
 
 	if (memcmp(vdso_start, "\177ELF", 4)) {
 		pr_err("VDSO is not a valid ELF object!\n");
-		return -ENOEXEC;
+		return -ENOEXEC;/*必须是一个有效的ELF obj*/
 	}
 
 	text_pages = (vdso_end - vdso_start) >> PAGE_SHIFT;

@@ -2225,7 +2225,7 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
 	TCP_SKB_CB(skb)->sacked	 = 0;/*默认认为没有sack对应的选项*/
 	TCP_SKB_CB(skb)->has_rxtstamp =
-			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
+			skb->tstamp/*软件时间签*/ || skb_hwtstamps(skb)->hwtstamp/*硬件时间签*/;/*是否有rx time stamp*/
 }
 
 /*

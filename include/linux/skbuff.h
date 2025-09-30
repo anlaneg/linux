@@ -465,7 +465,7 @@ static inline bool skb_frag_must_loop(struct page *p)
  */
 struct skb_shared_hwtstamps {
 	union {
-		ktime_t	hwtstamp;
+		ktime_t	hwtstamp;/*硬件填充timestamp(ns秒）*/
 		void *netdev_data;
 	};
 };
@@ -906,7 +906,7 @@ struct sk_buff {
 	struct sock		*sk;//对应的socket
 
 	union {
-		ktime_t		tstamp;/*收发包时的时间签*/
+		ktime_t		tstamp;/*收发包时的软件时间签*/
 		u64		skb_mstamp_ns; /* earliest departure time */
 	};
 	/*

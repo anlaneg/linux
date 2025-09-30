@@ -279,7 +279,7 @@ static void tcp_lp_pkts_acked(struct sock *sk, const struct ack_sample *sample)
 		tcp_lp_rtt_sample(sk, sample->rtt_us);
 
 	/* calc inference */
-	delta = now - tp->rx_opt.rcv_tsecr;
+	delta = now - tp->rx_opt.rcv_tsecr;/*当前时间减去，对方echo回来的时间，得到一个来回的时间*/
 	if ((s32)delta > 0)
 		lp->inference = 3 * delta;
 

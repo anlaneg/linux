@@ -26,7 +26,7 @@ int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts)
 	asm("syscall"
 		: "=a" (ret)
 		: "0" (__NR_clock_gettime), "D" (clock), "S" (ts)
-		: "rcx", "r11", "memory");
+		: "rcx", "r11", "memory");/*触发系统调用*/
 
 	return ret;
 }

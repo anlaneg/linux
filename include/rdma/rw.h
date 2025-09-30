@@ -23,13 +23,13 @@ struct rdma_rw_ctx {
 		struct {
 			struct ib_sge		sge;
 			struct ib_rdma_wr	wr;
-		} single;
+		} single;/*type == RDMA_RW_SINGLE_WR情况*/
 
 		/* for mapping of multiple SGEs: */
 		struct {
 			struct ib_sge		*sges;
 			struct ib_rdma_wr	*wrs;
-		} map;
+		} map;/*type == RDMA_RW_MULTI_WR情况*/
 
 		/* for registering multiple WRs: */
 		struct rdma_rw_reg_ctx {

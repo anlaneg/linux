@@ -5337,6 +5337,7 @@ static inline ktime_t netdev_get_tstamp(struct net_device *dev,
 	const struct net_device_ops *ops = dev->netdev_ops;
 
 	if (ops->ndo_get_tstamp)
+		/*有此回调，通过回调取得hw time stamp*/
 		return ops->ndo_get_tstamp(dev, hwtstamps, cycles);
 
 	return hwtstamps->hwtstamp;

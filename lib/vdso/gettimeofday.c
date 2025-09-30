@@ -75,7 +75,7 @@ static inline bool vdso_cycles_ok(u64 cycles)
 static __always_inline bool vdso_clockid_valid(clockid_t clock)
 {
 	/* Check for negative values or invalid clocks */
-	return likely((u32) clock <= CLOCK_AUX_LAST);
+	return likely((u32) clock <= CLOCK_AUX_LAST);/*clock是否有效*/
 }
 
 /*
@@ -103,7 +103,7 @@ bool vdso_get_timestamp(const struct vdso_time_data *vd, const struct vdso_clock
 		return false;
 
 	*ns = vdso_calc_ns(vc, cycles, vdso_ts->nsec);
-	*sec = vdso_ts->sec;
+	*sec = vdso_ts->sec;/*取秒值*/
 
 	return true;
 }
@@ -319,7 +319,7 @@ __cvdso_clock_gettime_common(const struct vdso_time_data *vd, clockid_t clock,
 	u32 msk;
 
 	if (!vdso_clockid_valid(clock))
-		return false;
+		return false;/*无效返回false*/
 
 	/*
 	 * Convert the clockid to a bitmask and use it to check which

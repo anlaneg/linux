@@ -159,7 +159,7 @@ struct cpuinfo_x86 {
 	 * union to enforce the array is aligned to size of unsigned long.
 	 */
 	union {
-		__u32		x86_capability[NCAPINTS + NBUGINTS];
+		__u32		x86_capability[NCAPINTS + NBUGINTS];/*标记CPU支持哪些能力*/
 		unsigned long	x86_capability_alignment;
 	};
 	char			x86_vendor_id[16];
@@ -213,6 +213,7 @@ extern __u32			cpu_caps_cleared[NCAPINTS + NBUGINTS];
 extern __u32			cpu_caps_set[NCAPINTS + NBUGINTS];
 
 DECLARE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);
+/*取此cpu对应的cpu_info*/
 #define cpu_data(cpu)		per_cpu(cpu_info, cpu)
 
 extern const struct seq_operations cpuinfo_op;

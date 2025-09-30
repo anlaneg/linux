@@ -75,7 +75,7 @@
 
 #include "cpu.h"
 
-DEFINE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);
+DEFINE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);/*为每个CPU定义一个cpu_info*/
 EXPORT_PER_CPU_SYMBOL(cpu_info);
 
 u32 elf_hwcap2 __read_mostly;

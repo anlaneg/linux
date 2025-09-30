@@ -1360,6 +1360,7 @@ static inline void mlx5e_skb_set_hash(struct mlx5_cqe64 *cqe,
 				      struct sk_buff *skb)
 {
 	u8 cht = cqe->rss_hash_type;
+	/*hash类型*/
 	int ht = (cht & CQE_RSS_HTYPE_L4) ? PKT_HASH_TYPE_L4 :
 		 (cht & CQE_RSS_HTYPE_IP) ? PKT_HASH_TYPE_L3 :
 					    PKT_HASH_TYPE_NONE;
@@ -2660,12 +2661,13 @@ static inline void mlx5i_complete_rx_cqe(struct mlx5e_rq *rq,
 	}
 
 	if (unlikely(mlx5e_rx_hw_stamp(tstamp)))
+		/*填写成ns值*/
 		skb_hwtstamps(skb)->hwtstamp = mlx5e_cqe_ts_to_ns(rq->ptp_cyc2time,
 								  rq->clock, get_cqe_ts(cqe));
-	skb_record_rx_queue(skb, rq->ix);
+	skb_record_rx_queue(skb, rq->ix);/*记录自哪个队列收上来的*/
 
 	if (likely(netdev->features & NETIF_F_RXHASH))
-		mlx5e_skb_set_hash(cqe, skb);
+		mlx5e_skb_set_hash(cqe, skb);/*设置rx hash*/
 
 	/* 20 bytes of ipoib header and 4 for encap existing */
 	pseudo_header = skb_push(skb, MLX5_IPOIB_PSEUDO_LEN);
