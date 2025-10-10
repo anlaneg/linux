@@ -37,7 +37,7 @@
 
 static DECLARE_RWSEM(hidp_session_sem);
 static DECLARE_WAIT_QUEUE_HEAD(hidp_session_wq);
-static LIST_HEAD(hidp_session_list);
+static LIST_HEAD(hidp_session_list);/*用于记录系统所有hidp session*/
 
 static unsigned char hidp_keycode[256] = {
 	  0,   0,   0,   0,  30,  48,  46,  32,  18,  33,  34,  35,  23,  36,
@@ -629,7 +629,7 @@ static int hidp_send_frame(struct socket *sock, unsigned char *data, int len)
 
 /* dequeue message from @transmit and send via @sock */
 static void hidp_process_transmit(struct hidp_session *session,
-				  struct sk_buff_head *transmit,
+				  struct sk_buff_head *transmit/*skb队列*/,
 				  struct socket *sock)
 {
 	struct sk_buff *skb;
@@ -638,6 +638,7 @@ static void hidp_process_transmit(struct hidp_session *session,
 	BT_DBG("session %p", session);
 
 	while ((skb = skb_dequeue(transmit))) {
+		/*使sock发送skb*/
 		ret = hidp_send_frame(sock, skb->data, skb->len);
 		if (ret == -EAGAIN) {
 			skb_queue_head(transmit, skb);
@@ -1006,6 +1007,7 @@ static struct hidp_session *__hidp_session_find(const bdaddr_t *bdaddr)
 {
 	struct hidp_session *session;
 
+	/*通过bdaddr查找对应的hidp_session*/
 	list_for_each_entry(session, &hidp_session_list, list) {
 		if (!bacmp(bdaddr, &session->bdaddr))
 			return session;
@@ -1109,7 +1111,7 @@ static int hidp_session_probe(struct l2cap_conn *conn,
 	s = __hidp_session_find(&session->bdaddr);
 	if (s) {
 		ret = -EEXIST;
-		goto out_unlock;
+		goto out_unlock;/*hidp session已存在*/
 	}
 
 	if (session->input) {
@@ -1129,7 +1131,7 @@ static int hidp_session_probe(struct l2cap_conn *conn,
 		schedule_work(&session->dev_init);
 
 	hidp_session_get(session);
-	list_add(&session->list, &hidp_session_list);
+	list_add(&session->list, &hidp_session_list);/*串连进hidp_session_list*/
 	ret = 0;
 	goto out_unlock;
 
@@ -1202,17 +1204,17 @@ static void hidp_session_run(struct hidp_session *session)
 		 */
 
 		if (atomic_read(&session->terminate))
-			break;
+			break;/*此session需要销毁，退出*/
 
 		if (ctrl_sk->sk_state != BT_CONNECTED ||
 		    intr_sk->sk_state != BT_CONNECTED)
-			break;
+			break;/*必须处理connected状态*/
 
 		/* parse incoming intr-skbs */
 		while ((skb = skb_dequeue(&intr_sk->sk_receive_queue))) {
 			skb_orphan(skb);
 			if (!skb_linearize(skb))
-				hidp_recv_intr_frame(session, skb);
+				hidp_recv_intr_frame(session, skb);/*中断帧收取*/
 			else
 				kfree_skb(skb);
 		}
@@ -1225,7 +1227,7 @@ static void hidp_session_run(struct hidp_session *session)
 		while ((skb = skb_dequeue(&ctrl_sk->sk_receive_queue))) {
 			skb_orphan(skb);
 			if (!skb_linearize(skb))
-				hidp_recv_ctrl_frame(session, skb);
+				hidp_recv_ctrl_frame(session, skb);/*控制帧收取*/
 			else
 				kfree_skb(skb);
 		}
@@ -1316,7 +1318,7 @@ static int hidp_verify_sockets(struct socket *ctrl_sock,
 	struct hidp_session *session;
 
 	if (!l2cap_is_socket(ctrl_sock) || !l2cap_is_socket(intr_sock))
-		return -EINVAL;
+		return -EINVAL;/*两个socket必须为l2cap socket*/
 
 	ctrl_chan = l2cap_pi(ctrl_sock->sk)->chan;
 	intr_chan = l2cap_pi(intr_sock->sk)->chan;
@@ -1330,13 +1332,13 @@ static int hidp_verify_sockets(struct socket *ctrl_sock,
 
 	if (ctrl->sk.sk_state != BT_CONNECTED ||
 	    intr->sk.sk_state != BT_CONNECTED)
-		return -EBADFD;
+		return -EBADFD;/*socket必须为connected*/
 
 	/* early session check, we check again during session registration */
 	session = hidp_session_find(&ctrl_chan->dst);
 	if (session) {
 		hidp_session_put(session);
-		return -EEXIST;
+		return -EEXIST;/*对应的session已存在*/
 	}
 
 	return 0;
@@ -1358,7 +1360,7 @@ int hidp_connection_add(const struct hidp_connadd_req *req,
 		return ret;
 
 	if (req->flags & ~valid_flags)
-		return -EINVAL;
+		return -EINVAL;/*遇到不认识的标记*/
 
 	chan = l2cap_pi(ctrl_sock->sk)->chan;
 	conn = NULL;

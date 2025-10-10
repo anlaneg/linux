@@ -46,8 +46,8 @@ struct hci_drv_ev_cmd_complete {
 #define HCI_DRV_READ_INFO_SIZE	0
 struct hci_drv_rp_read_info {
 	__u8	driver_name[HCI_DRV_MAX_DRIVER_NAME_LENGTH];
-	__le16	num_supported_commands;
-	__le16	supported_commands[];
+	__le16	num_supported_commands;/*支持的命令数*/
+	__le16	supported_commands[];/*列出支持的命令对应的opcode*/
 } __packed;
 
 /* Driver specific OGF (Opcode Group Field)
@@ -66,10 +66,10 @@ struct hci_drv_handler {
 };
 
 struct hci_drv {
-	size_t common_handler_count;
+	size_t common_handler_count;/*common_handler数组大小*/
 	const struct hci_drv_handler *common_handlers;
 
-	size_t specific_handler_count;
+	size_t specific_handler_count;/*specific_handler数组大小*/
 	const struct hci_drv_handler *specific_handlers;
 };
 

@@ -110,6 +110,7 @@ struct bnep_connadd_req {
 	int   sock;		/* Connected socket */
 	__u32 flags;
 	__u16 role;
+	/*网络设备名称*/
 	char  device[16];	/* Name of the Ethernet device */
 };
 
@@ -148,16 +149,20 @@ struct bnep_session {
 	unsigned int  role;
 	unsigned long state;
 	unsigned long flags;
-	atomic_t      terminate;
-	struct task_struct *task;
+	atomic_t      terminate;/*标非0时，此bnep_session需要销毁*/
+	struct task_struct *task;/*kernel线程bnep_session对应的task*/
 
 	struct ethhdr eh;
 	struct msghdr msg;
 
-	struct bnep_proto_filter proto_filter[BNEP_MAX_PROTO_FILTERS];
-	unsigned long long mc_filter;
+	struct bnep_proto_filter proto_filter[BNEP_MAX_PROTO_FILTERS];/*被记录的协议可以出去*/
+	unsigned long long mc_filter;/*被命中的目的mac可以出去*/
 
+	/*对应的l2cap socket,此socket收到的报文（sk->sk_receive_queue）将转netdev收取*/
 	struct socket    *sock;
+	/*收发的网络设备，此dev发送的报文将挂接在sk->sk_write_queue上，
+	 * 而kernel线程bnep_session负责将sk->sk_write_queue上的socket交socket，
+	 * 也将sk->sk_receive_queue送netdev;实现sock与dev之间的互通*/
 	struct net_device *dev;
 };
 
@@ -165,6 +170,7 @@ void bnep_net_setup(struct net_device *dev);
 int bnep_sock_init(void);
 void bnep_sock_cleanup(void);
 
+/*将mac hash成一个小于64的数字*/
 static inline int bnep_mc_hash(__u8 *addr)
 {
 	return crc32_be(~0, addr, ETH_ALEN) >> 26;

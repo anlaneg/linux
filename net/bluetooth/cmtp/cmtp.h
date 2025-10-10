@@ -79,9 +79,9 @@ struct cmtp_session {
 
 	uint mtu;
 
-	char name[BTNAMSIZ];
+	char name[BTNAMSIZ];/*名称*/
 
-	atomic_t terminate;
+	atomic_t terminate;/*标记此session是否要销毁*/
 	struct task_struct *task;
 
 	wait_queue_head_t wait;

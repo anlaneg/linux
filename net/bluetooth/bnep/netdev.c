@@ -123,6 +123,7 @@ static int bnep_net_mc_filter(struct sk_buff *skb, struct bnep_session *s)
 {
 	struct ethhdr *eh = (void *) skb->data;
 
+	/*是组播报文，但此组播没有被mc_filter标记，返回1，报文不容许出去*/
 	if ((eh->h_dest[0] & 1) && !test_bit(bnep_mc_hash(eh->h_dest), (ulong *) &s->mc_filter))
 		return 1;
 	return 0;
@@ -137,12 +138,12 @@ static u16 bnep_net_eth_proto(struct sk_buff *skb)
 	u16 proto = ntohs(eh->h_proto);
 
 	if (proto >= ETH_P_802_3_MIN)
-		return proto;
+		return proto;/*直接返回协议*/
 
 	if (get_unaligned((__be16 *) skb->data) == htons(0xFFFF))
-		return ETH_P_802_3;
+		return ETH_P_802_3;/*802.3*/
 
-	return ETH_P_802_2;
+	return ETH_P_802_2;/*802.2*/
 }
 
 static int bnep_net_proto_filter(struct sk_buff *skb, struct bnep_session *s)
@@ -153,11 +154,11 @@ static int bnep_net_proto_filter(struct sk_buff *skb, struct bnep_session *s)
 
 	for (i = 0; i < BNEP_MAX_PROTO_FILTERS && f[i].end; i++) {
 		if (proto >= f[i].start && proto <= f[i].end)
-			return 0;
+			return 0;/*协议容许通过*/
 	}
 
 	BT_DBG("BNEP: filtered skb %p, proto 0x%.4x", skb, proto);
-	return 1;
+	return 1;/*不容许通过*/
 }
 #endif
 
@@ -171,6 +172,7 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 
 #ifdef CONFIG_BT_BNEP_MC_FILTER
 	if (bnep_net_mc_filter(skb, s)) {
+		/*目的Mac不容许出去*/
 		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -178,7 +180,7 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 
 #ifdef CONFIG_BT_BNEP_PROTO_FILTER
 	if (bnep_net_proto_filter(skb, s)) {
-		kfree_skb(skb);
+		kfree_skb(skb);/*proto不容许出去*/
 		return NETDEV_TX_OK;
 	}
 #endif
@@ -203,7 +205,7 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
-/*蓝牙网络设备*/
+/*bnep蓝牙网络设备操作集*/
 static const struct net_device_ops bnep_netdev_ops = {
 	.ndo_open            = bnep_net_open,
 	.ndo_stop            = bnep_net_close,
@@ -215,6 +217,7 @@ static const struct net_device_ops bnep_netdev_ops = {
 
 };
 
+/*bnep网络设备初始化*/
 void bnep_net_setup(struct net_device *dev)
 {
 

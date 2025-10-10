@@ -1487,6 +1487,7 @@ static void hci_cmd_timeout(struct work_struct *work)
 					    cmd_timer.work);
 
 	if (hdev->req_skb) {
+		/*指明超时*/
 		u16 opcode = hci_skb_opcode(hdev->req_skb);
 
 		bt_dev_err(hdev, "command 0x%4.4x tx timeout", opcode);
@@ -1500,7 +1501,7 @@ static void hci_cmd_timeout(struct work_struct *work)
 		hdev->reset(hdev);
 
 	atomic_set(&hdev->cmd_cnt, 1);
-	queue_work(hdev->workqueue, &hdev->cmd_work);
+	queue_work(hdev->workqueue, &hdev->cmd_work);/**/
 }
 
 /* HCI ncmd timer function */
@@ -2585,8 +2586,8 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv/*私有结构体大小*/)
 
 	INIT_DELAYED_WORK(&hdev->power_off, hci_power_off);
 
-	skb_queue_head_init(&hdev->rx_q);
-	skb_queue_head_init(&hdev->cmd_q);
+	skb_queue_head_init(&hdev->rx_q);/*初始化rx queue*/
+	skb_queue_head_init(&hdev->cmd_q);/*初始化cmd queue*/
 	skb_queue_head_init(&hdev->raw_q);
 
 	init_waitqueue_head(&hdev->req_wait_q);
@@ -2945,25 +2946,28 @@ EXPORT_SYMBOL(hci_reset_dev);
 static u8 hci_dev_classify_pkt_type(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	if (hdev->classify_pkt_type)
+		/*通过回调区分报文类型*/
 		return hdev->classify_pkt_type(hdev, skb);
 
-	return hci_skb_pkt_type(skb);
+	return hci_skb_pkt_type(skb);/*返回skb中协带的报文类型*/
 }
 
 /* Receive frame from HCI drivers */
 int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
+	/*处理recv的frame*/
 	u8 dev_pkt_type;
 
 	if (!hdev || (!test_bit(HCI_UP, &hdev->flags)
 		      && !test_bit(HCI_INIT, &hdev->flags))) {
-		kfree_skb(skb);
+		kfree_skb(skb);/*设备未up且未初始化*/
 		return -ENXIO;
 	}
 
 	/* Check if the driver agree with packet type classification */
 	dev_pkt_type = hci_dev_classify_pkt_type(hdev, skb);
 	if (hci_skb_pkt_type(skb) != dev_pkt_type) {
+		/*报文类型与dev分辨的报文类型不相等时，以dev分辨为准*/
 		hci_skb_pkt_type(skb) = dev_pkt_type;
 	}
 
@@ -2991,6 +2995,7 @@ int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	case HCI_DRV_PKT:
 		break;
 	default:
+		/*释放掉不认识的报文类型*/
 		kfree_skb(skb);
 		return -EINVAL;
 	}
@@ -3001,7 +3006,7 @@ int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	/* Time stamp */
 	__net_timestamp(skb);
 
-	/*将收到的帧存入到rx_q,并触发rx_work*/
+	/*将收到的帧存入到rx_q,并触发rx_work(hci_rx_work),此work后续自queue上提取并处理报文*/
 	skb_queue_tail(&hdev->rx_q, skb);
 	queue_work(hdev->workqueue, &hdev->rx_work);
 
@@ -3013,7 +3018,7 @@ EXPORT_SYMBOL(hci_recv_frame);
 int hci_recv_diag(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	/* Mark as diagnostic packet */
-	hci_skb_pkt_type(skb) = HCI_DIAG_PKT;
+	hci_skb_pkt_type(skb) = HCI_DIAG_PKT;/*指明收到诊断类报文*/
 
 	/* Time stamp */
 	__net_timestamp(skb);
@@ -3073,6 +3078,7 @@ int hci_unregister_cb(struct hci_cb *cb)
 }
 EXPORT_SYMBOL(hci_unregister_cb);
 
+/*通过hdev向外发送frame*/
 static int hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	int err;
@@ -3103,12 +3109,12 @@ static int hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		/* Intercept HCI Drv packet here and don't go with hdev->send
 		 * callback.
 		 */
-		err = hci_drv_process_cmd(hdev, skb);
+		err = hci_drv_process_cmd(hdev, skb);/*对于driver类报文，直接处理并响应*/
 		kfree_skb(skb);
 		return err;
 	}
 
-	/*调用send回调，发送此skb命令*/
+	/*调用设备的send回调，发送此skb命令*/
 	err = hdev->send(hdev, skb);
 	if (err < 0) {
 		bt_dev_err(hdev, "sending frame failed (%d)", err);
@@ -3127,7 +3133,7 @@ static int hci_send_conn_frame(struct hci_dev *hdev, struct hci_conn *conn,
 }
 
 /* Send HCI command */
-int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
+int hci_send_cmd(struct hci_dev *hdev, __u16 opcode/*操作码*/, __u32 plen,
 		 const void *param)
 {
 	struct sk_buff *skb;
@@ -3146,15 +3152,15 @@ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
 	 */
 	bt_cb(skb)->hci.req_flags |= HCI_REQ_START;
 
-	/*skb存入此设备对应的cmd_q*/
+	/*将skb存入此设备对应的cmd_q*/
 	skb_queue_tail(&hdev->cmd_q, skb);
 	queue_work(hdev->workqueue, &hdev->cmd_work);
 
 	return 0;
 }
 
-int __hci_cmd_send(struct hci_dev *hdev, u16 opcode, u32 plen,
-		   const void *param)
+int __hci_cmd_send(struct hci_dev *hdev, u16 opcode/*消息opcode*/, u32 plen/*消息参数长度*/,
+		   const void *param/*消息参数*/)
 {
 	struct sk_buff *skb;
 
@@ -3171,6 +3177,7 @@ int __hci_cmd_send(struct hci_dev *hdev, u16 opcode, u32 plen,
 		return -EINVAL;
 	}
 
+	/*构造消息skb*/
 	skb = hci_cmd_sync_alloc(hdev, opcode, plen, param, NULL);
 	if (!skb) {
 		bt_dev_err(hdev, "no memory for command (opcode 0x%4.4x)",
@@ -3178,6 +3185,7 @@ int __hci_cmd_send(struct hci_dev *hdev, u16 opcode, u32 plen,
 		return -ENOMEM;
 	}
 
+	/*发送*/
 	hci_send_frame(hdev, skb);
 
 	return 0;
@@ -3836,7 +3844,8 @@ static void hci_tx_work(struct work_struct *work)
 
 	/* Send next queued raw (unknown type) packet */
 	while ((skb = skb_dequeue(&hdev->raw_q)))
-		hci_send_frame(hdev, skb);/*处理raw_q上所有skb,并调用hdev->send*/
+		/*处理raw_q上所有串连好的帧，并向外发送（调用hdev->send）*/
+		hci_send_frame(hdev, skb);
 }
 
 /* ----- HCI RX task (incoming data processing) ----- */
@@ -3850,6 +3859,7 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 
 	hdr = skb_pull_data(skb, sizeof(*hdr));
 	if (!hdr) {
+		/*长度不足*/
 		bt_dev_err(hdev, "ACL packet too small");
 		goto drop;
 	}
@@ -3970,6 +3980,7 @@ static bool hci_req_is_complete(struct hci_dev *hdev)
 	return (bt_cb(skb)->hci.req_flags & HCI_REQ_START);
 }
 
+/*用于发送最后一次send的command*/
 static void hci_resend_last(struct hci_dev *hdev)
 {
 	struct hci_command_hdr *sent;
@@ -3977,10 +3988,10 @@ static void hci_resend_last(struct hci_dev *hdev)
 	u16 opcode;
 
 	if (!hdev->sent_cmd)
-		return;
+		return;/*直接返回*/
 
 	sent = (void *) hdev->sent_cmd->data;
-	opcode = __le16_to_cpu(sent->opcode);
+	opcode = __le16_to_cpu(sent->opcode);/*取得cmd对应的opcode*/
 	if (opcode == HCI_OP_RESET)
 		return;
 
@@ -3988,8 +3999,8 @@ static void hci_resend_last(struct hci_dev *hdev)
 	if (!skb)
 		return;
 
-	skb_queue_head(&hdev->cmd_q, skb);
-	queue_work(hdev->workqueue, &hdev->cmd_work);
+	skb_queue_head(&hdev->cmd_q, skb);/*此skb再入队（实现重发）*/
+	queue_work(hdev->workqueue, &hdev->cmd_work);/*work入队，触发发送*/
 }
 
 void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
@@ -4063,6 +4074,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 /*负责处理hdev->rx_q队列上所有skb*/
 static void hci_rx_work(struct work_struct *work)
 {
+	/*取得对应的hci_dev*/
 	struct hci_dev *hdev = container_of(work, struct hci_dev, rx_work);
 	struct sk_buff *skb;
 
@@ -4074,7 +4086,7 @@ static void hci_rx_work(struct work_struct *work)
 	 * the packet. This helps fuzzing the kernel.
 	 */
 	for (; (skb = skb_dequeue(&hdev->rx_q)); kcov_remote_stop()) {
-		/*自rx_q中提取响应的skb*/
+		/*自rx_q中提取收到的skb*/
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		/* Send copy to monitor */
@@ -4099,7 +4111,7 @@ static void hci_rx_work(struct work_struct *work)
 
 		if (test_bit(HCI_INIT, &hdev->flags)) {
 			/* Don't process data packets in this states. */
-			switch (hci_skb_pkt_type(skb)) {
+			switch (hci_skb_pkt_type(skb)) {/*有init标记时，以下报文丢弃*/
 			case HCI_ACLDATA_PKT:
 			case HCI_SCODATA_PKT:
 			case HCI_ISODATA_PKT:
@@ -4111,6 +4123,7 @@ static void hci_rx_work(struct work_struct *work)
 		/* Process frame */
 		switch (hci_skb_pkt_type(skb)) {
 		case HCI_EVENT_PKT:
+			/*事件类报文*/
 			BT_DBG("%s Event packet", hdev->name);
 			hci_event_packet(hdev, skb);/*处理event pkt*/
 			break;
@@ -4131,6 +4144,7 @@ static void hci_rx_work(struct work_struct *work)
 			break;
 
 		default:
+			/*其它类型报文丢弃*/
 			kfree_skb(skb);
 			break;
 		}
@@ -4143,32 +4157,36 @@ static void hci_send_cmd_sync(struct hci_dev *hdev, struct sk_buff *skb)
 
 	bt_dev_dbg(hdev, "skb %p", skb);
 
-	kfree_skb(hdev->sent_cmd);
+	kfree_skb(hdev->sent_cmd);/*释放掉上一个cmd*/
 
 	hdev->sent_cmd = skb_clone(skb, GFP_KERNEL);
 	if (!hdev->sent_cmd) {
+		/*clone cmd skb失败，归还skb到cmd_q中，重新对cmd_work入队*/
 		skb_queue_head(&hdev->cmd_q, skb);
 		queue_work(hdev->workqueue, &hdev->cmd_work);
 		return;
 	}
 
 	if (hci_skb_opcode(skb) != HCI_OP_NOP) {
+		/*当前skb指定的opcode不是NOP，发送此skb*/
 		err = hci_send_frame(hdev, skb);
 		if (err < 0) {
+			/*发送失败，标记此cmd被取消，并给出错误原因*/
 			hci_cmd_sync_cancel_sync(hdev, -err);
 			return;
 		}
 		atomic_dec(&hdev->cmd_cnt);
 	}
 
+	/*opcode是NOP的情况或者非NOP且发送成功的*/
 	if (hdev->req_status == HCI_REQ_PEND &&
 	    !hci_dev_test_and_set_flag(hdev, HCI_CMD_PENDING)) {
-		kfree_skb(hdev->req_skb);
+		kfree_skb(hdev->req_skb);/*释放掉上一个req_skb*/
 		hdev->req_skb = skb_clone(hdev->sent_cmd, GFP_KERNEL);
 	}
 }
 
-/*具体处理挂接在hdev->cmd_q上所有cmd skb*/
+/*此worker负责具体处理挂接在hdev->cmd_q上所有cmd skb*/
 static void hci_cmd_work(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev, cmd_work);
@@ -4179,19 +4197,19 @@ static void hci_cmd_work(struct work_struct *work)
 
 	/* Send queued commands */
 	if (atomic_read(&hdev->cmd_cnt)) {
-		skb = skb_dequeue(&hdev->cmd_q);/*除一个cmd*/
+		skb = skb_dequeue(&hdev->cmd_q);/*只出队一个cmd*/
 		if (!skb)
 			return;
 
-		hci_send_cmd_sync(hdev, skb);
+		hci_send_cmd_sync(hdev, skb);/*同步发送此cmd*/
 
 		rcu_read_lock();
 		if (test_bit(HCI_RESET, &hdev->flags) ||
 		    hci_dev_test_flag(hdev, HCI_CMD_DRAIN_WORKQUEUE))
-			cancel_delayed_work(&hdev->cmd_timer);
+			cancel_delayed_work(&hdev->cmd_timer);/*取消timer*/
 		else
 			queue_delayed_work(hdev->workqueue, &hdev->cmd_timer,
-					   HCI_CMD_TIMEOUT);
+					   HCI_CMD_TIMEOUT);/*启动timer*/
 		rcu_read_unlock();
 	}
 }

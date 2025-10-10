@@ -48,6 +48,7 @@ static struct sock *l2cap_sock_alloc(struct net *net, struct socket *sock,
 				     int proto, gfp_t prio, int kern);
 static void l2cap_sock_cleanup_listen(struct sock *parent);
 
+/*检查是否l2cap的socket*/
 bool l2cap_is_socket(struct socket *sock)
 {
 	return sock && sock->ops == &l2cap_sock_ops;
@@ -178,8 +179,8 @@ done:
 	return err;
 }
 
-static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr,
-			      int alen, int flags)
+static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标地址*/,
+			      int alen/*地址长度*/, int flags)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -198,17 +199,17 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr,
 
 	if (!addr || alen < offsetofend(struct sockaddr, sa_family) ||
 	    addr->sa_family != AF_BLUETOOTH)
-		return -EINVAL;
+		return -EINVAL;/*目标地址格式有误*/
 
 	memset(&la, 0, sizeof(la));
-	len = min_t(unsigned int, sizeof(la), alen);
-	memcpy(&la, addr, len);
+	len = min_t(unsigned int, sizeof(la), alen);/*alen长度不得超过sizeof(la)*/
+	memcpy(&la, addr, len);/*设置目标地址到la*/
 
 	if (la.l2_cid && la.l2_psm)
-		return -EINVAL;
+		return -EINVAL;/*cid与psm同时有值*/
 
 	if (!bdaddr_type_is_valid(la.l2_bdaddr_type))
-		return -EINVAL;
+		return -EINVAL;/*地址类型有误*/
 
 	/* Check that the socket wasn't bound to something that
 	 * conflicts with the address given to connect(). If chan->src
@@ -1119,7 +1120,7 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return -EOPNOTSUPP;
 
 	if (sk->sk_state != BT_CONNECTED)
-		return -ENOTCONN;
+		return -ENOTCONN;/*必须处于connected状态*/
 
 	hci_sockcm_init(&sockc, sk);
 
@@ -1927,12 +1928,12 @@ static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 
 	if (sock->type != SOCK_SEQPACKET && sock->type != SOCK_STREAM &&
 	    sock->type != SOCK_DGRAM && sock->type != SOCK_RAW)
-		return -ESOCKTNOSUPPORT;
+		return -ESOCKTNOSUPPORT;/*仅支持以上几种type*/
 
 	if (sock->type == SOCK_RAW && !kern && !capable(CAP_NET_RAW))
 		return -EPERM;
 
-	sock->ops = &l2cap_sock_ops;
+	sock->ops = &l2cap_sock_ops;/*设置l2cap socket操作集*/
 
 	sk = l2cap_sock_alloc(net, sock, protocol, GFP_ATOMIC, kern);
 	if (!sk)
@@ -1943,7 +1944,8 @@ static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
-/*这种socket可以注入创建基于蓝牙的netdev*/
+/*l2cap socket对应的ops
+ * 这种socket可以注入创建基于蓝牙的netdev*/
 static const struct proto_ops l2cap_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,

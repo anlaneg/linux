@@ -42,6 +42,7 @@
 static bool compress_src = true;
 static bool compress_dst = true;
 
+/*记录系统所有bnep_session*/
 static LIST_HEAD(bnep_session_list);
 static DECLARE_RWSEM(bnep_session_sem);
 
@@ -58,6 +59,7 @@ static struct bnep_session *__bnep_get_session(u8 *dst)
 	return NULL;
 }
 
+/*bnep_session加入到全局队列*/
 static void __bnep_link_session(struct bnep_session *s)
 {
 	list_add(&s->list, &bnep_session_list);
@@ -153,17 +155,19 @@ static int bnep_ctrl_set_mcfilter(struct bnep_session *s, u8 *data, int len)
 	if (len < 2)
 		return -EILSEQ;
 
+	/*前两个字节转主机序*/
 	n = get_unaligned_be16(data);
 	data += 2;
 	len -= 2;
 
 	if (len < n)
+		/*报文长度小于n*/
 		return -EILSEQ;
 
 	BT_DBG("filter len %d", n);
 
 #ifdef CONFIG_BT_BNEP_MC_FILTER
-	n /= (ETH_ALEN * 2);
+	n /= (ETH_ALEN * 2);/*有多少mac地址对儿*/
 
 	if (n > 0) {
 		int i;
@@ -301,16 +305,18 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 	struct sk_buff *nskb;
 	u8 type, ctrl_type;
 
-	dev->stats.rx_bytes += skb->len;
+	dev->stats.rx_bytes += skb->len;/*增加rx方向统计*/
 
+	/*前两个字节为type,ctrl_type*/
 	type = *(u8 *) skb->data;
 	skb_pull(skb, 1);
 	ctrl_type = *(u8 *)skb->data;
 
 	if ((type & BNEP_TYPE_MASK) >= sizeof(__bnep_rx_hlen))
-		goto badframe;
+		goto badframe;/*type保存的值必小于sizeof(__bnep_rx_hlen)*/
 
 	if ((type & BNEP_TYPE_MASK) == BNEP_CONTROL) {
+		/*处理control类报文*/
 		if (bnep_rx_control(s, skb->data, skb->len) < 0) {
 			dev->stats.tx_errors++;
 			kfree_skb(skb);
@@ -350,6 +356,7 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 	}
 
 	if (type & BNEP_EXT_HEADER) {
+		/*标记了扩展header,处理extend header*/
 		if (bnep_rx_extension(s, skb) < 0)
 			goto badframe;
 	}
@@ -463,7 +470,7 @@ send:
 
 	/* FIXME: linearize skb */
 	{
-		len = kernel_sendmsg(sock, &s->msg, iv, il, len);
+		len = kernel_sendmsg(sock, &s->msg, iv, il, len);/*发送*/
 	}
 	kfree_skb(skb);
 
@@ -476,6 +483,8 @@ send:
 	return len;
 }
 
+/*kernel线程，负责获取sk->sk_receive_queue上的skb，将其转bnep网络设备收取报文
+ * 负责获取sk->sk_write_queue上的skb(由其它经以太网发送给bnep_session->dev网络设备的skb）,并交给sk发送*/
 static int bnep_session(void *arg)
 {
 	struct bnep_session *s = arg;
@@ -491,7 +500,7 @@ static int bnep_session(void *arg)
 	add_wait_queue(sk_sleep(sk), &wait);
 	while (1) {
 		if (atomic_read(&s->terminate))
-			break;
+			break;/*此session已标记需要销毁，跳出*/
 		/* RX */
 		while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
 			/*自sk->sk_receive_queue拿到skb,送网络协议栈*/
@@ -499,15 +508,15 @@ static int bnep_session(void *arg)
 			if (!skb_linearize(skb))
 				bnep_rx_frame(s, skb);
 			else
-				kfree_skb(skb);
+				kfree_skb(skb);/*转线性失败，丢包*/
 		}
 
 		if (sk->sk_state != BT_CONNECTED)
-			break;
+			break;/*状态不为contexted,跳出*/
 
 		/* TX */
 		while ((skb = skb_dequeue(&sk->sk_write_queue)))
-			/*自sk->sk_write_queue拿到skb,送蓝牙发送*/
+			/*自sk->sk_write_queue拿到skb,送session->sock蓝牙发送*/
 			if (bnep_tx_frame(s, skb))
 				break;
 		netif_wake_queue(dev);
@@ -537,7 +546,7 @@ static int bnep_session(void *arg)
 	__bnep_unlink_session(s);
 
 	up_write(&bnep_session_sem);
-	free_netdev(dev);
+	free_netdev(dev);/*释放网络设备*/
 	module_put_and_kthread_exit(0);
 	return 0;
 }
@@ -556,6 +565,9 @@ static const struct device_type bnep_type = {
 	.name	= "bluetooth",
 };
 
+/*创建bnep网络设备并使其与sock绑定；
+ * 创建kernel线程并使其分负将netdev发送与sock发送绑定；
+ * sock接收与netdev接收绑定*/
 int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 {
 	u32 valid_flags = BIT(BNEP_SETUP_RESPONSE);
@@ -566,15 +578,15 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 
 	BT_DBG("");
 
-	/*必须为l2cap socket*/
+	/*提供的必须为l2cap socket*/
 	if (!l2cap_is_socket(sock))
 		return -EBADFD;
 
 	if (req->flags & ~valid_flags)
 		return -EINVAL;
 
-	baswap((void *) dst, &l2cap_pi(sock->sk)->chan->dst);
-	baswap((void *) src, &l2cap_pi(sock->sk)->chan->src);
+	baswap((void *) dst, &l2cap_pi(sock->sk)->chan->dst);/*目的mac*/
+	baswap((void *) src, &l2cap_pi(sock->sk)->chan->src);/*源mac*/
 
 	/* session struct allocated as private part of net_device */
 	dev = alloc_netdev(sizeof(struct bnep_session),
@@ -592,16 +604,17 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 		goto failed;
 	}
 
-	s = netdev_priv(dev);
+	s = netdev_priv(dev);/*取bnep网络设备私有结构*/
 
 	/* This is rx header therefore addresses are swapped.
 	 * ie. eh.h_dest is our local address. */
 	memcpy(s->eh.h_dest,   &src, ETH_ALEN);
 	memcpy(s->eh.h_source, &dst, ETH_ALEN);
-	eth_hw_addr_set(dev, s->eh.h_dest);
+	eth_hw_addr_set(dev, s->eh.h_dest);/*设置bnep网络设备的mac地址为$src*/
 
 	s->dev   = dev;
-	s->sock  = sock;/*对应的socket*/
+	/*对应的l2cap socket,此socket收到的报文（sk->sk_receive_queue）将转netdev收取*/
+	s->sock  = sock;
 	s->role  = req->role;
 	s->state = BT_CONNECTED;
 	s->flags = req->flags;
@@ -653,6 +666,7 @@ failed:
 	return err;
 }
 
+/*此删除仅用于标记session需要terminate,具体销毁由bnep_session函数处理*/
 int bnep_del_connection(struct bnep_conndel_req *req)
 {
 	u32 valid_flags = 0;
@@ -662,13 +676,13 @@ int bnep_del_connection(struct bnep_conndel_req *req)
 	BT_DBG("");
 
 	if (req->flags & ~valid_flags)
-		return -EINVAL;
+		return -EINVAL;/*当前flags必须为0*/
 
 	down_read(&bnep_session_sem);
 
-	s = __bnep_get_session(req->dst);
+	s = __bnep_get_session(req->dst);/*通过dst查询要删除的bnep_session*/
 	if (s) {
-		atomic_inc(&s->terminate);
+		atomic_inc(&s->terminate);/*标记需要中止*/
 		wake_up_interruptible(sk_sleep(s->sock->sk));
 	} else
 		err = -ENOENT;
@@ -683,12 +697,13 @@ static void __bnep_copy_ci(struct bnep_conninfo *ci, struct bnep_session *s)
 
 	memset(ci, 0, sizeof(*ci));
 	memcpy(ci->dst, s->eh.h_source, ETH_ALEN);
-	strcpy(ci->device, s->dev->name);
+	strcpy(ci->device, s->dev->name);/*复制bnep设备名称*/
 	ci->flags = s->flags & valid_flags;
 	ci->state = s->state;
 	ci->role  = s->role;
 }
 
+/*按请求填充bnep_session列表*/
 int bnep_get_connlist(struct bnep_connlist_req *req)
 {
 	struct bnep_session *s;
@@ -707,11 +722,11 @@ int bnep_get_connlist(struct bnep_connlist_req *req)
 		}
 
 		if (++n >= req->cnum)
-			break;
+			break;/*数量超限，跳出*/
 
 		req->ci++;
 	}
-	req->cnum = n;
+	req->cnum = n;/*指明填充的总数量*/
 
 	up_read(&bnep_session_sem);
 	return err;

@@ -75,7 +75,7 @@ static int vhci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct vhci_data *data = hci_get_drvdata(hdev);
 
-	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
+	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);/*增加pkt_type*/
 
 	skb_queue_tail(&data->readq, skb);
 

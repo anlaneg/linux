@@ -898,12 +898,14 @@ static void cis_cleanup(struct hci_conn *conn)
 
 static int hci_conn_hash_alloc_unset(struct hci_dev *hdev)
 {
+	/*分配connect handle*/
 	return ida_alloc_range(&hdev->unset_handle_ida, HCI_CONN_HANDLE_MAX + 1,
 			       U16_MAX, GFP_ATOMIC);
 }
 
-static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,
-				       u8 role, u16 handle)
+/*添加connect*/
+static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类型*/, bdaddr_t *dst,
+				       u8 role, u16 handle/*conn对应的handle*/)
 {
 	struct hci_conn *conn;
 
@@ -932,11 +934,13 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t 
 			return ERR_PTR(-ECONNREFUSED);
 		break;
 	default:
+		/*不支持其它类型*/
 		return ERR_PTR(-ECONNREFUSED);
 	}
 
 	bt_dev_dbg(hdev, "dst %pMR handle 0x%4.4x", dst, handle);
 
+	/*申请并填充conn*/
 	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn)
 		return ERR_PTR(-ENOMEM);
@@ -1023,7 +1027,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t 
 
 	hci_dev_hold(hdev);
 
-	hci_conn_hash_add(hdev, conn);
+	hci_conn_hash_add(hdev, conn);/*添加conn*/
 
 	/* The SCO and eSCO connections will only be notified when their
 	 * setup has been completed. This is different to ACL links which
@@ -1038,8 +1042,9 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t 
 	return conn;
 }
 
+/*分配hci connect handle,并创建hci connect*/
 struct hci_conn *hci_conn_add_unset(struct hci_dev *hdev, int type,
-				    bdaddr_t *dst, u8 role)
+				    bdaddr_t *dst/*目的地址*/, u8 role)
 {
 	int handle;
 
@@ -1047,15 +1052,18 @@ struct hci_conn *hci_conn_add_unset(struct hci_dev *hdev, int type,
 
 	handle = hci_conn_hash_alloc_unset(hdev);
 	if (unlikely(handle < 0))
+		/*分配handle失败*/
 		return ERR_PTR(-ECONNREFUSED);
 
 	return __hci_conn_add(hdev, type, dst, role, handle);
 }
 
+/*添加hci connect*/
 struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,
 			      u8 role, u16 handle)
 {
 	if (handle > HCI_CONN_HANDLE_MAX)
+		/*handle校验失败*/
 		return ERR_PTR(-EINVAL);
 
 	return __hci_conn_add(hdev, type, dst, role, handle);
@@ -1179,15 +1187,17 @@ void hci_conn_del(struct hci_conn *conn)
 	hci_cmd_sync_dequeue(hdev, NULL, conn, NULL);
 }
 
+/*查找源设备*/
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 {
-	int use_src = bacmp(src, BDADDR_ANY);
+	int use_src = bacmp(src, BDADDR_ANY);/*是否不为any地址*/
 	struct hci_dev *hdev = NULL, *d;
 
 	BT_DBG("%pMR -> %pMR", src, dst);
 
 	read_lock(&hci_dev_list_lock);
 
+	/*遍历所有hci设备*/
 	list_for_each_entry(d, &hci_dev_list, list) {
 		if (!test_bit(HCI_UP, &d->flags) ||
 		    hci_dev_test_flag(d, HCI_USER_CHANNEL))
@@ -1199,6 +1209,7 @@ struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 		 */
 
 		if (use_src) {
+			/*源地址非any*/
 			bdaddr_t id_addr;
 			u8 id_addr_type;
 
@@ -1222,9 +1233,11 @@ struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 			}
 
 			if (!bacmp(&id_addr, src) && id_addr_type == src_type) {
+				/*设备地址与指明的src地址相同且地址类型也一致，则源设备为d*/
 				hdev = d; break;
 			}
 		} else {
+			/*src地址为零,如果d设备的地址与dst一致，则源设备为d*/
 			if (bacmp(&d->bdaddr, dst)) {
 				hdev = d; break;
 			}
@@ -1232,7 +1245,7 @@ struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 	}
 
 	if (hdev)
-		hdev = hci_dev_hold(hdev);
+		hdev = hci_dev_hold(hdev);/*增加设备引用*/
 
 	read_unlock(&hci_dev_list_lock);
 	return hdev;
@@ -1287,7 +1300,7 @@ u8 hci_conn_set_handle(struct hci_conn *conn, u16 handle)
 	bt_dev_dbg(hdev, "hcon %p handle 0x%4.4x", conn, handle);
 
 	if (conn->handle == handle)
-		return 0;
+		return 0;/*handle无变更*/
 
 	if (handle > HCI_CONN_HANDLE_MAX) {
 		bt_dev_err(hdev, "Invalid handle: 0x%4.4x > 0x%4.4x",
@@ -1302,9 +1315,9 @@ u8 hci_conn_set_handle(struct hci_conn *conn, u16 handle)
 		return conn->abort_reason;
 
 	if (HCI_CONN_HANDLE_UNSET(conn->handle))
-		ida_free(&hdev->unset_handle_ida, conn->handle);
+		ida_free(&hdev->unset_handle_ida, conn->handle);/*归还旧的handle*/
 
-	conn->handle = handle;
+	conn->handle = handle;/*设置新的handle*/
 
 	return 0;
 }
@@ -1627,6 +1640,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
 	 * CVE-2020-26555
 	 */
 	if (!bacmp(&hdev->bdaddr, dst)) {
+		/*目的地址与源地址相同，不发起连接，拒绝*/
 		bt_dev_dbg(hdev, "Reject connection with same BD_ADDR %pMR\n",
 			   dst);
 		return ERR_PTR(-ECONNREFUSED);
@@ -1634,6 +1648,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
 
 	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
 	if (!acl) {
+		/*无此连接，创建一个*/
 		acl = hci_conn_add_unset(hdev, ACL_LINK, dst, HCI_ROLE_MASTER);
 		if (IS_ERR(acl))
 			return acl;

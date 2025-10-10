@@ -22,8 +22,8 @@ enum {
 struct virtio_bluetooth {
 	struct virtio_device *vdev;
 	struct virtqueue *vqs[VIRTBT_NUM_VQS];
-	struct work_struct rx;
-	struct hci_dev *hdev;
+	struct work_struct rx;/*收方向work函数，例如：virtbt_rx_work*/
+	struct hci_dev *hdev;/*取应的hci设备*/
 };
 
 static int virtbt_add_inbuf(struct virtio_bluetooth *vbt)
@@ -90,12 +90,14 @@ static int virtbt_flush(struct hci_dev *hdev)
 	return 0;
 }
 
+/*将frame添加进tx队列*/
 static int virtbt_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct virtio_bluetooth *vbt = hci_get_drvdata(hdev);
 	struct scatterlist sg[1];
 	int err;
 
+	/*增加1个字节，用于填充packet type*/
 	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
 
 	sg_init_one(sg, skb->data, skb->len);
@@ -148,7 +150,7 @@ static int virtbt_setup_intel(struct hci_dev *hdev)
 	struct sk_buff *skb;
 
 	/* Intel Read Version */
-	skb = __hci_cmd_sync(hdev, 0xfc05, 0, NULL, HCI_CMD_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, 0xfc05, 0, NULL/*无参数*/, HCI_CMD_TIMEOUT);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -201,7 +203,7 @@ static void virtbt_rx_handle(struct virtio_bluetooth *vbt, struct sk_buff *skb)
 {
 	__u8 pkt_type;
 
-	pkt_type = *((__u8 *) skb->data);
+	pkt_type = *((__u8 *) skb->data);/*第一个字节为报文类型*/
 	skb_pull(skb, 1);
 
 	switch (pkt_type) {
@@ -209,11 +211,11 @@ static void virtbt_rx_handle(struct virtio_bluetooth *vbt, struct sk_buff *skb)
 	case HCI_ACLDATA_PKT:
 	case HCI_SCODATA_PKT:
 	case HCI_ISODATA_PKT:
-		hci_skb_pkt_type(skb) = pkt_type;
-		hci_recv_frame(vbt->hdev, skb);
+		hci_skb_pkt_type(skb) = pkt_type;/*设置报文类型*/
+		hci_recv_frame(vbt->hdev, skb);/*处理收到的报文（以上几种报文可从外界收到）*/
 		break;
 	default:
-		kfree_skb(skb);
+		kfree_skb(skb);/*遇到不认识的类型，释放报文*/
 		break;
 	}
 }
@@ -225,6 +227,7 @@ static void virtbt_rx_work(struct work_struct *work)
 	struct sk_buff *skb;
 	unsigned int len;
 
+	/*自rx队列中取skb*/
 	skb = virtqueue_get_buf(vbt->vqs[VIRTBT_VQ_RX], &len);
 	if (!skb)
 		return;
@@ -238,6 +241,7 @@ static void virtbt_rx_work(struct work_struct *work)
 	virtqueue_kick(vbt->vqs[VIRTBT_VQ_RX]);
 }
 
+/*释放vq中所有skb*/
 static void virtbt_tx_done(struct virtqueue *vq)
 {
 	struct sk_buff *skb;
@@ -251,7 +255,7 @@ static void virtbt_rx_done(struct virtqueue *vq)
 {
 	struct virtio_bluetooth *vbt = vq->vdev->priv;
 
-	schedule_work(&vbt->rx);
+	schedule_work(&vbt->rx);/*触发处rx队列收包并处理*/
 }
 
 static int virtbt_probe(struct virtio_device *vdev)

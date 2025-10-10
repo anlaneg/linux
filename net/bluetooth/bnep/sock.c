@@ -64,7 +64,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 	switch (cmd) {
 	case BNEPCONNADD:
-		/*注入socket形成基于蓝牙的netdev网络*/
+		/*添加连接，注入socket形成基于蓝牙的netdev网络*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -77,6 +77,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 			return err;
 
 		if (nsock->sk->sk_state != BT_CONNECTED) {
+			/*nsock对应的状态必须为CONNECTED*/
 			sockfd_put(nsock);
 			return -EBADFD;
 		}
@@ -92,6 +93,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case BNEPCONNDEL:
+		/*连接删除*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -101,6 +103,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return bnep_del_connection(&cd);
 
 	case BNEPGETCONNLIST:
+		/*返回连接列表*/
 		if (copy_from_user(&cl, argp, sizeof(cl)))
 			return -EFAULT;
 
@@ -114,6 +117,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case BNEPGETCONNINFO:
+		/*返回具体的一个bnep_session信息*/
 		if (copy_from_user(&ci, argp, sizeof(ci)))
 			return -EFAULT;
 
@@ -124,6 +128,7 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case BNEPGETSUPPFEAT:
+		/*返回kernel支持的feat*/
 		if (copy_to_user(argp, &supp_feat, sizeof(supp_feat)))
 			return -EFAULT;
 
@@ -175,7 +180,7 @@ static const struct proto_ops bnep_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= bnep_sock_release,
-	.ioctl		= bnep_sock_ioctl,/*主要是支持ioctl*/
+	.ioctl		= bnep_sock_ioctl,/*主要是支持ioctl，其它回调均为空*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= bnep_sock_compat_ioctl,
 #endif
@@ -205,6 +210,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 	BT_DBG("sock %p", sock);
 
 	if (sock->type != SOCK_RAW)
+		/*只支持sock_raw*/
 		return -ESOCKTNOSUPPORT;
 
 	sk = bt_sock_alloc(net, sock, &bnep_proto, protocol, GFP_ATOMIC, kern);
@@ -218,7 +224,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
-/*bnep 类型的socket对应的ops*/
+/*bnep类型的socket对应的ops*/
 static const struct net_proto_family bnep_sock_family_ops = {
 	.family = PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
@@ -234,7 +240,7 @@ int __init bnep_sock_init(void)
 	if (err < 0)
 		return err;
 
-	/*bnep协议对应的ops,用于以太网模拟*/
+	/*bnep协议对应socket的ops,用于以太网模拟*/
 	err = bt_sock_register(BTPROTO_BNEP, &bnep_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register BNEP socket");

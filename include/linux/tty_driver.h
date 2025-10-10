@@ -527,7 +527,7 @@ struct tty_driver {
 	struct kref kref;
 	struct cdev **cdevs;
 	struct module	*owner;
-	const char	*driver_name;
+	const char	*driver_name;/*驱动名称*/
 	const char	*name;
 	int	name_base;
 	int	major;
@@ -583,7 +583,7 @@ static inline struct tty_driver *tty_driver_kref_get(struct tty_driver *d)
 static inline void tty_set_operations(struct tty_driver *driver,
 		const struct tty_operations *op)
 {
-	driver->ops = op;
+	driver->ops = op;/*设备驱动对应的ops*/
 }
 
 int tty_register_driver(struct tty_driver *driver);

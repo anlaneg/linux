@@ -446,7 +446,7 @@ void hci_send_to_monitor(struct hci_dev *hdev, struct sk_buff *skb)
 	hdr->len = cpu_to_le16(skb->len);
 
 	hci_send_to_channel(HCI_CHANNEL_MONITOR, skb_copy,
-			    HCI_SOCK_TRUSTED, NULL);
+			    HCI_SOCK_TRUSTED, NULL);/*将复制的skb发送给monitor*/
 	kfree_skb(skb_copy);
 }
 

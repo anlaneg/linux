@@ -141,7 +141,7 @@ struct hidp_session {
 	/* runtime management */
 	atomic_t state;
 	wait_queue_head_t state_queue;
-	atomic_t terminate;
+	atomic_t terminate;/*标记此session是否需要terminate*/
 	struct task_struct *task;
 	unsigned long flags;
 

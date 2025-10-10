@@ -258,7 +258,7 @@ static inline void eth_random_addr(u8 *addr)
  */
 static inline void eth_broadcast_addr(u8 *addr)
 {
-	memset(addr, 0xff, ETH_ALEN);
+	memset(addr, 0xff, ETH_ALEN);/*指明全f的mac地址*/
 }
 
 /**

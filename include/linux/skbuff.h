@@ -2318,12 +2318,13 @@ static inline void __skb_insert(struct sk_buff *newsk,
 	WRITE_ONCE(list->qlen, list->qlen + 1);
 }
 
+/*list加入进双链表prev,next位置处*/
 static inline void __skb_queue_splice(const struct sk_buff_head *list,
 				      struct sk_buff *prev,
 				      struct sk_buff *next)
 {
-	struct sk_buff *first = list->next;
-	struct sk_buff *last = list->prev;
+	struct sk_buff *first = list->next;/*链表的首个*/
+	struct sk_buff *last = list->prev;/*链表的最后一个*/
 
 	WRITE_ONCE(first->prev, prev);
 	WRITE_ONCE(prev->next, first);
@@ -2373,6 +2374,7 @@ static inline void skb_queue_splice_tail(const struct sk_buff_head *list,
 					 struct sk_buff_head *head)
 {
 	if (!skb_queue_empty(list)) {
+		/*将list添加进head,队列长度增大*/
 		__skb_queue_splice(list, head->prev, (struct sk_buff *) head);
 		head->qlen += list->qlen;
 	}
@@ -3438,6 +3440,7 @@ void skb_queue_purge_reason(struct sk_buff_head *list,
 
 static inline void skb_queue_purge(struct sk_buff_head *list)
 {
+	/*排空skb buffer list*/
 	skb_queue_purge_reason(list, SKB_DROP_REASON_QUEUE_PURGE);
 }
 

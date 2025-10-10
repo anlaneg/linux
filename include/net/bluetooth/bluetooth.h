@@ -349,7 +349,7 @@ static inline bool bdaddr_type_is_valid(u8 type)
 	case BDADDR_BREDR:
 	case BDADDR_LE_PUBLIC:
 	case BDADDR_LE_RANDOM:
-		return true;
+		return true;/*支持以上三种地址类型*/
 	}
 
 	return false;
@@ -360,7 +360,7 @@ static inline bool bdaddr_type_is_le(u8 type)
 	switch (type) {
 	case BDADDR_LE_PUBLIC:
 	case BDADDR_LE_RANDOM:
-		return true;
+		return true;/*地址类型属于le*/
 	}
 
 	return false;
@@ -372,6 +372,7 @@ static inline bool bdaddr_type_is_le(u8 type)
 /* Copy, swap, convert BD Address */
 static inline int bacmp(const bdaddr_t *ba1, const bdaddr_t *ba2)
 {
+	/*地址比较*/
 	return memcmp(ba1, ba2, sizeof(bdaddr_t));
 }
 static inline void bacpy(bdaddr_t *dst, const bdaddr_t *src)
@@ -460,13 +461,15 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 int hci_ethtool_ts_info(unsigned int index, int sk_proto,
 			struct kernel_ethtool_ts_info *ts_info);
 
+/*请求首个skb*/
 #define HCI_REQ_START	BIT(0)
+/*标记请求skb结束*/
 #define HCI_REQ_SKB	BIT(1)
 
 struct hci_ctrl {
 	struct sock *sk;
-	u16 opcode;
-	u8 req_flags;
+	u16 opcode;/*操作码*/
+	u8 req_flags;/*请求标记，例如HCI_REQ_START*/
 	u8 req_event;
 	union {
 		hci_req_complete_t req_complete;
@@ -480,11 +483,11 @@ struct mgmt_ctrl {
 };
 
 struct bt_skb_cb {
-	u8 pkt_type;
+	u8 pkt_type;/*报文类型*/
 	u8 force_active;
 	u16 expect;
 	u16 pkt_seqnum;
-	u8 incoming:1;
+	u8 incoming:1;/*是否incoming报文*/
 	u8 pkt_status:2;
 	union {
 		struct l2cap_ctrl l2cap;
@@ -495,12 +498,16 @@ struct bt_skb_cb {
 };
 #define bt_cb(skb) ((struct bt_skb_cb *)((skb)->cb))
 
+/*报文类型*/
 #define hci_skb_pkt_type(skb) bt_cb((skb))->pkt_type
 #define hci_skb_pkt_status(skb) bt_cb((skb))->pkt_status
 #define hci_skb_pkt_seqnum(skb) bt_cb((skb))->pkt_seqnum
 #define hci_skb_expect(skb) bt_cb((skb))->expect
+/*报文对应的操作码*/
 #define hci_skb_opcode(skb) bt_cb((skb))->hci.opcode
+/*报文关联的请求event*/
 #define hci_skb_event(skb) bt_cb((skb))->hci.req_event
+/*报文关联的socket*/
 #define hci_skb_sk(skb) bt_cb((skb))->hci.sk
 
 static inline struct sk_buff *bt_skb_alloc(unsigned int len/*内容长度*/, gfp_t how)

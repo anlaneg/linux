@@ -16,13 +16,13 @@
 #define hci_req_sync_unlock(hdev) mutex_unlock(&hdev->req_lock)
 
 struct hci_request {
-	struct hci_dev		*hdev;
-	struct sk_buff_head	cmd_q;
+	struct hci_dev		*hdev;/*请求对应的hci设备*/
+	struct sk_buff_head	cmd_q;/*请求对应的一组命令*/
 
 	/* If something goes wrong when building the HCI request, the error
 	 * value is stored in this field.
 	 */
-	int			err;
+	int			err;/*是否出错*/
 };
 
 typedef int (*hci_cmd_sync_work_func_t)(struct hci_dev *hdev, void *data);

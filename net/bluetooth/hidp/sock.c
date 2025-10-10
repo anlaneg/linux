@@ -61,6 +61,7 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 	switch (cmd) {
 	case HIDPCONNADD:
+		/*hidp连接添加*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -69,16 +70,16 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 		csock = sockfd_lookup(ca.ctrl_sock, &err);
 		if (!csock)
-			return err;
+			return err;/*fd指定的socket不存在*/
 
 		isock = sockfd_lookup(ca.intr_sock, &err);
 		if (!isock) {
 			sockfd_put(csock);
-			return err;
+			return err;/*fd指定的socket不存在*/
 		}
 		ca.name[sizeof(ca.name)-1] = 0;
 
-		err = hidp_connection_add(&ca, csock, isock);
+		err = hidp_connection_add(&ca, csock/*控制socket*/, isock/*中断socket*/);
 		if (!err && copy_to_user(argp, &ca, sizeof(ca)))
 			err = -EFAULT;
 
@@ -88,6 +89,7 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case HIDPCONNDEL:
+		/*hidp连接删除*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -97,6 +99,7 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return hidp_connection_del(&cd);
 
 	case HIDPGETCONNLIST:
+		/*列出所有hidp连接*/
 		if (copy_from_user(&cl, argp, sizeof(cl)))
 			return -EFAULT;
 
@@ -110,6 +113,7 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case HIDPGETCONNINFO:
+		/*获取一个hidp连接对应的信息*/
 		if (copy_from_user(&ci, argp, sizeof(ci)))
 			return -EFAULT;
 
@@ -224,7 +228,7 @@ static const struct proto_ops hidp_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= hidp_sock_release,
-	.ioctl		= hidp_sock_ioctl,
+	.ioctl		= hidp_sock_ioctl,/*hidp socket主要实现了ioctl接口*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= hidp_sock_compat_ioctl,
 #endif
@@ -254,6 +258,7 @@ static int hidp_sock_create(struct net *net, struct socket *sock, int protocol,
 	BT_DBG("sock %p", sock);
 
 	if (sock->type != SOCK_RAW)
+		/*仅支持sock_raw类型*/
 		return -ESOCKTNOSUPPORT;
 
 	sk = bt_sock_alloc(net, sock, &hidp_proto, protocol, GFP_ATOMIC, kern);
@@ -278,6 +283,7 @@ int __init hidp_init_sockets(void)
 {
 	int err;
 
+	/*注册hidp_proto协议*/
 	err = proto_register(&hidp_proto, 0);
 	if (err < 0)
 		return err;

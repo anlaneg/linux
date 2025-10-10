@@ -438,6 +438,7 @@ static void l2cap_chan_timeout(struct work_struct *work)
 	mutex_unlock(&conn->lock);
 }
 
+/*创建l2cap channel*/
 struct l2cap_chan *l2cap_chan_create(void)
 {
 	struct l2cap_chan *chan;
@@ -6929,10 +6930,10 @@ static bool is_valid_psm(u16 psm, u8 dst_type)
 		return false;
 
 	if (bdaddr_type_is_le(dst_type))
-		return (psm <= 0x00ff);
+		return (psm <= 0x00ff);/*le情况下psm不得大于0xff*/
 
 	/* PSM must be odd and lsb of upper byte must be 0 */
-	return ((psm & 0x0101) == 0x0001);
+	return ((psm & 0x0101) == 0x0001);/*psm必须为单数，且0x100标记位须为0*/
 }
 
 struct l2cap_chan_data {
@@ -6975,7 +6976,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 
 	hdev = hci_get_route(dst, &chan->src, chan->src_type);
 	if (!hdev)
-		return -EHOSTUNREACH;
+		return -EHOSTUNREACH;/*没有查找到出口设备*/
 
 	hci_dev_lock(hdev);
 
@@ -6986,12 +6987,12 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 	}
 
 	if (chan->chan_type == L2CAP_CHAN_CONN_ORIENTED && !psm) {
-		err = -EINVAL;
+		err = -EINVAL;/*设置了oriented,但未设置psm*/
 		goto done;
 	}
 
 	if (chan->chan_type == L2CAP_CHAN_FIXED && !cid) {
-		err = -EINVAL;
+		err = -EINVAL;/*设置了fixed,但未设置cid*/
 		goto done;
 	}
 
@@ -7066,7 +7067,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 	} else {
 		u8 auth_type = l2cap_get_auth_type(chan);
 		hcon = hci_connect_acl(hdev, dst, chan->sec_level, auth_type,
-				       CONN_REASON_L2CAP_CHAN, timeout);
+				       CONN_REASON_L2CAP_CHAN/*连接原因*/, timeout);
 	}
 
 	if (IS_ERR(hcon)) {

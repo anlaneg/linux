@@ -62,10 +62,10 @@
 /* L2CAP socket address */
 struct sockaddr_l2 {
 	sa_family_t	l2_family;
-	__le16		l2_psm;
-	bdaddr_t	l2_bdaddr;
+	__le16		l2_psm;/*端口号*/
+	bdaddr_t	l2_bdaddr;/*地址*/
 	__le16		l2_cid;
-	__u8		l2_bdaddr_type;
+	__u8		l2_bdaddr_type;/*地址类型，例如BDADDR_BREDR*/
 };
 
 /* L2CAP socket options */
@@ -516,10 +516,10 @@ struct l2cap_chan {
 
 	__u8		state;
 
-	bdaddr_t	dst;
-	__u8		dst_type;
-	bdaddr_t	src;
-	__u8		src_type;
+	bdaddr_t	dst;/*目的地址*/
+	__u8		dst_type;/*目的地址类型*/
+	bdaddr_t	src;/*源地址*/
+	__u8		src_type;/*源地址类型*/
 	__le16		psm;
 	__le16		sport;
 	__u16		dcid;
@@ -596,7 +596,7 @@ struct l2cap_chan {
 	__u32		remote_flush_to;
 
 	struct delayed_work	chan_timer;
-	struct delayed_work	retrans_timer;
+	struct delayed_work	retrans_timer;/*重传timer*/
 	struct delayed_work	monitor_timer;
 	struct delayed_work	ack_timer;
 

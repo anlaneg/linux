@@ -166,8 +166,8 @@ static unsigned int cma_pernet_id;
 
 /*每个NET NS保存的端口分配情况*/
 struct cma_pernet {
-	struct xarray tcp_ps;
-	struct xarray udp_ps;
+	struct xarray tcp_ps;/*RC类型QP占用的port列表*/
+	struct xarray udp_ps;/*UD类型QP占用的port列表*/
 	struct xarray ipoib_ps;
 	struct xarray ib_ps;
 };
@@ -4037,7 +4037,8 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 		};
 
 		/* For a well behaved ULP state will be RDMA_CM_IDLE */
-		ret = rdma_bind_addr(id, (struct sockaddr *)&any_in);/*绑定源地址any*/
+		/*先尝试绑定any地址，再切换状态到listen*/
+		ret = rdma_bind_addr(id, (struct sockaddr *)&any_in);
 		if (ret)
 			return ret;
 		if (WARN_ON(!cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND,
@@ -4063,12 +4064,13 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 
 	id_priv->backlog = backlog;
 	if (id_priv->cma_dev) {
-		/*绑定了某一个cma设备*/
+		/*已绑定了某一个cma设备*/
 		if (rdma_cap_ib_cm(id->device, 1)) {
 			ret = cma_ib_listen(id_priv);/*创建监听处理所需的cm_id*/
 			if (ret)
 				goto err;
 		} else if (rdma_cap_iw_cm(id->device, 1)) {
+			/*iwarp处理listen*/
 			ret = cma_iw_listen(id_priv, backlog);
 			if (ret)
 				goto err;
@@ -4077,6 +4079,7 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 			goto err;
 		}
 	} else {
+		/*未绑定cma设备情况，处理为绑定所有设备*/
 		ret = cma_listen_on_all(id_priv);
 		if (ret)
 			goto err;
@@ -4096,7 +4099,7 @@ EXPORT_SYMBOL(rdma_listen);
 
 //为rdma绑定源地址,占用源port,设置目的地址,状态由idle转为addr_bound
 static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
-			      struct sockaddr *addr/*源地址*/, const struct sockaddr *daddr/*目的地址*/)
+			      struct sockaddr *addr/*要绑定的源地址*/, const struct sockaddr *daddr/*目的地址*/)
 {
 	struct sockaddr *id_daddr;
 	int ret;
@@ -4116,7 +4119,7 @@ static int rdma_bind_addr_dst(struct rdma_id_private *id_priv,
 	if (ret)
 		goto err1;/*检查不通过*/
 
-	//填充源地址
+	//设置源地址
 	memcpy(cma_src_addr(id_priv), addr, rdma_addr_size(addr));
 	if (!cma_any_addr(addr)) {
 		/*源地址不为ANY,也不是LOOPBACK地址,利用addr填充dev_addr的二层信息*/
@@ -4290,7 +4293,7 @@ err:
 }
 EXPORT_SYMBOL(rdma_resolve_addr);
 
-int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
+int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr/*要绑定的地址*/)
 {
 	struct rdma_id_private *id_priv =
 		container_of(id, struct rdma_id_private, id);

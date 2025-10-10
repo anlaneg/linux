@@ -280,6 +280,7 @@ static struct sk_buff *napi_skb_cache_get(void)
 
 	local_lock_nested_bh(&napi_alloc_cache.bh_lock);
 	if (unlikely(!nc->skb_count)) {
+		/*cache为空，申请一组*/
 		nc->skb_count = kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
 						      GFP_ATOMIC | __GFP_NOWARN,
 						      NAPI_SKB_CACHE_BULK,
@@ -290,7 +291,7 @@ static struct sk_buff *napi_skb_cache_get(void)
 		}
 	}
 
-	skb = nc->skb_cache[--nc->skb_count];
+	skb = nc->skb_cache[--nc->skb_count];/*取一个skb*/
 	local_unlock_nested_bh(&napi_alloc_cache.bh_lock);
 	kasan_mempool_unpoison_object(skb, kmem_cache_size(net_hotdata.skbuff_cache));
 

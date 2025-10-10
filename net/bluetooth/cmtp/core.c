@@ -48,8 +48,9 @@
 #define VERSION "1.0"
 
 static DECLARE_RWSEM(cmtp_session_sem);
-static LIST_HEAD(cmtp_session_list);
+static LIST_HEAD(cmtp_session_list);/*记录系统中所有cmtp session*/
 
+/*查询cmtp_session*/
 static struct cmtp_session *__cmtp_get_session(bdaddr_t *bdaddr)
 {
 	struct cmtp_session *session;
@@ -65,7 +66,7 @@ static struct cmtp_session *__cmtp_get_session(bdaddr_t *bdaddr)
 
 static void __cmtp_link_session(struct cmtp_session *session)
 {
-	list_add(&session->list, &cmtp_session_list);
+	list_add(&session->list, &cmtp_session_list);/*将此cmtp session连接到列表*/
 }
 
 static void __cmtp_unlink_session(struct cmtp_session *session)
@@ -220,6 +221,7 @@ static void cmtp_process_transmit(struct cmtp_session *session)
 		return;
 	}
 
+	/*遍历session->transmit上挂的skb*/
 	while ((skb = skb_dequeue(&session->transmit))) {
 		struct cmtp_scb *scb = (void *) skb->cb;
 
@@ -289,16 +291,16 @@ static int cmtp_session(void *arg)
 	add_wait_queue(sk_sleep(sk), &wait);
 	while (1) {
 		if (atomic_read(&session->terminate))
-			break;
+			break;/*要销毁，跳出*/
 		if (sk->sk_state != BT_CONNECTED)
-			break;
+			break;/*状态不再处理connected,跳出*/
 
 		while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
 			skb_orphan(skb);
 			if (!skb_linearize(skb))
-				cmtp_recv_frame(session, skb);
+				cmtp_recv_frame(session, skb);/*自sk_receive_queue交cmtp recv*/
 			else
-				kfree_skb(skb);
+				kfree_skb(skb);/*线性化失败，丢包*/
 		}
 
 		cmtp_process_transmit(session);
@@ -336,10 +338,10 @@ int cmtp_add_connection(struct cmtp_connadd_req *req, struct socket *sock)
 	BT_DBG("");
 
 	if (!l2cap_is_socket(sock))
-		return -EBADFD;
+		return -EBADFD;/*必须为l2cap socket*/
 
 	if (req->flags & ~valid_flags)
-		return -EINVAL;
+		return -EINVAL;/*flags包含了不支持的标记*/
 
 	session = kzalloc(sizeof(struct cmtp_session), GFP_KERNEL);
 	if (!session)
@@ -350,7 +352,7 @@ int cmtp_add_connection(struct cmtp_connadd_req *req, struct socket *sock)
 	s = __cmtp_get_session(&l2cap_pi(sock->sk)->chan->dst);
 	if (s && s->state == BT_CONNECTED) {
 		err = -EEXIST;
-		goto failed;
+		goto failed;/*此cmtp session已存在*/
 	}
 
 	bacpy(&session->bdaddr, &l2cap_pi(sock->sk)->chan->dst);
@@ -381,6 +383,7 @@ int cmtp_add_connection(struct cmtp_connadd_req *req, struct socket *sock)
 	__cmtp_link_session(session);
 
 	__module_get(THIS_MODULE);
+	/*创建cmtp_session kernel线程*/
 	session->task = kthread_run(cmtp_session, session, "kcmtpd_ctr_%d",
 								session->num);
 	if (IS_ERR(session->task)) {

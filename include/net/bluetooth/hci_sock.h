@@ -96,7 +96,7 @@ struct hci_dev_stats {
 	__u32 err_rx;
 	__u32 err_tx;
 	__u32 cmd_tx;
-	__u32 evt_rx;
+	__u32 evt_rx;/*收到的event数目*/
 	__u32 acl_tx;
 	__u32 acl_rx;
 	__u32 sco_tx;

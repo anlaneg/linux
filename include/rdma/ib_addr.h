@@ -85,11 +85,13 @@ int rdma_addr_size(const struct sockaddr *addr);
 int rdma_addr_size_in6(struct sockaddr_in6 *addr);
 int rdma_addr_size_kss(struct __kernel_sockaddr_storage *addr);
 
+/*rdma设备地址8,9自节对应的为pkey*/
 static inline u16 ib_addr_get_pkey(struct rdma_dev_addr *dev_addr)
 {
 	return ((u16)dev_addr->broadcast[8] << 8) | (u16)dev_addr->broadcast[9];
 }
 
+/*设置rdma设备地址对应的pkey*/
 static inline void ib_addr_set_pkey(struct rdma_dev_addr *dev_addr, u16 pkey)
 {
 	dev_addr->broadcast[8] = pkey >> 8;

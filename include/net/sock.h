@@ -1378,7 +1378,7 @@ struct proto {
 
 	/* Keeping track of sockets in use */
 #ifdef CONFIG_PROC_FS
-	//协议对应的protocol index
+	//协议对应的protocol index,见assign_proto_idx
 	unsigned int		inuse_idx;
 #endif
 

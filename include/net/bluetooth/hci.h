@@ -490,12 +490,16 @@ enum {
 #define HCI_LE_CONN_TIMEOUT	msecs_to_jiffies(20000)	/* 20 seconds */
 
 /* HCI data types */
+/*command类型的packet*/
 #define HCI_COMMAND_PKT		0x01
 #define HCI_ACLDATA_PKT		0x02
 #define HCI_SCODATA_PKT		0x03
+/*event类型的packet*/
 #define HCI_EVENT_PKT		0x04
 #define HCI_ISODATA_PKT		0x05
+
 #define HCI_DIAG_PKT		0xf0
+/*需driver处理的packet*/
 #define HCI_DRV_PKT		0xf1
 #define HCI_VENDOR_PKT		0xff
 
@@ -2900,6 +2904,7 @@ struct hci_ev_si_security {
 } __packed;
 
 /* ---- HCI Packet structures ---- */
+/*对应结构struct hci_command_hdr*/
 #define HCI_COMMAND_HDR_SIZE 3
 #define HCI_EVENT_HDR_SIZE   2
 #define HCI_ACL_HDR_SIZE     4
@@ -2912,7 +2917,7 @@ struct hci_command_hdr {
 } __packed;
 
 struct hci_event_hdr {
-	__u8	evt;
+	__u8	evt;/*event编号*/
 	__u8	plen;
 } __packed;
 
@@ -2977,7 +2982,9 @@ static inline struct hci_iso_hdr *hci_iso_hdr(const struct sk_buff *skb)
 
 /* ACL handle and flags pack/unpack */
 #define hci_handle_pack(h, f)	((__u16) ((h & 0x0fff)|(f << 12)))
+/*低12位为handle*/
 #define hci_handle(h)		(h & 0x0fff)
+/*高4位为flags*/
 #define hci_flags(h)		(h >> 12)
 
 /* ISO handle and flags pack/unpack */

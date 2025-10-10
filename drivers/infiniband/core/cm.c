@@ -117,12 +117,12 @@ static struct ib_cm {
 	struct list_head device_list;
 	rwlock_t device_lock;
 	struct rb_root listen_service_table;/*用于保存SERVICE*/
-	u64 listen_service_id;
+	u64 listen_service_id;/*用于动态分配service_id*/
 	/* struct rb_root peer_service_table; todo: fix peer to peer */
 	struct rb_root remote_qp_table;
 	struct rb_root remote_id_table;
 	struct rb_root remote_sidr_table;
-	struct xarray local_id_table;
+	struct xarray local_id_table;/*用于分配local id*/
 	u32 local_id_next;
 	__be32 random_id_operand;
 	struct list_head timewait_list;
@@ -212,18 +212,18 @@ struct cm_timewait_info {
 };
 
 struct cm_id_private {
-	struct ib_cm_id	id;
+	struct ib_cm_id	id;/*基类*/
 
-	struct rb_node service_node;
+	struct rb_node service_node;/*用于串连到cm.listen_service_table*/
 	struct rb_node sidr_id_node;
 	u32 sidr_slid;
 	spinlock_t lock;	/* Do not acquire inside cm.lock */
 	struct completion comp;
-	refcount_t refcount;
+	refcount_t refcount;/*引用计数*/
 	/* Number of clients sharing this ib_cm_id. Only valid for listeners.
 	 * Protected by the cm.lock spinlock.
 	 */
-	int listen_sharecount;
+	int listen_sharecount;/*此节点listen共享情况下，记录共享记数*/
 	struct rcu_head rcu;
 
 	struct ib_mad_send_buf *msg;
@@ -643,10 +643,10 @@ static int be64_gt(__be64 a, __be64 b)
 static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 					      ib_cm_handler shared_handler)
 {
-	struct rb_node **link = &cm.listen_service_table.rb_node;/*取根节点*/
+	struct rb_node **link = &cm.listen_service_table.rb_node;/*取目标根节点*/
 	struct rb_node *parent = NULL;
 	struct cm_id_private *cur_cm_id_priv;
-	__be64 service_id = cm_id_priv->id.service_id;
+	__be64 service_id = cm_id_priv->id.service_id;/*要临听的service_id*/
 	unsigned long flags;
 
 	spin_lock_irqsave(&cm.lock, flags);
@@ -656,14 +656,15 @@ static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 					  service_node);
 
 		if (cm_id_priv->id.device < cur_cm_id_priv->id.device)
-			link = &(*link)->rb_left;
+			link = &(*link)->rb_left;/*关联ib_device比对*/
 		else if (cm_id_priv->id.device > cur_cm_id_priv->id.device)
-			link = &(*link)->rb_right;
+			link = &(*link)->rb_right;/*关联ib_device比对*/
 		else if (be64_lt(service_id, cur_cm_id_priv->id.service_id))
-			link = &(*link)->rb_left;
+			link = &(*link)->rb_left;/*要监听的service_id比对*/
 		else if (be64_gt(service_id, cur_cm_id_priv->id.service_id))
-			link = &(*link)->rb_right;
+			link = &(*link)->rb_right;/*要监听的service_id比对*/
 		else {
+			/*两者关联的设备及service_id相同*/
 			/*
 			 * Sharing an ib_cm_id with different handlers is not
 			 * supported
@@ -672,12 +673,12 @@ static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 			    cur_cm_id_priv->id.context ||
 			    WARN_ON(!cur_cm_id_priv->id.cm_handler)) {
 				spin_unlock_irqrestore(&cm.lock, flags);
-				return NULL;/*两者不相等*/
+				return NULL;/*但两者context及cm_handler不相等，插入失败*/
 			}
 			refcount_inc(&cur_cm_id_priv->refcount);
 			cur_cm_id_priv->listen_sharecount++;
 			spin_unlock_irqrestore(&cm.lock, flags);
-			return cur_cm_id_priv;/*匹配,不需要插入*/
+			return cur_cm_id_priv;/*匹配，可share,不需要插入*/
 		}
 	}
 	cm_id_priv->listen_sharecount++;
@@ -862,7 +863,7 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 	atomic_set(&cm_id_priv->work_count, -1);
 	refcount_set(&cm_id_priv->refcount, 1);
 
-	/*分配个ID*/
+	/*分配个ID号*/
 	ret = xa_alloc_cyclic(&cm.local_id_table, &id, NULL, xa_limit_32b,
 			      &cm.local_id_next, GFP_KERNEL);
 	if (ret < 0)
@@ -1220,9 +1221,10 @@ static int cm_init_listen(struct cm_id_private *cm_id_priv, __be64 service_id)
 		return -EINVAL;
 
 	if (service_id == IB_CM_ASSIGN_SERVICE_ID)
+		/*动态分配一个service_id*/
 		cm_id_priv->id.service_id = cpu_to_be64(cm.listen_service_id++);
 	else
-		cm_id_priv->id.service_id = service_id;/*设置普通service_id*/
+		cm_id_priv->id.service_id = service_id;/*设置静态service_id*/
 
 	return 0;
 }
@@ -1285,20 +1287,22 @@ EXPORT_SYMBOL(ib_cm_listen);
  *
  * Callers should call ib_destroy_cm_id when done with the listener ID.
  */
-struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device,
+struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device/*listen针对的ib设备*/,
 				     ib_cm_handler cm_handler/*listen CM对应的CM事件处理回调*/,
-				     __be64 service_id)
+				     __be64 service_id/*监听的service id*/)
 {
 	struct cm_id_private *listen_id_priv;
 	struct cm_id_private *cm_id_priv;
 	int err = 0;
 
 	/* Create an ID in advance, since the creation may sleep */
-	cm_id_priv = cm_alloc_id_priv(device, cm_handler, NULL);/*来一个新的cm_id_private*/
+	/*创建cm_id_private结构体*/
+	cm_id_priv = cm_alloc_id_priv(device, cm_handler, NULL);
 	if (IS_ERR(cm_id_priv))
 		return ERR_CAST(cm_id_priv);
 
-	err = cm_init_listen(cm_id_priv, service_id);/*初始化service_id*/
+	/*设置cmd_id_rivate.id.service_id*/
+	err = cm_init_listen(cm_id_priv, service_id);
 	if (err) {
 		ib_destroy_cm_id(&cm_id_priv->id);
 		return ERR_PTR(err);

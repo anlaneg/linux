@@ -2139,7 +2139,7 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 
 	switch (hci_skb_pkt_type(skb)) {
 	case HCI_COMMAND_PKT:
-		urb = alloc_ctrl_urb(hdev, skb);
+		urb = alloc_ctrl_urb(hdev, skb);/*申请urb*/
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
 
@@ -3828,10 +3828,11 @@ static int btusb_hci_drv_read_info(struct hci_dev *hdev, void *data,
 	if (!rp)
 		return -ENOMEM;
 
-	strscpy_pad(rp->driver_name, btusb_driver.name);
+	strscpy_pad(rp->driver_name, btusb_driver.name);/*设置驱动名称*/
 
 	rp->num_supported_commands = cpu_to_le16(num_supported_commands);
 	for (i = 0; i < num_supported_commands; i++) {
+		/*填充支持的driver command对应的操作码*/
 		opcode = btusb_hci_drv_supported_commands[i].opcode;
 		bt_dev_info(hdev,
 			    "Supported HCI Drv command (0x%02x|0x%04x): %s",
@@ -3842,7 +3843,7 @@ static int btusb_hci_drv_read_info(struct hci_dev *hdev, void *data,
 	}
 
 	err = hci_drv_cmd_complete(hdev, HCI_DRV_OP_READ_INFO,
-				   HCI_DRV_STATUS_SUCCESS, rp, rp_size);
+				   HCI_DRV_STATUS_SUCCESS, rp/*响应消息*/, rp_size/*响应消息大小*/);
 
 	kfree(rp);
 	return err;
@@ -3900,7 +3901,7 @@ static int btusb_hci_drv_switch_altsetting(struct hci_dev *hdev, void *data,
 }
 
 static const struct hci_drv_handler btusb_hci_drv_common_handlers[] = {
-	{ btusb_hci_drv_read_info,	HCI_DRV_READ_INFO_SIZE },
+	{ btusb_hci_drv_read_info,	HCI_DRV_READ_INFO_SIZE },/*指明支持哪些opcode*/
 };
 
 static const struct hci_drv_handler btusb_hci_drv_specific_handlers[] = {

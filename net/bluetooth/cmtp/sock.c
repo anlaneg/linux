@@ -76,6 +76,7 @@ static int do_cmtp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 	switch (cmd) {
 	case CMTPCONNADD:
+		/*cmtp连接添加*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -84,11 +85,11 @@ static int do_cmtp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 		nsock = sockfd_lookup(ca.sock, &err);
 		if (!nsock)
-			return err;
+			return err;/*此fd对应的socket必须存在*/
 
 		if (nsock->sk->sk_state != BT_CONNECTED) {
 			sockfd_put(nsock);
-			return -EBADFD;
+			return -EBADFD;/*此socket必须处于非connected状态*/
 		}
 
 		err = cmtp_add_connection(&ca, nsock);
@@ -101,6 +102,7 @@ static int do_cmtp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case CMTPCONNDEL:
+		/*cmtp连接删除*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -110,6 +112,7 @@ static int do_cmtp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return cmtp_del_connection(&cd);
 
 	case CMTPGETCONNLIST:
+		/*cmtp获取所有连接列表*/
 		if (copy_from_user(&cl, argp, sizeof(cl)))
 			return -EFAULT;
 
@@ -123,6 +126,7 @@ static int do_cmtp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return err;
 
 	case CMTPGETCONNINFO:
+		/*cmtp获取一个连接信息*/
 		if (copy_from_user(&ci, argp, sizeof(ci)))
 			return -EFAULT;
 
@@ -175,7 +179,7 @@ static const struct proto_ops cmtp_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= cmtp_sock_release,
-	.ioctl		= cmtp_sock_ioctl,
+	.ioctl		= cmtp_sock_ioctl,/*cmtp socket主要实现ioctl回调*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= cmtp_sock_compat_ioctl,
 #endif
@@ -237,6 +241,7 @@ int cmtp_init_sockets(void)
 {
 	int err;
 
+	/*注册cmtp协议*/
 	err = proto_register(&cmtp_proto, 0);
 	if (err < 0)
 		return err;

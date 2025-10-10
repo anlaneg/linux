@@ -293,14 +293,15 @@ typedef int (*ib_cm_handler)(struct ib_cm_id *cm_id,
 
 struct ib_cm_id {
 	ib_cm_handler		cm_handler;/*cm处理函数,例如:cma_ib_handler*/
-	void			*context;
-	struct ib_device	*device;
+	void			*context;/*私有数据，可以为NULL*/
+	struct ib_device	*device;/*关联的ib设备*/
 	__be64			service_id;/*由port及地址生成的service_id(listen时设置)*/
+	/*cm状态*/
 	enum ib_cm_state	state;		/* internal CM/debug use */
 	enum ib_cm_lap_state	lap_state;	/* internal CM/debug use */
-	__be32			local_id;
+	__be32			local_id;/*为此cm_id分配的id号，由cm.local_id_table申请来*/
 	__be32			remote_id;
-	/*远端CM QPN为1*/
+	/*远端CM QPN，当前为1*/
 	u32			remote_cm_qpn;  /* 1 unless redirected */
 };
 

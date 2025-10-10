@@ -2255,12 +2255,14 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 	bt_dev_dbg(hdev, "bdaddr %pMR hcon %p", &cp->bdaddr, conn);
 
 	if (status) {
+		/*建立连接失败*/
 		if (conn && conn->state == BT_CONNECT) {
 			conn->state = BT_CLOSED;
 			hci_connect_cfm(conn, status);
 			hci_conn_del(conn);
 		}
 	} else {
+		/*建立连接成功*/
 		if (!conn) {
 			conn = hci_conn_add_unset(hdev, ACL_LINK, &cp->bdaddr,
 						  HCI_ROLE_MASTER);
@@ -3133,6 +3135,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!status) {
+		/*更新connect handle*/
 		status = hci_conn_set_handle(conn, __le16_to_cpu(ev->handle));
 		if (status)
 			goto done;
@@ -4309,8 +4312,10 @@ static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
 
 	bt_dev_dbg(hdev, "opcode 0x%4.4x", *opcode);
 
+	/*检查此opcode是否从属于hci_cs_table*/
 	for (i = 0; i < ARRAY_SIZE(hci_cs_table); i++) {
 		if (hci_cs_table[i].op == *opcode) {
+			/*从属于hci_cs_table,直接调用回调*/
 			hci_cs_table[i].func(hdev, ev->status);
 			break;
 		}
@@ -4334,6 +4339,7 @@ static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
 		}
 	}
 
+	/*仍有cmd,继续触发cmd_work运行*/
 	if (atomic_read(&hdev->cmd_cnt) && !skb_queue_empty(&hdev->cmd_q))
 		queue_work(hdev->workqueue, &hdev->cmd_work);
 }
@@ -6834,6 +6840,7 @@ static void hci_le_cis_req_evt(struct hci_dev *hdev, void *data,
 
 	cis = hci_conn_hash_lookup_handle(hdev, cis_handle);
 	if (!cis) {
+		/*未找到cis_handle对应的hci connect,添加一个*/
 		cis = hci_conn_add(hdev, CIS_LINK, &acl->dst,
 				   HCI_ROLE_SLAVE, cis_handle);
 		if (IS_ERR(cis)) {
@@ -6947,6 +6954,7 @@ static void hci_le_big_sync_established_evt(struct hci_dev *hdev, void *data,
 
 		bis = hci_conn_hash_lookup_handle(hdev, handle);
 		if (!bis) {
+			/*没有查找到handle对应的hci connect,创建一个*/
 			if (handle > HCI_CONN_HANDLE_MAX) {
 				bt_dev_dbg(hdev, "ignore too large handle %u", handle);
 				continue;
@@ -7323,7 +7331,7 @@ unlock:
 
 #define HCI_EV_VL(_op, _func, _min_len, _max_len) \
 [_op] = { \
-	.req = false, \
+	.req = false,/*非请求类opcode*/ \
 	.func = _func, \
 	.min_len = _min_len, \
 	.max_len = _max_len, \
@@ -7332,12 +7340,13 @@ unlock:
 #define HCI_EV(_op, _func, _len) \
 	HCI_EV_VL(_op, _func, _len, _len)
 
+/*参数为struct hci_ev_status类型*/
 #define HCI_EV_STATUS(_op, _func) \
 	HCI_EV(_op, _func, sizeof(struct hci_ev_status))
 
 #define HCI_EV_REQ_VL(_op, _func, _min_len, _max_len) \
 [_op] = { \
-	.req = true, \
+	.req = true, /*请求类opcode*/\
 	.func_req = _func, \
 	.min_len = _min_len, \
 	.max_len = _max_len, \
@@ -7352,17 +7361,19 @@ unlock:
  * events without a callback function don't have entered.
  */
 static const struct hci_ev {
-	bool req;
+	bool req;/*是否请求*/
 	union {
+		/*非请求类回调*/
 		void (*func)(struct hci_dev *hdev, void *data,
 			     struct sk_buff *skb);
+		/*请求类回调*/
 		void (*func_req)(struct hci_dev *hdev, void *data,
 				 struct sk_buff *skb, u16 *opcode, u8 *status,
 				 hci_req_complete_t *req_complete,
 				 hci_req_complete_skb_t *req_complete_skb);
 	};
-	u16  min_len;
-	u16  max_len;
+	u16  min_len;/*opcode参数最小长度*/
+	u16  max_len;/*opcode参数最大长度*/
 } hci_ev_table[U8_MAX + 1] = {
 	/* [0x01 = HCI_EV_INQUIRY_COMPLETE] */
 	HCI_EV_STATUS(HCI_EV_INQUIRY_COMPLETE, hci_inquiry_complete_evt),
@@ -7402,7 +7413,7 @@ static const struct hci_ev {
 		   sizeof(struct hci_ev_cmd_status)),
 	/* [0x10 = HCI_EV_CMD_STATUS] */
 	HCI_EV(HCI_EV_HARDWARE_ERROR, hci_hardware_error_evt,
-	       sizeof(struct hci_ev_hardware_error)),
+	       sizeof(struct hci_ev_hardware_error)),/*硬件error处理*/
 	/* [0x12 = HCI_EV_ROLE_CHANGE] */
 	HCI_EV(HCI_EV_ROLE_CHANGE, hci_role_change_evt,
 	       sizeof(struct hci_ev_role_change)),
@@ -7487,7 +7498,7 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 			   hci_req_complete_t *req_complete,
 			   hci_req_complete_skb_t *req_complete_skb)
 {
-	/*按照event编号取对应的entity*/
+	/*按照event编号取对应的entity,确定要处理的回调*/
 	const struct hci_ev *ev = &hci_ev_table[event];
 	void *data;
 
@@ -7514,15 +7525,18 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 
 	data = hci_ev_skb_pull(hdev, skb, event, ev->min_len);
 	if (!data)
-		return;
+		return;/*长度不足*/
 
 	if (ev->req)
+		/*触发请求类回调*/
 		ev->func_req(hdev, data, skb, opcode, status, req_complete,
 			     req_complete_skb);
 	else
+		/*触发非请求类回调*/
 		ev->func(hdev, data, skb);
 }
 
+/*hci event报文处理*/
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct hci_event_hdr *hdr = (void *) skb->data;
@@ -7534,16 +7548,17 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 
 	if (skb->len < sizeof(*hdr)) {
 		bt_dev_err(hdev, "Malformed HCI Event");
-		goto done;
+		goto done;/*收到的event报文长度有误*/
 	}
 
 	hci_dev_lock(hdev);
-	kfree_skb(hdev->recv_event);
-	hdev->recv_event = skb_clone(skb, GFP_KERNEL);
+	kfree_skb(hdev->recv_event);/*释放掉上次收到的event*/
+	hdev->recv_event = skb_clone(skb, GFP_KERNEL);/*复制本次收到的event*/
 	hci_dev_unlock(hdev);
 
 	event = hdr->evt;
 	if (!event) {
+		/*收到的event编号不能为0*/
 		bt_dev_warn(hdev, "Received unexpected HCI Event 0x%2.2x",
 			    event);
 		goto done;
@@ -7552,7 +7567,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	/* Only match event if command OGF is not for LE */
 	if (hdev->req_skb &&
 	    hci_opcode_ogf(hci_skb_opcode(hdev->req_skb)) != 0x08 &&
-	    hci_skb_event(hdev->req_skb) == event) {
+	    hci_skb_event(hdev->req_skb) == event/*请求的event与响应event一致*/) {
 		hci_req_cmd_complete(hdev, hci_skb_opcode(hdev->req_skb),
 				     status, &req_complete, &req_complete_skb);
 		req_evt = event;
@@ -7574,7 +7589,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 
 	bt_dev_dbg(hdev, "event 0x%2.2x", event);
 
-	/*取complete回调*/
+	/*响应event回调，取complete回调（有请求或非请求complete两种)*/
 	hci_event_func(hdev, event, skb, &opcode, &status, &req_complete,
 		       &req_complete_skb);
 
@@ -7582,11 +7597,11 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 		/*有req_complete回调，则调用*/
 		req_complete(hdev, status, opcode);
 	} else if (req_complete_skb) {
-		/*否则有req_complete_skb，则调用*/
 		if (!hci_get_cmd_complete(hdev, opcode, req_evt, orig_skb)) {
 			kfree_skb(orig_skb);
 			orig_skb = NULL;
 		}
+		/*否则有req_complete_skb，则调用*/
 		req_complete_skb(hdev, status, opcode, orig_skb);
 	}
 

@@ -94,9 +94,9 @@ int bt_sock_register(int proto, const struct net_proto_family *ops)
 	write_lock(&bt_proto_lock);
 
 	if (bt_proto[proto])
-		err = -EEXIST;
+		err = -EEXIST;/*已注册*/
 	else
-		bt_proto[proto] = ops;
+		bt_proto[proto] = ops;/*注册协议proto对应的操作集*/
 
 	write_unlock(&bt_proto_lock);
 
@@ -150,8 +150,9 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 	return err;
 }
 
+/*bluetooth socket申请*/
 struct sock *bt_sock_alloc(struct net *net, struct socket *sock,
-			   struct proto *prot, int proto, gfp_t prio, int kern)
+			   struct proto *prot, int proto, gfp_t prio, int kern/*是否kernel创建*/)
 {
 	struct sock *sk;
 

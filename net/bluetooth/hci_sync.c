@@ -48,8 +48,9 @@ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行�
 	wake_up_interruptible(&hdev->req_wait_q);
 }
 
-struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode, u32 plen,
-				   const void *param, struct sock *sk)
+/*申请cmd packet*/
+struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode/*操作码*/, u32 plen/*参数param长度*/,
+				   const void *param/*参数*/, struct sock *sk)
 {
 	int len = HCI_COMMAND_HDR_SIZE + plen;
 	struct hci_command_hdr *hdr;
@@ -62,7 +63,7 @@ struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode, u32 plen,
 
 	/*添加command header*/
 	hdr = skb_put(skb, HCI_COMMAND_HDR_SIZE);
-	hdr->opcode = cpu_to_le16(opcode);
+	hdr->opcode = cpu_to_le16(opcode);/*存入opcode*/
 	hdr->plen   = plen;
 
 	/*添加payload*/
@@ -71,7 +72,9 @@ struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode, u32 plen,
 
 	bt_dev_dbg(hdev, "skb len %d", skb->len);
 
+	/*指明此报文为command packet*/
 	hci_skb_pkt_type(skb) = HCI_COMMAND_PKT;
+	/*指明报文opcode*/
 	hci_skb_opcode(skb) = opcode;
 
 	/* Grab a reference if command needs to be associated with a sock (e.g.
@@ -86,8 +89,8 @@ struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode, u32 plen,
 	return skb;
 }
 
-static void hci_cmd_sync_add(struct hci_request *req, u16 opcode, u32 plen,
-			     const void *param, u8 event, struct sock *sk)
+static void hci_cmd_sync_add(struct hci_request *req, u16 opcode/*操作码*/, u32 plen/*param参数长度*/,
+			     const void *param, u8 event/*cmd关联的event*/, struct sock *sk/*cmd关联的socket*/)
 {
 	struct hci_dev *hdev = req->hdev;
 	struct sk_buff *skb;
@@ -98,8 +101,9 @@ static void hci_cmd_sync_add(struct hci_request *req, u16 opcode, u32 plen,
 	 * queueing the HCI command. We can simply return.
 	 */
 	if (req->err)
-		return;
+		return;/*请求之前已出错，不再继续处理*/
 
+	/*申请cmd packet*/
 	skb = hci_cmd_sync_alloc(hdev, opcode, plen, param, sk);
 	if (!skb) {
 		bt_dev_err(hdev, "no memory for command (opcode 0x%4.4x)",
@@ -108,7 +112,7 @@ static void hci_cmd_sync_add(struct hci_request *req, u16 opcode, u32 plen,
 		return;
 	}
 
-	/*cmd_q为空，指明request start*/
+	/*cmd_q为空，指明为首个请求skb,标记request start*/
 	if (skb_queue_empty(&req->cmd_q))
 		bt_cb(skb)->hci.req_flags |= HCI_REQ_START;
 
@@ -130,6 +134,7 @@ static int hci_req_sync_run(struct hci_request *req)
 	 * commands queued on the HCI request queue.
 	 */
 	if (req->err) {
+		/*出错，清空req->cmd_q*/
 		skb_queue_purge(&req->cmd_q);
 		return req->err;
 	}
@@ -149,12 +154,13 @@ static int hci_req_sync_run(struct hci_request *req)
 	skb_queue_splice_tail(&req->cmd_q, &hdev->cmd_q);
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 
-	/*将cmd_work入队，处理hdev->cmd_q*/
+	/*将cmd_work入队，处理hdev->cmd_q上的命令*/
 	queue_work(hdev->workqueue, &hdev->cmd_work);
 
 	return 0;
 }
 
+/*初始化req*/
 static void hci_request_init(struct hci_request *req, struct hci_dev *hdev)
 {
 	skb_queue_head_init(&req->cmd_q);
@@ -163,7 +169,7 @@ static void hci_request_init(struct hci_request *req, struct hci_dev *hdev)
 }
 
 /* This function requires the caller holds hdev->req_lock. */
-struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
+struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode/*操作码*/, u32 plen/*param参数长度*/,
 				  const void *param, u8 event, u32 timeout/*执行超时时间*/,
 				  struct sock *sk)
 {
@@ -178,10 +184,10 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 	/*添加cmd*/
 	hci_cmd_sync_add(&req, opcode, plen, param, event, sk);
 
-	/*同步请求标记req pending*/
+	/*标记req_status为req pending*/
 	hdev->req_status = HCI_REQ_PEND;
 
-	/*运行此cmd*/
+	/*请求入队，触发worker运行此cmd*/
 	err = hci_req_sync_run(&req);
 	if (err < 0)
 		return ERR_PTR(err);
@@ -201,12 +207,12 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 		break;
 
 	case HCI_REQ_CANCELED:
-		/*请求被超时取消*/
+		/*请求被取消*/
 		err = -hdev->req_result;
 		break;
 
 	default:
-		err = -ETIMEDOUT;
+		err = -ETIMEDOUT;/*请求超时*/
 		break;
 	}
 
@@ -270,8 +276,8 @@ struct sk_buff *__hci_cmd_sync_ev(struct hci_dev *hdev, u16 opcode, u32 plen,
 EXPORT_SYMBOL(__hci_cmd_sync_ev);
 
 /* This function requires the caller holds hdev->req_lock. */
-int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
-			     const void *param, u8 event, u32 timeout,
+int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数长度*/,
+			     const void *param/*参数*/, u8 event, u32 timeout,
 			     struct sock *sk)
 {
 	struct sk_buff *skb;
@@ -319,7 +325,7 @@ int hci_cmd_sync_status(struct hci_dev *hdev, u16 opcode, u32 plen,
 }
 EXPORT_SYMBOL(hci_cmd_sync_status);
 
-/*执行sync worker*/
+/*执行sync worker，分别执行entry->func, entry->destroy*/
 static void hci_cmd_sync_work(struct work_struct *work)
 {
 	/*获得对应的hci设备*/
@@ -341,7 +347,7 @@ static void hci_cmd_sync_work(struct work_struct *work)
 		mutex_unlock(&hdev->cmd_sync_work_lock);
 
 		if (!entry)
-			break;
+			break;/*队列已为空，跳出*/
 
 		bt_dev_dbg(hdev, "entry %p", entry);
 
@@ -745,7 +751,7 @@ int hci_cmd_sync_submit(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	entry->destroy = destroy;
 
 	mutex_lock(&hdev->cmd_sync_work_lock);
-	/*将entry添加至cmd_sync_work_list*/
+	/*将entry添加至cmd_sync_work_list（这里加锁后应该再检查一遍是否存在?)*/
 	list_add_tail(&entry->list, &hdev->cmd_sync_work_list);
 	mutex_unlock(&hdev->cmd_sync_work_lock);
 
@@ -781,6 +787,7 @@ _hci_cmd_sync_lookup_entry(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 {
 	struct hci_cmd_sync_work_entry *entry, *tmp;
 
+	/*查找是否已存在相同的entry*/
 	list_for_each_entry_safe(entry, tmp, &hdev->cmd_sync_work_list, list) {
 		if (func && entry->func != func)
 			continue;
@@ -791,10 +798,10 @@ _hci_cmd_sync_lookup_entry(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 		if (destroy && entry->destroy != destroy)
 			continue;
 
-		return entry;
+		return entry;/*存在，返回*/
 	}
 
-	return NULL;
+	return NULL;/*不存在*/
 }
 
 /* Queue HCI command entry once:
@@ -806,9 +813,9 @@ int hci_cmd_sync_queue_once(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 			    void *data, hci_cmd_sync_work_destroy_t destroy)
 {
 	if (hci_cmd_sync_lookup_entry(hdev, func, data, destroy))
-		return 0;
+		return 0;/*此cmd已存在，直接返回*/
 
-	return hci_cmd_sync_queue(hdev, func, data, destroy);
+	return hci_cmd_sync_queue(hdev, func, data, destroy);/*不存在，入队到cmd_sync_work_list*/
 }
 EXPORT_SYMBOL(hci_cmd_sync_queue_once);
 
@@ -5183,7 +5190,7 @@ int hci_dev_open_sync(struct hci_dev *hdev)
 		flush_work(&hdev->cmd_work);
 
 		skb_queue_purge(&hdev->cmd_q);
-		skb_queue_purge(&hdev->rx_q);
+		skb_queue_purge(&hdev->rx_q);/*排空rx队列*/
 
 		if (hdev->flush)
 			hdev->flush(hdev);
@@ -6877,7 +6884,7 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	int err;
 
 	if (!hci_conn_valid(hdev, conn))
-		return -ECANCELED;
+		return -ECANCELED;/*conn无效，返回*/
 
 	/* Many controllers disallow HCI Create Connection while it is doing
 	 * HCI Inquiry. So we cancel the Inquiry first before issuing HCI Create
@@ -6932,8 +6939,9 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 
 int hci_connect_acl_sync(struct hci_dev *hdev, struct hci_conn *conn)
 {
+	/*排队执行hci_acl_create_conn_sync*/
 	return hci_cmd_sync_queue_once(hdev, hci_acl_create_conn_sync, conn,
-				       NULL);
+				       NULL/*无destroy函数*/);
 }
 
 static void create_le_conn_complete(struct hci_dev *hdev, void *data, int err)

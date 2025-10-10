@@ -127,10 +127,10 @@ enum suspended_state {
 
 struct hci_conn_hash {
 	struct list_head list;
-	unsigned int     acl_num;
+	unsigned int     acl_num;/*此链表上acl_link的数量*/
 	unsigned int     sco_num;
 	unsigned int     iso_num;
-	unsigned int     le_num;
+	unsigned int     le_num;/*此链表上le_link的数量*/
 	unsigned int     le_num_peripheral;
 };
 
@@ -353,13 +353,13 @@ struct hci_dev {
 	struct srcu_struct srcu;
 	struct mutex	lock;
 
-	struct ida	unset_handle_ida;
+	struct ida	unset_handle_ida;/*用于分配connect handle*/
 
 	const char	*name;/*设备名称，例如hci0*/
-	unsigned long	flags;
+	unsigned long	flags;/*设备标记位，例如：HCI_UP*/
 	__u16		id;/*hci设备编号*/
 	__u8		bus;
-	bdaddr_t	bdaddr;/*蓝牙地址*/
+	bdaddr_t	bdaddr;/*设备蓝牙地址*/
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;
 	bdaddr_t	random_addr;
@@ -468,7 +468,7 @@ struct hci_dev {
 
 	DECLARE_BITMAP(quirk_flags, __HCI_NUM_QUIRKS);
 
-	atomic_t	cmd_cnt;
+	atomic_t	cmd_cnt;/*cmd_q队列长度*/
 	unsigned int	acl_cnt;
 	unsigned int	sco_cnt;
 	unsigned int	le_cnt;
@@ -497,7 +497,7 @@ struct hci_dev {
 	struct work_struct	error_reset;
 	struct work_struct	cmd_sync_work;
 	struct list_head	cmd_sync_work_list;/*同步命令工作列表*/
-	struct mutex		cmd_sync_work_lock;
+	struct mutex		cmd_sync_work_lock;/*保护cmd_sync_work_list列表*/
 	struct mutex		unregister_lock;
 	struct work_struct	cmd_sync_cancel_work;
 	struct work_struct	reenable_adv_work;
@@ -507,12 +507,12 @@ struct hci_dev {
 
 	struct delayed_work	service_cache;
 
-	struct delayed_work	cmd_timer;
+	struct delayed_work	cmd_timer;/*负责执行cmd时的超时定时器*/
 	struct delayed_work	ncmd_timer;
 
-	struct work_struct	rx_work;/*负责处理rx_q上所有skb*/
-	struct work_struct	cmd_work;/*负责处理cmd_q上所有cmd skb*/
-	struct work_struct	tx_work;/*负责处理raw_q上所有skb*/
+	struct work_struct	rx_work;/*负责处理rx_q上所有skb，例如：virtbt_rx_work*/
+	struct work_struct	cmd_work;/*负责处理cmd_q上所有cmd skb，例如：hci_cmd_work*/
+	struct work_struct	tx_work;/*负责处理raw_q上所有skb，例如：hci_tx_work*/
 
 	struct delayed_work	le_scan_disable;
 
@@ -520,15 +520,16 @@ struct hci_dev {
 	struct sk_buff_head	raw_q;/*挂接在此q上的skb将被调用send回调*/
 	struct sk_buff_head	cmd_q;/*待处理的cmd skb队列*/
 
-	struct sk_buff		*sent_cmd;
-	struct sk_buff		*recv_event;
+	struct sk_buff		*sent_cmd;/*记录我们正在sent的command*/
+	struct sk_buff		*recv_event;/*记录我们本次收到的event*/
 
 	struct mutex		req_lock;
 	wait_queue_head_t	req_wait_q;
-	/*用于标记请求执行状态，例如HCI_REQ_PEND（待执行），HCI_REQ_DONE（执行完成），HCI_REQ_CANCELED（执行取消）*/
+	/*用于标记请求执行状态，例如HCI_REQ_PEND（待执行）,
+	 * HCI_REQ_DONE（执行完成），HCI_REQ_CANCELED（执行取消）*/
 	__u32			req_status;
 	__u32			req_result;/*标记请求执行结果*/
-	struct sk_buff		*req_skb;
+	struct sk_buff		*req_skb;/*记录我们当前已成功发送且等待响应的请求*/
 	struct sk_buff		*req_rsp;
 
 	void			*smp_data;
@@ -622,7 +623,7 @@ struct hci_dev {
 	struct list_head	monitored_devices;
 	bool			advmon_pend_notify;
 
-	struct hci_drv		*hci_drv;
+	struct hci_drv		*hci_drv;/*用于提供driver command*/
 
 #if IS_ENABLED(CONFIG_BT_LEDS)
 	struct led_trigger	*power_led;
@@ -657,6 +658,7 @@ struct hci_dev {
 	int (*get_codec_config_data)(struct hci_dev *hdev, __u8 type,
 				     struct bt_codec *codec, __u8 *vnd_len,
 				     __u8 **vnd_data);
+	/*由hci设备通过此函数分辨报文类型*/
 	u8 (*classify_pkt_type)(struct hci_dev *hdev, struct sk_buff *skb);
 };
 
@@ -678,22 +680,22 @@ struct hci_conn {
 
 	atomic_t	refcnt;
 
-	bdaddr_t	dst;
+	bdaddr_t	dst;/*对端地址*/
 	__u8		dst_type;
-	bdaddr_t	src;
+	bdaddr_t	src;/*本端地址*/
 	__u8		src_type;
 	bdaddr_t	init_addr;
 	__u8		init_addr_type;
 	bdaddr_t	resp_addr;
 	__u8		resp_addr_type;
 	__u8		adv_instance;
-	__u16		handle;
+	__u16		handle;/*conn对应的handle*/
 	__u16		sync_handle;
 	__u8		sid;
 	__u16		state;
 	__u16		mtu;
 	__u8		mode;
-	__u8		type;
+	__u8		type;/*conn类型，例如：ACL_LINK*/
 	__u8		role;
 	bool		out;
 	__u8		attempt;
@@ -1088,13 +1090,14 @@ static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c == conn) {
+			/*此connect已添加至h->list*/
 			rcu_read_unlock();
 			return true;
 		}
 	}
 	rcu_read_unlock();
 
-	return false;
+	return false;/*此connect未添加至h->list上*/
 }
 
 static inline __u8 hci_conn_lookup_type(struct hci_dev *hdev, __u16 handle)
@@ -1189,6 +1192,7 @@ hci_conn_hash_lookup_per_adv_bis(struct hci_dev *hdev,
 	return NULL;
 }
 
+/*通过handle查找hci_conn*/
 static inline struct hci_conn *hci_conn_hash_lookup_handle(struct hci_dev *hdev,
 								__u16 handle)
 {
@@ -1219,7 +1223,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type == type && !bacmp(&c->dst, ba)) {
 			rcu_read_unlock();
-			return c;
+			return c;/*类型与目的地址相同，返回此连接*/
 		}
 	}
 

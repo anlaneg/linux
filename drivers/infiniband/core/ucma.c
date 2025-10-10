@@ -66,7 +66,7 @@ static struct ctl_table_header *ucma_ctl_table_hdr;
 static struct ctl_table ucma_ctl_table[] = {
 	{
 		.procname	= "max_backlog",
-		.data		= &max_backlog,
+		.data		= &max_backlog,/*配置支持的最大backlog*/
 		.maxlen		= sizeof max_backlog,
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
@@ -88,7 +88,7 @@ struct ucma_context {
 	struct completion	comp;
 	refcount_t		ref;
 	int			events_reported;/*事件报告次数*/
-	atomic_t		backlog;
+	atomic_t		backlog;/*listen调用设置的backlog*/
 
 	struct ucma_file	*file;/*此context关联的FILE*/
 	struct rdma_cm_id	*cm_id;/*关联的rdma_cm_id*/
@@ -829,7 +829,7 @@ static void ucma_copy_iboe_route(struct rdma_ucm_query_route_resp *resp,
 			    (union ib_gid *)&resp->ib_route[0].dgid);
 		rdma_ip2gid((struct sockaddr *)&route->addr.src_addr,
 			    (union ib_gid *)&resp->ib_route[0].sgid);
-		resp->ib_route[0].pkey = cpu_to_be16(0xffff);
+		resp->ib_route[0].pkey = cpu_to_be16(0xffff);/*pkey指定为全ffff*/
 		break;
 	case 2:
 		ib_copy_path_rec_to_user(&resp->ib_route[1],
@@ -917,19 +917,22 @@ out:
 	return ret;
 }
 
+/*获取指定id绑定的设备信息*/
 static void ucma_query_device_addr(struct rdma_cm_id *cm_id,
 				   struct rdma_ucm_query_addr_resp *resp)
 {
 	if (!cm_id->device)
 		return;
 
+	/*填充绑定的ib设备对应的guid*/
 	resp->node_guid = (__force __u64) cm_id->device->node_guid;
-	resp->ibdev_index = cm_id->device->index;
-	resp->port_num = cm_id->port_num;
+	resp->ibdev_index = cm_id->device->index;/*填充绑定的设备index*/
+	resp->port_num = cm_id->port_num;/*填充绑定的设备对应的port*/
 	resp->pkey = (__force __u16) cpu_to_be16(
-		     ib_addr_get_pkey(&cm_id->route.addr.dev_addr));
+		     ib_addr_get_pkey(&cm_id->route.addr.dev_addr));/*填充绑定的设备对应的pkey信息*/
 }
 
+/*响应地址查询*/
 static ssize_t ucma_query_addr(struct ucma_context *ctx,
 			       void __user *response, int out_len)
 {
@@ -942,13 +945,13 @@ static ssize_t ucma_query_addr(struct ucma_context *ctx,
 
 	memset(&resp, 0, sizeof resp);
 
-	addr = (struct sockaddr *) &ctx->cm_id->route.addr.src_addr;
+	addr = (struct sockaddr *) &ctx->cm_id->route.addr.src_addr;/*源地址*/
 	resp.src_size = rdma_addr_size(addr);
-	memcpy(&resp.src_addr, addr, resp.src_size);
+	memcpy(&resp.src_addr, addr, resp.src_size);/*填充源地址*/
 
-	addr = (struct sockaddr *) &ctx->cm_id->route.addr.dst_addr;
+	addr = (struct sockaddr *) &ctx->cm_id->route.addr.dst_addr;/*目的地址*/
 	resp.dst_size = rdma_addr_size(addr);
-	memcpy(&resp.dst_addr, addr, resp.dst_size);
+	memcpy(&resp.dst_addr, addr, resp.dst_size);/*填充目的地址*/
 
 	ucma_query_device_addr(ctx->cm_id, &resp);
 
@@ -1043,6 +1046,7 @@ static ssize_t ucma_query_gid(struct ucma_context *ctx,
 	return ret;
 }
 
+/*用于响应用户态的ucma查询请求*/
 static ssize_t ucma_query(struct ucma_file *file,
 			  const char __user *inbuf,
 			  int in_len, int out_len)
@@ -1056,19 +1060,21 @@ static ssize_t ucma_query(struct ucma_file *file,
 		return -EFAULT;
 
 	response = u64_to_user_ptr(cmd.response);
-	ctx = ucma_get_ctx(file, cmd.id);
+	ctx = ucma_get_ctx(file, cmd.id);/*取得查询要求的ucma_context*/
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
 	mutex_lock(&ctx->mutex);
 	switch (cmd.option) {
 	case RDMA_USER_CM_QUERY_ADDR:
+		/*响应ucm地址查询*/
 		ret = ucma_query_addr(ctx, response, out_len);
 		break;
 	case RDMA_USER_CM_QUERY_PATH:
 		ret = ucma_query_path(ctx, response, out_len);
 		break;
 	case RDMA_USER_CM_QUERY_GID:
+		/*响应gid查询*/
 		ret = ucma_query_gid(ctx, response, out_len);
 		break;
 	default:
@@ -1135,6 +1141,7 @@ static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 	return ret;
 }
 
+/*响应用户态listen命令*/
 static ssize_t ucma_listen(struct ucma_file *file, const char __user *inbuf,
 			   int in_len, int out_len)
 {
@@ -1145,15 +1152,17 @@ static ssize_t ucma_listen(struct ucma_file *file, const char __user *inbuf,
 	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
 		return -EFAULT;
 
-	ctx = ucma_get_ctx(file, cmd.id);
+	ctx = ucma_get_ctx(file, cmd.id);/*找到命令指明的ucma_context*/
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
 	if (cmd.backlog <= 0 || cmd.backlog > max_backlog)
+		/*backlog不得超过设置的最大值*/
 		cmd.backlog = max_backlog;
-	atomic_set(&ctx->backlog, cmd.backlog);
+	atomic_set(&ctx->backlog, cmd.backlog);/*设置backlog*/
 
 	mutex_lock(&ctx->mutex);
+	/*完成rdma listen*/
 	ret = rdma_listen(ctx->cm_id, cmd.backlog);
 	mutex_unlock(&ctx->mutex);
 	ucma_put_ctx(ctx);
@@ -1747,7 +1756,7 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,/*路由解析命令(当resolve_ip后执行路由解析)*/
 	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,/*用户态找kernel查询route信息*/
 	[RDMA_USER_CM_CMD_CONNECT]	 = ucma_connect,/*执行用户态发送的connect命令*/
-	[RDMA_USER_CM_CMD_LISTEN]	 = ucma_listen,
+	[RDMA_USER_CM_CMD_LISTEN]	 = ucma_listen,/*执行用户态发送的listen命令*/
 	[RDMA_USER_CM_CMD_ACCEPT]	 = ucma_accept,
 	[RDMA_USER_CM_CMD_REJECT]	 = ucma_reject,
 	[RDMA_USER_CM_CMD_DISCONNECT]	 = ucma_disconnect,
@@ -1852,7 +1861,7 @@ static int ucma_open(struct inode *inode, struct file *filp)
 
 static int ucma_close(struct inode *inode, struct file *filp)
 {
-	struct ucma_file *file = filp->private_data;
+	struct ucma_file *file = filp->private_data;/*取得私有结构ucma_file*/
 
 	/*
 	 * All paths that touch ctx_list or ctx_list starting from write() are
@@ -1877,7 +1886,7 @@ static int ucma_close(struct inode *inode, struct file *filp)
 //rdma_cm字符设备fops
 static const struct file_operations ucma_fops = {
 	.owner 	 = THIS_MODULE,
-	.open 	 = ucma_open,
+	.open 	 = ucma_open,/*创建结构体ucma_file*/
 	.release = ucma_close,
 	.write	 = ucma_write,/*写入内容,这个函数负责和用户态通信执行命令*/
 	.poll    = ucma_poll,/*如果event_list链不为空，则表明有数据*/

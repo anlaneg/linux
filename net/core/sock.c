@@ -4268,7 +4268,7 @@ int proto_register(struct proto *prot, int alloc_slab/*是否申请slab*/)
 	//将prot添加到proto_list，用于/proc/net/protocols文件
 	list_add(&prot->node, &proto_list);
 	mutex_unlock(&proto_list_mutex);
-	return ret;
+	return ret;/*分配成功，返回index*/
 
 out_free_timewait_sock_slab:
 	if (alloc_slab)
