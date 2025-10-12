@@ -24,6 +24,7 @@
 #ifndef __HCI_MON_H
 #define __HCI_MON_H
 
+/*hci monitor消息头*/
 struct hci_mon_hdr {
 	__le16	opcode;
 	__le16	index;
@@ -31,6 +32,7 @@ struct hci_mon_hdr {
 } __packed;
 #define HCI_MON_HDR_SIZE 6
 
+/*monitor header支持的opcode*/
 #define HCI_MON_NEW_INDEX	0
 #define HCI_MON_DEL_INDEX	1
 #define HCI_MON_COMMAND_PKT	2

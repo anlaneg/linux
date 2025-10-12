@@ -75,7 +75,7 @@ static const struct usb_device_id btusb_table[] = {
 	{ USB_DEVICE_INFO(0xe0, 0x01, 0x04), .driver_info = BTUSB_AMP },
 
 	/* Generic Bluetooth USB interface */
-	{ USB_INTERFACE_INFO(0xe0, 0x01, 0x01) },
+	{ USB_INTERFACE_INFO(0xe0, 0x01, 0x01) },/*台式机采用此设备*/
 
 	/* Apple-specific (Broadcom) devices */
 	{ USB_VENDOR_AND_INTERFACE_INFO(0x05ac, 0xff, 0x01, 0x01),
@@ -4060,7 +4060,7 @@ static int btusb_probe(struct usb_interface *intf,
 	hdev->open    = btusb_open;
 	hdev->close   = btusb_close;
 	hdev->flush   = btusb_flush;
-	hdev->send    = btusb_send_frame;
+	hdev->send    = btusb_send_frame;/*指明SEND回调*/
 	hdev->notify  = btusb_notify;
 	hdev->wakeup  = btusb_wakeup;
 	hdev->hci_drv = &btusb_hci_drv;
@@ -4549,7 +4549,7 @@ static struct usb_driver btusb_driver = {
 #endif
 };
 
-module_usb_driver(btusb_driver);
+module_usb_driver(btusb_driver);/*注册usb设备*/
 
 module_param(disable_scofix, bool, 0644);
 MODULE_PARM_DESC(disable_scofix, "Disable fixup of wrong SCO buffer size");

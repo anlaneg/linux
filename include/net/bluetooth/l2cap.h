@@ -519,17 +519,17 @@ struct l2cap_chan {
 	bdaddr_t	dst;/*目的地址*/
 	__u8		dst_type;/*目的地址类型*/
 	bdaddr_t	src;/*源地址*/
-	__u8		src_type;/*源地址类型*/
-	__le16		psm;
-	__le16		sport;
-	__u16		dcid;
+	__u8		src_type;/*源地址类型,例如:BDADDR_BREDR*/
+	__le16		psm;/*目标psm*/
+	__le16		sport;/*源port*/
+	__u16		dcid;/*目标cid*/
 	__u16		scid;
 
 	__u16		imtu;
 	__u16		omtu;
 	__u16		flush_to;
 	__u8		mode;
-	__u8		chan_type;
+	__u8		chan_type;/*CHANNEL类型*/
 	__u8		chan_policy;
 
 	__u8		sec_level;

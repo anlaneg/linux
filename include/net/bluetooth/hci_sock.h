@@ -36,21 +36,22 @@
 
 struct sockaddr_hci {
 	sa_family_t    hci_family;
-	unsigned short hci_dev;
-	unsigned short hci_channel;
+	unsigned short hci_dev;/*hci设备索引*/
+	unsigned short hci_channel;/*hci socket当前支持HCI_CHANNEL_RAW等多个channel*/
 };
 #define HCI_DEV_NONE	0xffff
 
 #define HCI_CHANNEL_RAW		0
 #define HCI_CHANNEL_USER	1
 #define HCI_CHANNEL_MONITOR	2
+/*用于实现基本管理*/
 #define HCI_CHANNEL_CONTROL	3
 #define HCI_CHANNEL_LOGGING	4
 
 struct hci_filter {
-	unsigned long type_mask;
-	unsigned long event_mask[2];
-	__le16 opcode;
+	unsigned long type_mask;/*关注哪些报文类型(即没有设置的会被过滤掉)*/
+	unsigned long event_mask[2];/*关注哪些event(即没有设置的会被过滤掉)*/
+	__le16 opcode;/*关注的opcode*/
 };
 
 struct hci_ufilter {

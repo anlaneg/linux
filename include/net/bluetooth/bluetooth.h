@@ -405,7 +405,7 @@ enum {
 
 struct bt_sock_list {
 	struct hlist_head head;
-	rwlock_t          lock;
+	rwlock_t          lock;/*保护head*/
 #ifdef CONFIG_PROC_FS
         int (* custom_seq_show)(struct seq_file *, void *);
 #endif
@@ -567,9 +567,9 @@ static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
 
 	/*预留headroom*/
 	skb_reserve(skb, headroom);
-	skb_tailroom_reserve(skb, mtu, tailroom);
+	skb_tailroom_reserve(skb, mtu, tailroom);/*预留tailroom*/
 
-	/*复制payload*/
+	/*复制payload到skb*/
 	if (!copy_from_iter_full(skb_put(skb, size), size, &msg->msg_iter)) {
 		kfree_skb(skb);
 		return ERR_PTR(-EFAULT);

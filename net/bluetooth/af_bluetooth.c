@@ -137,9 +137,9 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 
 	read_lock(&bt_proto_lock);
 
-	/*按照给定的协议调用create完成socket创建*/
+	/*如果协议存在,则按照给定的协议调用create完成socket创建*/
 	if (bt_proto[proto] && try_module_get(bt_proto[proto]->owner)) {
-		err = bt_proto[proto]->create(net, sock, proto, kern);
+		err = bt_proto[proto]->create(net, sock, proto, kern);/*再由各协议创建*/
 		if (!err)
 			bt_sock_reclassify_lock(sock->sk, proto);
 		module_put(bt_proto[proto]->owner);
@@ -882,7 +882,7 @@ void bt_procfs_cleanup(struct net *net, const char *name)
 EXPORT_SYMBOL(bt_procfs_init);
 EXPORT_SYMBOL(bt_procfs_cleanup);
 
-/*负责bluetooth 各类protocol 相应socket的创建*/
+/*负责bluetooth协议族 各类protocol(例如sco,iso,l2cap,hci,bnep,cmtp,hidp,rfcomm) 相应socket的创建*/
 static const struct net_proto_family bt_sock_family_ops = {
 	.owner	= THIS_MODULE,
 	.family	= PF_BLUETOOTH,

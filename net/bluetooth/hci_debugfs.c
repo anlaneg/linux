@@ -97,6 +97,7 @@ static int features_show(struct seq_file *f, void *ptr)
 	for (p = 0; p < HCI_MAX_PAGES && p <= hdev->max_page; p++)
 		seq_printf(f, "%2u: %8ph\n", p, hdev->features[p]);
 	if (lmp_le_capable(hdev))
+		/*支持低功耗功能,显示低功耗功能列表*/
 		seq_printf(f, "LE: %8ph\n", hdev->le_features);
 	hci_dev_unlock(hdev);
 

@@ -38,6 +38,7 @@
 
 #include "smp.h"
 
+/*记录系统中所有l2cap sock*/
 static struct bt_sock_list l2cap_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(l2cap_sk_list.lock)
 };
@@ -92,14 +93,14 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 
 	if (!addr || alen < offsetofend(struct sockaddr, sa_family) ||
 	    addr->sa_family != AF_BLUETOOTH)
-		return -EINVAL;
+		return -EINVAL;/*不提供地址或者提供的地址family有误*/
 
 	memset(&la, 0, sizeof(la));
 	len = min_t(unsigned int, sizeof(la), alen);
 	memcpy(&la, addr, len);
 
 	if (la.l2_cid && la.l2_psm)
-		return -EINVAL;
+		return -EINVAL;/*不能cid,psm均非零*/
 
 	if (!bdaddr_type_is_valid(la.l2_bdaddr_type))
 		return -EINVAL;
@@ -134,6 +135,7 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	chan->src_type = la.l2_bdaddr_type;
 
 	if (la.l2_cid)
+		/*指定l2_cid情况*/
 		err = l2cap_add_scid(chan, __le16_to_cpu(la.l2_cid));
 	else
 		err = l2cap_add_psm(chan, &la.l2_bdaddr, la.l2_psm);
@@ -141,6 +143,7 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	if (err < 0)
 		goto done;
 
+	/*设置sec_level*/
 	switch (chan->chan_type) {
 	case L2CAP_CHAN_CONN_LESS:
 		if (__le16_to_cpu(la.l2_psm) == L2CAP_PSM_3DSP)
@@ -171,6 +174,7 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	    chan->mode != L2CAP_MODE_EXT_FLOWCTL)
 		chan->mode = L2CAP_MODE_LE_FLOWCTL;
 
+	/*CHANNEL及sk均进入bound状态*/
 	chan->state = BT_BOUND;
 	sk->sk_state = BT_BOUND;
 
@@ -218,6 +222,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	 */
 	if (chan->src_type == BDADDR_BREDR && bacmp(&chan->src, BDADDR_ANY) &&
 	    bdaddr_type_is_le(la.l2_bdaddr_type)) {
+		/*源地址是bdaddr_berdr,且源地址为any,且目地址是LE类型*/
 		/* Old user space versions will try to incorrectly bind
 		 * the ATT socket using BDADDR_BREDR. We need to accept
 		 * this and fix up the source address type only when
@@ -226,7 +231,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 		 */
 		if (chan->scid != L2CAP_CID_ATT ||
 		    la.l2_cid != cpu_to_le16(L2CAP_CID_ATT))
-			return -EINVAL;
+			return -EINVAL;/*仅更正att*/
 
 		/* We don't have the hdev available here to make a
 		 * better decision on random vs public, but since all
@@ -1226,6 +1231,7 @@ static int l2cap_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 			list_first_entry(&pi->rx_busy,
 					 struct l2cap_rx_busy,
 					 list);
+		/*将收到的报文挂接在SOCKET接收链上*/
 		if (__sock_queue_rcv_skb(sk, rx_busy->skb) < 0)
 			goto done;
 		list_del(&rx_busy->list);
@@ -1527,7 +1533,7 @@ static int l2cap_sock_recv_cb(struct l2cap_chan *chan, struct sk_buff *skb)
 			goto done;
 	}
 
-	err = __sock_queue_rcv_skb(sk, skb);
+	err = __sock_queue_rcv_skb(sk, skb);/*将收到的报文挂接在SOCKET接收链上*/
 
 	l2cap_publish_rx_avail(chan);
 
@@ -1847,7 +1853,7 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 	} else {
 		switch (sk->sk_type) {
 		case SOCK_RAW:
-			chan->chan_type = L2CAP_CHAN_RAW;
+			chan->chan_type = L2CAP_CHAN_RAW;/*channel类型为raw*/
 			break;
 		case SOCK_DGRAM:
 			chan->chan_type = L2CAP_CHAN_CONN_LESS;
@@ -1901,7 +1907,7 @@ static struct sock *l2cap_sock_alloc(struct net *net, struct socket *sock,
 
 	INIT_LIST_HEAD(&l2cap_pi(sk)->rx_busy);
 
-	chan = l2cap_chan_create();
+	chan = l2cap_chan_create();/*创建l2cap channel*/
 	if (!chan) {
 		sk_free(sk);
 		if (sock)
@@ -1931,7 +1937,7 @@ static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 		return -ESOCKTNOSUPPORT;/*仅支持以上几种type*/
 
 	if (sock->type == SOCK_RAW && !kern && !capable(CAP_NET_RAW))
-		return -EPERM;
+		return -EPERM;/*raw格式,不容许kernel创建,且必须有网络raw权限*/
 
 	sock->ops = &l2cap_sock_ops;/*设置l2cap socket操作集*/
 

@@ -31,7 +31,7 @@ void hci_conn_init_sysfs(struct hci_conn *conn)
 	conn->dev.class = &bt_class;
 	conn->dev.parent = &hdev->dev;
 
-	device_initialize(&conn->dev);
+	device_initialize(&conn->dev);/*初始化hci conn对应的sysfs*/
 }
 
 void hci_conn_add_sysfs(struct hci_conn *conn)
@@ -43,8 +43,9 @@ void hci_conn_add_sysfs(struct hci_conn *conn)
 	if (device_is_registered(&conn->dev))
 		return;
 
-	dev_set_name(&conn->dev, "%s:%d", hdev->name, conn->handle);
+	dev_set_name(&conn->dev, "%s:%d", hdev->name, conn->handle);/*设置在sysfs中的名称*/
 
+	/*添加进sysfs*/
 	if (device_add(&conn->dev) < 0)
 		bt_dev_err(hdev, "failed to register connection device");
 }

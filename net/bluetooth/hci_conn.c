@@ -904,8 +904,8 @@ static int hci_conn_hash_alloc_unset(struct hci_dev *hdev)
 }
 
 /*添加connect*/
-static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类型*/, bdaddr_t *dst,
-				       u8 role, u16 handle/*conn对应的handle*/)
+static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类型*/, bdaddr_t *dst/*目的地址*/,
+				       u8 role/*角色,例如HCI_ROLE_MASTER*/, u16 handle/*conn对应的handle*/)
 {
 	struct hci_conn *conn;
 
@@ -952,7 +952,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 	conn->type  = type;
 	conn->role  = role;
 	conn->mode  = HCI_CM_ACTIVE;
-	conn->state = BT_OPEN;
+	conn->state = BT_OPEN;/*初始化为open状态*/
 	conn->auth_type = HCI_AT_GENERAL_BONDING;
 	conn->io_capability = hdev->io_capability;
 	conn->remote_auth = 0xff;
@@ -1035,7 +1035,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 	 */
 	if (conn->type != SCO_LINK && conn->type != ESCO_LINK) {
 		if (hdev->notify)
-			hdev->notify(hdev, HCI_NOTIFY_CONN_ADD);
+			hdev->notify(hdev, HCI_NOTIFY_CONN_ADD);/*通知conn添加*/
 	}
 
 	hci_conn_init_sysfs(conn);
@@ -1215,12 +1215,12 @@ struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 
 			if (src_type == BDADDR_BREDR) {
 				if (!lmp_bredr_capable(d))
-					continue;
+					continue;/*此设备不支持br,edr忽略*/
 				bacpy(&id_addr, &d->bdaddr);
 				id_addr_type = BDADDR_BREDR;
 			} else {
 				if (!lmp_le_capable(d))
-					continue;
+					continue;/*此设备不支持低功耗,忽略*/
 
 				hci_copy_identity_address(d, &id_addr,
 							  &id_addr_type);
@@ -1623,7 +1623,7 @@ done:
 	return conn;
 }
 
-struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
+struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地址*/,
 				 u8 sec_level, u8 auth_type,
 				 enum conn_reasons conn_reason, u16 timeout)
 {
@@ -1646,6 +1646,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
 		return ERR_PTR(-ECONNREFUSED);
 	}
 
+	/*查询到dst是否已有连接*/
 	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
 	if (!acl) {
 		/*无此连接，创建一个*/
@@ -1703,7 +1704,7 @@ static struct hci_link *hci_conn_link(struct hci_conn *parent,
 	return link;
 }
 
-struct hci_conn *hci_connect_sco(struct hci_dev *hdev, int type, bdaddr_t *dst,
+struct hci_conn *hci_connect_sco(struct hci_dev *hdev, int type, bdaddr_t *dst/*目的地址*/,
 				 __u16 setting, struct bt_codec *codec,
 				 u16 timeout)
 {

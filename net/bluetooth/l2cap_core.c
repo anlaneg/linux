@@ -47,6 +47,7 @@ bool enable_ecred = IS_ENABLED(CONFIG_BT_LE_L2CAP_ECRED);
 
 static u32 l2cap_feat_mask = L2CAP_FEAT_FIXED_CHAN | L2CAP_FEAT_UCD;
 
+/*记录系统中所有l2cap_chan*/
 static LIST_HEAD(chan_list);
 static DEFINE_RWLOCK(chan_list_lock);
 
@@ -166,6 +167,7 @@ static struct l2cap_chan *__l2cap_global_chan_by_addr(__le16 psm, bdaddr_t *src,
 {
 	struct l2cap_chan *c;
 
+	/*遍历所有l2cap_chan,查找是否有与psm,src,src_type匹配的l2cap_chan*/
 	list_for_each_entry(c, &chan_list, global_l) {
 		if (src_type == BDADDR_BREDR && c->src_type != BDADDR_BREDR)
 			continue;
@@ -179,6 +181,7 @@ static struct l2cap_chan *__l2cap_global_chan_by_addr(__le16 psm, bdaddr_t *src,
 	return NULL;
 }
 
+/*如果指定了psm,则检查是否重用,如果未指定psm,则分配不重用的psm*/
 int l2cap_add_psm(struct l2cap_chan *chan, bdaddr_t *src, __le16 psm)
 {
 	int err;
@@ -186,15 +189,18 @@ int l2cap_add_psm(struct l2cap_chan *chan, bdaddr_t *src, __le16 psm)
 	write_lock(&chan_list_lock);
 
 	if (psm && __l2cap_global_chan_by_addr(psm, src, chan->src_type)) {
+		/*地址重用*/
 		err = -EADDRINUSE;
 		goto done;
 	}
 
 	if (psm) {
+		/*设置psm,sport*/
 		chan->psm = psm;
 		chan->sport = psm;
 		err = 0;
 	} else {
+		/*PSm为零的情况*/
 		u16 p, start, end, incr;
 
 		if (chan->src_type == BDADDR_BREDR) {
@@ -202,15 +208,18 @@ int l2cap_add_psm(struct l2cap_chan *chan, bdaddr_t *src, __le16 psm)
 			end = L2CAP_PSM_AUTO_END;
 			incr = 2;
 		} else {
+			/*LE方式的动态port范围*/
 			start = L2CAP_PSM_LE_DYN_START;
 			end = L2CAP_PSM_LE_DYN_END;
 			incr = 1;
 		}
 
+		/*遍历start,end在其间查找空间的port*/
 		err = -EINVAL;
 		for (p = start; p <= end; p += incr)
 			if (!__l2cap_global_chan_by_addr(cpu_to_le16(p), src,
 							 chan->src_type)) {
+				/*这个psm可以使用*/
 				chan->psm   = cpu_to_le16(p);
 				chan->sport = cpu_to_le16(p);
 				err = 0;
@@ -868,7 +877,7 @@ static inline u8 l2cap_get_auth_type(struct l2cap_chan *chan)
 		case BT_SECURITY_MEDIUM:
 			return HCI_AT_DEDICATED_BONDING;
 		default:
-			return HCI_AT_NO_BONDING;
+			return HCI_AT_NO_BONDING;/*返回AUTH类型*/
 		}
 		break;
 	case L2CAP_CHAN_CONN_LESS:
@@ -6963,8 +6972,8 @@ static void l2cap_chan_by_pid(struct l2cap_chan *chan, void *data)
 	d->count++;
 }
 
-int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
-		       bdaddr_t *dst, u8 dst_type, u16 timeout)
+int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid/*目标cid*/,
+		       bdaddr_t *dst/*目标地址*/, u8 dst_type/*目标地址类型*/, u16 timeout)
 {
 	struct l2cap_conn *conn;
 	struct hci_conn *hcon;

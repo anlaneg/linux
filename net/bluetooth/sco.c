@@ -316,6 +316,7 @@ static int sco_connect(struct sock *sk)
 
 	BT_DBG("%pMR -> %pMR", &sco_pi(sk)->src, &sco_pi(sk)->dst);
 
+	/*选择发起端设备*/
 	hdev = hci_get_route(&sco_pi(sk)->dst, &sco_pi(sk)->src, BDADDR_BREDR);
 	if (!hdev)
 		return -EHOSTUNREACH;
@@ -412,6 +413,7 @@ static void sco_recv_frame(struct sco_conn *conn, struct sk_buff *skb)
 	if (sk->sk_state != BT_CONNECTED)
 		goto drop;
 
+	/*将收到的报文挂接在socket上*/
 	if (!sock_queue_rcv_skb(sk, skb))
 		return;
 
@@ -623,7 +625,7 @@ static int sco_sock_bind(struct socket *sock, struct sockaddr *addr,
 		goto done;
 	}
 
-	bacpy(&sco_pi(sk)->src, &sa->sco_bdaddr);
+	bacpy(&sco_pi(sk)->src, &sa->sco_bdaddr);/*设置绑定地址*/
 
 	sk->sk_state = BT_BOUND;
 
@@ -806,7 +808,7 @@ static int sco_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 			return err;
 	}
 
-	skb = bt_skb_sendmsg(sk, msg, len, len, 0, 0);
+	skb = bt_skb_sendmsg(sk, msg, len, len, 0, 0);/*转换为skb*/
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -1495,6 +1497,7 @@ DEFINE_SHOW_ATTRIBUTE(sco_debugfs);
 
 static struct dentry *sco_debugfs;
 
+/*提供同步、实时的语音数据传输，专为音频场景设计。*/
 static const struct proto_ops sco_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
@@ -1516,6 +1519,7 @@ static const struct proto_ops sco_sock_ops = {
 	.getsockopt	= sco_sock_getsockopt
 };
 
+/*负责sco协议*/
 static const struct net_proto_family sco_sock_family_ops = {
 	.family	= PF_BLUETOOTH,
 	.owner	= THIS_MODULE,

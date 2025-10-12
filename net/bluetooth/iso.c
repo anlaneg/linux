@@ -569,6 +569,7 @@ static void iso_recv_frame(struct iso_conn *conn, struct sk_buff *skb)
 	if (sk->sk_state != BT_CONNECTED)
 		goto drop;
 
+	/*报文送socket*/
 	if (!sock_queue_rcv_skb(sk, skb))
 		return;
 
@@ -2480,7 +2481,7 @@ static const struct proto_ops iso_sock_ops = {
 static const struct net_proto_family iso_sock_family_ops = {
 	.family	= PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
-	.create	= iso_sock_create,
+	.create	= iso_sock_create,/*用于创建iso 协议socket*/
 };
 
 static bool iso_inited;

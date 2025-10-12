@@ -570,13 +570,13 @@ struct socket *sockfd_lookup(int fd, int *err)
 	struct file *file;
 	struct socket *sock;
 
-	file = fget(fd);
+	file = fget(fd);/*FD查找file*/
 	if (!file) {
 		*err = -EBADF;
 		return NULL;
 	}
 
-	sock = sock_from_file(file);
+	sock = sock_from_file(file);/*FILE必须是socket*/
 	if (!sock) {
 		*err = -ENOTSOCK;
 		fput(file);
@@ -1671,7 +1671,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	/* Now protected by module ref count */
 	rcu_read_unlock();
 
-	//调用create创建对应的sock，例如通过netlink_create创建netlink的socket
+	//调用此协议族create创建对应的sock，例如通过netlink_create创建netlink的socket
 	err = pf->create(net, sock, protocol, kern);
 	if (err < 0) {
 		/* ->create should release the allocated sock->sk object on error

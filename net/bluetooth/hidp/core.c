@@ -918,8 +918,8 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 	int ret;
 	struct bt_sock *ctrl, *intr;
 
-	ctrl = bt_sk(ctrl_sock->sk);
-	intr = bt_sk(intr_sock->sk);
+	ctrl = bt_sk(ctrl_sock->sk);/*控制socket*/
+	intr = bt_sk(intr_sock->sk);/*中断socket*/
 
 	session = kzalloc(sizeof(*session), GFP_KERNEL);
 	if (!session)
@@ -1027,6 +1027,7 @@ static struct hidp_session *hidp_session_find(const bdaddr_t *bdaddr)
 
 	down_read(&hidp_session_sem);
 
+	/*利用bt地址查询hidp_session*/
 	session = __hidp_session_find(bdaddr);
 	if (session)
 		hidp_session_get(session);
@@ -1325,7 +1326,7 @@ static int hidp_verify_sockets(struct socket *ctrl_sock,
 
 	if (bacmp(&ctrl_chan->src, &intr_chan->src) ||
 	    bacmp(&ctrl_chan->dst, &intr_chan->dst))
-		return -ENOTUNIQ;
+		return -ENOTUNIQ;/*两个不能是同一个连接*/
 
 	ctrl = bt_sk(ctrl_sock->sk);
 	intr = bt_sk(intr_sock->sk);
@@ -1355,6 +1356,7 @@ int hidp_connection_add(const struct hidp_connadd_req *req,
 	struct l2cap_chan *chan;
 	int ret;
 
+	/*socket校验*/
 	ret = hidp_verify_sockets(ctrl_sock, intr_sock);
 	if (ret)
 		return ret;

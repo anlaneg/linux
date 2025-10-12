@@ -847,6 +847,7 @@ int hci_get_dev_list(void __user *arg)
 	return err ? -EFAULT : 0;
 }
 
+/*取hci设备的设备信息*/
 int hci_get_dev_info(void __user *arg)
 {
 	struct hci_dev *hdev;
@@ -857,7 +858,7 @@ int hci_get_dev_info(void __user *arg)
 	if (copy_from_user(&di, arg, sizeof(di)))
 		return -EFAULT;
 
-	/*通过dev_id获取hdev*/
+	/*通过dev_id获取hdev,接下来取此hci设备的信息*/
 	hdev = hci_dev_get(di.dev_id);
 	if (!hdev)
 		return -ENODEV;
@@ -890,8 +891,8 @@ int hci_get_dev_info(void __user *arg)
 	di.link_policy = hdev->link_policy;
 	di.link_mode   = hdev->link_mode;
 
-	memcpy(&di.stat, &hdev->stat, sizeof(di.stat));
-	memcpy(&di.features, &hdev->features, sizeof(di.features));
+	memcpy(&di.stat, &hdev->stat, sizeof(di.stat));/*取设备统计信息*/
+	memcpy(&di.features, &hdev->features, sizeof(di.features));/*取设备features列表*/
 
 	if (copy_to_user(arg, &di, sizeof(di)))
 		err = -EFAULT;
@@ -2576,7 +2577,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv/*私有结构体大小*/)
 	INIT_LIST_HEAD(&hdev->local_codecs);
 	/*初始化对rx_q队列进行处理的rx_work*/
 	INIT_WORK(&hdev->rx_work, hci_rx_work);
-	INIT_WORK(&hdev->cmd_work, hci_cmd_work);/*初始化cmd work,处理cmd_q*/
+	INIT_WORK(&hdev->cmd_work, hci_cmd_work);/*初始化cmd work,处理cmd_q上的command*/
 	INIT_WORK(&hdev->tx_work, hci_tx_work);/*初始化tx work,处理raw_q*/
 	/*初始化power_on work*/
 	INIT_WORK(&hdev->power_on, hci_power_on);
@@ -3177,7 +3178,7 @@ int __hci_cmd_send(struct hci_dev *hdev, u16 opcode/*消息opcode*/, u32 plen/*�
 		return -EINVAL;
 	}
 
-	/*构造消息skb*/
+	/*构造CMD消息skb*/
 	skb = hci_cmd_sync_alloc(hdev, opcode, plen, param, NULL);
 	if (!skb) {
 		bt_dev_err(hdev, "no memory for command (opcode 0x%4.4x)",
@@ -3185,7 +3186,7 @@ int __hci_cmd_send(struct hci_dev *hdev, u16 opcode/*消息opcode*/, u32 plen/*�
 		return -ENOMEM;
 	}
 
-	/*发送*/
+	/*发送CMD*/
 	hci_send_frame(hdev, skb);
 
 	return 0;
@@ -3324,9 +3325,9 @@ void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb, __u16 flags)
 
 	BT_DBG("%s chan %p flags 0x%4.4x", hdev->name, chan, flags);
 
-	hci_queue_acl(chan, &chan->data_q, skb, flags);
+	hci_queue_acl(chan, &chan->data_q, skb, flags);/*存入到chan->data_q*/
 
-	queue_work(hdev->workqueue, &hdev->tx_work);
+	queue_work(hdev->workqueue, &hdev->tx_work);/*触发tx_work*/
 }
 
 /* Send SCO data */
@@ -3344,10 +3345,10 @@ void hci_send_sco(struct hci_conn *conn, struct sk_buff *skb)
 	skb_reset_transport_header(skb);
 	memcpy(skb_transport_header(skb), &hdr, HCI_SCO_HDR_SIZE);
 
-	hci_skb_pkt_type(skb) = HCI_SCODATA_PKT;
+	hci_skb_pkt_type(skb) = HCI_SCODATA_PKT;/*标记为sco数据报*/
 
-	skb_queue_tail(&conn->data_q, skb);
-	queue_work(hdev->workqueue, &hdev->tx_work);
+	skb_queue_tail(&conn->data_q, skb);/*将内容挂接在conn->data_q*/
+	queue_work(hdev->workqueue, &hdev->tx_work);/*触发tx_work*/
 }
 
 /* Send ISO data */
@@ -3414,9 +3415,9 @@ void hci_send_iso(struct hci_conn *conn, struct sk_buff *skb)
 
 	BT_DBG("%s len %d", hdev->name, skb->len);
 
-	hci_queue_iso(conn, &conn->data_q, skb);
+	hci_queue_iso(conn, &conn->data_q, skb);/*存入到conn->data_q*/
 
-	queue_work(hdev->workqueue, &hdev->tx_work);
+	queue_work(hdev->workqueue, &hdev->tx_work);/*触发tx_work*/
 }
 
 /* ---- HCI TX task (outgoing data) ---- */
@@ -4044,6 +4045,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	 * command queue (hdev->cmd_q).
 	 */
 	if (skb && bt_cb(skb)->hci.req_flags & HCI_REQ_SKB) {
+		/*请求报文存在,且此请求报文为最后一个req报文*/
 		*req_complete_skb = bt_cb(skb)->hci.req_complete_skb;
 		return;
 	}
@@ -4074,7 +4076,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 /*负责处理hdev->rx_q队列上所有skb*/
 static void hci_rx_work(struct work_struct *work)
 {
-	/*取得对应的hci_dev*/
+	/*取得work服务的hci dev*/
 	struct hci_dev *hdev = container_of(work, struct hci_dev, rx_work);
 	struct sk_buff *skb;
 
@@ -4090,11 +4092,11 @@ static void hci_rx_work(struct work_struct *work)
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		/* Send copy to monitor */
-		hci_send_to_monitor(hdev, skb);/*如开启全局混杂，则上送monitor*/
+		hci_send_to_monitor(hdev, skb);/*如开启全局混杂，则上送monitor socket*/
 
 		if (atomic_read(&hdev->promisc)) {
 			/* Send copy to the sockets */
-			hci_send_to_sock(hdev, skb);/*如果有socket开启混杂，则复制一份镜像给hci socket*/
+			hci_send_to_sock(hdev, skb);/*如果设备有socket开启混杂，则复制一份镜像给hci socket*/
 		}
 
 		/* If the device has been opened in HCI_USER_CHANNEL,
@@ -4135,12 +4137,12 @@ static void hci_rx_work(struct work_struct *work)
 
 		case HCI_SCODATA_PKT:
 			BT_DBG("%s SCO data packet", hdev->name);
-			hci_scodata_packet(hdev, skb);
+			hci_scodata_packet(hdev, skb);/*sco socket报文接收处理*/
 			break;
 
 		case HCI_ISODATA_PKT:
 			BT_DBG("%s ISO data packet", hdev->name);
-			hci_isodata_packet(hdev, skb);
+			hci_isodata_packet(hdev, skb);/*iso socket报文接收处理*/
 			break;
 
 		default:

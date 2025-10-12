@@ -1141,7 +1141,7 @@ static void mesh_send_done(struct work_struct *work)
 static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 {
 	if (hci_dev_test_flag(hdev, HCI_MGMT))
-		return;
+		return;/*已有管理标记,则直接返回*/
 
 	BT_INFO("MGMT ver %d.%d", MGMT_VERSION, MGMT_REVISION);
 
@@ -1157,7 +1157,7 @@ static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 	 */
 	hci_dev_clear_flag(hdev, HCI_BONDABLE);
 
-	hci_dev_set_flag(hdev, HCI_MGMT);
+	hci_dev_set_flag(hdev, HCI_MGMT);/*设置管理标记*/
 }
 
 /*请求读取指定设备hdev的info信息(通过MGMT_OP_READ_INFO）*/
@@ -9260,11 +9260,12 @@ static int get_adv_size_info(struct sock *sk, struct hci_dev *hdev,
 				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 }
 
+/*control channel 支持的opcode处理(用于管理配置设备)*/
 static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ NULL }, /* 0x0000 (no command) */
 	/*mgmt版本号读取*/
 	{ read_version,            MGMT_READ_VERSION_SIZE,
-						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_NO_HDEV/*不需指明设备*/ |
 						HCI_MGMT_UNTRUSTED },
 	/*返回支持的commands/events总数及对应的opcode读取*/
 	{ read_commands,           MGMT_READ_COMMANDS_SIZE,
@@ -10523,7 +10524,7 @@ void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 static struct hci_mgmt_chan chan = {
 	.channel	= HCI_CHANNEL_CONTROL,
 	.handler_count	= ARRAY_SIZE(mgmt_handlers),
-	.handlers	= mgmt_handlers,/*controll channel 各opcode对应的handler数组*/
+	.handlers	= mgmt_handlers,/*control channel各opcode对应的handler数组,用于管理设备*/
 	.hdev_init	= mgmt_init_hdev,
 };
 

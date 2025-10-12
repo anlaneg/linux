@@ -21,12 +21,12 @@
 #include "leds.h"
 
 static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行结果*/, u16 opcode,
-				  struct sk_buff *skb)
+				  struct sk_buff *skb/*响应报文*/)
 {
 	bt_dev_dbg(hdev, "result 0x%2.2x", result);
 
 	if (hdev->req_status != HCI_REQ_PEND)
-		return;
+		return;/*必须为pend状态*/
 
 	hdev->req_result = result;/*指出请求执行结果*/
 	hdev->req_status = HCI_REQ_DONE;/*标记请求已执行*/
@@ -42,7 +42,7 @@ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行�
 		if (sk)
 			sock_put(sk);
 
-		hdev->req_rsp = skb_get(skb);/*设备同步返回skb*/
+		hdev->req_rsp = skb_get(skb);/*记录设备同步返回的skb*/
 	}
 
 	wake_up_interruptible(&hdev->req_wait_q);
@@ -192,7 +192,7 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode/*操作码*/,
 	if (err < 0)
 		return ERR_PTR(err);
 
-	/*等待req_status发生变换*/
+	/*阻塞等待req_status发生变换(等待RX方向处理响应)*/
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
 					       hdev->req_status != HCI_REQ_PEND,
 					       timeout);
@@ -218,8 +218,8 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode/*操作码*/,
 
 	hdev->req_status = 0;
 	hdev->req_result = 0;
-	skb = hdev->req_rsp;
-	hdev->req_rsp = NULL;
+	skb = hdev->req_rsp;/*取得响应报文*/
+	hdev->req_rsp = NULL;/*取获得响应报文,临时位置清空*/
 
 	bt_dev_dbg(hdev, "end: err %d", err);
 
@@ -283,6 +283,7 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 	struct sk_buff *skb;
 	u8 status;
 
+	/*构造opcode对应的skb并发送等待响应*/
 	skb = __hci_cmd_sync_sk(hdev, opcode, plen, param, event, timeout, sk);
 
 	/* If command return a status event, skb will be set to -ENODATA */
@@ -300,7 +301,7 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 
 	kfree_skb(skb);
 
-	return status;
+	return status;/*返回执行状态*/
 }
 EXPORT_SYMBOL(__hci_cmd_sync_status_sk);
 

@@ -160,6 +160,7 @@ int mgmt_cmd_status(struct sock *sk, u16 index, u16 cmd, u8 status)
 	else
 		__net_timestamp(skb);
 
+	/*报文送socket*/
 	err = sock_queue_rcv_skb(sk, skb);
 	if (err < 0)
 		kfree_skb(skb);
@@ -208,6 +209,7 @@ int mgmt_cmd_complete(struct sock *sk, u16 index, u16 cmd, u8 status,
 	else
 		__net_timestamp(skb);
 
+	/*报文送socket*/
 	err = sock_queue_rcv_skb(sk, skb);
 	if (err < 0)
 		kfree_skb(skb);

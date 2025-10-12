@@ -127,7 +127,7 @@ enum suspended_state {
 
 struct hci_conn_hash {
 	struct list_head list;
-	unsigned int     acl_num;/*此链表上acl_link的数量*/
+	unsigned int     acl_num;/*此链表上acl_link hci_conn的数量*/
 	unsigned int     sco_num;
 	unsigned int     iso_num;
 	unsigned int     le_num;/*此链表上le_link的数量*/
@@ -373,6 +373,7 @@ struct hci_dev {
 	__u8		major_class;
 	__u8		minor_class;
 	__u8		max_page;
+	/*设备支持的features列表*/
 	__u8		features[HCI_MAX_PAGES][8];
 	__u8		le_features[8];
 	__u8		le_accept_list_size;
@@ -571,7 +572,7 @@ struct hci_dev {
 	struct list_head	blocked_keys;
 	struct list_head	local_codecs;
 
-	struct hci_dev_stats	stat;
+	struct hci_dev_stats	stat;/*设备统计信息*/
 
 	atomic_t		promisc;/*标记此设备是否开启混杂模式*/
 
@@ -585,7 +586,7 @@ struct hci_dev {
 
 	struct rfkill		*rfkill;
 
-	DECLARE_BITMAP(dev_flags, __HCI_NUM_FLAGS);
+	DECLARE_BITMAP(dev_flags, __HCI_NUM_FLAGS);/*设备flags*/
 	hci_conn_flags_t	conn_flags;
 
 	__s8			adv_tx_power;
@@ -696,7 +697,7 @@ struct hci_conn {
 	__u16		mtu;
 	__u8		mode;
 	__u8		type;/*conn类型，例如：ACL_LINK*/
-	__u8		role;
+	__u8		role;/*conn角色,例如:HCI_ROLE_MASTER*/
 	bool		out;
 	__u8		attempt;
 	__u8		dev_class[3];
@@ -739,7 +740,7 @@ struct hci_conn {
 
 	unsigned long	flags;
 
-	enum conn_reasons conn_reason;
+	enum conn_reasons conn_reason;/*连接原因*/
 	__u8		abort_reason;
 
 	__u32		clock;
@@ -766,7 +767,7 @@ struct hci_conn {
 	struct device	dev;
 	struct dentry	*debugfs;
 
-	struct hci_dev	*hdev;
+	struct hci_dev	*hdev;/*此连接对应的Hci设备*/
 	void		*l2cap_data;
 	void		*sco_data;
 	void		*iso_data;
@@ -834,6 +835,7 @@ extern struct mutex hci_cb_list_lock;
 #define hci_dev_set_flag(hdev, nr)             set_bit((nr), (hdev)->dev_flags)
 #define hci_dev_clear_flag(hdev, nr)           clear_bit((nr), (hdev)->dev_flags)
 #define hci_dev_change_flag(hdev, nr)          change_bit((nr), (hdev)->dev_flags)
+/*hdev->dev_flags是否具有某个标记*/
 #define hci_dev_test_flag(hdev, nr)            test_bit((nr), (hdev)->dev_flags)
 #define hci_dev_test_and_set_flag(hdev, nr)    test_and_set_bit((nr), (hdev)->dev_flags)
 #define hci_dev_test_and_clear_flag(hdev, nr)  test_and_clear_bit((nr), (hdev)->dev_flags)
@@ -1876,6 +1878,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define GET_HCIDEV_DEV(hdev) ((hdev)->dev.parent)
 
 /* ----- LMP capabilities ----- */
+//LPM 指的是 Low Power Mode（低功耗模式）
 #define lmp_encrypt_capable(dev)   ((dev)->features[0][0] & LMP_ENCRYPT)
 #define lmp_rswitch_capable(dev)   ((dev)->features[0][0] & LMP_RSWITCH)
 #define lmp_hold_capable(dev)      ((dev)->features[0][0] & LMP_HOLD)
@@ -1884,7 +1887,9 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_sco_capable(dev)       ((dev)->features[0][1] & LMP_SCO)
 #define lmp_inq_rssi_capable(dev)  ((dev)->features[0][3] & LMP_RSSI_INQ)
 #define lmp_esco_capable(dev)      ((dev)->features[0][3] & LMP_ESCO)
+/*是否支持br,edr能力*/
 #define lmp_bredr_capable(dev)     (!((dev)->features[0][4] & LMP_NO_BREDR))
+/*是否有低功耗能力*/
 #define lmp_le_capable(dev)        ((dev)->features[0][4] & LMP_LE)
 #define lmp_sniffsubr_capable(dev) ((dev)->features[0][5] & LMP_SNIFF_SUBR)
 #define lmp_pause_enc_capable(dev) ((dev)->features[0][5] & LMP_PAUSE_ENC)
@@ -2289,10 +2294,10 @@ struct hci_mgmt_handler {
 
 struct hci_mgmt_chan {
 	struct list_head list;
-	unsigned short channel;
+	unsigned short channel;/*channel编号*/
 	size_t handler_count;/*handlers数组长度*/
-	const struct hci_mgmt_handler *handlers;
-	void (*hdev_init) (struct sock *sk, struct hci_dev *hdev);
+	const struct hci_mgmt_handler *handlers;/*管理命令处理*/
+	void (*hdev_init) (struct sock *sk, struct hci_dev *hdev);/*用于初始化*/
 };
 
 int hci_mgmt_chan_register(struct hci_mgmt_chan *c);
