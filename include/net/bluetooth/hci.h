@@ -2918,7 +2918,7 @@ struct hci_command_hdr {
 
 struct hci_event_hdr {
 	__u8	evt;/*event编号*/
-	__u8	plen;
+	__u8	plen;/*参数长度*/
 } __packed;
 
 struct hci_acl_hdr {
@@ -2955,6 +2955,7 @@ struct hci_iso_ts_data_hdr {
 	__le16	slen;
 };
 
+/*取skb中记录的hci event header*/
 static inline struct hci_event_hdr *hci_event_hdr(const struct sk_buff *skb)
 {
 	return (struct hci_event_hdr *) skb->data;

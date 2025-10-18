@@ -510,13 +510,14 @@ struct bt_skb_cb {
 /*报文关联的socket*/
 #define hci_skb_sk(skb) bt_cb((skb))->hci.sk
 
+/*用于bt申请skb*/
 static inline struct sk_buff *bt_skb_alloc(unsigned int len/*内容长度*/, gfp_t how)
 {
 	struct sk_buff *skb;
 
 	skb = alloc_skb(len + BT_SKB_RESERVE, how);
 	if (skb)
-		/*申请成功，跳过预留的长度*/
+		/*申请SKB成功，预留BT需要的长度*/
 		skb_reserve(skb, BT_SKB_RESERVE);
 	return skb;
 }
@@ -551,12 +552,12 @@ out:
 
 /* Shall not be called with lock_sock held */
 static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
-					     struct msghdr *msg,
-					     size_t len, size_t mtu,
-					     size_t headroom, size_t tailroom)
+					     struct msghdr *msg/*要复制到skb中的消息*/,
+					     size_t len/*预计的消息长度*/, size_t mtu/*支持的mtu大小*/,
+					     size_t headroom/*头部预留空间*/, size_t tailroom/*尾部预留空间*/)
 {
 	struct sk_buff *skb;
-	size_t size = min_t(size_t, len, mtu);
+	size_t size = min_t(size_t, len, mtu);/*防止超过mtu*/
 	int err;
 
 	/*申请skb*/
@@ -575,7 +576,7 @@ static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
 		return ERR_PTR(-EFAULT);
 	}
 
-	/*沿用scoket的优先级*/
+	/*沿用socket的优先级*/
 	skb->priority = READ_ONCE(sk->sk_priority);
 
 	return skb;
@@ -597,25 +598,26 @@ static inline struct sk_buff *bt_skb_sendmmsg(struct sock *sk,
 
 	len -= skb->len;
 	if (!len)
-		return skb;
+		return skb;/*没有其它内容了,返回此skb*/
 
+	/*这种需要多个skb*/
 	/* Add remaining data over MTU as continuation fragments */
 	frag = &skb_shinfo(skb)->frag_list;
 	while (len) {
 		struct sk_buff *tmp;
 
-		tmp = bt_skb_sendmsg(sk, msg, len, mtu, headroom, tailroom);
+		tmp = bt_skb_sendmsg(sk, msg, len, mtu, headroom, tailroom);/*再填充一个skb*/
 		if (IS_ERR(tmp)) {
-			return skb;
+			return skb;/*再填充处理失败,返回前半部分已成功的skb*/
 		}
 
 		len -= tmp->len;
 
 		*frag = tmp;
-		frag = &(*frag)->next;
+		frag = &(*frag)->next;/*利用skb的next串连*/
 	}
 
-	return skb;
+	return skb;/*返回串好的一组skb*/
 }
 
 int bt_to_errno(u16 code);

@@ -256,7 +256,7 @@
 
 //将x按cacheline对齐
 #define SKB_DATA_ALIGN(X)	ALIGN(X, SMP_CACHE_BYTES)
-//x的大小，减去skb-shared-info按cacheline对齐
+//x的大小，减去skb-shared-info按cacheline对齐,即x中因cacheline对齐而增加的空间
 #define SKB_WITH_OVERHEAD(X)	\
 	((X) - SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 
@@ -264,8 +264,8 @@
  * allocation needed, knowing struct skb_shared_info needs
  * to be aligned.
  */
-#define SKB_HEAD_ALIGN(X) (SKB_DATA_ALIGN(X) + \
-	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+#define SKB_HEAD_ALIGN(X) (SKB_DATA_ALIGN(X)/*按cache line对齐*/ + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))/*增加skb_shared_info长度*/
 
 #define SKB_MAX_ORDER(X, ORDER) \
 	SKB_WITH_OVERHEAD((PAGE_SIZE << (ORDER)) - (X))
@@ -602,7 +602,7 @@ struct skb_shared_info {
 	unsigned short	gso_size;/*所有segment合并后长度*/
 	/* Warning: this field is not always filled in (UFO)! */
 	unsigned short	gso_segs;
-	struct sk_buff	*frag_list;/*指向其它分片*/
+	struct sk_buff	*frag_list;/*指向其它分片(分片头指针)*/
 	union {
 		struct skb_shared_hwtstamps hwtstamps;
 		struct xsk_tx_metadata_compl xsk_meta;
@@ -613,7 +613,7 @@ struct skb_shared_info {
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()
 	 */
-	atomic_t	dataref;
+	atomic_t	dataref;/*此结构的引用数*/
 
 	union {
 		struct {
@@ -886,7 +886,7 @@ struct sk_buff {
 	union {
 		struct {
 			/* These two members must be first to match sk_buff_head. */
-			struct sk_buff		*next;/*用于串连一组skb,例如qos出队的一组报文*/
+			struct sk_buff		*next;/*用于串连一组skb,例如qos出队的一组报文(此链的head在skb_shinfo(skb)->frag_list)*/
 			struct sk_buff		*prev;
 
 			union {
@@ -1074,7 +1074,7 @@ struct sk_buff {
 
 	union {
 		__u32		mark;
-		__u32		reserved_tailroom;/*预留尾部空间*/
+		__u32		reserved_tailroom;/*预留的尾部空间大小*/
 	};
 
 	union {
@@ -1756,7 +1756,7 @@ int skb_zerocopy_iter_stream(struct sock *sk, struct sk_buff *skb,
 			     struct net_devmem_dmabuf_binding *binding);
 
 /* Internal */
-/* 取skb对应的shared_info结构*/
+/* 利用此宏取skb buffer上存放的shared_info结构(见函数__finalize_skb_around)*/
 #define skb_shinfo(SKB)	((struct skb_shared_info *)(skb_end_pointer(SKB)))
 
 static inline struct skb_shared_hwtstamps *skb_hwtstamps(struct sk_buff *skb)
@@ -2792,7 +2792,7 @@ static inline void *skb_put_zero(struct sk_buff *skb, unsigned int len)
 	return tmp;
 }
 
-//将数据data复制到skb结尾处
+//将数据data(长度为len)复制到skb结尾处,SKB长度增加
 static inline void *skb_put_data(struct sk_buff *skb, const void *data,
 				 unsigned int len)
 {
@@ -2956,7 +2956,7 @@ static inline void skb_tailroom_reserve(struct sk_buff *skb, unsigned int mtu,
 	SKB_LINEAR_ASSERT(skb);
 	if (mtu < skb_tailroom(skb) - needed_tailroom)
 		/* use at most mtu */
-		skb->reserved_tailroom = skb_tailroom(skb) - mtu;
+		skb->reserved_tailroom = skb_tailroom(skb) - mtu;/*尾部需要保证mtu总是可用*/
 	else
 		/* use up to all available space */
 		skb->reserved_tailroom = needed_tailroom;

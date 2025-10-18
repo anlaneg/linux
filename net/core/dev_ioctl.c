@@ -288,6 +288,7 @@ int dev_get_hwtstamp_phylib(struct net_device *dev,
 	return dev->netdev_ops->ndo_hwtstamp_get(dev, cfg);
 }
 
+/*请求获取此网络设备的hwtstamp_config*/
 static int dev_get_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
@@ -296,6 +297,7 @@ static int dev_get_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 	int err;
 
 	if (!ops->ndo_hwtstamp_get)
+		/*设备不支持此回调,使用默认实现*/
 		return dev_eth_ioctl(dev, ifr, SIOCGHWTSTAMP); /* legacy */
 
 	if (!netif_device_present(dev))

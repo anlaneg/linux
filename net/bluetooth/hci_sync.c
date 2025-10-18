@@ -243,6 +243,7 @@ EXPORT_SYMBOL(__hci_cmd_sync_sk);
 struct sk_buff *__hci_cmd_sync(struct hci_dev *hdev, u16 opcode, u32 plen,
 			       const void *param, u32 timeout)
 {
+	/*发送命令并获得响应的SKB*/
 	return __hci_cmd_sync_sk(hdev, opcode, plen, param, 0, timeout, NULL);
 }
 EXPORT_SYMBOL(__hci_cmd_sync);

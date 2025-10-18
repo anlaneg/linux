@@ -5379,8 +5379,9 @@ void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
 EXPORT_SYMBOL(kmem_cache_free_bulk);
 
 #ifndef CONFIG_SLUB_TINY
+/*自s中申请size,如果申请失败,则返回0;否则返回size*/
 static inline
-int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size/*要申请的数目*/,
+int __kmem_cache_alloc_bulk(struct kmem_cache *s/*要申请的cache*/, gfp_t flags, size_t size/*要申请的数目*/,
 			    void **p/*出参，记录申请的obj*/)
 {
 	struct kmem_cache_cpu *c;
@@ -5426,7 +5427,7 @@ int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size/*要�
 			p[i] = ___slab_alloc(s, flags, NUMA_NO_NODE,
 					    _RET_IP_, c, s->object_size);
 			if (unlikely(!p[i]))
-				goto error;
+				goto error;/*申请失败*/
 
 			c = this_cpu_ptr(s->cpu_slab);
 			maybe_wipe_obj_freeptr(s, p[i]);
@@ -5450,7 +5451,7 @@ int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size/*要�
 
 error:
 	slub_put_cpu_ptr(s->cpu_slab);
-	__kmem_cache_free_bulk(s, i, p);
+	__kmem_cache_free_bulk(s, i, p);/*释放掉已申请的obj*/
 	return 0;
 
 }
@@ -5491,6 +5492,7 @@ int kmem_cache_alloc_bulk_noprof(struct kmem_cache *s, gfp_t flags, size_t size,
 	int i;
 
 	if (!size)
+		/*申请数为0,直接返回0*/
 		return 0;
 
 	s = slab_pre_alloc_hook(s, flags);
@@ -5499,7 +5501,7 @@ int kmem_cache_alloc_bulk_noprof(struct kmem_cache *s, gfp_t flags, size_t size,
 
 	i = __kmem_cache_alloc_bulk(s, flags, size, p);
 	if (unlikely(i == 0))
-		return 0;
+		return 0;/*申请失败*/
 
 	/*
 	 * memcg and kmem_cache debug support and memory initialization.
@@ -5509,7 +5511,7 @@ int kmem_cache_alloc_bulk_noprof(struct kmem_cache *s, gfp_t flags, size_t size,
 		    slab_want_init_on_alloc(flags, s), s->object_size))) {
 		return 0;
 	}
-	return i;
+	return i;/*返回申请到的数目(即SIZE)*/
 }
 EXPORT_SYMBOL(kmem_cache_alloc_bulk_noprof);
 

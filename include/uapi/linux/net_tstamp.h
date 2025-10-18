@@ -89,7 +89,7 @@ struct so_timestamping {
  */
 struct hwtstamp_config {
 	int flags;
-	int tx_type;
+	int tx_type;/*TX方向时间签配置*/
 	int rx_filter;
 };
 

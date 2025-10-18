@@ -1938,7 +1938,7 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		/*长度过小或者长度过大，则参数有误*/
 		return -EINVAL;
 
-	/*按msg构造skb*/
+	/*按msg内容构造skb*/
 	skb = bt_skb_sendmsg(sk, msg, len/*消息长度*/, len, 0, 0);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);

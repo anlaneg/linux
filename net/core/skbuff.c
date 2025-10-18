@@ -275,17 +275,18 @@ EXPORT_SYMBOL(__netdev_alloc_frag_align);
 
 static struct sk_buff *napi_skb_cache_get(void)
 {
-	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
+	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);/*取此cpu上的napi_alloc_cache*/
 	struct sk_buff *skb;
 
 	local_lock_nested_bh(&napi_alloc_cache.bh_lock);
 	if (unlikely(!nc->skb_count)) {
-		/*cache为空，申请一组*/
+		/*cache为空，自net_hotdata.skbuff_cache中申请一组*/
 		nc->skb_count = kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
 						      GFP_ATOMIC | __GFP_NOWARN,
-						      NAPI_SKB_CACHE_BULK,
+						      NAPI_SKB_CACHE_BULK/*申请的数目*/,
 						      nc->skb_cache);
 		if (unlikely(!nc->skb_count)) {
+			/*申请失败,未申请到足量的*/
 			local_unlock_nested_bh(&napi_alloc_cache.bh_lock);
 			return NULL;
 		}
@@ -360,19 +361,19 @@ get:
 }
 EXPORT_SYMBOL_GPL(napi_skb_cache_get_bulk);
 
-static inline void __finalize_skb_around(struct sk_buff *skb, void *data,
+static inline void __finalize_skb_around(struct sk_buff *skb, void *data/*buffer起始地址*/,
 					 unsigned int size)
 {
 	struct skb_shared_info *shinfo;
 
-	size -= SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	size -= SKB_DATA_ALIGN(sizeof(struct skb_shared_info));/*针对size,先多减出一个skb_shared_info结构体*/
 
 	/* Assumes caller memset cleared SKB */
 	skb->truesize = SKB_TRUESIZE(size);
 	refcount_set(&skb->users, 1);
-	skb->head = data;
+	skb->head = data;/*指明buffer起始位置*/
 	skb->data = data;
-	//使tail与data同值(即相当于报文为空）
+	//使tail与data同值(即相当于报文当前内容为空）
 	skb_reset_tail_pointer(skb);
 	skb_set_end_offset(skb, size);//指明buffer结束位置
 	//将偏移量清0
@@ -380,7 +381,7 @@ static inline void __finalize_skb_around(struct sk_buff *skb, void *data,
 	skb->transport_header = (typeof(skb->transport_header))~0U;
 	skb->alloc_cpu = raw_smp_processor_id();
 	/* make sure we initialize shinfo sequentially */
-	//取skb_shared_info空间，并初始化shinfo
+	//取skb_shared_info空间，并初始化shinfo(上面size已预留出一个skb_shared_info结构)
 	shinfo = skb_shinfo(skb);
 	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);
@@ -438,7 +439,7 @@ static void __build_skb_around(struct sk_buff *skb, void *data,
 	 * using slab buffer should use slab_build_skb() instead.
 	 */
 	if (WARN_ONCE(size == 0, "Use slab_build_skb() instead"))
-		data = __slab_build_skb(data, &size);
+		data = __slab_build_skb(data, &size);/*长度为0情况*/
 
 	__finalize_skb_around(skb, data, size);
 }
@@ -572,16 +573,17 @@ EXPORT_SYMBOL(napi_build_skb);
  * may be used. Otherwise, the packet data may be discarded until enough
  * memory is free
  */
-static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
+static void *kmalloc_reserve(unsigned int *size/*入参,原大小;出参,实际大小*/, gfp_t flags, int node,
 			     bool *pfmemalloc)
 {
 	bool ret_pfmemalloc = false;
 	size_t obj_size;
 	void *obj;
 
-	obj_size = SKB_HEAD_ALIGN(*size);
+	obj_size = SKB_HEAD_ALIGN(*size);/*增加skb_shared_info结构体大小*/
 	if (obj_size <= SKB_SMALL_HEAD_CACHE_SIZE &&
 	    !(flags & KMALLOC_NOT_NORMAL_BITS)) {
+		/*对于小的skb buffer从此cache中申请*/
 		obj = kmem_cache_alloc_node(net_hotdata.skb_small_head_cache,
 				flags | __GFP_NOMEMALLOC | __GFP_NOWARN,
 				node);
@@ -606,7 +608,7 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 	 */
 	obj = kmalloc_node_track_caller(obj_size,
 					flags | __GFP_NOMEMALLOC | __GFP_NOWARN,
-					node);
+					node);/*按obj_size分配*/
 	if (obj || !(gfp_pfmemalloc_allowed(flags)))
 		goto out;
 
@@ -644,7 +646,7 @@ out:
  *	Buffers may only be allocated from interrupts using a @gfp_mask of
  *	%GFP_ATOMIC.
  */
-struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+struct sk_buff *__alloc_skb(unsigned int size/*buffer大小*/, gfp_t gfp_mask,
 			    int flags, int node)
 {
 	struct kmem_cache *cache;
@@ -660,11 +662,12 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 		gfp_mask |= __GFP_MEMALLOC;
 
 	/* Get the HEAD */
-	/*先申请skb buffer*/
+	/*先申请skb buffer结构体*/
 	if ((flags & (SKB_ALLOC_FCLONE | SKB_ALLOC_NAPI)) == SKB_ALLOC_NAPI &&
 	    likely(node == NUMA_NO_NODE || node == numa_mem_id()))
 		skb = napi_skb_cache_get();
 	else
+		/*自cache中申请*/
 		skb = kmem_cache_alloc_node(cache, gfp_mask & ~GFP_DMA, node);
 	if (unlikely(!skb))
 		return NULL;
@@ -690,8 +693,8 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * actually initialise below. Hence, don't put any more fields after
 	 * the tail pointer in struct sk_buff!
 	 */
-	memset(skb, 0, offsetof(struct sk_buff, tail));
-	__build_skb_around(skb, data, size);
+	memset(skb, 0, offsetof(struct sk_buff, tail));/*清空skb结构体*/
+	__build_skb_around(skb, data, size);/*利用data,size初始化skb的buffer空间*/
 	skb->pfmemalloc = pfmemalloc;
 
 	if (flags & SKB_ALLOC_FCLONE) {

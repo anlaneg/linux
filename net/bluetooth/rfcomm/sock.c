@@ -580,7 +580,7 @@ static int rfcomm_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return sent;
 
 	skb = bt_skb_sendmmsg(sk, msg, len, d->mtu, RFCOMM_SKB_HEAD_RESERVE,
-			      RFCOMM_SKB_TAIL_RESERVE);
+			      RFCOMM_SKB_TAIL_RESERVE);/*这里有个bug,skb可能只串成功了一部分*/
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 

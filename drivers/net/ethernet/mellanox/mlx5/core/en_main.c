@@ -4788,7 +4788,7 @@ int mlx5e_hwstamp_set(struct mlx5e_priv *priv, struct ifreq *ifr)
 		break;
 	default:
 		err = -ERANGE;
-		goto err_unlock;
+		goto err_unlock;/*遇到不支持的*/
 	}
 
 	if (!mlx5e_profile_feature_cap(priv->profile, PTP_RX))
@@ -4817,7 +4817,7 @@ int mlx5e_hwstamp_get(struct mlx5e_priv *priv, struct ifreq *ifr)
 	struct hwtstamp_config *cfg = &priv->tstamp;
 
 	if (!MLX5_CAP_GEN(priv->mdev, device_frequency_khz))
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*设备必须有此能力才行*/
 
 	return copy_to_user(ifr->ifr_data, cfg, sizeof(*cfg)) ? -EFAULT : 0;
 }

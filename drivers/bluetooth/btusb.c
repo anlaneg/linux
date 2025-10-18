@@ -932,7 +932,7 @@ struct btusb_data {
 	int isoc_altsetting;
 	int suspend_count;
 
-	/*收取event*/
+	/*收到event skb后此回调会被调用*/
 	int (*recv_event)(struct hci_dev *hdev, struct sk_buff *skb);
 	/**/
 	int (*recv_acl)(struct hci_dev *hdev, struct sk_buff *skb);
@@ -1145,13 +1145,13 @@ static int btusb_recv_event(struct btusb_data *data, struct sk_buff *skb)
 {
 	if (data->intr_interval) {
 		/* Trigger dequeue immediately if an event is received */
-		schedule_delayed_work(&data->rx_work, 0);
+		schedule_delayed_work(&data->rx_work, 0);/*再触发rx*/
 	}
 
-	return data->recv_event(data->hdev, skb);
+	return data->recv_event(data->hdev, skb);/*指明hdev收到event SKB*/
 }
 
-static int btusb_recv_intr(struct btusb_data *data, void *buffer, int count)
+static int btusb_recv_intr(struct btusb_data *data, void *buffer/*收到的内容*/, int count/*收到的内容长度*/)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -1164,44 +1164,47 @@ static int btusb_recv_intr(struct btusb_data *data, void *buffer, int count)
 		int len;
 
 		if (!skb) {
+			/*申请event最大buffer备用*/
 			skb = bt_skb_alloc(HCI_MAX_EVENT_SIZE, GFP_ATOMIC);
 			if (!skb) {
 				err = -ENOMEM;
 				break;
 			}
 
-			hci_skb_pkt_type(skb) = HCI_EVENT_PKT;
-			hci_skb_expect(skb) = HCI_EVENT_HDR_SIZE;
+			hci_skb_pkt_type(skb) = HCI_EVENT_PKT;/*指明event报文*/
+			hci_skb_expect(skb) = HCI_EVENT_HDR_SIZE;/*指明期待的长度为event_hdr_size*/
 		}
 
 		len = min_t(uint, hci_skb_expect(skb), count);
-		skb_put_data(skb, buffer, len);
+		skb_put_data(skb, buffer, len);/*将buffer中的内容填充进skb*/
 
 		count -= len;
 		buffer += len;
 		hci_skb_expect(skb) -= len;
 
-		if (skb->len == HCI_EVENT_HDR_SIZE) {
+		if (skb->len == HCI_EVENT_HDR_SIZE) {/*HEADER填充成功,开始填充参数*/
 			/* Complete event header */
-			hci_skb_expect(skb) = hci_event_hdr(skb)->plen;
+			hci_skb_expect(skb) = hci_event_hdr(skb)->plen;/*取buffer中参数长度*/
 
 			if (skb_tailroom(skb) < hci_skb_expect(skb)) {
+				/*尾部空间不足以存放参数,释放掉这个skb*/
 				kfree_skb(skb);
 				skb = NULL;
 
 				err = -EILSEQ;
 				break;
 			}
+			/*此时param还未填充,会在下一次循环中填充.*/
 		}
 
-		if (!hci_skb_expect(skb)) {
+		if (!hci_skb_expect(skb)) {/*所有内容均已收取,event报文填充成功*/
 			/* Complete frame */
-			btusb_recv_event(data, skb);
+			btusb_recv_event(data, skb);/*走收到event流程*/
 			skb = NULL;
 		}
 	}
 
-	data->evt_skb = skb;
+	data->evt_skb = skb;/*传入的buffer被消费光了,但skb还未填充完成,暂存在此处(可以为NULL)*/
 	spin_unlock_irqrestore(&data->rxlock, flags);
 
 	return err;
@@ -1242,7 +1245,7 @@ static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count/*内
 				break;
 			}
 
-			hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明为ACLDATA报文*/
+			hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明为acl data packet*/
 			hci_skb_expect(skb) = HCI_ACL_HDR_SIZE;
 		}
 
@@ -1383,7 +1386,7 @@ static void btusb_intr_complete(struct urb *urb)
 	if (urb->status == 0) {
 		hdev->stat.byte_rx += urb->actual_length;
 
-		/*成功，处理收到的内容*/
+		/*收到event pkt*/
 		if (btusb_recv_intr(data, urb->transfer_buffer,
 				    urb->actual_length) < 0) {
 			bt_dev_err(hdev, "corrupted event packet");
@@ -2592,6 +2595,7 @@ static int btusb_recv_bulk_intel(struct btusb_data *data, void *buffer,
 	 * same way as the ones received from the interrupt endpoint.
 	 */
 	if (btintel_test_flag(hdev, INTEL_BOOTLOADER))
+		/*收到event pkt*/
 		return btusb_recv_intr(data, buffer, count);
 
 	return btusb_recv_bulk(data, buffer, count);
@@ -4048,6 +4052,7 @@ static int btusb_probe(struct usb_interface *intf,
 
 	data->recv_acl = hci_recv_frame;/*收包函数*/
 
+	/*创建hci DEV*/
 	hdev = hci_alloc_dev_priv(priv_size);
 	if (!hdev)
 		return -ENOMEM;
@@ -4560,7 +4565,7 @@ static struct usb_driver btusb_driver = {
 #endif
 };
 
-module_usb_driver(btusb_driver);/*注册usb设备*/
+module_usb_driver(btusb_driver);/*注册usb设备驱动*/
 
 module_param(disable_scofix, bool, 0644);
 MODULE_PARM_DESC(disable_scofix, "Disable fixup of wrong SCO buffer size");

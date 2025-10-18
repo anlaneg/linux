@@ -358,7 +358,7 @@ struct hci_dev {
 	const char	*name;/*设备名称，例如hci0*/
 	unsigned long	flags;/*设备标记位，例如：HCI_UP*/
 	__u16		id;/*hci设备编号*/
-	__u8		bus;
+	__u8		bus;/*所属bus类型*/
 	bdaddr_t	bdaddr;/*设备蓝牙地址*/
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;

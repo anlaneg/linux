@@ -577,7 +577,7 @@ int rfcomm_dlc_send(struct rfcomm_dlc *d, struct sk_buff *skb)
 	if (d->state != BT_CONNECTED)
 		return -ENOTCONN;
 
-	frag = skb_shinfo(skb)->frag_list;
+	frag = skb_shinfo(skb)->frag_list;/*取链表头*/
 	skb_shinfo(skb)->frag_list = NULL;
 
 	/* Queue all fragments atomically. */
@@ -587,6 +587,7 @@ int rfcomm_dlc_send(struct rfcomm_dlc *d, struct sk_buff *skb)
 	if (len < 0 || !frag)
 		goto unlock;
 
+	/*遍历发送其余分片*/
 	for (; frag; frag = next) {
 		int ret;
 

@@ -52,8 +52,8 @@ void aosp_do_open(struct hci_dev *hdev)
 	bt_dev_dbg(hdev, "Initialize AOSP extension");
 
 	/* LE Get Vendor Capabilities Command */
-	skb = __hci_cmd_sync(hdev, hci_opcode_pack(0x3f, 0x153), 0, NULL,
-			     HCI_CMD_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, hci_opcode_pack(0x3f, 0x153), 0, NULL/*无参数*/,
+			     HCI_CMD_TIMEOUT);/*发送命令并获得响应*/
 	if (IS_ERR_OR_NULL(skb)) {
 		if (!skb)
 			skb = ERR_PTR(-EIO);
@@ -77,7 +77,7 @@ void aosp_do_open(struct hci_dev *hdev)
 	/* Do not support very old versions. */
 	if (version_supported < 95) {
 		bt_dev_warn(hdev, "AOSP capabilities version %u too old",
-			    version_supported);
+			    version_supported);/*版本过低*/
 		goto done;
 	}
 
@@ -95,7 +95,7 @@ void aosp_do_open(struct hci_dev *hdev)
 	 *         master:system/bt/gd/hci/controller.cc;l=477
 	 */
 	if (rp->bluetooth_quality_report_support) {
-		hdev->aosp_quality_report = true;
+		hdev->aosp_quality_report = true;/*标记支持此特性*/
 		bt_dev_info(hdev, "AOSP quality report is supported");
 	}
 

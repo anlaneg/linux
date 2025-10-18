@@ -747,7 +747,7 @@ u8 kmalloc_size_index[24] __ro_after_init = {
 
 size_t kmalloc_size_roundup(size_t size)
 {
-	if (size && size <= KMALLOC_MAX_CACHE_SIZE) {
+	if (size && size <= KMALLOC_MAX_CACHE_SIZE) {/*长度小的,采用kmalloc_slab的相近大小进行分配*/
 		/*
 		 * The flags don't matter since size_index is common to all.
 		 * Neither does the caller for just getting ->object_size.
@@ -757,13 +757,13 @@ size_t kmalloc_size_roundup(size_t size)
 
 	/* Above the smaller buckets, size is a multiple of page size. */
 	if (size && size <= KMALLOC_MAX_SIZE)
-		return PAGE_SIZE << get_order(size);
+		return PAGE_SIZE << get_order(size);/*这种按相近整页大小进行分配*/
 
 	/*
 	 * Return 'size' for 0 - kmalloc() returns ZERO_SIZE_PTR
 	 * and very large size - kmalloc() may fail.
 	 */
-	return size;
+	return size;/*直接使用原大小*/
 
 }
 EXPORT_SYMBOL(kmalloc_size_roundup);

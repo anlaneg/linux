@@ -25,7 +25,7 @@ struct net_hotdata {
 	struct list_head	offload_base;
 	struct kmem_cache	*skbuff_cache;
 	struct kmem_cache	*skbuff_fclone_cache;
-	struct kmem_cache	*skb_small_head_cache;
+	struct kmem_cache	*skb_small_head_cache;/*用于申请小尺寸的skb buffer*/
 #ifdef CONFIG_RPS
 	struct rps_sock_flow_table __rcu *rps_sock_flow_table;
 	u32			rps_cpu_mask;
