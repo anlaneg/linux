@@ -1182,6 +1182,7 @@ static ssize_t ucma_accept(struct ucma_file *file, const char __user *inbuf,
 	if (in_len < offsetofend(typeof(cmd), reserved))
 		return -EINVAL;
 	in_size = min_t(size_t, in_len, sizeof(cmd));
+	/*复制cmd*/
 	if (copy_from_user(&cmd, inbuf, in_size))
 		return -EFAULT;
 
@@ -1195,6 +1196,7 @@ static ssize_t ucma_accept(struct ucma_file *file, const char __user *inbuf,
 	}
 
 	if (cmd.conn_param.valid) {
+		/*利用cmd中的连接参数填充conn_param*/
 		ucma_copy_conn_param(ctx->cm_id, &conn_param, &cmd.conn_param);
 		mutex_lock(&ctx->mutex);
 		rdma_lock_handler(ctx->cm_id);

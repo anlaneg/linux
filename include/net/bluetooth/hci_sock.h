@@ -94,16 +94,16 @@ struct hci_ufilter {
 
 /* Ioctl requests structures */
 struct hci_dev_stats {
-	__u32 err_rx;
-	__u32 err_tx;
-	__u32 cmd_tx;
+	__u32 err_rx;/*rx方向接收失败的包数*/
+	__u32 err_tx;/*传送出去时失败的包数*/
+	__u32 cmd_tx;/*tx方向cmd数目*/
 	__u32 evt_rx;/*收到的event数目*/
-	__u32 acl_tx;
+	__u32 acl_tx;/*tx方向acl数目数*/
 	__u32 acl_rx;
 	__u32 sco_tx;
 	__u32 sco_rx;
-	__u32 byte_rx;
-	__u32 byte_tx;
+	__u32 byte_rx;/*rx方向接收成功的包数*/
+	__u32 byte_tx;/*传送出去时成功的字节数*/
 };
 
 struct hci_dev_info {

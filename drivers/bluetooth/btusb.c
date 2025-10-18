@@ -923,8 +923,8 @@ struct btusb_data {
 
 	struct gpio_desc *reset_gpio;
 
-	__u8 cmdreq_type;
-	__u8 cmdreq;
+	__u8 cmdreq_type;/*请求类型，该字节用于指定请求的类型、数据传输方向以及请求的目标。*/
+	__u8 cmdreq;/*具体的请求代码*/
 
 	unsigned int sco_num;
 	unsigned int air_mode;
@@ -932,8 +932,11 @@ struct btusb_data {
 	int isoc_altsetting;
 	int suspend_count;
 
+	/*收取event*/
 	int (*recv_event)(struct hci_dev *hdev, struct sk_buff *skb);
+	/**/
 	int (*recv_acl)(struct hci_dev *hdev, struct sk_buff *skb);
+	/*bluk方式收取*/
 	int (*recv_bulk)(struct btusb_data *data, void *buffer, int count);
 
 	int (*setup_on_usb)(struct hci_dev *hdev);
@@ -1210,15 +1213,17 @@ static int btusb_recv_acl(struct btusb_data *data, struct sk_buff *skb)
 	 * force_poll_sync has been enabled.
 	 */
 	if (!data->intr_interval)
+		/*未设置中断间隔，直接采用回调方式收取*/
 		return data->recv_acl(data->hdev, skb);
 
 	skb_queue_tail(&data->acl_q, skb);
-	schedule_delayed_work(&data->rx_work, data->intr_interval);
+	schedule_delayed_work(&data->rx_work, data->intr_interval);/*触发rx_work，保证必要的中断间隔*/
 
 	return 0;
 }
 
-static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
+/*处理收到的buffer为acldata packet*/
+static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count/*内容长度*/)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -1237,7 +1242,7 @@ static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
 				break;
 			}
 
-			hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;
+			hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明为ACLDATA报文*/
 			hci_skb_expect(skb) = HCI_ACL_HDR_SIZE;
 		}
 
@@ -1246,26 +1251,26 @@ static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
 
 		count -= len;
 		buffer += len;
-		hci_skb_expect(skb) -= len;
+		hci_skb_expect(skb) -= len;/*len长度已读，期待长度减少len*/
 
 		if (skb->len == HCI_ACL_HDR_SIZE) {
 			__le16 dlen = hci_acl_hdr(skb)->dlen;
 
 			/* Complete ACL header */
-			hci_skb_expect(skb) = __le16_to_cpu(dlen);
+			hci_skb_expect(skb) = __le16_to_cpu(dlen);/*设置期待的data len*/
 
 			if (skb_tailroom(skb) < hci_skb_expect(skb)) {
 				kfree_skb(skb);
 				skb = NULL;
 
 				err = -EILSEQ;
-				break;
+				break;/*不足存放，报错*/
 			}
 		}
 
 		if (!hci_skb_expect(skb)) {
 			/* Complete frame */
-			btusb_recv_acl(data, skb);
+			btusb_recv_acl(data, skb);/*acldata packet填充完成，触发接收*/
 			skb = NULL;
 		}
 	}
@@ -1373,11 +1378,12 @@ static void btusb_intr_complete(struct urb *urb)
 	       urb->actual_length);
 
 	if (!test_bit(HCI_RUNNING, &hdev->flags))
-		return;
+		return;/*hci未处理running*/
 
 	if (urb->status == 0) {
 		hdev->stat.byte_rx += urb->actual_length;
 
+		/*成功，处理收到的内容*/
 		if (btusb_recv_intr(data, urb->transfer_buffer,
 				    urb->actual_length) < 0) {
 			bt_dev_err(hdev, "corrupted event packet");
@@ -1421,7 +1427,7 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	if (!data->intr_ep)
 		return -ENODEV;
 
-	urb = usb_alloc_urb(0, mem_flags);
+	urb = usb_alloc_urb(0, mem_flags);/*申请urb*/
 	if (!urb)
 		return -ENOMEM;
 
@@ -1435,7 +1441,7 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 		 */
 		size = HCI_MAX_EVENT_SIZE;
 
-	buf = kmalloc(size, mem_flags);
+	buf = kmalloc(size, mem_flags);/*申请待填充buffer*/
 	if (!buf) {
 		usb_free_urb(urb);
 		return -ENOMEM;
@@ -1443,7 +1449,7 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 
 	pipe = usb_rcvintpipe(data->udev, data->intr_ep->bEndpointAddress);
 
-	usb_fill_int_urb(urb, data->udev, pipe, buf, size,
+	usb_fill_int_urb(urb, data->udev, pipe, buf/*设置待填充buffer*/, size/*设置待填充buffer长度*/,
 			 btusb_intr_complete, hdev, data->intr_ep->bInterval);
 
 	urb->transfer_flags |= URB_FREE_BUFFER;
@@ -1502,6 +1508,7 @@ static void btusb_bulk_complete(struct urb *urb)
 	if (urb->status == 0) {
 		hdev->stat.byte_rx += urb->actual_length;
 
+		/*收取成功，触发recv_bulk*/
 		if (data->recv_bulk(data, urb->transfer_buffer,
 				    urb->actual_length) < 0) {
 			bt_dev_err(hdev, "corrupted ACL packet");
@@ -1536,7 +1543,7 @@ static int btusb_submit_bulk_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	struct urb *urb;
 	unsigned char *buf;
 	unsigned int pipe;
-	int err, size = HCI_MAX_FRAME_SIZE;
+	int err, size = HCI_MAX_FRAME_SIZE;/*取等填充的最大帧*/
 
 	BT_DBG("%s", hdev->name);
 
@@ -1547,7 +1554,7 @@ static int btusb_submit_bulk_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	if (!urb)
 		return -ENOMEM;
 
-	buf = kmalloc(size, mem_flags);
+	buf = kmalloc(size, mem_flags);/*申请size长度buffer*/
 	if (!buf) {
 		usb_free_urb(urb);
 		return -ENOMEM;
@@ -1555,7 +1562,7 @@ static int btusb_submit_bulk_urb(struct hci_dev *hdev, gfp_t mem_flags)
 
 	pipe = usb_rcvbulkpipe(data->udev, data->bulk_rx_ep->bEndpointAddress);
 
-	usb_fill_bulk_urb(urb, data->udev, pipe, buf, size,
+	usb_fill_bulk_urb(urb, data->udev, pipe, buf/*待填充的buffer*/, size,
 			  btusb_bulk_complete, hdev);
 
 	urb->transfer_flags |= URB_FREE_BUFFER;
@@ -1839,11 +1846,13 @@ static void btusb_tx_complete(struct urb *urb)
 	       urb->actual_length);
 
 	if (!test_bit(HCI_RUNNING, &hdev->flags))
-		goto done;
+		goto done;/*设备未处于running状态*/
 
 	if (!urb->status) {
+		/*传输成功，增加统计*/
 		hdev->stat.byte_tx += urb->transfer_buffer_length;
 	} else {
+		/*传全失败，对于command pkt,需要取消此命令*/
 		if (hci_skb_pkt_type(skb) == HCI_COMMAND_PKT)
 			hci_cmd_sync_cancel(hdev, -urb->status);
 		hdev->stat.err_tx++;
@@ -1906,11 +1915,11 @@ static int btusb_open(struct hci_dev *hdev)
 	if (test_and_set_bit(BTUSB_INTR_RUNNING, &data->flags))
 		goto done;
 
-	err = btusb_submit_intr_urb(hdev, GFP_KERNEL);
+	err = btusb_submit_intr_urb(hdev, GFP_KERNEL);/*intr_ep urb填充*/
 	if (err < 0)
 		goto failed;
 
-	err = btusb_submit_bulk_urb(hdev, GFP_KERNEL);
+	err = btusb_submit_bulk_urb(hdev, GFP_KERNEL);/*bulk_rx_eq urb填充*/
 	if (err < 0) {
 		usb_kill_anchored_urbs(&data->intr_anchor);
 		goto failed;
@@ -1998,9 +2007,9 @@ static int btusb_flush(struct hci_dev *hdev)
 	return 0;
 }
 
-static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb)
+static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb/*要发送的报文*/)
 {
-	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct btusb_data *data = hci_get_drvdata(hdev);/*取驱动私有结构*/
 	struct usb_ctrlrequest *dr;
 	struct urb *urb;
 	unsigned int pipe;
@@ -2019,7 +2028,7 @@ static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb)
 	dr->bRequest     = data->cmdreq;
 	dr->wIndex       = 0;
 	dr->wValue       = 0;
-	dr->wLength      = __cpu_to_le16(skb->len);
+	dr->wLength      = __cpu_to_le16(skb->len);/*报文长度*/
 
 	pipe = usb_sndctrlpipe(data->udev, 0x00);
 
@@ -2122,15 +2131,17 @@ static int submit_or_queue_tx_urb(struct hci_dev *hdev, struct urb *urb)
 	spin_unlock_irqrestore(&data->txlock, flags);
 
 	if (!suspending)
+		/*无suspending标记，执行传送*/
 		return submit_tx_urb(hdev, urb);
 
-	usb_anchor_urb(urb, &data->deferred);
+	usb_anchor_urb(urb, &data->deferred);/*加入到deferred链上*/
 	schedule_work(&data->waker);
 
 	usb_free_urb(urb);
 	return 0;
 }
 
+/*通过USB向外发送报文*/
 static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct urb *urb;
@@ -2146,7 +2157,7 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		hdev->stat.cmd_tx++;
 		return submit_or_queue_tx_urb(hdev, urb);
 
-	case HCI_ACLDATA_PKT:
+	case HCI_ACLDATA_PKT:/*ACL数据包*/
 		urb = alloc_bulk_urb(hdev, skb);
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
@@ -2154,7 +2165,7 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		hdev->stat.acl_tx++;
 		return submit_or_queue_tx_urb(hdev, urb);
 
-	case HCI_SCODATA_PKT:
+	case HCI_SCODATA_PKT:/*SCO数据包*/
 		if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
 		    hci_conn_num(hdev, SCO_LINK) < 1)
 			return -ENODEV;
@@ -2166,7 +2177,7 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		hdev->stat.sco_tx++;
 		return submit_tx_urb(hdev, urb);
 
-	case HCI_ISODATA_PKT:
+	case HCI_ISODATA_PKT:/*ISO数据包*/
 		urb = alloc_bulk_urb(hdev, skb);
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
@@ -4015,7 +4026,7 @@ static int btusb_probe(struct usb_interface *intf,
 
 	priv_size = 0;
 
-	data->recv_event = hci_recv_frame;
+	data->recv_event = hci_recv_frame;/*默认event收包函数*/
 	data->recv_bulk = btusb_recv_bulk;
 
 	if (id->driver_info & BTUSB_INTEL_COMBINED) {
@@ -4023,28 +4034,28 @@ static int btusb_probe(struct usb_interface *intf,
 		priv_size += sizeof(struct btintel_data);
 
 		/* Override the rx handlers */
-		data->recv_event = btintel_recv_event;
+		data->recv_event = btintel_recv_event;/*intel设备*/
 		data->recv_bulk = btusb_recv_bulk_intel;
 	} else if (id->driver_info & BTUSB_REALTEK) {
 		/* Allocate extra space for Realtek device */
 		priv_size += sizeof(struct btrealtek_data);
 
-		data->recv_event = btusb_recv_event_realtek;
+		data->recv_event = btusb_recv_event_realtek;/*realtek设备*/
 	} else if (id->driver_info & BTUSB_MEDIATEK) {
 		/* Allocate extra space for Mediatek device */
 		priv_size += sizeof(struct btmtk_data);
 	}
 
-	data->recv_acl = hci_recv_frame;
+	data->recv_acl = hci_recv_frame;/*收包函数*/
 
 	hdev = hci_alloc_dev_priv(priv_size);
 	if (!hdev)
 		return -ENOMEM;
 
 	hdev->bus = HCI_USB;
-	hci_set_drvdata(hdev, data);
+	hci_set_drvdata(hdev, data);/*驱动私有数据*/
 
-	data->hdev = hdev;
+	data->hdev = hdev;/*设置hci设备*/
 
 	SET_HCIDEV_DEV(hdev, &intf->dev);
 

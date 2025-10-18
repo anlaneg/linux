@@ -4795,7 +4795,7 @@ int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	lockdep_assert_held(&id_priv->handler_mutex);
 
 	if (READ_ONCE(id_priv->state) != RDMA_CM_CONNECT)
-		return -EINVAL;
+		return -EINVAL;/*状态有误*/
 
 	if (!id->qp && conn_param) {
 		id_priv->qp_num = conn_param->qp_num;

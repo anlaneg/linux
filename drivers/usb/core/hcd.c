@@ -1652,7 +1652,7 @@ static void __usb_hcd_giveback_urb(struct urb *urb)
 		usb_led_activity(USB_LED_EVENT_HOST);
 
 	/* pass ownership to the completion handler */
-	urb->status = status;
+	urb->status = status;/*设置状态*/
 	/*
 	 * Only collect coverage in the softirq context and disable interrupts
 	 * to avoid scenarios with nested remote coverage collection sections
@@ -1660,7 +1660,7 @@ static void __usb_hcd_giveback_urb(struct urb *urb)
 	 * See the comment next to kcov_remote_start_usb_softirq() for details.
 	 */
 	flags = kcov_remote_start_usb_softirq((u64)urb->dev->bus->busnum);
-	urb->complete(urb);
+	urb->complete(urb);/*触发complete回调*/
 	kcov_remote_stop_softirq(flags);
 
 	usb_anchor_resume_wakeups(anchor);

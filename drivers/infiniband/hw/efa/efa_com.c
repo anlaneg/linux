@@ -382,6 +382,7 @@ static inline int efa_com_init_comp_ctxt(struct efa_com_admin_queue *aq)
 	return 0;
 }
 
+/*提交admin command*/
 static struct efa_comp_ctx *efa_com_submit_admin_cmd(struct efa_com_admin_queue *aq,
 						     struct efa_admin_aq_entry *cmd,
 						     size_t cmd_size_in_bytes,
@@ -501,7 +502,7 @@ static int efa_com_wait_and_process_admin_cq_polling(struct efa_comp_ctx *comp_c
 	unsigned long flags;
 	int err;
 
-	timeout = jiffies + usecs_to_jiffies(aq->completion_timeout);
+	timeout = jiffies + usecs_to_jiffies(aq->completion_timeout);/*超时时间*/
 
 	while (1) {
 		spin_lock_irqsave(&aq->cq.lock, flags);
@@ -512,6 +513,7 @@ static int efa_com_wait_and_process_admin_cq_polling(struct efa_comp_ctx *comp_c
 			break;
 
 		if (time_is_before_jiffies(timeout)) {
+			/*等待响应超时*/
 			ibdev_err_ratelimited(
 				aq->efa_dev,
 				"Wait for completion (polling) timeout\n");
@@ -523,7 +525,7 @@ static int efa_com_wait_and_process_admin_cq_polling(struct efa_comp_ctx *comp_c
 			goto out;
 		}
 
-		msleep(aq->poll_interval);
+		msleep(aq->poll_interval);/*sleep一小会儿*/
 	}
 
 	err = efa_com_comp_status_to_errno(comp_ctx->user_cqe->acq_common_descriptor.status);
@@ -612,7 +614,7 @@ static int efa_com_wait_and_process_admin_cq(struct efa_comp_ctx *comp_ctx,
  */
 int efa_com_cmd_exec(struct efa_com_admin_queue *aq,
 		     struct efa_admin_aq_entry *cmd,
-		     size_t cmd_size,
+		     size_t cmd_size/*cmd占用的字节数*/,
 		     struct efa_admin_acq_entry *comp,
 		     size_t comp_size)
 {
@@ -642,6 +644,7 @@ int efa_com_cmd_exec(struct efa_com_admin_queue *aq,
 
 	err = efa_com_wait_and_process_admin_cq(comp_ctx, aq);
 	if (err) {
+		/*出错*/
 		ibdev_err_ratelimited(
 			aq->efa_dev,
 			"Failed to process command %s (opcode %u) comp_status %d err %d\n",

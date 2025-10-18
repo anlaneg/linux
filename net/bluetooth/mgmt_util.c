@@ -72,7 +72,7 @@ struct sk_buff *mgmt_alloc_skb(struct hci_dev *hdev, u16 opcode,
 	return skb;
 }
 
-int mgmt_send_event_skb(unsigned short channel/*指明event投递channel*/, struct sk_buff *skb, int flag,
+int mgmt_send_event_skb(unsigned short channel/*指明event投递channel*/, struct sk_buff *skb/*要发送的消息*/, int flag,
 			struct sock *skip_sk)
 {
 	struct hci_dev *hdev;
@@ -117,12 +117,13 @@ int mgmt_send_event(u16 event, struct hci_dev *hdev, unsigned short channel,
 {
 	struct sk_buff *skb;
 
-	/*构造要发送的消息*/
+	/*构造要发送的消息buffer*/
 	skb = mgmt_alloc_skb(hdev, event, data_len);
 	if (!skb)
 		return -ENOMEM;
 
 	if (data)
+		/*填充消息参数*/
 		skb_put_data(skb, data, data_len);
 
 	/*发送此event*/

@@ -1189,7 +1189,7 @@ put_done:
 	return err;
 }
 
-/*dump设备device*/
+/*完成具体一个ib设备的dump*/
 static int _nldev_get_dumpit(struct ib_device *device/*待dump的ib设备*/,
 			     struct sk_buff *skb,
 			     struct netlink_callback *cb/*dump上下文*/,
@@ -1207,7 +1207,7 @@ static int _nldev_get_dumpit(struct ib_device *device/*待dump的ib设备*/,
 			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),/*指明ib设备get信息*/
 			0, NLM_F_MULTI);
 
-	//填充device信息
+	//填充ib device信息
 	if (!nlh || fill_dev_info(skb, device)) {
 		nlmsg_cancel(skb, nlh);
 		goto out;

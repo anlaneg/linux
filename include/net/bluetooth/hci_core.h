@@ -496,7 +496,7 @@ struct hci_dev {
 	struct work_struct	power_on;
 	struct delayed_work	power_off;
 	struct work_struct	error_reset;
-	struct work_struct	cmd_sync_work;
+	struct work_struct	cmd_sync_work;/*同步命令对应的work*/
 	struct list_head	cmd_sync_work_list;/*同步命令工作列表*/
 	struct mutex		cmd_sync_work_lock;/*保护cmd_sync_work_list列表*/
 	struct mutex		unregister_lock;
@@ -517,7 +517,7 @@ struct hci_dev {
 
 	struct delayed_work	le_scan_disable;
 
-	struct sk_buff_head	rx_q;/*挂接在此q上的skb将按照pkt_type，进行分别处理，见hci_rx_work*/
+	struct sk_buff_head	rx_q;/*挂接在此q上的skb将按照pkt_type区别处理，见hci_rx_work*/
 	struct sk_buff_head	raw_q;/*挂接在此q上的skb将被调用send回调*/
 	struct sk_buff_head	cmd_q;/*待处理的cmd skb队列*/
 
@@ -646,6 +646,7 @@ struct hci_dev {
 	int (*flush)(struct hci_dev *hdev);
 	int (*setup)(struct hci_dev *hdev);
 	int (*shutdown)(struct hci_dev *hdev);
+	/*hci设备向外发送报文*/
 	int (*send)(struct hci_dev *hdev, struct sk_buff *skb);
 	void (*notify)(struct hci_dev *hdev, unsigned int evt);
 	void (*hw_error)(struct hci_dev *hdev, u8 code);
@@ -2288,6 +2289,7 @@ void hci_sock_dev_event(struct hci_dev *hdev, int event);
 struct hci_mgmt_handler {
 	int (*func) (struct sock *sk, struct hci_dev *hdev, void *data,
 		     u16 data_len);
+	/*数据长度*/
 	size_t data_len;
 	unsigned long flags;
 };

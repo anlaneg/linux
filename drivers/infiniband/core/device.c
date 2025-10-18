@@ -1931,7 +1931,7 @@ int ib_register_client(struct ib_client *client)
 	 */
 	down_write(&devices_rwsem);
 	down_write(&clients_rwsem);
-	ret = assign_client_id(client);
+	ret = assign_client_id(client);/*分配client id*/
 	if (ret)
 		goto out;
 

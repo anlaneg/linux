@@ -31,9 +31,9 @@ typedef void (*hci_cmd_sync_work_destroy_t)(struct hci_dev *hdev, void *data,
 
 struct hci_cmd_sync_work_entry {
 	struct list_head list;
-	hci_cmd_sync_work_func_t func;
-	void *data;
-	hci_cmd_sync_work_destroy_t destroy;
+	hci_cmd_sync_work_func_t func;/*work函数*/
+	void *data;/*函数参数*/
+	hci_cmd_sync_work_destroy_t destroy;/*如果destroy函数不为空，则在func执行后，执行destroy*/
 };
 
 struct adv_info;

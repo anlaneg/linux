@@ -1687,9 +1687,9 @@ static inline void usb_fill_control_urb(struct urb *urb,
 					struct usb_device *dev,
 					unsigned int pipe,
 					unsigned char *setup_packet,
-					void *transfer_buffer,
-					int buffer_length,
-					usb_complete_t complete_fn,
+					void *transfer_buffer/*要传输的buffer*/,
+					int buffer_length/*要传输的buffer长度*/,
+					usb_complete_t complete_fn/*传输完成后回调*/,
 					void *context)
 {
 	urb->dev = dev;
@@ -2031,7 +2031,7 @@ static inline unsigned int __create_pipe(struct usb_device *dev,
 #define usb_sndintpipe(dev, endpoint)	\
 	((PIPE_INTERRUPT << 30) | __create_pipe(dev, endpoint))
 #define usb_rcvintpipe(dev, endpoint)	\
-	((PIPE_INTERRUPT << 30) | __create_pipe(dev, endpoint) | USB_DIR_IN)
+	((PIPE_INTERRUPT << 30) | __create_pipe(dev, endpoint) | USB_DIR_IN/*收方向*/)
 
 static inline struct usb_host_endpoint *
 usb_pipe_endpoint(struct usb_device *dev, unsigned int pipe)

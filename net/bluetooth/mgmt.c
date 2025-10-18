@@ -338,9 +338,10 @@ static int mgmt_limited_event(u16 event, struct hci_dev *hdev, void *data,
 			       flag, skip_sk);
 }
 
-static int mgmt_event(u16 event, struct hci_dev *hdev, void *data, u16 len,
+static int mgmt_event(u16 event/*需触发的event*/, struct hci_dev *hdev, void *data/*参数*/, u16 len,
 		      struct sock *skip_sk)
 {
+	/*向用户态通过HCI_CHANNEL_CONTROL触发event通知*/
 	return mgmt_send_event(event, hdev, HCI_CHANNEL_CONTROL, data, len,
 			       HCI_SOCK_TRUSTED, skip_sk);
 }
@@ -1135,6 +1136,7 @@ static void mesh_send_done(struct work_struct *work)
 	if (!hci_dev_test_flag(hdev, HCI_MESH_SENDING))
 		return;
 
+	/*sync cmd函数入队*/
 	hci_cmd_sync_queue(hdev, mesh_send_done_sync, NULL, mesh_next);
 }
 
@@ -9835,6 +9837,7 @@ void mgmt_connect_failed(struct hci_dev *hdev, struct hci_conn *conn, u8 status)
 	ev.addr.type = link_to_bdaddr(conn->type, conn->dst_type);
 	ev.status = mgmt_status(status);
 
+	/*通知用户态connect failed*/
 	mgmt_event(MGMT_EV_CONNECT_FAILED, hdev, &ev, sizeof(ev), NULL);
 }
 
@@ -9842,6 +9845,7 @@ void mgmt_pin_code_request(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 secure)
 {
 	struct mgmt_ev_pin_code_request ev;
 
+	/*填写ev*/
 	bacpy(&ev.addr.bdaddr, bdaddr);
 	ev.addr.type = BDADDR_BREDR;
 	ev.secure = secure;

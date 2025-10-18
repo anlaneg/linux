@@ -73,6 +73,7 @@ struct urb *usb_alloc_urb(int iso_packets/*报文数*/, gfp_t mem_flags)
 	/*创建URB*/
 	struct urb *urb;
 
+	/*申请urb，要求urb结构体后有iso_packets个iso_frame_desc*/
 	urb = kmalloc(struct_size(urb, iso_frame_desc, iso_packets),
 		      mem_flags);
 	if (!urb)
@@ -131,7 +132,7 @@ void usb_anchor_urb(struct urb *urb, struct usb_anchor *anchor)
 
 	spin_lock_irqsave(&anchor->lock, flags);
 	usb_get_urb(urb);
-	list_add_tail(&urb->anchor_list, &anchor->urb_list);
+	list_add_tail(&urb->anchor_list, &anchor->urb_list);/*将urb加入到anchor->urb_list链上*/
 	urb->anchor = anchor;
 
 	if (unlikely(anchor->poisoned))
@@ -376,7 +377,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 	unsigned int			allowed;
 
 	if (!urb || !urb->complete)
-		return -EINVAL;
+		return -EINVAL;/*必须提供complete函数*/
 	if (urb->hcpriv) {
 		WARN_ONCE(1, "URB %p submitted while active\n", urb);
 		return -EBUSY;
@@ -407,13 +408,14 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 				(struct usb_ctrlrequest *) urb->setup_packet;
 
 		if (!setup)
-			return -ENOEXEC;
+			return -ENOEXEC;/*必须提供setup*/
 		is_out = !(setup->bRequestType & USB_DIR_IN) ||
 				!setup->wLength;
 		dev_WARN_ONCE(&dev->dev, (usb_pipeout(urb->pipe) != is_out),
 				"BOGUS control dir, pipe %x doesn't match bRequestType %x\n",
 				urb->pipe, setup->bRequestType);
 		if (le16_to_cpu(setup->wLength) != urb->transfer_buffer_length) {
+			/*长度与urb中记录的buffer长度不匹配*/
 			dev_dbg(&dev->dev, "BOGUS control len %d doesn't match transfer length %d\n",
 					le16_to_cpu(setup->wLength),
 					urb->transfer_buffer_length);

@@ -283,7 +283,7 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 	struct sk_buff *skb;
 	u8 status;
 
-	/*构造opcode对应的skb并发送等待响应*/
+	/*执行同步cmd,并获取响应,构造opcode对应的skb并发送等待响应*/
 	skb = __hci_cmd_sync_sk(hdev, opcode, plen, param, event, timeout, sk);
 
 	/* If command return a status event, skb will be set to -ENODATA */
@@ -297,7 +297,7 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 		return PTR_ERR(skb);
 	}
 
-	status = skb->data[0];
+	status = skb->data[0];/*返回cmd响应状态*/
 
 	kfree_skb(skb);
 
@@ -305,8 +305,8 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 }
 EXPORT_SYMBOL(__hci_cmd_sync_status_sk);
 
-int __hci_cmd_sync_status(struct hci_dev *hdev, u16 opcode, u32 plen,
-			  const void *param, u32 timeout)
+int __hci_cmd_sync_status(struct hci_dev *hdev, u16 opcode/*操作码*/, u32 plen/*参数长度*/,
+			  const void *param/*参数*/, u32 timeout)
 {
 	return __hci_cmd_sync_status_sk(hdev, opcode, plen, param, 0, timeout,
 					NULL);
@@ -358,7 +358,7 @@ static void hci_cmd_sync_work(struct work_struct *work)
 			hci_req_sync_lock(hdev);
 			/*执行回调函数*/
 			err = entry->func(hdev, entry->data);
-			/*执行destroy函数*/
+			/*有destroy的，执行destroy函数*/
 			if (entry->destroy)
 				entry->destroy(hdev, entry->data, err);
 			hci_req_sync_unlock(hdev);
@@ -733,12 +733,13 @@ EXPORT_SYMBOL(hci_cmd_sync_cancel_sync);
 int hci_cmd_sync_submit(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 			void *data, hci_cmd_sync_work_destroy_t destroy)
 {
+	/*用于提交sync cmd work到hdev->cmd_sync_work_list队列*/
 	struct hci_cmd_sync_work_entry *entry;
 	int err = 0;
 
-	mutex_lock(&hdev->unregister_lock);
+	mutex_lock(&hdev->unregister_lock);/*加unregister锁，此过程中设备不会unregister*/
 	if (hci_dev_test_flag(hdev, HCI_UNREGISTER)) {
-		err = -ENODEV;
+		err = -ENODEV;/*加锁后检查设备已unregister,解锁退出*/
 		goto unlock;
 	}
 
@@ -778,6 +779,7 @@ int hci_cmd_sync_queue(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	if (!test_bit(HCI_RUNNING, &hdev->flags))
 		return -ENETDOWN;
 
+	/*将func,destroy入队，并在另一个线程上按序执行*/
 	return hci_cmd_sync_submit(hdev, func, data, destroy);
 }
 EXPORT_SYMBOL(hci_cmd_sync_queue);
@@ -5145,6 +5147,7 @@ int hci_dev_open_sync(struct hci_dev *hdev)
 	}
 
 	if (test_bit(HCI_UP, &hdev->flags)) {
+		/*设备已开启*/
 		ret = -EALREADY;
 		goto done;
 	}
@@ -5416,7 +5419,7 @@ static int hci_power_on_sync(struct hci_dev *hdev)
 		return hci_powered_update_sync(hdev);
 	}
 
-	err = hci_dev_open_sync(hdev);
+	err = hci_dev_open_sync(hdev);/*启动hdev设备*/
 	if (err < 0)
 		return err;
 

@@ -72,10 +72,10 @@ enum {
 
 /* See IBTA Annex A11, servies ID bytes 4 & 5 */
 enum rdma_ucm_port_space {
-	RDMA_PS_IPOIB = 0x0002,
+	RDMA_PS_IPOIB = 0x0002,/*对应的使用的是UD QP*/
 	RDMA_PS_IB    = 0x013F,
 	RDMA_PS_TCP   = 0x0106,/*使用TCP*/
-	RDMA_PS_UDP   = 0x0111,
+	RDMA_PS_UDP   = 0x0111,/*对应的使用的是RC QP*/
 };
 
 /*

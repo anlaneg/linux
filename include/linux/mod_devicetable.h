@@ -152,7 +152,7 @@ struct usb_device_id {
 	__u8		bInterfaceNumber;
 
 	/* not matched against */
-	kernel_ulong_t	driver_info
+	kernel_ulong_t	driver_info/*驱动信息*/
 		__attribute__((aligned(sizeof(kernel_ulong_t))));
 };
 
