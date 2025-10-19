@@ -3986,10 +3986,10 @@ unlock:
 	HCI_CC(_op, _func, sizeof(struct hci_ev_status))
 
 static const struct hci_cc {
-	u16  op;
+	u16  op;/*操作码*/
 	u8 (*func)(struct hci_dev *hdev, void *data, struct sk_buff *skb);
-	u16  min_len;
-	u16  max_len;
+	u16  min_len;/*最小参数长度*/
+	u16  max_len;/*最大参数长度*/
 } hci_cc_table[] = {
 	HCI_CC_STATUS(HCI_OP_INQUIRY_CANCEL, hci_cc_inquiry_cancel),
 	HCI_CC_STATUS(HCI_OP_PERIODIC_INQ, hci_cc_periodic_inq),
@@ -4158,6 +4158,7 @@ static u8 hci_cc_func(struct hci_dev *hdev, const struct hci_cc *cc,
 	void *data;
 
 	if (skb->len < cc->min_len) {
+		/*参数长度过小*/
 		bt_dev_err(hdev, "unexpected cc 0x%4.4x length: %u < %u",
 			   cc->op, skb->len, cc->min_len);
 		return HCI_ERROR_UNSPECIFIED;
@@ -4168,6 +4169,7 @@ static u8 hci_cc_func(struct hci_dev *hdev, const struct hci_cc *cc,
 	 * acceptable.
 	 */
 	if (skb->len > cc->max_len)
+		/*参数长度过大*/
 		bt_dev_warn(hdev, "unexpected cc 0x%4.4x length: %u > %u",
 			    cc->op, skb->len, cc->max_len);
 
@@ -4175,6 +4177,7 @@ static u8 hci_cc_func(struct hci_dev *hdev, const struct hci_cc *cc,
 	if (!data)
 		return HCI_ERROR_UNSPECIFIED;
 
+	/*触发相应回调*/
 	return cc->func(hdev, data, skb);
 }
 
@@ -4192,6 +4195,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 
 	for (i = 0; i < ARRAY_SIZE(hci_cc_table); i++) {
 		if (hci_cc_table[i].op == *opcode) {
+			/*如果此opcode与hci_cc_table中元素命中,则检查并触发相应回调*/
 			*status = hci_cc_func(hdev, &hci_cc_table[i], skb);
 			break;
 		}
@@ -4205,7 +4209,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 		 * need to introduce a vendor CC table in order to properly set
 		 * the status.
 		 */
-		*status = skb->data[0];
+		*status = skb->data[0];/*如上示,失配,假设0号字节包含了状态*/
 	}
 
 	handle_cmd_cnt_and_timer(hdev, ev->ncmd);
@@ -7406,7 +7410,7 @@ static const struct hci_ev {
 	HCI_EV(HCI_EV_REMOTE_FEATURES, hci_remote_features_evt,
 	       sizeof(struct hci_ev_remote_features)),
 	/* [0x0e = HCI_EV_CMD_COMPLETE] */
-	HCI_EV_REQ_VL(HCI_EV_CMD_COMPLETE, hci_cmd_complete_evt,
+	HCI_EV_REQ_VL(HCI_EV_CMD_COMPLETE, hci_cmd_complete_evt/*收到cmd complete时调用*/,
 		      sizeof(struct hci_ev_cmd_complete), HCI_MAX_EVENT_SIZE),
 	/* [0x0f = HCI_EV_CMD_STATUS] */
 	HCI_EV_REQ(HCI_EV_CMD_STATUS, hci_cmd_status_evt,

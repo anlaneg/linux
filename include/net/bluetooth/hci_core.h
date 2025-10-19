@@ -503,8 +503,8 @@ struct hci_dev {
 	struct work_struct	cmd_sync_cancel_work;
 	struct work_struct	reenable_adv_work;
 
-	__u16			discov_timeout;
-	struct delayed_work	discov_off;
+	__u16			discov_timeout;/*可发现超时时间*/
+	struct delayed_work	discov_off;/*用于在timeout后关闭设备的"可发现"标记*/
 
 	struct delayed_work	service_cache;
 
@@ -540,7 +540,7 @@ struct hci_dev {
 
 	bool			discovery_paused;
 	int			advertising_old_state;
-	bool			advertising_paused;
+	bool			advertising_paused;/*停止对外宣告*/
 
 	struct notifier_block	suspend_notifier;
 	enum suspended_state	suspend_state_next;
@@ -559,7 +559,7 @@ struct hci_dev {
 	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
 	struct list_head	reject_list;
 	struct list_head	accept_list;
-	struct list_head	uuids;
+	struct list_head	uuids;/*用于串连一组设置的uuid*/
 	struct list_head	link_keys;
 	struct list_head	long_term_keys;
 	struct list_head	identity_resolving_keys;
@@ -599,7 +599,7 @@ struct hci_dev {
 
 	struct list_head	adv_instances;
 	unsigned int		adv_instance_cnt;
-	__u8			cur_adv_instance;
+	__u8			cur_adv_instance;/*当前广播间隔*/
 	__u16			adv_instance_timeout;
 	struct delayed_work	adv_instance_expire;
 
@@ -1897,6 +1897,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_esco_2m_capable(dev)   ((dev)->features[0][5] & LMP_EDR_ESCO_2M)
 #define lmp_ext_inq_capable(dev)   ((dev)->features[0][6] & LMP_EXT_INQ)
 #define lmp_le_br_capable(dev)     (!!((dev)->features[0][6] & LMP_SIMUL_LE_BR))
+/*设备是否有ssp能力*/
 #define lmp_ssp_capable(dev)       ((dev)->features[0][6] & LMP_SIMPLE_PAIR)
 #define lmp_no_flush_capable(dev)  ((dev)->features[0][6] & LMP_NO_FLUSH)
 #define lmp_lsto_capable(dev)      ((dev)->features[0][7] & LMP_LSTO)
@@ -1922,6 +1923,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_host_le_capable(dev)   (!!((dev)->features[1][0] & LMP_HOST_LE))
 #define lmp_host_le_br_capable(dev) (!!((dev)->features[1][0] & LMP_HOST_LE_BREDR))
 
+/*设备UP且没有置auto_off标记*/
 #define hdev_is_powered(dev)   (test_bit(HCI_UP, &(dev)->flags) && \
 				!hci_dev_test_flag(dev, HCI_AUTO_OFF))
 #define bredr_sc_enabled(dev)  (lmp_sc_capable(dev) && \
@@ -1975,9 +1977,11 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define use_ext_conn(dev) (((dev)->commands[37] & 0x80) && \
 	!hci_test_quirk((dev), HCI_QUIRK_BROKEN_EXT_CREATE_CONN))
 /* Extended advertising support */
+/*是否支持广播扩展能力*/
 #define ext_adv_capable(dev) (((dev)->le_features[1] & HCI_LE_EXT_ADV))
 
 /* Maximum advertising length */
+/*最大广播报文长度*/
 #define max_adv_len(dev) \
 	(ext_adv_capable(dev) ? HCI_MAX_EXT_AD_LENGTH : HCI_MAX_AD_LENGTH)
 

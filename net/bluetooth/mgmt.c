@@ -328,12 +328,13 @@ static int mgmt_index_event(u16 event, struct hci_dev *hdev, void *data,
 			    u16 len, int flag)
 {
 	return mgmt_send_event(event, hdev, HCI_CHANNEL_CONTROL, data, len,
-			       flag, NULL);
+			       flag, NULL/*无SKIP SOCKET*/);
 }
 
 static int mgmt_limited_event(u16 event, struct hci_dev *hdev, void *data,
-			      u16 len, int flag, struct sock *skip_sk)
+			      u16 len, int flag/*向满足此标记的socket发送*/, struct sock *skip_sk)
 {
+	/*向用户态通过HCI_CHANNEL_CONTROL触发event通知*/
 	return mgmt_send_event(event, hdev, HCI_CHANNEL_CONTROL, data, len,
 			       flag, skip_sk);
 }
@@ -836,6 +837,7 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 	settings |= MGMT_SETTING_DISCOVERABLE;/*可发现*/
 
 	if (lmp_bredr_capable(hdev)) {
+		/*支持br/edr*/
 		if (hdev->hci_ver >= BLUETOOTH_VER_1_2)
 			settings |= MGMT_SETTING_FAST_CONNECTABLE;
 		settings |= MGMT_SETTING_BREDR;
@@ -1021,6 +1023,7 @@ static void service_cache_off(struct work_struct *work)
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
 					    service_cache.work);
 
+	/*移除service_cache标记*/
 	if (!hci_dev_test_and_clear_flag(hdev, HCI_SERVICE_CACHE))
 		return;
 
@@ -1056,6 +1059,7 @@ static void rpa_expired(struct work_struct *work)
 
 static int set_discoverable_sync(struct hci_dev *hdev, void *data);
 
+/*关闭设备可发现*/
 static void discov_off(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
@@ -1174,7 +1178,7 @@ static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 
 	memset(&rp, 0, sizeof(rp));
 
-	bacpy(&rp.bdaddr, &hdev->bdaddr);
+	bacpy(&rp.bdaddr, &hdev->bdaddr);/*响应设备地址*/
 
 	/*此设备版本信息*/
 	rp.version = hdev->hci_ver;
@@ -1281,6 +1285,7 @@ static int send_settings_rsp(struct sock *sk, u16 opcode, struct hci_dev *hdev)
 {
 	__le32 settings = cpu_to_le32(get_current_settings(hdev));
 
+	/*向用户态响应*/
 	return mgmt_cmd_complete(sk, hdev->id, opcode, 0, &settings,
 				 sizeof(settings));
 }
@@ -1391,7 +1396,7 @@ static int set_powered_sync(struct hci_dev *hdev, void *data)
 
 	/* Make sure cmd still outstanding. */
 	if (cmd != pending_find(MGMT_OP_SET_POWERED, hdev))
-		return -ECANCELED;
+		return -ECANCELED;/*确认已取消*/
 
 	cp = cmd->param;
 
@@ -1418,6 +1423,7 @@ static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 	hci_dev_lock(hdev);
 
 	if (!cp->val) {
+		/*关闭电源时,电源正在down,返回busy*/
 		if (hci_dev_test_flag(hdev, HCI_POWERING_DOWN)) {
 			err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_POWERED,
 					      MGMT_STATUS_BUSY);
@@ -1432,7 +1438,7 @@ static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 		goto failed;
 	}
 
-	/*两者状态一致，响应已设置*/
+	/*两者状态一致，直接响应已设置*/
 	if (!!cp->val == hdev_is_powered(hdev)) {
 		err = send_settings_rsp(sk, MGMT_OP_SET_POWERED, hdev);
 		goto failed;
@@ -1528,8 +1534,10 @@ static int addr_cmd_complete(struct mgmt_pending_cmd *cmd, u8 status)
 static u8 mgmt_bredr_support(struct hci_dev *hdev)
 {
 	if (!lmp_bredr_capable(hdev))
+		/*设备不支持br/edr*/
 		return MGMT_STATUS_NOT_SUPPORTED;
 	else if (!hci_dev_test_flag(hdev, HCI_BREDR_ENABLED))
+		/*设备未开启br/edr*/
 		return MGMT_STATUS_REJECTED;
 	else
 		return MGMT_STATUS_SUCCESS;
@@ -1572,6 +1580,7 @@ static void mgmt_set_discoverable_complete(struct hci_dev *hdev, void *data,
 		queue_delayed_work(hdev->req_workqueue, &hdev->discov_off, to);
 	}
 
+	/*响应discoverable*/
 	send_settings_rsp(cmd->sk, MGMT_OP_SET_DISCOVERABLE, hdev);
 	new_settings(hdev, cmd->sk);
 
@@ -1580,6 +1589,7 @@ done:
 	hci_dev_unlock(hdev);
 }
 
+/*同步设置discoverable标记*/
 static int set_discoverable_sync(struct hci_dev *hdev, void *data)
 {
 	BT_DBG("%s", hdev->name);
@@ -1599,10 +1609,12 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED) &&
 	    !hci_dev_test_flag(hdev, HCI_BREDR_ENABLED))
+		/*非以上两种情况,不容许设置*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				       MGMT_STATUS_REJECTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01 && cp->val != 0x02)
+		/*只支持三种方式,关闭;开启;有限开启*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				       MGMT_STATUS_INVALID_PARAMS);
 
@@ -1613,12 +1625,14 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 	 */
 	if ((cp->val == 0x00 && timeout > 0) ||
 	    (cp->val == 0x02 && timeout == 0))
+		/*禁用时不得设置timeout,有限发现时,需要设置timeout,报错*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
 
 	if (!hdev_is_powered(hdev) && timeout > 0) {
+		/*TIMEOUT不为0时,POWERED标记无有*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				      MGMT_STATUS_NOT_POWERED);
 		goto failed;
@@ -1626,18 +1640,21 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	if (pending_find(MGMT_OP_SET_DISCOVERABLE, hdev) ||
 	    pending_find(MGMT_OP_SET_CONNECTABLE, hdev)) {
+		/*正在处理discoverable或者set connectable*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				      MGMT_STATUS_BUSY);
 		goto failed;
 	}
 
 	if (!hci_dev_test_flag(hdev, HCI_CONNECTABLE)) {
+		/*必须先置connectable标记*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				      MGMT_STATUS_REJECTED);
 		goto failed;
 	}
 
 	if (hdev->advertising_paused) {
+		/*不能停止对外广播*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_DISCOVERABLE,
 				      MGMT_STATUS_BUSY);
 		goto failed;
@@ -1651,6 +1668,7 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 		 * and so no need to check HCI_LIMITED_DISCOVERABLE.
 		 */
 		if (!!cp->val != hci_dev_test_flag(hdev, HCI_DISCOVERABLE)) {
+			/*当前设置的值与生效值不符,反转discoverable标记*/
 			hci_dev_change_flag(hdev, HCI_DISCOVERABLE);
 			changed = true;
 		}
@@ -1673,9 +1691,10 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 	    (cp->val == 0x02) == hci_dev_test_flag(hdev,
 						   HCI_LIMITED_DISCOVERABLE)) {
 		cancel_delayed_work(&hdev->discov_off);
-		hdev->discov_timeout = timeout;
+		hdev->discov_timeout = timeout;/*设置可发现超时时间*/
 
 		if (cp->val && hdev->discov_timeout > 0) {
+			/*在hdev->discov_timeout时间内开启discoverable*/
 			int to = secs_to_jiffies(hdev->discov_timeout);
 			queue_delayed_work(hdev->req_workqueue,
 					   &hdev->discov_off, to);
@@ -1696,7 +1715,7 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 	 * the timeout happens in the complete handler.
 	 */
 	cancel_delayed_work(&hdev->discov_off);
-	hdev->discov_timeout = timeout;
+	hdev->discov_timeout = timeout;/*设置可发现超时时间*/
 
 	if (cp->val)
 		hci_dev_set_flag(hdev, HCI_DISCOVERABLE);
@@ -1707,8 +1726,9 @@ static int set_discoverable(struct sock *sk, struct hci_dev *hdev, void *data,
 	if (cp->val == 0x02)
 		hci_dev_set_flag(hdev, HCI_LIMITED_DISCOVERABLE);
 	else
-		hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);
+		hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);/*清除limited可发现标记*/
 
+	/*更新discoverable标记*/
 	err = hci_cmd_sync_queue(hdev, set_discoverable_sync, cmd,
 				 mgmt_set_discoverable_complete);
 
@@ -1759,8 +1779,10 @@ static int set_connectable_update_settings(struct hci_dev *hdev,
 		changed = true;
 
 	if (val) {
+		/*设置可连接标记*/
 		hci_dev_set_flag(hdev, HCI_CONNECTABLE);
 	} else {
+		/*关闭可连接时,discoverables标记也会被移除*/
 		hci_dev_clear_flag(hdev, HCI_CONNECTABLE);
 		hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);
 	}
@@ -1770,6 +1792,7 @@ static int set_connectable_update_settings(struct hci_dev *hdev,
 		return err;
 
 	if (changed) {
+		/*有变化,更新SCAN,及被动扫描设置*/
 		hci_update_scan(hdev);
 		hci_update_passive_scan(hdev);
 		return new_settings(hdev, sk);
@@ -1796,6 +1819,7 @@ static int set_connectable(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED) &&
 	    !hci_dev_test_flag(hdev, HCI_BREDR_ENABLED))
+		/*非以上两种模式,则拒绝*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_CONNECTABLE,
 				       MGMT_STATUS_REJECTED);
 
@@ -1855,16 +1879,20 @@ static int set_bondable(struct sock *sk, struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*仅支持enable,disable两种*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_BONDABLE,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
 
 	if (cp->val)
+		/*开启*/
 		changed = !hci_dev_test_and_set_flag(hdev, HCI_BONDABLE);
 	else
+		/*关闭*/
 		changed = hci_dev_test_and_clear_flag(hdev, HCI_BONDABLE);
 
+	/*发送响应*/
 	err = send_settings_rsp(sk, MGMT_OP_SET_BONDABLE, hdev);
 	if (err < 0)
 		goto unlock;
@@ -2023,13 +2051,16 @@ static int set_ssp(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	status = mgmt_bredr_support(hdev);
 	if (status)
+		/*未开启br/edr 不支持*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_SSP, status);
 
 	if (!lmp_ssp_capable(hdev))
+		/*设备无ssp能力*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_SSP,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*只接收true/false*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_SSP,
 				       MGMT_STATUS_INVALID_PARAMS);
 
@@ -2038,6 +2069,7 @@ static int set_ssp(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	if (!hdev_is_powered(hdev)) {
 		bool changed;
 
+		/*未powered,直接设置并响应*/
 		if (cp->val) {
 			changed = !hci_dev_test_and_set_flag(hdev,
 							     HCI_SSP_ENABLED);
@@ -2057,12 +2089,14 @@ static int set_ssp(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	}
 
 	if (pending_find(MGMT_OP_SET_SSP, hdev)) {
+		/*已有设置在处理,响应busy*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_SSP,
 				      MGMT_STATUS_BUSY);
 		goto failed;
 	}
 
 	if (!!cp->val == hci_dev_test_flag(hdev, HCI_SSP_ENABLED)) {
+		/*与当前生效值一致,直接响应*/
 		err = send_settings_rsp(sk, MGMT_OP_SET_SSP, hdev);
 		goto failed;
 	}
@@ -2071,12 +2105,12 @@ static int set_ssp(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	if (!cmd)
 		err = -ENOMEM;
 	else
-		err = hci_cmd_sync_queue(hdev, set_ssp_sync, cmd,
+		err = hci_cmd_sync_queue(hdev, set_ssp_sync/*执行ssp设置*/, cmd,
 					 set_ssp_complete);
 
 	if (err < 0) {
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_SSP,
-				      MGMT_STATUS_FAILED);
+				      MGMT_STATUS_FAILED);/*设置失败*/
 
 		if (cmd)
 			mgmt_pending_remove(cmd);
@@ -2116,6 +2150,7 @@ static void set_le_complete(struct hci_dev *hdev, void *data, int err)
 		sock_put(match.sk);
 }
 
+/*处理低功耗开启/关闭*/
 static int set_le_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
@@ -2124,6 +2159,7 @@ static int set_le_sync(struct hci_dev *hdev, void *data)
 	int err;
 
 	if (!val) {
+		/*关闭低功耗*/
 		hci_clear_adv_instance_sync(hdev, NULL, 0x00, true);
 
 		if (hci_dev_test_flag(hdev, HCI_LE_ADV))
@@ -2132,6 +2168,7 @@ static int set_le_sync(struct hci_dev *hdev, void *data)
 		if (ext_adv_capable(hdev))
 			hci_remove_ext_adv_instance_sync(hdev, 0, cmd->sk);
 	} else {
+		/*开启低功耗*/
 		hci_dev_set_flag(hdev, HCI_LE_ENABLED);
 	}
 
@@ -2502,10 +2539,12 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (!lmp_le_capable(hdev))
+		/*设备无LE能力,报错*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_LE,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*只支持true/false*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_LE,
 				       MGMT_STATUS_INVALID_PARAMS);
 
@@ -2519,9 +2558,12 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	 * result into rejection.
 	 */
 	if (!hci_dev_test_flag(hdev, HCI_BREDR_ENABLED)) {
+		/*未开启br/edr*/
 		if (cp->val == 0x01)
+			/*如为开启,则当前已开启,直接响应*/
 			return send_settings_rsp(sk, MGMT_OP_SET_LE, hdev);
 
+		/*当前已是le,再次开启,报错*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_LE,
 				       MGMT_STATUS_REJECTED);
 	}
@@ -2535,11 +2577,13 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 		bool changed = false;
 
 		if (val != hci_dev_test_flag(hdev, HCI_LE_ENABLED)) {
+			/*开关反转*/
 			hci_dev_change_flag(hdev, HCI_LE_ENABLED);
 			changed = true;
 		}
 
 		if (!val && hci_dev_test_flag(hdev, HCI_ADVERTISING)) {
+			/*关闭LE时,广播标记清空*/
 			hci_dev_clear_flag(hdev, HCI_ADVERTISING);
 			changed = true;
 		}
@@ -2556,6 +2600,7 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	if (pending_find(MGMT_OP_SET_LE, hdev) ||
 	    pending_find(MGMT_OP_SET_ADVERTISING, hdev)) {
+		/*有未绝的set_le或者set_广播*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_LE,
 				      MGMT_STATUS_BUSY);
 		goto unlock;
@@ -2565,6 +2610,7 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	if (!cmd)
 		err = -ENOMEM;
 	else
+		/*设置开启/关闭 低功耗*/
 		err = hci_cmd_sync_queue(hdev, set_le_sync, cmd,
 					 set_le_complete);
 
@@ -2688,6 +2734,7 @@ static void mgmt_class_complete(struct hci_dev *hdev, void *data, int err)
 
 	bt_dev_dbg(hdev, "err %d", err);
 
+	/*构建cmd->opcode对应的CMD消息,并响应给用户态*/
 	mgmt_cmd_complete(cmd->sk, cmd->hdev->id, cmd->opcode,
 			  mgmt_status(err), hdev->dev_class, 3);
 
@@ -2758,7 +2805,7 @@ failed:
 static bool enable_service_cache(struct hci_dev *hdev)
 {
 	if (!hdev_is_powered(hdev))
-		return false;
+		return false;/*未提供power*/
 
 	if (!hci_dev_test_and_set_flag(hdev, HCI_SERVICE_CACHE)) {
 		queue_delayed_work(hdev->workqueue, &hdev->service_cache,
@@ -2783,7 +2830,7 @@ static int remove_uuid_sync(struct hci_dev *hdev, void *data)
 static int remove_uuid(struct sock *sk, struct hci_dev *hdev, void *data,
 		       u16 len)
 {
-	struct mgmt_cp_remove_uuid *cp = data;
+	struct mgmt_cp_remove_uuid *cp = data;/*参数指定的uuid*/
 	struct mgmt_pending_cmd *cmd;
 	struct bt_uuid *match, *tmp;
 	static const u8 bt_uuid_any[] = {
@@ -2796,18 +2843,20 @@ static int remove_uuid(struct sock *sk, struct hci_dev *hdev, void *data,
 	hci_dev_lock(hdev);
 
 	if (pending_eir_or_class(hdev)) {
+		/*存在未绝的uuid相关的命令,响应失败*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_REMOVE_UUID,
 				      MGMT_STATUS_BUSY);
 		goto unlock;
 	}
 
 	if (memcmp(cp->uuid, bt_uuid_any, 16) == 0) {
+		/*指定的uuid为全零时进入,清除设备上配置的所有uuids*/
 		hci_uuids_clear(hdev);
 
 		if (enable_service_cache(hdev)) {
 			err = mgmt_cmd_complete(sk, hdev->id,
 						MGMT_OP_REMOVE_UUID,
-						0, hdev->dev_class, 3);
+						0, hdev->dev_class/*响应内容为dev_class*/, 3);
 			goto unlock;
 		}
 
@@ -2832,6 +2881,7 @@ static int remove_uuid(struct sock *sk, struct hci_dev *hdev, void *data,
 	}
 
 update_class:
+	/*构造remove_uuid cmd*/
 	cmd = mgmt_pending_new(sk, MGMT_OP_REMOVE_UUID, hdev, data, len);
 	if (!cmd) {
 		err = -ENOMEM;
@@ -2842,7 +2892,7 @@ update_class:
 	 * hci_cmd_sync_submit instead of hci_cmd_sync_queue.
 	 */
 	err = hci_cmd_sync_submit(hdev, remove_uuid_sync, cmd,
-				  mgmt_class_complete);
+				  mgmt_class_complete);/*提前按序执行函数序列*/
 	if (err < 0)
 		mgmt_pending_free(cmd);
 
@@ -3309,18 +3359,21 @@ static int get_connections(struct sock *sk, struct hci_dev *hdev, void *data,
 		goto unlock;
 	}
 
+	/*搞清楚当前有多少conection*/
 	i = 0;
 	list_for_each_entry(c, &hdev->conn_hash.list, list) {
 		if (test_bit(HCI_CONN_MGMT_CONNECTED, &c->flags))
 			i++;
 	}
 
+	/*申请空间,准备填充*/
 	rp = kmalloc(struct_size(rp, addr, i), GFP_KERNEL);
 	if (!rp) {
 		err = -ENOMEM;
 		goto unlock;
 	}
 
+	/*填充*/
 	i = 0;
 	list_for_each_entry(c, &hdev->conn_hash.list, list) {
 		if (!test_bit(HCI_CONN_MGMT_CONNECTED, &c->flags))
@@ -3332,6 +3385,7 @@ static int get_connections(struct sock *sk, struct hci_dev *hdev, void *data,
 		i++;
 	}
 
+	/*指明连接数*/
 	rp->conn_count = cpu_to_le16(i);
 
 	/* Recalculate length in case of filtered SCO connections, etc */
@@ -4349,6 +4403,7 @@ static int set_wideband_speech(struct sock *sk, struct hci_dev *hdev,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*只支持true/false*/
 		return mgmt_cmd_status(sk, hdev->id,
 				       MGMT_OP_SET_WIDEBAND_SPEECH,
 				       MGMT_STATUS_INVALID_PARAMS);
@@ -4358,6 +4413,7 @@ static int set_wideband_speech(struct sock *sk, struct hci_dev *hdev,
 	if (hdev_is_powered(hdev) &&
 	    !!cp->val != hci_dev_test_flag(hdev,
 					   HCI_WIDEBAND_SPEECH_ENABLED)) {
+		/*已POWERED,则不容许变更*/
 		err = mgmt_cmd_status(sk, hdev->id,
 				      MGMT_OP_SET_WIDEBAND_SPEECH,
 				      MGMT_STATUS_REJECTED);
@@ -4366,7 +4422,7 @@ static int set_wideband_speech(struct sock *sk, struct hci_dev *hdev,
 
 	if (cp->val)
 		changed = !hci_dev_test_and_set_flag(hdev,
-						   HCI_WIDEBAND_SPEECH_ENABLED);
+						   HCI_WIDEBAND_SPEECH_ENABLED);/*添加speech_enabled*/
 	else
 		changed = hci_dev_test_and_clear_flag(hdev,
 						   HCI_WIDEBAND_SPEECH_ENABLED);
@@ -6601,6 +6657,7 @@ static int set_fast_connectable(struct sock *sk, struct hci_dev *hdev,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*仅支持true,false两种*/
 		return mgmt_cmd_status(sk, hdev->id,
 				       MGMT_OP_SET_FAST_CONNECTABLE,
 				       MGMT_STATUS_INVALID_PARAMS);
@@ -6608,6 +6665,7 @@ static int set_fast_connectable(struct sock *sk, struct hci_dev *hdev,
 	hci_dev_lock(hdev);
 
 	if (!!cp->val == hci_dev_test_flag(hdev, HCI_FAST_CONNECTABLE)) {
+		/*无更新,直接响应*/
 		err = send_settings_rsp(sk, MGMT_OP_SET_FAST_CONNECTABLE, hdev);
 		goto unlock;
 	}
@@ -6624,10 +6682,12 @@ static int set_fast_connectable(struct sock *sk, struct hci_dev *hdev,
 	if (!cmd)
 		err = -ENOMEM;
 	else
+		/*配置set fast connectable*/
 		err = hci_cmd_sync_queue(hdev, write_fast_connectable_sync, cmd,
 					 fast_connectable_complete);
 
 	if (err < 0) {
+		/*执行失败*/
 		mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_FAST_CONNECTABLE,
 				MGMT_STATUS_FAILED);
 
@@ -6664,6 +6724,7 @@ static void set_bredr_complete(struct hci_dev *hdev, void *data, int err)
 	mgmt_pending_free(cmd);
 }
 
+/*开启br/edr*/
 static int set_bredr_sync(struct hci_dev *hdev, void *data)
 {
 	int status;
@@ -6691,25 +6752,30 @@ static int set_bredr(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (!lmp_bredr_capable(hdev) || !lmp_le_capable(hdev))
+		/*设备无BR/EDR功能*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_BREDR,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED))
+		/*低功耗未开启,拒绝开启br/edr*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_BREDR,
 				       MGMT_STATUS_REJECTED);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*只容许true/false两种设置*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_BREDR,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
 
 	if (cp->val == hci_dev_test_flag(hdev, HCI_BREDR_ENABLED)) {
+		/*要设置的值与当前状态一致,直接响应*/
 		err = send_settings_rsp(sk, MGMT_OP_SET_BREDR, hdev);
 		goto unlock;
 	}
 
 	if (!hdev_is_powered(hdev)) {
+		/*未提供powered,关闭的话,清除以下标记*/
 		if (!cp->val) {
 			hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);
 			hci_dev_clear_flag(hdev, HCI_SSP_ENABLED);
@@ -6719,6 +6785,7 @@ static int set_bredr(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 		hci_dev_change_flag(hdev, HCI_BREDR_ENABLED);
 
+		/*这种直接响应*/
 		err = send_settings_rsp(sk, MGMT_OP_SET_BREDR, hdev);
 		if (err < 0)
 			goto unlock;
@@ -6729,6 +6796,7 @@ static int set_bredr(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	/* Reject disabling when powered on */
 	if (!cp->val) {
+		/*powered on状态下,不容许关闭*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_BREDR,
 				      MGMT_STATUS_REJECTED);
 		goto unlock;
@@ -7718,6 +7786,7 @@ static void device_removed(struct sock *sk, struct hci_dev *hdev,
 	bacpy(&ev.addr.bdaddr, bdaddr);
 	ev.addr.type = type;
 
+	/*向用户态产生device remove事件*/
 	mgmt_event(MGMT_EV_DEVICE_REMOVED, hdev, &ev, sizeof(ev), sk);
 }
 
@@ -7737,10 +7806,12 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 	hci_dev_lock(hdev);
 
 	if (bacmp(&cp->addr.bdaddr, BDADDR_ANY)) {
+		/*指定地址为0,要求删除所有设备*/
 		struct hci_conn_params *params;
 		u8 addr_type;
 
 		if (!bdaddr_type_is_valid(cp->addr.type)) {
+			/*cp地址类型无效,响应参数无效*/
 			err = mgmt_cmd_complete(sk, hdev->id,
 						MGMT_OP_REMOVE_DEVICE,
 						MGMT_STATUS_INVALID_PARAMS,
@@ -7749,10 +7820,12 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 		}
 
 		if (cp->addr.type == BDADDR_BREDR) {
+			/*地址类型为br/edr*/
 			err = hci_bdaddr_list_del(&hdev->accept_list,
 						  &cp->addr.bdaddr,
 						  cp->addr.type);
 			if (err) {
+				/*移除时出错,响应参数无效*/
 				err = mgmt_cmd_complete(sk, hdev->id,
 							MGMT_OP_REMOVE_DEVICE,
 							MGMT_STATUS_INVALID_PARAMS,
@@ -7764,7 +7837,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 			hci_update_scan(hdev);
 
 			device_removed(sk, hdev, &cp->addr.bdaddr,
-				       cp->addr.type);
+				       cp->addr.type);/*向用户态产生device remove事件*/
 			goto complete;
 		}
 
@@ -8396,6 +8469,7 @@ done:
 	return err;
 }
 
+/*返回支持的广播标记*/
 static u32 get_supported_adv_flags(struct hci_dev *hdev)
 {
 	u32 flags = 0;
@@ -8446,11 +8520,13 @@ static int read_adv_features(struct sock *sk, struct hci_dev *hdev,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (!lmp_le_capable(hdev))
+		/*设备必须有le能力*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_READ_ADV_FEATURES,
 				       MGMT_STATUS_REJECTED);
 
 	hci_dev_lock(hdev);
 
+	/*申请响应空间*/
 	rp_len = sizeof(*rp) + hdev->adv_instance_cnt;
 	rp = kmalloc(rp_len, GFP_ATOMIC);
 	if (!rp) {
@@ -8458,6 +8534,7 @@ static int read_adv_features(struct sock *sk, struct hci_dev *hdev,
 		return -ENOMEM;
 	}
 
+	/*取设备支持的广播标记*/
 	supported_flags = get_supported_adv_flags(hdev);
 
 	rp->supported_flags = cpu_to_le32(supported_flags);
@@ -8466,6 +8543,7 @@ static int read_adv_features(struct sock *sk, struct hci_dev *hdev,
 	rp->max_instances = hdev->le_num_of_adv_sets;
 	rp->num_instances = hdev->adv_instance_cnt;
 
+	/*填充instance*/
 	instance = rp->instance;
 	list_for_each_entry(adv_instance, &hdev->adv_instances, list) {
 		/* Only instances 1-le_num_of_adv_sets are externally visible */
@@ -8480,6 +8558,7 @@ static int read_adv_features(struct sock *sk, struct hci_dev *hdev,
 
 	hci_dev_unlock(hdev);
 
+	/*执行响应*/
 	err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_READ_ADV_FEATURES,
 				MGMT_STATUS_SUCCESS, rp, rp_len);
 
@@ -9190,6 +9269,7 @@ static int remove_advertising(struct sock *sk, struct hci_dev *hdev,
 	hci_dev_lock(hdev);
 
 	if (cp->instance && !hci_find_adv_instance(hdev, cp->instance)) {
+		/*指明了instance,但没有找到,发送参数无效*/
 		err = mgmt_cmd_status(sk, hdev->id,
 				      MGMT_OP_REMOVE_ADVERTISING,
 				      MGMT_STATUS_INVALID_PARAMS);
@@ -9197,12 +9277,14 @@ static int remove_advertising(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	if (pending_find(MGMT_OP_SET_LE, hdev)) {
+		/*正在设置低功耗,响应busy*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_REMOVE_ADVERTISING,
 				      MGMT_STATUS_BUSY);
 		goto unlock;
 	}
 
 	if (list_empty(&hdev->adv_instances)) {
+		/*列表为空,响应参数为空*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_REMOVE_ADVERTISING,
 				      MGMT_STATUS_INVALID_PARAMS);
 		goto unlock;
@@ -9280,19 +9362,24 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	/*请求读取指定设备的info信息*/
 	{ read_controller_info,    MGMT_READ_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED },
-	/*处理powered设置*/
+	/*处理powered设置(即常见的bluetooth开关)*/
 	{ set_powered,             MGMT_SETTING_SIZE },
+	/*设置可发现*/
 	{ set_discoverable,        MGMT_SET_DISCOVERABLE_SIZE },
+	/*设置可连接*/
 	{ set_connectable,         MGMT_SETTING_SIZE },
+	/*设置可快速连接*/
 	{ set_fast_connectable,    MGMT_SETTING_SIZE },
 	{ set_bondable,            MGMT_SETTING_SIZE },
 	{ set_link_security,       MGMT_SETTING_SIZE },
 	{ set_ssp,                 MGMT_SETTING_SIZE },
 	{ set_hs,                  MGMT_SETTING_SIZE },
+	/*设置低功耗*/
 	{ set_le,                  MGMT_SETTING_SIZE },
 	{ set_dev_class,           MGMT_SET_DEV_CLASS_SIZE },
 	{ set_local_name,          MGMT_SET_LOCAL_NAME_SIZE },
 	{ add_uuid,                MGMT_ADD_UUID_SIZE },
+	/*响应用户态REMOVE_UUID,用于移除HCI设备上关联的一个或所有UUID*/
 	{ remove_uuid,             MGMT_REMOVE_UUID_SIZE },
 	{ load_link_keys,          MGMT_LOAD_LINK_KEYS_SIZE,
 						HCI_MGMT_VAR_LEN },
@@ -9321,6 +9408,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ unblock_device,          MGMT_UNBLOCK_DEVICE_SIZE },
 	{ set_device_id,           MGMT_SET_DEVICE_ID_SIZE },
 	{ set_advertising,         MGMT_SETTING_SIZE },
+	/*用于开启br/edr*/
 	{ set_bredr,               MGMT_SETTING_SIZE },
 	{ set_static_address,      MGMT_SET_STATIC_ADDRESS_SIZE },
 	{ set_scan_params,         MGMT_SET_SCAN_PARAMS_SIZE },
@@ -9332,6 +9420,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ get_conn_info,           MGMT_GET_CONN_INFO_SIZE },
 	{ get_clock_info,          MGMT_GET_CLOCK_INFO_SIZE },
 	{ add_device,              MGMT_ADD_DEVICE_SIZE },
+	/*用于移除hci设备上关联的所有devices或具体一个device*/
 	{ remove_device,           MGMT_REMOVE_DEVICE_SIZE },
 	{ load_conn_param,         MGMT_LOAD_CONN_PARAM_SIZE,
 						HCI_MGMT_VAR_LEN },
@@ -9351,6 +9440,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ read_ext_index_list,     MGMT_READ_EXT_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	/*响应用户态MGMT_OP_READ_ADV_FEATURES*/
 	{ read_adv_features,       MGMT_READ_ADV_FEATURES_SIZE },
 	{ add_advertising,	   MGMT_ADD_ADVERTISING_SIZE,
 						HCI_MGMT_VAR_LEN },

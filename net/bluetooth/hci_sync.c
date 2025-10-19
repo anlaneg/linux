@@ -780,7 +780,7 @@ int hci_cmd_sync_queue(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	if (!test_bit(HCI_RUNNING, &hdev->flags))
 		return -ENETDOWN;
 
-	/*将func,destroy入队，并在另一个线程上按序执行*/
+	/*将func,destroy入队，并在另一个线程上按序执行(这些函数均是针对HCI进行操作的函数,不能多线程运行)*/
 	return hci_cmd_sync_submit(hdev, func, data, destroy);
 }
 EXPORT_SYMBOL(hci_cmd_sync_queue);
@@ -817,7 +817,7 @@ int hci_cmd_sync_queue_once(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 			    void *data, hci_cmd_sync_work_destroy_t destroy)
 {
 	if (hci_cmd_sync_lookup_entry(hdev, func, data, destroy))
-		return 0;/*此cmd已存在，直接返回*/
+		return 0;/*此cmd已在队列中存在，直接返回*/
 
 	return hci_cmd_sync_queue(hdev, func, data, destroy);/*不存在，入队到cmd_sync_work_list*/
 }
@@ -964,6 +964,7 @@ int hci_update_eir_sync(struct hci_dev *hdev)
 				     HCI_CMD_TIMEOUT);
 }
 
+/*遍历hdev上所有uuids,并收集所有uuid的svc_hint*/
 static u8 get_service_classes(struct hci_dev *hdev)
 {
 	struct bt_uuid *uuid;
@@ -985,17 +986,17 @@ int hci_update_class_sync(struct hci_dev *hdev)
 		return 0;
 
 	if (!hci_dev_test_flag(hdev, HCI_BREDR_ENABLED))
-		return 0;
+		return 0;/*未启用bredr,直接返回*/
 
 	if (hci_dev_test_flag(hdev, HCI_SERVICE_CACHE))
-		return 0;
+		return 0;/*已设置service cache,则返回*/
 
 	cod[0] = hdev->minor_class;
 	cod[1] = hdev->major_class;
 	cod[2] = get_service_classes(hdev);
 
 	if (hci_dev_test_flag(hdev, HCI_LIMITED_DISCOVERABLE))
-		cod[1] |= 0x20;
+		cod[1] |= 0x20;/*有dicoverable标记,打0X20标记*/
 
 	if (memcmp(cod, hdev->dev_class, 3) == 0)
 		return 0;
@@ -2073,6 +2074,7 @@ static int hci_clear_adv_sync(struct hci_dev *hdev, struct sock *sk, bool force)
 		if (!(force || adv->timeout))
 			continue;
 
+		/*依除此instance*/
 		err = hci_remove_adv_instance(hdev, instance);
 		if (!err)
 			mgmt_advertising_removed(sk, hdev, instance);
@@ -2125,7 +2127,7 @@ int hci_remove_advertising_sync(struct hci_dev *hdev, struct sock *sk,
 
 	/* Cancel any timeout concerning the removed instance(s). */
 	if (!instance || hdev->cur_adv_instance == instance)
-		cancel_adv_timeout(hdev);
+		cancel_adv_timeout(hdev);/*先取消广播*/
 
 	/* Get the next instance to advertise BEFORE we remove
 	 * the current one. This can be the same instance again
@@ -2135,6 +2137,7 @@ int hci_remove_advertising_sync(struct hci_dev *hdev, struct sock *sk,
 		next = hci_get_next_instance(hdev, instance);
 
 	if (!instance) {
+		/*清空所有*/
 		err = hci_clear_adv_sync(hdev, sk, force);
 		if (err)
 			return err;
@@ -2251,6 +2254,7 @@ static int hci_le_set_addr_resolution_enable_sync(struct hci_dev *hdev, u8 val)
 				     sizeof(val), &val, HCI_CMD_TIMEOUT);
 }
 
+/*关闭scan*/
 static int hci_scan_disable_sync(struct hci_dev *hdev)
 {
 	int err;
@@ -2264,7 +2268,7 @@ static int hci_scan_disable_sync(struct hci_dev *hdev)
 		return 0;
 	}
 
-	err = hci_le_set_scan_enable_sync(hdev, LE_SCAN_DISABLE, 0x00);
+	err = hci_le_set_scan_enable_sync(hdev, LE_SCAN_DISABLE/*指明关闭scan*/, 0x00);
 	if (err) {
 		bt_dev_err(hdev, "Unable to disable scanning: %d", err);
 		return err;
@@ -3057,7 +3061,7 @@ static int hci_start_scan_sync(struct hci_dev *hdev, u8 type, u16 interval,
 	if (err)
 		return err;
 
-	return hci_le_set_scan_enable_sync(hdev, LE_SCAN_ENABLE, filter_dup);
+	return hci_le_set_scan_enable_sync(hdev, LE_SCAN_ENABLE/*指明开启scan*/, filter_dup);
 }
 
 static int hci_passive_scan_sync(struct hci_dev *hdev)
@@ -3171,7 +3175,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 
 	bt_dev_dbg(hdev, "LE passive scan with acceptlist = %d", filter_policy);
 
-	return hci_start_scan_sync(hdev, LE_SCAN_PASSIVE, interval, window,
+	return hci_start_scan_sync(hdev, LE_SCAN_PASSIVE/*被动扫描*/, interval, window,
 				   own_addr_type, filter_policy, filter_dups);
 }
 
@@ -3327,6 +3331,7 @@ int hci_write_ssp_mode_sync(struct hci_dev *hdev, u8 mode)
 				      sizeof(mode), &mode, HCI_CMD_TIMEOUT);
 	}
 
+	/*给驱动发命令*/
 	err = __hci_cmd_sync_status(hdev, HCI_OP_WRITE_SSP_MODE,
 				    sizeof(mode), &mode, HCI_CMD_TIMEOUT);
 	if (err)
@@ -3435,7 +3440,7 @@ int hci_write_fast_connectable_sync(struct hci_dev *hdev, bool enable)
 		type = PAGE_SCAN_TYPE_INTERLACED;
 
 		/* 160 msec page scan interval */
-		cp.interval = cpu_to_le16(0x0100);
+		cp.interval = cpu_to_le16(0x0100);/*扫描间隔为160ms*/
 	} else {
 		type = hdev->def_page_scan_type;
 		cp.interval = cpu_to_le16(hdev->def_page_scan_int);
@@ -3491,7 +3496,7 @@ int hci_update_scan_sync(struct hci_dev *hdev)
 	u8 scan;
 
 	if (!hci_dev_test_flag(hdev, HCI_BREDR_ENABLED))
-		return 0;
+		return 0;/*未开启br/edr,直接返回*/
 
 	if (!hdev_is_powered(hdev))
 		return 0;
@@ -3500,13 +3505,13 @@ int hci_update_scan_sync(struct hci_dev *hdev)
 		return 0;
 
 	if (hdev->scanning_paused)
-		return 0;
+		return 0;/*扫描暂停,直接返回*/
 
 	if (hci_dev_test_flag(hdev, HCI_CONNECTABLE) ||
 	    disconnected_accept_list_entries(hdev))
 		scan = SCAN_PAGE;
 	else
-		scan = SCAN_DISABLED;
+		scan = SCAN_DISABLED;/*标用扫描*/
 
 	if (hci_dev_test_flag(hdev, HCI_DISCOVERABLE))
 		scan |= SCAN_INQUIRY;
@@ -5264,6 +5269,7 @@ static int hci_dev_shutdown(struct hci_dev *hdev)
 	return err;
 }
 
+/*执行设备关闭*/
 int hci_dev_close_sync(struct hci_dev *hdev)
 {
 	bool auto_off;
@@ -5300,13 +5306,13 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 	hci_leds_update_powered(hdev, false);
 
 	/* Flush RX and TX works */
-	flush_work(&hdev->tx_work);
+	flush_work(&hdev->tx_work);/*清空tx work */
 	flush_work(&hdev->rx_work);
 
 	if (hdev->discov_timeout > 0) {
 		hdev->discov_timeout = 0;
-		hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);
-		hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);
+		hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);/*清除可发现标记*/
+		hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);/*清除limited可发现标记*/
 	}
 
 	if (hci_dev_test_and_clear_flag(hdev, HCI_SERVICE_CACHE))
@@ -5384,11 +5390,11 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 		hdev->req_skb = NULL;
 	}
 
-	clear_bit(HCI_RUNNING, &hdev->flags);
+	clear_bit(HCI_RUNNING, &hdev->flags);/*清除running标记*/
 	hci_sock_dev_event(hdev, HCI_DEV_CLOSE);
 
 	/* After this point our queues are empty and no tasks are scheduled. */
-	hdev->close(hdev);
+	hdev->close(hdev);/*设备关闭*/
 
 	/* Clear flags */
 	hdev->flags &= BIT(HCI_RAW);
@@ -5482,6 +5488,7 @@ static int hci_remote_name_cancel_sync(struct hci_dev *hdev, bdaddr_t *addr)
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }
 
+/*同步停止discovery*/
 int hci_stop_discovery_sync(struct hci_dev *hdev)
 {
 	struct discovery_state *d = &hdev->discovery;
@@ -5688,6 +5695,7 @@ static int hci_reject_conn_sync(struct hci_dev *hdev, struct hci_conn *conn,
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }
 
+/*abort 此连接*/
 int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 {
 	int err = 0;
@@ -5747,6 +5755,7 @@ static int hci_disconnect_all_sync(struct hci_dev *hdev, u8 reason)
 	struct hci_conn *conn;
 
 	rcu_read_lock();
+	/*遍历所有已建立的连接,执行connection abort*/
 	while ((conn = list_first_or_null_rcu(head, struct hci_conn, list))) {
 		/* Make sure the connection is not freed while unlocking */
 		conn = hci_conn_get(conn);
@@ -5778,9 +5787,9 @@ static int hci_power_off_sync(struct hci_dev *hdev)
 
 	/* If controller is already down there is nothing to do */
 	if (!test_bit(HCI_UP, &hdev->flags))
-		return 0;
+		return 0;/*设备未OPEN,直接返回*/
 
-	hci_dev_set_flag(hdev, HCI_POWERING_DOWN);
+	hci_dev_set_flag(hdev, HCI_POWERING_DOWN);/*标明正在置down*/
 
 	if (test_bit(HCI_ISCAN, &hdev->flags) ||
 	    test_bit(HCI_PSCAN, &hdev->flags)) {
@@ -5802,10 +5811,10 @@ static int hci_power_off_sync(struct hci_dev *hdev)
 	if (err)
 		goto out;
 
-	err = hci_dev_close_sync(hdev);
+	err = hci_dev_close_sync(hdev);/*关闭设备*/
 
 out:
-	hci_dev_clear_flag(hdev, HCI_POWERING_DOWN);
+	hci_dev_clear_flag(hdev, HCI_POWERING_DOWN);/*清除掉正在置DOWN标记*/
 	return err;
 }
 
@@ -5815,6 +5824,7 @@ int hci_set_powered_sync(struct hci_dev *hdev, u8 val)
 		/*开启power*/
 		return hci_power_on_sync(hdev);
 
+	/*关闭设备电源,设备将被close*/
 	return hci_power_off_sync(hdev);
 }
 
@@ -5823,11 +5833,12 @@ static int hci_write_iac_sync(struct hci_dev *hdev)
 	struct hci_cp_write_current_iac_lap cp;
 
 	if (!hci_dev_test_flag(hdev, HCI_DISCOVERABLE))
-		return 0;
+		return 0;/*如果设置未设置discoverable,则直接返回*/
 
 	memset(&cp, 0, sizeof(cp));
 
 	if (hci_dev_test_flag(hdev, HCI_LIMITED_DISCOVERABLE)) {
+		/*设备被置为limited discoverable模式*/
 		/* Limited discoverable mode */
 		cp.num_iac = min_t(u8, hdev->num_iac, 2);
 		cp.iac_lap[0] = 0x00;	/* LIAC */
@@ -5837,6 +5848,7 @@ static int hci_write_iac_sync(struct hci_dev *hdev)
 		cp.iac_lap[4] = 0x8b;
 		cp.iac_lap[5] = 0x9e;
 	} else {
+		/*设备被置为discoverable模式*/
 		/* General discoverable mode */
 		cp.num_iac = 1;
 		cp.iac_lap[0] = 0x33;	/* GIAC */
@@ -5844,16 +5856,19 @@ static int hci_write_iac_sync(struct hci_dev *hdev)
 		cp.iac_lap[2] = 0x9e;
 	}
 
+	/*发送cmd设置给驱动*/
 	return __hci_cmd_sync_status(hdev, HCI_OP_WRITE_CURRENT_IAC_LAP,
 				     (cp.num_iac * 3) + 1, &cp,
 				     HCI_CMD_TIMEOUT);
 }
 
+/*更新discoverable设置*/
 int hci_update_discoverable_sync(struct hci_dev *hdev)
 {
 	int err = 0;
 
 	if (hci_dev_test_flag(hdev, HCI_BREDR_ENABLED)) {
+		/*BR/EDR模式*/
 		err = hci_write_iac_sync(hdev);
 		if (err)
 			return err;

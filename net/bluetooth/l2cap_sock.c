@@ -1212,8 +1212,10 @@ static int l2cap_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	release_sock(sk);
 
 	if (sock->type == SOCK_STREAM)
+		/*流方式的收取*/
 		err = bt_sock_stream_recvmsg(sock, msg, len, flags);
 	else
+		/*报文方式的收取*/
 		err = bt_sock_recvmsg(sock, msg, len, flags);
 
 	if (pi->chan->mode != L2CAP_MODE_ERTM &&

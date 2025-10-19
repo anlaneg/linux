@@ -4294,7 +4294,7 @@ static bool __flush_work(struct work_struct *work, bool from_cancel/*是否来�
 		return false;
 
 	if (WARN_ON(!work->func))
-		return false;
+		return false;/*work还未赋值*/
 
 	/*将barrier加入到wq，并等待其完成*/
 	if (!start_flush_work(work, &barr, from_cancel))

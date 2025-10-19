@@ -191,16 +191,16 @@ int mgmt_cmd_complete(struct sock *sk, u16 index, u16 cmd, u8 status,
 
 	hdr = skb_put(skb, sizeof(*hdr));
 
-	hdr->opcode = cpu_to_le16(MGMT_EV_CMD_COMPLETE);
-	hdr->index = cpu_to_le16(index);
+	hdr->opcode = cpu_to_le16(MGMT_EV_CMD_COMPLETE);/*响应complete*/
+	hdr->index = cpu_to_le16(index);/*设备索引*/
 	hdr->len = cpu_to_le16(sizeof(*ev) + rp_len);
 
 	ev = skb_put(skb, sizeof(*ev) + rp_len);
 	ev->opcode = cpu_to_le16(cmd);
-	ev->status = status;
+	ev->status = status;/*指明状态*/
 
 	if (rp)
-		memcpy(ev->data, rp, rp_len);
+		memcpy(ev->data, rp, rp_len);/*设置REPLAY内容*/
 
 	mskb = create_monitor_ctrl_event(hdr->index, hci_sock_get_cookie(sk),
 					 MGMT_EV_CMD_COMPLETE,
@@ -275,9 +275,10 @@ void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev, bool remove,
 	mutex_unlock(&hdev->mgmt_pending_lock);
 }
 
+/*利用opcode及参数构造mgmt_pending_cmd*/
 struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
 					  struct hci_dev *hdev,
-					  void *data, u16 len)
+					  void *data/*参数*/, u16 len/*参数长度*/)
 {
 	struct mgmt_pending_cmd *cmd;
 

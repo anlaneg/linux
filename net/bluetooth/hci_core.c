@@ -1058,6 +1058,7 @@ static void hci_error_reset(struct work_struct *work)
 	hci_dev_put(hdev);
 }
 
+/*移除hdev设备上串连的所有uuids*/
 void hci_uuids_clear(struct hci_dev *hdev)
 {
 	struct bt_uuid *uuid, *tmp;
@@ -2082,7 +2083,7 @@ struct bdaddr_list *hci_bdaddr_list_lookup(struct list_head *bdaddr_list,
 
 	list_for_each_entry(b, bdaddr_list, list) {
 		if (!bacmp(&b->bdaddr, bdaddr) && b->bdaddr_type == type)
-			return b;
+			return b;/*匹配成功,返回*/
 	}
 
 	return NULL;
@@ -2206,15 +2207,17 @@ int hci_bdaddr_list_del(struct list_head *list, bdaddr_t *bdaddr, u8 type)
 	struct bdaddr_list *entry;
 
 	if (!bacmp(bdaddr, BDADDR_ANY)) {
+		/*指定的匹配地址bdaddr为ANY,则清空此LIST*/
 		hci_bdaddr_list_clear(list);
 		return 0;
 	}
 
+	/*不为ANY,在list上进行匹配*/
 	entry = hci_bdaddr_list_lookup(list, bdaddr, type);
 	if (!entry)
-		return -ENOENT;
+		return -ENOENT;/*未查找到*/
 
-	list_del(&entry->list);
+	list_del(&entry->list);/*移除*/
 	kfree(entry);
 
 	return 0;

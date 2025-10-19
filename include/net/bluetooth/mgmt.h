@@ -121,11 +121,11 @@ struct mgmt_rp_read_info {
 	bdaddr_t	bdaddr;
 	__u8		version;
 	__le16		manufacturer;
-	__le32		supported_settings;
-	__le32		current_settings;
+	__le32		supported_settings;/*设备支持的设置*/
+	__le32		current_settings;/*设备当前支持的设置*/
 	__u8		dev_class[3];
-	__u8		name[MGMT_MAX_NAME_LENGTH];
-	__u8		short_name[MGMT_MAX_SHORT_NAME_LENGTH];
+	__u8		name[MGMT_MAX_NAME_LENGTH];/*设备名称*/
+	__u8		short_name[MGMT_MAX_SHORT_NAME_LENGTH];/*设备短名称*/
 } __packed;
 
 struct mgmt_mode {
@@ -544,7 +544,7 @@ struct mgmt_rp_read_ext_index_list {
 #define MGMT_OP_READ_ADV_FEATURES	0x0003D
 #define MGMT_READ_ADV_FEATURES_SIZE	0
 struct mgmt_rp_read_adv_features {
-	__le32 supported_flags;
+	__le32 supported_flags;/*支持的广播标记*/
 	__u8   max_adv_data_len;
 	__u8   max_scan_rsp_len;
 	__u8   max_instances;
