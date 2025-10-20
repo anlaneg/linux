@@ -216,6 +216,7 @@ static const u16 mgmt_untrusted_events[] = {
 
 #define CACHE_TIMEOUT	secs_to_jiffies(2)
 
+/*全零的UUID*/
 #define ZERO_KEY "\x00\x00\x00\x00\x00\x00\x00\x00" \
 		 "\x00\x00\x00\x00\x00\x00\x00\x00"
 
@@ -1093,6 +1094,7 @@ static void mesh_send_complete(struct hci_dev *hdev,
 	u8 handle = mesh_tx->handle;
 
 	if (!silent)
+		/*触发event到用户态*/
 		mgmt_event(MGMT_EV_MESH_PACKET_CMPLT, hdev, &handle,
 			   sizeof(handle), NULL);
 
@@ -1105,6 +1107,7 @@ static int mesh_send_done_sync(struct hci_dev *hdev, void *data)
 
 	hci_dev_clear_flag(hdev, HCI_MESH_SENDING);
 	if (list_empty(&hdev->adv_instances))
+		/*队列为空,停止广播*/
 		hci_disable_advertising_sync(hdev);
 	mesh_tx = mgmt_mesh_next(hdev, NULL);
 
@@ -1138,9 +1141,9 @@ static void mesh_send_done(struct work_struct *work)
 					    mesh_send_done.work);
 
 	if (!hci_dev_test_flag(hdev, HCI_MESH_SENDING))
-		return;
+		return;/*无此标记,则直接返回*/
 
-	/*sync cmd函数入队*/
+	/*否则mesh send sync cmd函数入队*/
 	hci_cmd_sync_queue(hdev, mesh_send_done_sync, NULL, mesh_next);
 }
 
@@ -2311,9 +2314,10 @@ static void mesh_send_start_complete(struct hci_dev *hdev, void *data, int err)
 		return;
 	}
 
+	/*入队,延迟发送*/
 	mesh_send_interval = msecs_to_jiffies((send->cnt) * 25);
 	queue_delayed_work(hdev->req_workqueue, &hdev->mesh_send_done,
-			   mesh_send_interval);
+			   mesh_send_interval/*延迟时间*/);
 }
 
 static int mesh_send_sync(struct hci_dev *hdev, void *data)
@@ -2321,16 +2325,16 @@ static int mesh_send_sync(struct hci_dev *hdev, void *data)
 	struct mgmt_mesh_tx *mesh_tx = data;
 	struct mgmt_cp_mesh_send *send = (void *)mesh_tx->param;
 	struct adv_info *adv, *next_instance;
-	u8 instance = hdev->le_num_of_adv_sets + 1;
+	u8 instance = hdev->le_num_of_adv_sets + 1;/*编号*/
 	u16 timeout, duration;
 	int err = 0;
 
 	if (hdev->le_num_of_adv_sets <= hdev->adv_instance_cnt)
-		return MGMT_STATUS_BUSY;
+		return MGMT_STATUS_BUSY;/*超过小限*/
 
 	timeout = 1000;
 	duration = send->cnt * INTERVAL_TO_MS(hdev->le_adv_max_interval);
-	adv = hci_add_adv_instance(hdev, instance, 0,
+	adv = hci_add_adv_instance(hdev, instance/*instant编号*/, 0,
 				   send->adv_data_len, send->adv_data,
 				   0, NULL,
 				   timeout, duration,
@@ -2356,7 +2360,7 @@ static int mesh_send_sync(struct hci_dev *hdev, void *data)
 		if (next_instance)
 			instance = next_instance->instance;
 		else
-			instance = 0;
+			instance = 0;/*遍历完成,回归到0号instance*/
 	} else if (hdev->adv_instance_timeout) {
 		/* Immediately advertise the new instance if no other, or
 		 * let it go naturally from queue if ADV is already happening
@@ -2375,9 +2379,9 @@ static void send_count(struct mgmt_mesh_tx *mesh_tx, void *data)
 	struct mgmt_rp_mesh_read_features *rp = data;
 
 	if (rp->used_handles >= rp->max_handles)
-		return;
+		return;/*超限,不填充*/
 
-	rp->handles[rp->used_handles++] = mesh_tx->handle;
+	rp->handles[rp->used_handles++] = mesh_tx->handle;/*设置handle*/
 }
 
 static int mesh_features(struct sock *sk, struct hci_dev *hdev,
@@ -2387,19 +2391,21 @@ static int mesh_features(struct sock *sk, struct hci_dev *hdev,
 
 	if (!lmp_le_capable(hdev) ||
 	    !hci_dev_test_flag(hdev, HCI_MESH_EXPERIMENTAL))
+		/*未开启"低功耗"或者设置未使能mesh*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_MESH_READ_FEATURES,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	memset(&rp, 0, sizeof(rp));
-	rp.index = cpu_to_le16(hdev->id);
+	rp.index = cpu_to_le16(hdev->id);/*填充设备*/
 	if (hci_dev_test_flag(hdev, HCI_LE_ENABLED))
-		rp.max_handles = MESH_HANDLES_MAX;
+		rp.max_handles = MESH_HANDLES_MAX;/*低功耗开启时,handles为3*/
 
 	hci_dev_lock(hdev);
 
 	if (rp.max_handles)
 		mgmt_mesh_foreach(hdev, send_count, &rp, sk);
 
+	/*执行响应*/
 	mgmt_cmd_complete(sk, hdev->id, MGMT_OP_MESH_READ_FEATURES, 0, &rp,
 			  rp.used_handles + sizeof(rp) - MESH_HANDLES_MAX);
 
@@ -2478,11 +2484,13 @@ static int mesh_send(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	if (!lmp_le_capable(hdev) ||
 	    !hci_dev_test_flag(hdev, HCI_MESH_EXPERIMENTAL))
+		/*无"低功耗"能功或者未开启"mesh"*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_MESH_SEND,
 				       MGMT_STATUS_NOT_SUPPORTED);
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED) ||
 	    len <= MGMT_MESH_SEND_SIZE ||
 	    len > (MGMT_MESH_SEND_SIZE + 31))
+		/*设置未配置"低功耗"或者参数长度有误*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_MESH_SEND,
 				       MGMT_STATUS_REJECTED);
 
@@ -2491,20 +2499,23 @@ static int mesh_send(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	memset(&rp, 0, sizeof(rp));
 	rp.max_handles = MESH_HANDLES_MAX;
 
+	/*填充已有的handles*/
 	mgmt_mesh_foreach(hdev, send_count, &rp, sk);
 
 	if (rp.max_handles <= rp.used_handles) {
+		/*handles数量超限*/
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_MESH_SEND,
 				      MGMT_STATUS_BUSY);
 		goto done;
 	}
 
 	sending = hci_dev_test_flag(hdev, HCI_MESH_SENDING);
-	mesh_tx = mgmt_mesh_add(sk, hdev, send, len);
+	mesh_tx = mgmt_mesh_add(sk, hdev, send, len);/*申请并添加mesh_tx*/
 
 	if (!mesh_tx)
-		err = -ENOMEM;
+		err = -ENOMEM;/*无内存,申请失败*/
 	else if (!sending)
+		/*无sending标记,添加同步函数*/
 		err = hci_cmd_sync_queue(hdev, mesh_send_sync, mesh_tx,
 					 mesh_send_start_complete);
 
@@ -2518,8 +2529,9 @@ static int mesh_send(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 				mgmt_mesh_remove(mesh_tx);
 		}
 	} else {
-		hci_dev_set_flag(hdev, HCI_MESH_SENDING);
+		hci_dev_set_flag(hdev, HCI_MESH_SENDING);/*总置sending标记*/
 
+		/*执行响应*/
 		mgmt_cmd_complete(sk, hdev->id, MGMT_OP_MESH_SEND, 0,
 				  &mesh_tx->handle, 1);
 	}
@@ -4651,6 +4663,7 @@ static int exp_feature_changed(struct hci_dev *hdev, const u8 *uuid,
 	memcpy(ev.uuid, uuid, 16);
 	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
 
+	/*向用户态产生事件*/
 	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
@@ -4752,6 +4765,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 
 	/* Parameters are limited to a single octet */
 	if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
+		/*长度必须UUID长度+1,否则报错*/
 		return mgmt_cmd_status(sk, hdev->id,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_INVALID_PARAMS);
@@ -4777,11 +4791,12 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	/*执行响应*/
-	memcpy(rp.uuid, mgmt_mesh_uuid, 16);
-	rp.flags = cpu_to_le32(val ? BIT(0) : 0);
+	memcpy(rp.uuid, mgmt_mesh_uuid, 16);/*填写mesh uuid*/
+	rp.flags = cpu_to_le32(val ? BIT(0) : 0);/*返回开启/关闭*/
 
-	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
+	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);/*标记此socket可以收取扩展功能事件*/
 
+	/*响应*/
 	err = mgmt_cmd_complete(sk, hdev->id,
 				MGMT_OP_SET_EXP_FEATURE, 0,
 				&rp, sizeof(rp));
@@ -5035,7 +5050,7 @@ static int set_iso_socket_func(struct sock *sk, struct hci_dev *hdev,
 
 /*当前支持的功能set列表*/
 static const struct mgmt_exp_feature {
-	const u8 *uuid;
+	const u8 *uuid;/*功能UUID名称*/
 	int (*set_func)(struct sock *sk, struct hci_dev *hdev,
 			struct mgmt_cp_set_exp_feature *cp, u16 data_len);
 } exp_features[] = {
@@ -5064,8 +5079,8 @@ static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	for (i = 0; exp_features[i].uuid; i++) {
-		if (!memcmp(cp->uuid, exp_features[i].uuid/*用户指定的功能uuid*/, 16))
-			/*匹配成功，调用相应的set函数*/
+		if (!memcmp(cp->uuid/*用户指定的功能uuid参数*/, exp_features[i].uuid, 16))
+			/*匹配成功，调用相应的set函数,针对参数处理*/
 			return exp_features[i].set_func(sk, hdev, cp, data_len);
 	}
 
@@ -9489,6 +9504,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_VAR_LEN },
 	{ set_mesh,                MGMT_SET_MESH_RECEIVER_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*读取mesh功能*/
 	{ mesh_features,           MGMT_MESH_READ_FEATURES_SIZE },
 	{ mesh_send,               MGMT_MESH_SEND_SIZE,
 						HCI_MGMT_VAR_LEN },

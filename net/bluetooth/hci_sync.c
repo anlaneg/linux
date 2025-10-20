@@ -1339,11 +1339,13 @@ static int hci_set_adv_data_sync(struct hci_dev *hdev, u8 instance)
 	    memcmp(cp.data, hdev->adv_data, len) == 0)
 		return 0;
 
+	/*设置广播数据到cp*/
 	memcpy(hdev->adv_data, cp.data, sizeof(cp.data));
 	hdev->adv_data_len = len;
 
 	cp.length = len;
 
+	/*发送HCI_OP_LE_SET_ADV_DATA指明为广播数据*/
 	return __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_ADV_DATA,
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }

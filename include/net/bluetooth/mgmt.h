@@ -868,8 +868,8 @@ struct mgmt_cp_mesh_send {
 	__le64  instant;
 	__le16  delay;
 	__u8   cnt;
-	__u8   adv_data_len;
-	__u8   adv_data[];
+	__u8   adv_data_len;/*广播数据长度*/
+	__u8   adv_data[];/*广播数据*/
 } __packed;
 #define MGMT_MESH_SEND_SIZE		19
 

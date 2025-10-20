@@ -1620,7 +1620,7 @@ struct adv_info *hci_find_adv_instance(struct hci_dev *hdev, u8 instance)
 
 	list_for_each_entry(adv_instance, &hdev->adv_instances, list) {
 		if (adv_instance->instance == instance)
-			return adv_instance;
+			return adv_instance;/*取instance号adv_instance*/
 	}
 
 	return NULL;
@@ -1640,19 +1640,23 @@ struct adv_info *hci_find_adv_sid(struct hci_dev *hdev, u8 sid)
 }
 
 /* This function requires the caller holds hdev->lock */
+/*取此下一个广播实例*/
 struct adv_info *hci_get_next_instance(struct hci_dev *hdev, u8 instance)
 {
 	struct adv_info *cur_instance;
 
+	/*利用instance取得当前adv_info*/
 	cur_instance = hci_find_adv_instance(hdev, instance);
 	if (!cur_instance)
 		return NULL;
 
+	/*当前实例是此链表最后一个,则next取首个*/
 	if (cur_instance == list_last_entry(&hdev->adv_instances,
 					    struct adv_info, list))
 		return list_first_entry(&hdev->adv_instances,
 						 struct adv_info, list);
 	else
+		/*否则取列表下一个*/
 		return list_next_entry(cur_instance, list);
 }
 
@@ -1675,7 +1679,7 @@ int hci_remove_adv_instance(struct hci_dev *hdev, u8 instance)
 		hdev->cur_adv_instance = 0x00;
 	}
 
-	cancel_delayed_work_sync(&adv_instance->rpa_expired_cb);
+	cancel_delayed_work_sync(&adv_instance->rpa_expired_cb);/*移除掉对应的cb*/
 
 	list_del(&adv_instance->list);
 	kfree(adv_instance);
@@ -1724,42 +1728,46 @@ static void adv_instance_rpa_expired(struct work_struct *work)
 }
 
 /* This function requires the caller holds hdev->lock */
+/*新增广播实例*/
 struct adv_info *hci_add_adv_instance(struct hci_dev *hdev, u8 instance,
-				      u32 flags, u16 adv_data_len, u8 *adv_data,
-				      u16 scan_rsp_len, u8 *scan_rsp_data,
+				      u32 flags, u16 adv_data_len/*adv_data长度*/, u8 *adv_data/*广播报文*/,
+				      u16 scan_rsp_len/*扫描响应数据长度*/, u8 *scan_rsp_data,
 				      u16 timeout, u16 duration, s8 tx_power,
-				      u32 min_interval, u32 max_interval,
+				      u32 min_interval/*最小间隔*/, u32 max_interval/*最大间隔*/,
 				      u8 mesh_handle)
 {
 	struct adv_info *adv;
 
 	adv = hci_find_adv_instance(hdev, instance);
 	if (adv) {
+		/*adv_info已存在,内容清零*/
 		memset(adv->adv_data, 0, sizeof(adv->adv_data));
 		memset(adv->scan_rsp_data, 0, sizeof(adv->scan_rsp_data));
 		memset(adv->per_adv_data, 0, sizeof(adv->per_adv_data));
 	} else {
 		if (hdev->adv_instance_cnt >= hdev->le_num_of_adv_sets ||
 		    instance < 1 || instance > hdev->le_num_of_adv_sets + 1)
+			/*超限*/
 			return ERR_PTR(-EOVERFLOW);
 
+		/*申请adv*/
 		adv = kzalloc(sizeof(*adv), GFP_KERNEL);
 		if (!adv)
 			return ERR_PTR(-ENOMEM);
 
 		adv->pending = true;
-		adv->instance = instance;
+		adv->instance = instance;/*设置instance编号*/
 
 		/* If controller support only one set and the instance is set to
 		 * 1 then there is no option other than using handle 0x00.
 		 */
 		if (hdev->le_num_of_adv_sets == 1 && instance == 1)
-			adv->handle = 0x00;
+			adv->handle = 0x00;/*首个instance的handle为0*/
 		else
 			adv->handle = instance;
 
-		list_add(&adv->list, &hdev->adv_instances);
-		hdev->adv_instance_cnt++;
+		list_add(&adv->list, &hdev->adv_instances);/*添加adv_info*/
+		hdev->adv_instance_cnt++;/*数目增加*/
 	}
 
 	adv->flags = flags;
@@ -1779,10 +1787,12 @@ struct adv_info *hci_add_adv_instance(struct hci_dev *hdev, u8 instance,
 	adv->remaining_time = timeout;
 
 	if (duration == 0)
+		/*使用默认周期*/
 		adv->duration = hdev->def_multi_adv_rotation_duration;
 	else
 		adv->duration = duration;
 
+	/*设置超时回调*/
 	INIT_DELAYED_WORK(&adv->rpa_expired_cb, adv_instance_rpa_expired);
 
 	BT_DBG("%s for %dMR", hdev->name, instance);
@@ -1820,13 +1830,14 @@ int hci_set_adv_instance_data(struct hci_dev *hdev, u8 instance,
 {
 	struct adv_info *adv;
 
-	adv = hci_find_adv_instance(hdev, instance);
+	adv = hci_find_adv_instance(hdev, instance);/*取得此编号的adv*/
 
 	/* If advertisement doesn't exist, we can't modify its data */
 	if (!adv)
 		return -ENOENT;
 
 	if (adv_data_len && ADV_DATA_CMP(adv, adv_data, adv_data_len)) {
+		/*更新广播数据长度*/
 		memset(adv->adv_data, 0, sizeof(adv->adv_data));
 		memcpy(adv->adv_data, adv_data, adv_data_len);
 		adv->adv_data_len = adv_data_len;
@@ -1834,6 +1845,7 @@ int hci_set_adv_instance_data(struct hci_dev *hdev, u8 instance,
 	}
 
 	if (scan_rsp_len && SCAN_RSP_CMP(adv, scan_rsp_data, scan_rsp_len)) {
+		/*更新扫描响应数据*/
 		memset(adv->scan_rsp_data, 0, sizeof(adv->scan_rsp_data));
 		memcpy(adv->scan_rsp_data, scan_rsp_data, scan_rsp_len);
 		adv->scan_rsp_len = scan_rsp_len;

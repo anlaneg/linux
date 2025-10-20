@@ -22,7 +22,7 @@
 
 struct mgmt_mesh_tx {
 	struct list_head list;
-	int index;
+	int index;/*HCI设备编号*/
 	size_t param_len;
 	struct sock *sk;
 	u8 handle;

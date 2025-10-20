@@ -471,7 +471,7 @@ enum {
 	HCI_LE_SIMULTANEOUS_ROLES,
 	HCI_CMD_DRAIN_WORKQUEUE,
 
-	HCI_MESH_EXPERIMENTAL,
+	HCI_MESH_EXPERIMENTAL,/*标记mesh开启*/
 	HCI_MESH,
 	HCI_MESH_SENDING,
 
@@ -1671,7 +1671,7 @@ struct hci_rp_le_read_adv_tx_power {
 #define HCI_OP_LE_SET_ADV_DATA		0x2008
 struct hci_cp_le_set_adv_data {
 	__u8	length;
-	__u8	data[HCI_MAX_AD_LENGTH];
+	__u8	data[HCI_MAX_AD_LENGTH];/*广播数据*/
 } __packed;
 
 #define HCI_OP_LE_SET_SCAN_RSP_DATA	0x2009

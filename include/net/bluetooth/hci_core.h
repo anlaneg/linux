@@ -243,24 +243,24 @@ struct adv_info {
 	bool	pending;
 	bool	periodic;
 	__u8	mesh;
-	__u8	instance;
+	__u8	instance;/*instance编号*/
 	__u8	handle;
 	__u8	sid;
 	__u32	flags;
 	__u16	timeout;
 	__u16	remaining_time;
 	__u16	duration;
-	__u16	adv_data_len;
-	__u8	adv_data[HCI_MAX_EXT_AD_LENGTH];
+	__u16	adv_data_len;/*广播数据长度*/
+	__u8	adv_data[HCI_MAX_EXT_AD_LENGTH];/*广播数据*/
 	bool	adv_data_changed;
-	__u16	scan_rsp_len;
-	__u8	scan_rsp_data[HCI_MAX_EXT_AD_LENGTH];
+	__u16	scan_rsp_len;/*扫描响应数据长度*/
+	__u8	scan_rsp_data[HCI_MAX_EXT_AD_LENGTH];/*扫描响应数据*/
 	bool	scan_rsp_changed;
 	__u16	per_adv_data_len;
 	__u8	per_adv_data[HCI_MAX_PER_AD_LENGTH];
 	__s8	tx_power;
-	__u32   min_interval;
-	__u32   max_interval;
+	__u32   min_interval;/*最小间隔*/
+	__u32   max_interval;/*最大间隔*/
 	bdaddr_t	random_addr;
 	bool 		rpa_expired;
 	struct delayed_work	rpa_expired_cb;
@@ -400,7 +400,7 @@ struct hci_dev {
 	__u8		page_scan_type;
 	__u8		le_adv_channel_map;
 	__u16		le_adv_min_interval;
-	__u16		le_adv_max_interval;
+	__u16		le_adv_max_interval;/*广播最大间隔*/
 	__u8		le_scan_type;
 	__u16		le_scan_interval;
 	__u16		le_scan_window;
@@ -597,9 +597,9 @@ struct hci_dev {
 	__u8			per_adv_data[HCI_MAX_PER_AD_LENGTH];
 	__u8			per_adv_data_len;
 
-	struct list_head	adv_instances;
-	unsigned int		adv_instance_cnt;
-	__u8			cur_adv_instance;/*当前广播间隔*/
+	struct list_head	adv_instances;/*列表,记录所有的adv_info*/
+	unsigned int		adv_instance_cnt;/*列表长度,即adv_instances的数目*/
+	__u8			cur_adv_instance;/*当前广播的instance编号*/
 	__u16			adv_instance_timeout;
 	struct delayed_work	adv_instance_expire;
 

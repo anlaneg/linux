@@ -343,6 +343,7 @@ void mgmt_mesh_foreach(struct hci_dev *hdev,
 {
 	struct mgmt_mesh_tx *mesh_tx, *tmp;
 
+	/*利用cb遍历mesh_pending上所有mesh_tx*/
 	list_for_each_entry_safe(mesh_tx, tmp, &hdev->mesh_pending, list) {
 		if (!sk || mesh_tx->sk == sk)
 			cb(mesh_tx, data);
@@ -380,10 +381,11 @@ struct mgmt_mesh_tx *mgmt_mesh_find(struct hci_dev *hdev, u8 handle)
 }
 
 struct mgmt_mesh_tx *mgmt_mesh_add(struct sock *sk, struct hci_dev *hdev,
-				   void *data, u16 len)
+				   void *data/*参数*/, u16 len/*参数长度*/)
 {
 	struct mgmt_mesh_tx *mesh_tx;
 
+	/*申请mesh_tx*/
 	mesh_tx = kzalloc(sizeof(*mesh_tx), GFP_KERNEL);
 	if (!mesh_tx)
 		return NULL;
@@ -394,11 +396,12 @@ struct mgmt_mesh_tx *mgmt_mesh_add(struct sock *sk, struct hci_dev *hdev,
 
 	mesh_tx->handle = hdev->mesh_send_ref;
 	mesh_tx->index = hdev->id;
-	memcpy(mesh_tx->param, data, len);
+	memcpy(mesh_tx->param, data, len);/*设置参数*/
 	mesh_tx->param_len = len;
 	mesh_tx->sk = sk;
 	sock_hold(sk);
 
+	/*添加mesh_tx到mesh_pending*/
 	list_add_tail(&mesh_tx->list, &hdev->mesh_pending);
 
 	return mesh_tx;
@@ -408,5 +411,5 @@ void mgmt_mesh_remove(struct mgmt_mesh_tx *mesh_tx)
 {
 	list_del(&mesh_tx->list);
 	sock_put(mesh_tx->sk);
-	kfree(mesh_tx);
+	kfree(mesh_tx);/*释放mesh_tx*/
 }
