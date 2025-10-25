@@ -88,7 +88,7 @@ struct rdma_ud_param {
 };
 
 struct rdma_cm_event {
-	enum rdma_cm_event_type	 event;
+	enum rdma_cm_event_type	 event;/*event类型*/
 	int			 status;
 	union {
 		struct rdma_conn_param	conn;

@@ -391,7 +391,7 @@ enum {
 	HCI_ISCAN,
 	HCI_AUTH,
 	HCI_ENCRYPT,
-	HCI_INQUIRY,
+	HCI_INQUIRY,/*标记设备是否进行了inquiry操作*/
 
 	HCI_RAW,
 
@@ -464,7 +464,7 @@ enum {
 	HCI_FORCE_BREDR_SMP,
 	HCI_FORCE_STATIC_ADDR,
 	HCI_LL_RPA_RESOLUTION,
-	HCI_CMD_PENDING,
+	HCI_CMD_PENDING,/*标记有cmd在等待响应*/
 	HCI_FORCE_NO_MITM,
 	HCI_QUALITY_REPORT,
 	HCI_OFFLOAD_CODECS_ENABLED,
@@ -542,8 +542,11 @@ enum {
 #define EDR_ESCO_MASK  (ESCO_2EV3 | ESCO_3EV3 | ESCO_2EV5 | ESCO_3EV5)
 
 /* ACL flags */
+/*首片非自动可刷新报文*/
 #define ACL_START_NO_FLUSH	0x00
+/*非首片*/
 #define ACL_CONT		0x01
+/*首片自动可刷新报文*/
 #define ACL_START		0x02
 #define ACL_COMPLETE		0x03
 #define ACL_ACTIVE_BCAST	0x04
@@ -770,6 +773,8 @@ enum {
 /* -----  HCI Commands ---- */
 #define HCI_OP_NOP			0x0000
 
+/*OGF占用6位，OCF占用10位(以0x1举例），
+ * 故当OGF=0x1时(link control command)，转换为16进制恰好为0x401*/
 #define HCI_OP_INQUIRY			0x0401
 struct hci_cp_inquiry {
 	__u8     lap[3];
@@ -1054,6 +1059,7 @@ struct hci_cp_remote_oob_ext_data_reply {
 	__u8     rand256[16];
 } __packed;
 
+/**Link Policy commands的OGF为0x2,由于OCF占用10bit,故首个opcode为0x0801*/
 #define HCI_OP_SNIFF_MODE		0x0803
 struct hci_cp_sniff_mode {
 	__le16   handle;
@@ -1123,6 +1129,8 @@ struct hci_cp_sniff_subrate {
 	__le16   min_local_timeout;
 } __packed;
 
+/*OGF占用6位，OCF占用10位(以0x1举例），
+ * 故当OGF=0x3时(Control and Baseband commands)，转换为16进制恰好为0xc01*/
 #define HCI_OP_SET_EVENT_MASK		0x0c01
 
 #define HCI_OP_RESET			0x0c03
@@ -1408,13 +1416,15 @@ struct hci_op_configure_data_path {
 	__u8	vnd_data[];
 } __packed;
 
+/*OGF占用6位，OCF占用10位(以0x1举例），
+ * 故当OGF=0x4时(Informational Parameters commands)，转换为16进制恰好为0x1001*/
 #define HCI_OP_READ_LOCAL_VERSION	0x1001
 struct hci_rp_read_local_version {
 	__u8     status;
 	__u8     hci_ver;
 	__le16   hci_rev;
 	__u8     lmp_ver;
-	__le16   manufacturer;
+	__le16   manufacturer;/*制造商公司标识*/
 	__le16   lmp_subver;
 } __packed;
 
@@ -1619,6 +1629,7 @@ struct hci_rp_read_enc_key_size {
 
 #define HCI_OP_WRITE_SSP_DEBUG_MODE	0x1804
 
+/*LE Controller commands首个*/
 #define HCI_OP_LE_SET_EVENT_MASK	0x2001
 struct hci_cp_le_set_event_mask {
 	__u8     mask[8];
@@ -2318,12 +2329,15 @@ struct hci_ev_qos_setup_complete {
 	struct   hci_qos qos;
 } __packed;
 
+/*表示命令被执行完成*/
 #define HCI_EV_CMD_COMPLETE		0x0e
 struct hci_ev_cmd_complete {
-	__u8     ncmd;
-	__le16   opcode;
+	__u8     ncmd;/*可接收的command数目，为零时需要停止发送*/
+	__le16   opcode;/*触发此event的opcode*/
 } __packed;
 
+/*表示命令正在被执行
+ * (the Controller is currently performing the task for this command.)*/
 #define HCI_EV_CMD_STATUS		0x0f
 struct hci_ev_cmd_status {
 	__u8     status;
@@ -2906,12 +2920,14 @@ struct hci_ev_si_security {
 /* ---- HCI Packet structures ---- */
 /*对应结构struct hci_command_hdr*/
 #define HCI_COMMAND_HDR_SIZE 3
+/*对应结构体hci_event_hdr*/
 #define HCI_EVENT_HDR_SIZE   2
 #define HCI_ACL_HDR_SIZE     4
 #define HCI_SCO_HDR_SIZE     3
 #define HCI_ISO_HDR_SIZE     4
 
 struct hci_command_hdr {
+	/*由ogf(6bits)和ocf(10bits)组成*/
 	__le16	opcode;		/* OCF & OGF */
 	__u8	plen;
 } __packed;
@@ -2922,6 +2938,7 @@ struct hci_event_hdr {
 } __packed;
 
 struct hci_acl_hdr {
+	/*handle占用12bit,另外还有两个标记各占2bits（pb,bc)*/
 	__le16	handle;		/* Handle & Flags(PB, BC) */
 	__le16	dlen;
 } __packed;
@@ -2978,24 +2995,41 @@ static inline struct hci_iso_hdr *hci_iso_hdr(const struct sk_buff *skb)
 
 /* Command opcode pack/unpack */
 #define hci_opcode_pack(ogf, ocf)	((__u16) ((ocf & 0x03ff)|(ogf << 10)))
+/*opcode由两部分构成，其中一部分为opcode group filed,占用6位*/
+/*对于Link Controller command,ogf被定义为0x01
+ * 对于Link Policy Command,ogf被定义为0x02
+ * HCI Control and Baseband commands, the OGF is defined as 0x03.
+ * For Informational Parameters commands, the OGF is defined as 0x04.
+ * For the status parameters commands, the OGF is defined as 0x05.
+ * For the Testing commands, the OGF is defined as 0x06.
+ * For the LE Controller commands, the OGF code is defined as 0x08.
+ *
+ * The OGF value 0x3E is reserved for specification development purposes.
+ * The OGF of 0x3F is reserved for vendor-specific debug commands.
+ * */
 #define hci_opcode_ogf(op)		(op >> 10)
+/*opcode由两部分构成，其中一部分为opcode comamnd filed,占用10位*/
 #define hci_opcode_ocf(op)		(op & 0x03ff)
 
 /* ACL handle and flags pack/unpack */
 #define hci_handle_pack(h, f)	((__u16) ((h & 0x0fff)|(f << 12)))
-/*低12位为handle*/
+/*acl data中首个u16中低12位为handle*/
 #define hci_handle(h)		(h & 0x0fff)
 /*高4位为flags*/
 #define hci_flags(h)		(h >> 12)
 
 /* ISO handle and flags pack/unpack */
+/*iso报文的pb标记，占用两个bits*/
 #define hci_iso_flags_pb(f)		(f & 0x0003)
+/*ts标记占用1位*/
 #define hci_iso_flags_ts(f)		((f >> 2) & 0x0001)
 #define hci_iso_flags_pack(pb, ts)	((pb & 0x03) | ((ts & 0x01) << 2))
 
 /* ISO data length and flags pack/unpack */
 #define hci_iso_data_len_pack(h, f)	((__u16) ((h) | ((f) << 14)))
+/*iso data报文中len字段占用14bits*/
 #define hci_iso_data_len(h)		((h) & 0x3fff)
+/*标记占用两个bits*/
 #define hci_iso_data_flags(h)		((h) >> 14)
 
 /* codec transport types */

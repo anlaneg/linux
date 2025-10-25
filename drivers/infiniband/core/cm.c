@@ -251,7 +251,7 @@ struct cm_id_private {
 	u8 target_ack_delay;
 
 	struct list_head work_list;/*用于串连待执行的cm消息对应的work*/
-	atomic_t work_count;
+	atomic_t work_count;/*work_list长度*/
 
 	struct rdma_ucm_ece ece;
 };
@@ -596,6 +596,7 @@ static u32 cm_local_id(__be32 local_id)
 	return (__force u32) (local_id ^ cm.random_id_operand);
 }
 
+/*通过id获取cm_id_private*/
 static struct cm_id_private *cm_acquire_id(__be32 local_id, __be32 remote_id)
 {
 	struct cm_id_private *cm_id_priv;
@@ -604,7 +605,7 @@ static struct cm_id_private *cm_acquire_id(__be32 local_id, __be32 remote_id)
 	cm_id_priv = xa_load(&cm.local_id_table, cm_local_id(local_id));
 	if (!cm_id_priv || cm_id_priv->id.remote_id != remote_id ||
 	    !refcount_inc_not_zero(&cm_id_priv->refcount))
-		cm_id_priv = NULL;
+		cm_id_priv = NULL;/*local_id无效，返回NULL*/
 	rcu_read_unlock();
 
 	return cm_id_priv;
@@ -851,7 +852,7 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 
 	cm_id_priv->id.state = IB_CM_IDLE;
 	cm_id_priv->id.device = device;
-	cm_id_priv->id.cm_handler = cm_handler;/*cm处理函数*/
+	cm_id_priv->id.cm_handler = cm_handler;/*cm事件处理函数*/
 	cm_id_priv->id.context = context;
 	cm_id_priv->id.remote_cm_qpn = 1;/*远端CM QPN为1*/
 
@@ -899,7 +900,8 @@ struct ib_cm_id *ib_create_cm_id(struct ib_device *device,
 		return ERR_CAST(cm_id_priv);
 
 	cm_finalize_id(cm_id_priv);
-	return &cm_id_priv->id;/*返回新创建并初始化的ib_cm_id*/
+	/*返回新创建并初始化的ib_cm_id*/
+	return &cm_id_priv->id;
 }
 EXPORT_SYMBOL(ib_create_cm_id);
 
@@ -923,7 +925,7 @@ static void cm_free_work(struct cm_work *work)
 	kfree(work);
 }
 
-/*将cm work入队并解锁*/
+/*将cm事件 work入队并解锁*/
 static void cm_queue_work_unlock(struct cm_id_private *cm_id_priv,
 				 struct cm_work *work)
 	__releases(&cm_id_priv->lock)
@@ -1288,7 +1290,7 @@ EXPORT_SYMBOL(ib_cm_listen);
  * Callers should call ib_destroy_cm_id when done with the listener ID.
  */
 struct ib_cm_id *ib_cm_insert_listen(struct ib_device *device/*listen针对的ib设备*/,
-				     ib_cm_handler cm_handler/*listen CM对应的CM事件处理回调*/,
+				     ib_cm_handler cm_handler/*listen对应的CM事件处理回调*/,
 				     __be64 service_id/*监听的service id*/)
 {
 	struct cm_id_private *listen_id_priv;
@@ -1898,25 +1900,27 @@ static void cm_format_req_event(struct cm_work *work,
 		IBA_GET_MEM_PTR(CM_REQ_PRIVATE_DATA, req_msg);
 }
 
+/*cm事件处理*/
 static void cm_process_work(struct cm_id_private *cm_id_priv,
 			    struct cm_work *work)
 {
 	int ret;
 
 	/* We will typically only have the current event to report. */
-	ret = cm_id_priv->id.cm_handler(&cm_id_priv->id, &work->cm_event);/*先执行当前work*/
+	/*cm事件处理*/
+	ret = cm_id_priv->id.cm_handler(&cm_id_priv->id, &work->cm_event);
 	cm_free_work(work);
 
 	/*继续执行,直接出错或者work_count减为-1*/
 	while (!ret && !atomic_add_negative(-1, &cm_id_priv->work_count)) {
 		spin_lock_irq(&cm_id_priv->lock);
-		work = cm_dequeue_work(cm_id_priv);
+		work = cm_dequeue_work(cm_id_priv);/*出一个work*/
 		spin_unlock_irq(&cm_id_priv->lock);
 		if (!work)
 			return;
 
 		ret = cm_id_priv->id.cm_handler(&cm_id_priv->id,
-						&work->cm_event);/*执行worker*/
+						&work->cm_event);/*再处理此cm事件*/
 		cm_free_work(work);
 	}
 	cm_deref_id(cm_id_priv);
@@ -2147,7 +2151,7 @@ static int cm_req_handler(struct cm_work *work)
 	req_msg = (struct cm_req_msg *)work->mad_recv_wc->recv_buf.mad;
 
 	cm_id_priv =
-		cm_alloc_id_priv(work->port->cm_dev->ib_device, NULL, NULL);
+		cm_alloc_id_priv(work->port->cm_dev->ib_device, NULL/*无CM事件处理回调*/, NULL);
 	if (IS_ERR(cm_id_priv))
 		return PTR_ERR(cm_id_priv);
 
@@ -2270,7 +2274,8 @@ static int cm_req_handler(struct cm_work *work)
 		}
 	}
 
-	cm_id_priv->id.cm_handler = listen_cm_id_priv->id.cm_handler;/*指明事件触发函数*/
+	/*复用listen cm_id对应的cm事件触发函数*/
+	cm_id_priv->id.cm_handler = listen_cm_id_priv->id.cm_handler;
 	cm_id_priv->id.context = listen_cm_id_priv->id.context;
 	cm_format_req_event(work, cm_id_priv, &listen_cm_id_priv->id);/*产生事件*/
 
@@ -2280,7 +2285,7 @@ static int cm_req_handler(struct cm_work *work)
 
 	/* Refcount belongs to the event, pairs with cm_process_work() */
 	refcount_inc(&cm_id_priv->refcount);
-	cm_queue_work_unlock(cm_id_priv, work);/*work入队并解锁*/
+	cm_queue_work_unlock(cm_id_priv, work);/*cm work入队并解锁*/
 	/*
 	 * Since this ID was just created and was not made visible to other MAD
 	 * handlers until the cm_finalize_id() above we know that the
@@ -2642,6 +2647,7 @@ error:
 	return ret;
 }
 
+/*处理est事件*/
 static int cm_establish_handler(struct cm_work *work)
 {
 	struct cm_id_private *cm_id_priv;
@@ -2649,15 +2655,15 @@ static int cm_establish_handler(struct cm_work *work)
 	/* See comment in cm_establish about lookup. */
 	cm_id_priv = cm_acquire_id(work->local_id, work->remote_id);
 	if (!cm_id_priv)
-		return -EINVAL;
+		return -EINVAL;/*取本端cm_id失败*/
 
 	spin_lock_irq(&cm_id_priv->lock);
 	if (cm_id_priv->id.state != IB_CM_ESTABLISHED) {
 		spin_unlock_irq(&cm_id_priv->lock);
-		goto out;
+		goto out;/*收到est事件，但状成未达到est*/
 	}
 
-	ib_cancel_mad(cm_id_priv->msg);
+	ib_cancel_mad(cm_id_priv->msg);/*已达est,取消其它mad发送*/
 	cm_queue_work_unlock(cm_id_priv, work);
 	return 0;
 out:
@@ -3603,7 +3609,7 @@ static int cm_sidr_req_handler(struct cm_work *work)
 	int ret;
 
 	cm_id_priv =
-		cm_alloc_id_priv(work->port->cm_dev->ib_device, NULL, NULL);
+		cm_alloc_id_priv(work->port->cm_dev->ib_device, NULL/*无cm事件处理回调*/, NULL);
 	if (IS_ERR(cm_id_priv))
 		return PTR_ERR(cm_id_priv);
 
@@ -3888,7 +3894,7 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 		cm_free_msg(msg);
 }
 
-/*cm event work处理（上文cm_recv_handler已按照收到的报文产生了事件，现在处理这些事件）*/
+/*cm event处理（上文cm_recv_handler已按照收到的报文产生了事件，现在处理这些事件）*/
 static void cm_work_handler(struct work_struct *_work)
 {
 	struct cm_work *work = container_of(_work, struct cm_work, work.work);
@@ -3993,12 +3999,12 @@ static int cm_establish(struct ib_cm_id *cm_id)
 	work->local_id = cm_id->local_id;
 	work->remote_id = cm_id->remote_id;
 	work->mad_recv_wc = NULL;
-	work->cm_event.event = IB_CM_USER_ESTABLISHED;/*达到est*/
+	work->cm_event.event = IB_CM_USER_ESTABLISHED;/*指明cm达到est事件*/
 
 	/* Check if the device started its remove_one */
 	spin_lock_irqsave(&cm.lock, flags);
 	if (!cm_dev->going_down) {
-		queue_delayed_work(cm.wq, &work->work, 0);
+		queue_delayed_work(cm.wq, &work->work, 0);/*触发处理cm事件*/
 	} else {
 		kfree(work);
 		ret = -ENODEV;
@@ -4120,7 +4126,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	}
 
 	INIT_DELAYED_WORK(&work->work, cm_work_handler);/*指定为cm消息处理handler*/
-	work->cm_event.event = event;/*event类型*/
+	work->cm_event.event = event;/*指明cm event类型*/
 	work->mad_recv_wc = mad_recv_wc;/*收到的消息内容*/
 	work->port = port;/*自哪个cm_port收到的*/
 

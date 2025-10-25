@@ -297,7 +297,7 @@ void bt_err_ratelimited(const char *fmt, ...);
 enum bt_sock_state {
 	BT_CONNECTED = 1, /* Equal to TCP_ESTABLISHED to make net code happy */
 	BT_OPEN,
-	BT_BOUND,
+	BT_BOUND,/*标记bind已调用*/
 	BT_LISTEN,
 	BT_CONNECT,
 	BT_CONNECT2,
@@ -463,7 +463,7 @@ int hci_ethtool_ts_info(unsigned int index, int sk_proto,
 
 /*请求首个skb*/
 #define HCI_REQ_START	BIT(0)
-/*标记请求skb结束*/
+/*标记为请求skb（仅在最后一个skb上打标记）*/
 #define HCI_REQ_SKB	BIT(1)
 
 struct hci_ctrl {
@@ -570,7 +570,7 @@ static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
 	skb_reserve(skb, headroom);
 	skb_tailroom_reserve(skb, mtu, tailroom);/*预留tailroom*/
 
-	/*复制payload到skb*/
+	/*复制size长度的payload到skb*/
 	if (!copy_from_iter_full(skb_put(skb, size), size, &msg->msg_iter)) {
 		kfree_skb(skb);
 		return ERR_PTR(-EFAULT);

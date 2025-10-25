@@ -688,6 +688,7 @@ static u8 hci_cc_write_sc_support(struct hci_dev *hdev, void *data,
 	return rp->status;
 }
 
+/*收到读取local controller版本完成事件*/
 static u8 hci_cc_read_local_version(struct hci_dev *hdev, void *data,
 				    struct sk_buff *skb)
 {
@@ -696,13 +697,13 @@ static u8 hci_cc_read_local_version(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*读取出错，返回错误码*/
 
 	if (hci_dev_test_flag(hdev, HCI_SETUP) ||
 	    hci_dev_test_flag(hdev, HCI_CONFIG)) {
-		hdev->hci_ver = rp->hci_ver;
-		hdev->hci_rev = __le16_to_cpu(rp->hci_rev);
-		hdev->lmp_ver = rp->lmp_ver;
+		hdev->hci_ver = rp->hci_ver;/*controller支持的hci版本号*/
+		hdev->hci_rev = __le16_to_cpu(rp->hci_rev);/*controller实现的子版本号*/
+		hdev->lmp_ver = rp->lmp_ver;/*controller支持的lmp版本号*/
 		hdev->manufacturer = __le16_to_cpu(rp->manufacturer);
 		hdev->lmp_subver = __le16_to_cpu(rp->lmp_subver);
 	}
@@ -2951,10 +2952,10 @@ static void hci_inquiry_complete_evt(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", ev->status);
 
 	if (!test_and_clear_bit(HCI_INQUIRY, &hdev->flags))
-		return;
+		return;/*设备没有HCI_INQUIRY标记，表明没有执行inquiry,忽略响应*/
 
 	smp_mb__after_atomic(); /* wake_up_bit advises about this barrier */
-	wake_up_bit(&hdev->flags, HCI_INQUIRY);
+	wake_up_bit(&hdev->flags, HCI_INQUIRY);/*唤醒等此标记清除的（通过wait_on_bit)*/
 
 	if (!hci_dev_test_flag(hdev, HCI_MGMT))
 		return;
@@ -3014,7 +3015,7 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 	bt_dev_dbg(hdev, "num %d", ev->num);
 
 	if (!ev->num)
-		return;
+		return;/*响应数为零，直接返回*/
 
 	if (hci_dev_test_flag(hdev, HCI_PERIODIC_INQ))
 		return;
@@ -3034,6 +3035,7 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 		data.rssi		= HCI_RSSI_INVALID;
 		data.ssp_mode		= 0x00;
 
+		/*缓存响应*/
 		flags = hci_inquiry_cache_update(hdev, &data, false);
 
 		mgmt_device_found(hdev, &info->bdaddr, ACL_LINK, 0x00,
@@ -3089,7 +3091,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 		 * just unlock as there is nothing to cleanup.
 		 */
 		if (ev->status)
-			goto unlock;
+			goto unlock;/*连接创建失败，本端也没有找到，直接返回*/
 
 		/* Connection may not exist if auto-connected. Check the bredr
 		 * allowlist to see if this device is allowed to auto connect.
@@ -3135,7 +3137,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!status) {
-		/*更新connect handle*/
+		/*连接创建成功，更新connect handle*/
 		status = hci_conn_set_handle(conn, __le16_to_cpu(ev->handle));
 		if (status)
 			goto done;
@@ -3215,6 +3217,7 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+/*构造拒绝连接报文并发送*/
 static void hci_reject_conn(struct hci_dev *hdev, bdaddr_t *bdaddr)
 {
 	struct hci_cp_reject_conn_req cp;
@@ -3224,6 +3227,7 @@ static void hci_reject_conn(struct hci_dev *hdev, bdaddr_t *bdaddr)
 	hci_send_cmd(hdev, HCI_OP_REJECT_CONN_REQ, sizeof(cp), &cp);
 }
 
+/*收到连接请求事件*/
 static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 				 struct sk_buff *skb)
 {
@@ -3239,16 +3243,18 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 	 * CVE-2020-26555
 	 */
 	if (hdev && !bacmp(&hdev->bdaddr, &ev->bdaddr)) {
+		/*收到了一个新连接，请求连接的设备地址与当前设备地址一致，拒绝连接*/
 		bt_dev_dbg(hdev, "Reject connection with same BD_ADDR %pMR\n",
 			   &ev->bdaddr);
 		hci_reject_conn(hdev, &ev->bdaddr);
 		return;
 	}
 
-	mask |= hci_proto_connect_ind(hdev, &ev->bdaddr, ev->link_type,
+	mask |= hci_proto_connect_ind(hdev, &ev->bdaddr/*请求方地址*/, ev->link_type/*请求的链路类型*/,
 				      &flags);
 
 	if (!(mask & HCI_LM_ACCEPT)) {
+		/*无accept标记，响应拒绝*/
 		hci_reject_conn(hdev, &ev->bdaddr);
 		return;
 	}
@@ -3257,6 +3263,7 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 
 	if (hci_bdaddr_list_lookup(&hdev->reject_list, &ev->bdaddr,
 				   BDADDR_BREDR)) {
+		/*此地址在reject_list上有记录，响应拒绝*/
 		hci_reject_conn(hdev, &ev->bdaddr);
 		goto unlock;
 	}
@@ -3266,9 +3273,10 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 	 * only do the checks if HCI_MGMT is set.
 	 */
 	if (hci_dev_test_flag(hdev, HCI_MGMT) &&
-	    !hci_dev_test_flag(hdev, HCI_CONNECTABLE) &&
+	    !hci_dev_test_flag(hdev, HCI_CONNECTABLE)/*无connectable标记*/ &&
 	    !hci_bdaddr_list_lookup_with_flags(&hdev->accept_list, &ev->bdaddr,
-					       BDADDR_BREDR)) {
+					       BDADDR_BREDR)/*不在accept_list链表上*/) {
+		/*拒绝此连接*/
 		hci_reject_conn(hdev, &ev->bdaddr);
 		goto unlock;
 	}
@@ -3279,9 +3287,11 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 	if (ie)
 		memcpy(ie->data.dev_class, ev->dev_class, 3);
 
+	/*检查是否存在此link_type的连接*/
 	conn = hci_conn_hash_lookup_ba(hdev, ev->link_type,
 			&ev->bdaddr);
 	if (!conn) {
+		/*无已存在的连接，添加新的连接*/
 		conn = hci_conn_add_unset(hdev, ev->link_type, &ev->bdaddr,
 					  HCI_ROLE_SLAVE);
 		if (IS_ERR(conn)) {
@@ -3363,14 +3373,17 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, void *data,
 
 	conn = hci_conn_hash_lookup_handle(hdev, __le16_to_cpu(ev->handle));
 	if (!conn)
+		/*此连接并不存在，直接返回*/
 		goto unlock;
 
 	if (ev->status) {
+		/*断连接失败*/
 		mgmt_disconnect_failed(hdev, &conn->dst, conn->type,
 				       conn->dst_type, ev->status);
 		goto unlock;
 	}
 
+	/*成功断开连接*/
 	conn->state = BT_CLOSED;
 
 	mgmt_connected = test_and_clear_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
@@ -3504,6 +3517,7 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+/*对端响应了remte name complete event*/
 static void hci_remote_name_evt(struct hci_dev *hdev, void *data,
 				struct sk_buff *skb)
 {
@@ -3520,8 +3534,9 @@ static void hci_remote_name_evt(struct hci_dev *hdev, void *data,
 		goto check_auth;
 
 	if (ev->status == 0)
-		hci_check_pending_name(hdev, conn, &ev->bdaddr, ev->name,
-				       strnlen(ev->name, HCI_MAX_NAME_LENGTH));
+		/*请求成功*/
+		hci_check_pending_name(hdev, conn, &ev->bdaddr/*设备地址*/, ev->name/*设备名称*/,
+				       strnlen(ev->name, HCI_MAX_NAME_LENGTH)/*名称长度*/);
 	else
 		hci_check_pending_name(hdev, conn, &ev->bdaddr, NULL, 0);
 
@@ -3722,11 +3737,12 @@ unlock:
 
 static inline void handle_cmd_cnt_and_timer(struct hci_dev *hdev, u8 ncmd)
 {
-	cancel_delayed_work(&hdev->cmd_timer);
+	cancel_delayed_work(&hdev->cmd_timer);/*取消命令超时定时器*/
 
 	rcu_read_lock();
 	if (!test_bit(HCI_RESET, &hdev->flags)) {
 		if (ncmd) {
+			/*controller可以接收命令发送*/
 			cancel_delayed_work(&hdev->ncmd_timer);
 			atomic_set(&hdev->cmd_cnt, 1);
 		} else {
@@ -3990,7 +4006,7 @@ static const struct hci_cc {
 	u8 (*func)(struct hci_dev *hdev, void *data, struct sk_buff *skb);
 	u16  min_len;/*最小参数长度*/
 	u16  max_len;/*最大参数长度*/
-} hci_cc_table[] = {
+} hci_cc_table/*命令complete表*/[] = {
 	HCI_CC_STATUS(HCI_OP_INQUIRY_CANCEL, hci_cc_inquiry_cancel),
 	HCI_CC_STATUS(HCI_OP_PERIODIC_INQ, hci_cc_periodic_inq),
 	HCI_CC_STATUS(HCI_OP_EXIT_PERIODIC_INQ, hci_cc_exit_periodic_inq),
@@ -4033,7 +4049,7 @@ static const struct hci_cc {
 	HCI_CC(HCI_OP_WRITE_AUTH_PAYLOAD_TO, hci_cc_write_auth_payload_timeout,
 	       sizeof(struct hci_rp_write_auth_payload_to)),
 	HCI_CC(HCI_OP_READ_LOCAL_VERSION, hci_cc_read_local_version,
-	       sizeof(struct hci_rp_read_local_version)),
+	       sizeof(struct hci_rp_read_local_version)),/*读取local controller版本信息完成*/
 	HCI_CC(HCI_OP_READ_LOCAL_COMMANDS, hci_cc_read_local_commands,
 	       sizeof(struct hci_rp_read_local_commands)),
 	HCI_CC(HCI_OP_READ_LOCAL_FEATURES, hci_cc_read_local_features,
@@ -4178,9 +4194,10 @@ static u8 hci_cc_func(struct hci_dev *hdev, const struct hci_cc *cc,
 		return HCI_ERROR_UNSPECIFIED;
 
 	/*触发相应回调*/
-	return cc->func(hdev, data, skb);
+	return cc->func(hdev, data/*响应参数*/, skb);
 }
 
+/*收到command complete事件*/
 static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 				 struct sk_buff *skb, u16 *opcode, u8 *status,
 				 hci_req_complete_t *req_complete,
@@ -4195,7 +4212,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 
 	for (i = 0; i < ARRAY_SIZE(hci_cc_table); i++) {
 		if (hci_cc_table[i].op == *opcode) {
-			/*如果此opcode与hci_cc_table中元素命中,则检查并触发相应回调*/
+			/*如果此opcode与command complete表中元素命中,则检查并触发相应回调*/
 			*status = hci_cc_func(hdev, &hci_cc_table[i], skb);
 			break;
 		}
@@ -4214,7 +4231,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 
 	handle_cmd_cnt_and_timer(hdev, ev->ncmd);
 
-	hci_req_cmd_complete(hdev, *opcode, *status, req_complete,
+	hci_req_cmd_complete(hdev, *opcode/*响应指明完成的opcode*/, *status/*响应指明完成状态*/, req_complete,
 			     req_complete_skb);
 
 	if (hci_dev_test_flag(hdev, HCI_CMD_PENDING)) {
@@ -4224,6 +4241,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (atomic_read(&hdev->cmd_cnt) && !skb_queue_empty(&hdev->cmd_q))
+		/*controller可继续接受cmd,且cmd_q不为空，继续向controller发送*/
 		queue_work(hdev->workqueue, &hdev->cmd_work);
 }
 
@@ -7386,19 +7404,19 @@ static const struct hci_ev {
 		  sizeof(struct hci_ev_inquiry_result), HCI_MAX_EVENT_SIZE),
 	/* [0x03 = HCI_EV_CONN_COMPLETE] */
 	HCI_EV(HCI_EV_CONN_COMPLETE, hci_conn_complete_evt,
-	       sizeof(struct hci_ev_conn_complete)),
+	       sizeof(struct hci_ev_conn_complete)),/*创建connect完成*/
 	/* [0x04 = HCI_EV_CONN_REQUEST] */
 	HCI_EV(HCI_EV_CONN_REQUEST, hci_conn_request_evt,
-	       sizeof(struct hci_ev_conn_request)),
+	       sizeof(struct hci_ev_conn_request)),/*收到连接请求*/
 	/* [0x05 = HCI_EV_DISCONN_COMPLETE] */
 	HCI_EV(HCI_EV_DISCONN_COMPLETE, hci_disconn_complete_evt,
-	       sizeof(struct hci_ev_disconn_complete)),
+	       sizeof(struct hci_ev_disconn_complete)),/*断开连接完成*/
 	/* [0x06 = HCI_EV_AUTH_COMPLETE] */
 	HCI_EV(HCI_EV_AUTH_COMPLETE, hci_auth_complete_evt,
 	       sizeof(struct hci_ev_auth_complete)),
 	/* [0x07 = HCI_EV_REMOTE_NAME] */
 	HCI_EV(HCI_EV_REMOTE_NAME, hci_remote_name_evt,
-	       sizeof(struct hci_ev_remote_name)),
+	       sizeof(struct hci_ev_remote_name)),/*远端名称请求完成*/
 	/* [0x08 = HCI_EV_ENCRYPT_CHANGE] */
 	HCI_EV(HCI_EV_ENCRYPT_CHANGE, hci_encrypt_change_evt,
 	       sizeof(struct hci_ev_encrypt_change)),
@@ -7497,7 +7515,7 @@ static const struct hci_ev {
 	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
 };
 
-static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
+static void hci_event_func(struct hci_dev *hdev, u8 event/*事件编号*/, struct sk_buff *skb/*事件参数*/,
 			   u16 *opcode, u8 *status,
 			   hci_req_complete_t *req_complete,
 			   hci_req_complete_skb_t *req_complete_skb)
@@ -7507,7 +7525,7 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 	void *data;
 
 	if (!ev->func)
-		/*必须提供func回调*/
+		/*未提供func回调，直接返回*/
 		return;
 
 	if (skb->len < ev->min_len) {
@@ -7529,18 +7547,18 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 
 	data = hci_ev_skb_pull(hdev, skb, event, ev->min_len);
 	if (!data)
-		return;/*长度不足*/
+		return;/*参数实际长度不足*/
 
 	if (ev->req)
 		/*触发请求类回调*/
-		ev->func_req(hdev, data, skb, opcode, status, req_complete,
+		ev->func_req(hdev, data/*参数指针*/, skb, opcode, status, req_complete,
 			     req_complete_skb);
 	else
 		/*触发非请求类回调*/
 		ev->func(hdev, data, skb);
 }
 
-/*hci event报文处理*/
+/*hci event报文处理(event是由hci controller来的报文）*/
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct hci_event_hdr *hdr = (void *) skb->data;
@@ -7572,6 +7590,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	if (hdev->req_skb &&
 	    hci_opcode_ogf(hci_skb_opcode(hdev->req_skb)) != 0x08/*不是le命令*/ &&
 	    hci_skb_event(hdev->req_skb) == event/*请求的event与响应event一致*/) {
+		/*之前发送过req请求，当前收到了非le响应的event,且与请求event一致，按req的响应处理*/
 		hci_req_cmd_complete(hdev, hci_skb_opcode(hdev->req_skb),
 				     status, &req_complete, &req_complete_skb);
 		req_evt = event;
@@ -7586,7 +7605,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	    event == HCI_EV_CMD_COMPLETE)
 		orig_skb = skb_clone(skb, GFP_KERNEL);
 
-	skb_pull(skb, HCI_EVENT_HDR_SIZE);
+	skb_pull(skb, HCI_EVENT_HDR_SIZE);/*跳过event header*/
 
 	/* Store wake reason if we're suspended */
 	hci_store_wake_reason(hdev, event, skb);

@@ -124,9 +124,9 @@ void hci_discovery_set_state(struct hci_dev *hdev, int state)
 	int old_state = hdev->discovery.state;
 
 	if (old_state == state)
-		return;
+		return;/*状态一致，直接返回*/
 
-	hdev->discovery.state = state;
+	hdev->discovery.state = state;/*更新discovery state*/
 
 	switch (state) {
 	case DISCOVERY_STOPPED:
@@ -3221,7 +3221,7 @@ static void *hci_cmd_data(struct sk_buff *skb, __u16 opcode)
 	if (hdr->opcode != cpu_to_le16(opcode))
 		return NULL;
 
-	return skb->data + HCI_COMMAND_HDR_SIZE;
+	return skb->data + HCI_COMMAND_HDR_SIZE;/*返回此opcode请求时对应的参数*/
 }
 
 /* Get data from the previously sent command */
@@ -3230,10 +3230,10 @@ void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode)
 	void *data;
 
 	/* Check if opcode matches last sent command */
-	data = hci_cmd_data(hdev->sent_cmd, opcode);
+	data = hci_cmd_data(hdev->sent_cmd, opcode);/*先查发送过的cmd*/
 	if (!data)
 		/* Check if opcode matches last request */
-		data = hci_cmd_data(hdev->req_skb, opcode);
+		data = hci_cmd_data(hdev->req_skb, opcode);/*再查req_skb*/
 
 	return data;
 }
@@ -3389,18 +3389,18 @@ static void hci_queue_iso(struct hci_conn *conn, struct sk_buff_head *queue,
 	skb->len = skb_headlen(skb);
 	skb->data_len = 0;
 
-	hci_skb_pkt_type(skb) = HCI_ISODATA_PKT;
+	hci_skb_pkt_type(skb) = HCI_ISODATA_PKT;/*指明为iso data报文*/
 
 	list = skb_shinfo(skb)->frag_list;
 
 	flags = hci_iso_flags_pack(list ? ISO_START : ISO_SINGLE, 0x00);
-	hci_add_iso_hdr(skb, conn->handle, flags);
+	hci_add_iso_hdr(skb, conn->handle, flags);/*添加连接及handle*/
 
 	if (!list) {
 		/* Non fragmented */
 		BT_DBG("%s nonfrag skb %p len %d", hdev->name, skb, skb->len);
 
-		skb_queue_tail(queue, skb);
+		skb_queue_tail(queue, skb);/*直接加入队列*/
 	} else {
 		/* Fragmented */
 		BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
@@ -3430,7 +3430,7 @@ void hci_send_iso(struct hci_conn *conn, struct sk_buff *skb)
 
 	BT_DBG("%s len %d", hdev->name, skb->len);
 
-	hci_queue_iso(conn, &conn->data_q, skb);/*存入到conn->data_q*/
+	hci_queue_iso(conn, &conn->data_q, skb);/*将iso data报文存入到conn->data_q*/
 
 	queue_work(hdev->workqueue, &hdev->tx_work);/*触发tx_work*/
 }
@@ -3489,12 +3489,12 @@ static struct hci_conn *hci_low_sent(struct hci_dev *hdev, __u8 type,
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(c, &h->list, list) {
-		if (c->type != type ||
-		    skb_queue_empty(&c->data_q))
-			continue;
+		if (c->type != type/*连接类型不一致*/ ||
+		    skb_queue_empty(&c->data_q)/*此连接data queue为空*/)
+			continue;/*跳过*/
 
 		if (c->state != BT_CONNECTED && c->state != BT_CONFIG)
-			continue;
+			continue;/*状态不匹配*/
 
 		num++;
 
@@ -3683,7 +3683,7 @@ static void hci_sched_sco(struct hci_dev *hdev, __u8 type)
 	bt_dev_dbg(hdev, "type %u", type);
 
 	if (!hci_conn_num(hdev, type) || !pkts)
-		return;
+		return;/*hci设备上此type类型的连接数为0，或者sco_pkts为空，则直接返回。*/
 
 	/* Use sco_pkts if flow control has not been enabled which will limit
 	 * the amount of buffer sent in a row.
@@ -3695,6 +3695,7 @@ static void hci_sched_sco(struct hci_dev *hdev, __u8 type)
 
 	while (*cnt && (conn = hci_low_sent(hdev, type, &quote))) {
 		while (quote-- && (skb = skb_dequeue(&conn->data_q))) {
+			/*quote有值，且有待发送的data报文*/
 			BT_DBG("skb %p len %d", skb, skb->len);
 			hci_send_conn_frame(hdev, conn, skb);
 
@@ -3881,8 +3882,8 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	}
 
 	handle = __le16_to_cpu(hdr->handle);
-	flags  = hci_flags(handle);
-	handle = hci_handle(handle);
+	flags  = hci_flags(handle);/*取flags*/
+	handle = hci_handle(handle);/*取handle*/
 
 	bt_dev_dbg(hdev, "len %d handle 0x%4.4x flags 0x%4.4x", skb->len,
 		   handle, flags);
@@ -3890,6 +3891,7 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	hdev->stat.acl_rx++;
 
 	hci_dev_lock(hdev);
+	/*利用handle查询connection*/
 	conn = hci_conn_hash_lookup_handle(hdev, handle);
 	hci_dev_unlock(hdev);
 
@@ -3897,9 +3899,10 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 		hci_conn_enter_active_mode(conn, BT_POWER_FORCE_ACTIVE_OFF);
 
 		/* Send to upper protocol */
-		l2cap_recv_acldata(conn, skb, flags);
+		l2cap_recv_acldata(conn, skb, flags);/*此连接收到acl数据报文*/
 		return;
 	} else {
+		/*没有找到连接，丢包*/
 		bt_dev_err(hdev, "ACL packet for unknown connection handle %d",
 			   handle);
 	}
@@ -3922,24 +3925,26 @@ static void hci_scodata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	}
 
 	handle = __le16_to_cpu(hdr->handle);
-	flags  = hci_flags(handle);
+	flags  = hci_flags(handle);/*取标记位*/
 	handle = hci_handle(handle);
 
 	bt_dev_dbg(hdev, "len %d handle 0x%4.4x flags 0x%4.4x", skb->len,
 		   handle, flags);
 
-	hdev->stat.sco_rx++;
+	hdev->stat.sco_rx++;/*收方向报文增加*/
 
 	hci_dev_lock(hdev);
+	/*通过handle查询conn*/
 	conn = hci_conn_hash_lookup_handle(hdev, handle);
 	hci_dev_unlock(hdev);
 
 	if (conn) {
 		/* Send to upper protocol */
-		hci_skb_pkt_status(skb) = flags & 0x03;
+		hci_skb_pkt_status(skb) = flags & 0x03;/*取packet status标记*/
 		sco_recv_scodata(conn, skb);
 		return;
 	} else {
+		/*无conn,报错丢包*/
 		bt_dev_err_ratelimited(hdev, "SCO packet for unknown connection handle %d",
 				       handle);
 	}
@@ -3961,17 +3966,19 @@ static void hci_isodata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	}
 
 	handle = __le16_to_cpu(hdr->handle);
-	flags  = hci_flags(handle);
-	handle = hci_handle(handle);
+	flags  = hci_flags(handle);/*取标记*/
+	handle = hci_handle(handle);/*取handle*/
 
 	bt_dev_dbg(hdev, "len %d handle 0x%4.4x flags 0x%4.4x", skb->len,
 		   handle, flags);
 
 	hci_dev_lock(hdev);
+	/*利用handle查询connection*/
 	conn = hci_conn_hash_lookup_handle(hdev, handle);
 	hci_dev_unlock(hdev);
 
 	if (!conn) {
+		/*connect不存在，报错丢包*/
 		bt_dev_err(hdev, "ISO packet for unknown connection handle %d",
 			   handle);
 		goto drop;
@@ -3991,9 +3998,9 @@ static bool hci_req_is_complete(struct hci_dev *hdev)
 
 	skb = skb_peek(&hdev->cmd_q);
 	if (!skb)
-		return true;
+		return true;/*没有其它命令了*/
 
-	return (bt_cb(skb)->hci.req_flags & HCI_REQ_START);
+	return (bt_cb(skb)->hci.req_flags & HCI_REQ_START);/*下一个命令是否首个命令*/
 }
 
 /*用于发送最后一次send的command*/
@@ -4020,8 +4027,8 @@ static void hci_resend_last(struct hci_dev *hdev)
 }
 
 void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
-			  hci_req_complete_t *req_complete,
-			  hci_req_complete_skb_t *req_complete_skb)
+			  hci_req_complete_t *req_complete/*出参，完成无HCI_REQ_SKB标记的skb时填充*/,
+			  hci_req_complete_skb_t *req_complete_skb/*出参，完成有HCI_REQ_SKB标记的skb时填充*/)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -4041,17 +4048,17 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 		if (test_bit(HCI_INIT, &hdev->flags) && opcode == HCI_OP_RESET)
 			hci_resend_last(hdev);
 
-		return;
+		return;/*没有找到此opcode对应的请求数据，返回*/
 	}
 
 	/* If we reach this point this event matches the last command sent */
-	hci_dev_clear_flag(hdev, HCI_CMD_PENDING);
+	hci_dev_clear_flag(hdev, HCI_CMD_PENDING);/*收到响应，移除pending标记*/
 
 	/* If the command succeeded and there's still more commands in
 	 * this request the request is not yet complete.
 	 */
 	if (!status && !hci_req_is_complete(hdev))
-		return;
+		return;/*成功，且仍有同一批次的cmd需要执行，直接返回*/
 
 	skb = hdev->req_skb;
 
@@ -4060,7 +4067,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	 * command queue (hdev->cmd_q).
 	 */
 	if (skb && bt_cb(skb)->hci.req_flags & HCI_REQ_SKB) {
-		/*请求报文存在,且此请求报文为最后一个req报文*/
+		/*请求报文存在,且此请求报文为同一批次的最后一个req报文，填充req_complete_skb回调，并返回*/
 		*req_complete_skb = bt_cb(skb)->hci.req_complete_skb;
 		return;
 	}
@@ -4088,7 +4095,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 }
 
-/*负责处理hdev->rx_q队列上所有skb*/
+/*负责处理hdev->rx_q队列上所有skb(收取controller报文)*/
 static void hci_rx_work(struct work_struct *work)
 {
 	/*取得work服务的hci dev*/
@@ -4140,24 +4147,28 @@ static void hci_rx_work(struct work_struct *work)
 		/* Process frame */
 		switch (hci_skb_pkt_type(skb)) {
 		case HCI_EVENT_PKT:
-			/*事件类报文*/
+			/*事件类报文（event报文是由hci controller来的报文）*/
 			BT_DBG("%s Event packet", hdev->name);
 			hci_event_packet(hdev, skb);/*处理event pkt*/
 			break;
 
 		case HCI_ACLDATA_PKT:
+			/*ACLDATA用于host与hci controller之间互传的报文，
+			 * 报文会按连接投递，l2cap_recv_acldata*/
 			BT_DBG("%s ACL data packet", hdev->name);
 			hci_acldata_packet(hdev, skb);
 			break;
 
 		case HCI_SCODATA_PKT:
+			/*sco socket报文接收处理,送sco_recv_frame*/
 			BT_DBG("%s SCO data packet", hdev->name);
-			hci_scodata_packet(hdev, skb);/*sco socket报文接收处理*/
+			hci_scodata_packet(hdev, skb);
 			break;
 
 		case HCI_ISODATA_PKT:
+			/*iso socket报文接收处理,送iso_recv_frame*/
 			BT_DBG("%s ISO data packet", hdev->name);
-			hci_isodata_packet(hdev, skb);/*iso socket报文接收处理*/
+			hci_isodata_packet(hdev, skb);
 			break;
 
 		default:
@@ -4192,10 +4203,10 @@ static void hci_send_cmd_sync(struct hci_dev *hdev, struct sk_buff *skb)
 			hci_cmd_sync_cancel_sync(hdev, -err);
 			return;
 		}
-		atomic_dec(&hdev->cmd_cnt);
+		atomic_dec(&hdev->cmd_cnt);/*减少可发送数目*/
 	}
 
-	/*opcode是NOP的情况或者非NOP且发送成功的*/
+	/*请求状态处于PEND(等待响应）且之前无pending标记，记录此req_skb*/
 	if (hdev->req_status == HCI_REQ_PEND &&
 	    !hci_dev_test_and_set_flag(hdev, HCI_CMD_PENDING)) {
 		kfree_skb(hdev->req_skb);/*释放掉上一个req_skb*/
@@ -4223,10 +4234,10 @@ static void hci_cmd_work(struct work_struct *work)
 		rcu_read_lock();
 		if (test_bit(HCI_RESET, &hdev->flags) ||
 		    hci_dev_test_flag(hdev, HCI_CMD_DRAIN_WORKQUEUE))
-			cancel_delayed_work(&hdev->cmd_timer);/*取消timer*/
+			cancel_delayed_work(&hdev->cmd_timer);/*取消cmd超时timer*/
 		else
 			queue_delayed_work(hdev->workqueue, &hdev->cmd_timer,
-					   HCI_CMD_TIMEOUT);/*启动timer*/
+					   HCI_CMD_TIMEOUT);/*启动超时timer*/
 		rcu_read_unlock();
 	}
 }

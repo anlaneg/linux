@@ -240,7 +240,7 @@ struct ib_cm_sidr_rep_event_param {
 };
 
 struct ib_cm_event {
-	enum ib_cm_event_type	event;/*cm事件（收到消息后触发）*/
+	enum ib_cm_event_type	event;/*cm事件类型*/
 	union {
 		struct ib_cm_req_event_param	req_rcvd;
 		struct ib_cm_rep_event_param	rep_rcvd;
@@ -299,8 +299,8 @@ struct ib_cm_id {
 	/*cm状态*/
 	enum ib_cm_state	state;		/* internal CM/debug use */
 	enum ib_cm_lap_state	lap_state;	/* internal CM/debug use */
-	__be32			local_id;/*为此cm_id分配的id号，由cm.local_id_table申请来*/
-	__be32			remote_id;
+	__be32			local_id;/*为此cm_id分配的本端id号，由cm.local_id_table申请来*/
+	__be32			remote_id;/*对端id*/
 	/*远端CM QPN，当前为1*/
 	u32			remote_cm_qpn;  /* 1 unless redirected */
 };
@@ -358,7 +358,7 @@ struct ib_cm_req_param {
 	const struct ib_gid_attr *ppath_sgid_attr;
 	__be64			service_id;
 	u32			qp_num;
-	enum ib_qp_type		qp_type;
+	enum ib_qp_type		qp_type;/*qp类型*/
 	u32			starting_psn;
 	const void		*private_data;/*私有数据(非IB时,会有一个cma_hdr结构体在最前面)*/
 	u8			private_data_len;/*私有数据长度(如为0,则无私有数据)*/

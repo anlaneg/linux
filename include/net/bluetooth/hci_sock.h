@@ -99,9 +99,9 @@ struct hci_dev_stats {
 	__u32 cmd_tx;/*tx方向cmd数目*/
 	__u32 evt_rx;/*收到的event数目*/
 	__u32 acl_tx;/*tx方向acl数目数*/
-	__u32 acl_rx;
+	__u32 acl_rx;/*rx方向收到acl data报文数目*/
 	__u32 sco_tx;
-	__u32 sco_rx;
+	__u32 sco_rx;/*rx方向Synchronous Data packets报文数目*/
 	__u32 byte_rx;/*rx方向接收成功的包数*/
 	__u32 byte_tx;/*传送出去时成功的字节数*/
 };

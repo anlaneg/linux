@@ -467,7 +467,7 @@ struct l2cap_chan *l2cap_chan_create(void)
 	chan->rx_avail = -1;
 
 	write_lock(&chan_list_lock);
-	list_add(&chan->global_l, &chan_list);
+	list_add(&chan->global_l, &chan_list);/*添加此chan*/
 	write_unlock(&chan_list_lock);
 
 	INIT_DELAYED_WORK(&chan->chan_timer, l2cap_chan_timeout);
@@ -7199,7 +7199,7 @@ int l2cap_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr)
 	read_lock(&chan_list_lock);
 	list_for_each_entry(c, &chan_list, global_l) {
 		if (c->state != BT_LISTEN)
-			continue;
+			continue;/*跳过非listen状态的socket*/
 
 		if (!bacmp(&c->src, &hdev->bdaddr)) {
 			lm1 |= HCI_LM_ACCEPT;
@@ -7519,6 +7519,7 @@ struct l2cap_conn *l2cap_conn_hold_unless_zero(struct l2cap_conn *c)
 	return c;
 }
 
+/*此hci_conn收到acl data报文*/
 void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 {
 	struct l2cap_conn *conn;
@@ -7604,6 +7605,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 		break;
 
 	case ACL_CONT:
+		/*非首片*/
 		BT_DBG("Cont: frag len %u (expecting %u)", skb->len, conn->rx_len);
 
 		if (!conn->rx_skb) {
@@ -7645,6 +7647,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 			l2cap_recv_frame(conn, rx_skb);
 		}
 		break;
+		/*其它类型报文将被丢弃*/
 	}
 
 drop:

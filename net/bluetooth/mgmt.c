@@ -2670,7 +2670,7 @@ done:
 static int mgmt_hci_cmd_sync(struct sock *sk, struct hci_dev *hdev,
 			     void *data, u16 len)
 {
-	struct mgmt_cp_hci_cmd_sync *cp = data;
+	struct mgmt_cp_hci_cmd_sync *cp = data;/*参数*/
 	struct mgmt_pending_cmd *cmd;
 	int err;
 
@@ -2680,7 +2680,7 @@ static int mgmt_hci_cmd_sync(struct sock *sk, struct hci_dev *hdev,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
-	cmd = mgmt_pending_new(sk, MGMT_OP_HCI_CMD_SYNC, hdev, data, len);
+	cmd = mgmt_pending_new(sk, MGMT_OP_HCI_CMD_SYNC, hdev, data/*参数指针*/, len/*参数长度*/);
 	if (!cmd)
 		err = -ENOMEM;
 	else

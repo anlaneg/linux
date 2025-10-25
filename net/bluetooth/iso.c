@@ -18,13 +18,14 @@
 
 static const struct proto_ops iso_sock_ops;
 
+/*用于记录系统所有iso_sock*/
 static struct bt_sock_list iso_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(iso_sk_list.lock)
 };
 
 /* ---- ISO connections ---- */
 struct iso_conn {
-	struct hci_conn	*hcon;
+	struct hci_conn	*hcon;/*指向其对应的hci_conn*/
 
 	/* @lock: spinlock protecting changes to iso_conn fields */
 	spinlock_t	lock;
@@ -35,7 +36,7 @@ struct iso_conn {
 	struct sk_buff	*rx_skb;
 	__u32		rx_len;
 	__u16		tx_sn;
-	struct kref	ref;
+	struct kref	ref;/*此连接引用计数*/
 };
 
 #define iso_conn_lock(c)	spin_lock(&(c)->lock)
@@ -59,9 +60,9 @@ enum {
 
 struct iso_pinfo {
 	struct bt_sock		bt;
-	bdaddr_t		src;
-	__u8			src_type;
-	bdaddr_t		dst;
+	bdaddr_t		src;/*源地址*/
+	__u8			src_type;/*源地址类型*/
+	bdaddr_t		dst;/*目的地址*/
 	__u8			dst_type;
 	__u8			bc_sid;
 	__u8			bc_num_bis;
@@ -72,7 +73,7 @@ struct iso_pinfo {
 	bool			qos_user_set;
 	__u8			base_len;
 	__u8			base[BASE_MAX_LENGTH];
-	struct iso_conn		*conn;
+	struct iso_conn		*conn;/*关联的iso_conn*/
 };
 
 static struct bt_iso_qos default_qos;
@@ -127,20 +128,21 @@ static void iso_conn_put(struct iso_conn *conn)
 static struct iso_conn *iso_conn_hold_unless_zero(struct iso_conn *conn)
 {
 	if (!conn)
-		return NULL;
+		return NULL;/*为空，直接返回*/
 
 	BT_DBG("conn %p refcnt %u", conn, kref_read(&conn->ref));
 
 	if (!kref_get_unless_zero(&conn->ref))
-		return NULL;
+		return NULL;/*不为空，增加引用失败，返回NULL*/
 
 	return conn;
 }
 
+/*返回此连接关联的socket*/
 static struct sock *iso_sock_hold(struct iso_conn *conn)
 {
 	if (!conn || !bt_sock_linked(&iso_sk_list, conn->sk))
-		return NULL;
+		return NULL;/*链表不存在，或者连接记录的socket未添加到iso_sk_list上*/
 
 	sock_hold(conn->sk);
 
@@ -155,7 +157,7 @@ static void iso_sock_timeout(struct work_struct *work)
 
 	conn = iso_conn_hold_unless_zero(conn);
 	if (!conn)
-		return;
+		return;/*增加引用计数失败*/
 
 	iso_conn_lock(conn);
 	sk = iso_sock_hold(conn);
@@ -163,12 +165,12 @@ static void iso_sock_timeout(struct work_struct *work)
 	iso_conn_put(conn);
 
 	if (!sk)
-		return;
+		return;/*此连接未关联socket,直接返回*/
 
 	BT_DBG("sock %p state %d", sk, sk->sk_state);
 
 	lock_sock(sk);
-	sk->sk_err = ETIMEDOUT;
+	sk->sk_err = ETIMEDOUT;/*将socket状态变更为etimeout*/
 	sk->sk_state_change(sk);
 	release_sock(sk);
 	sock_put(sk);
@@ -180,6 +182,7 @@ static void iso_sock_set_timer(struct sock *sk, long timeout)
 		return;
 
 	BT_DBG("sock %p state %d timeout %ld", sk, sk->sk_state, timeout);
+	/*更新超时时间*/
 	cancel_delayed_work(&iso_pi(sk)->conn->timeout_work);
 	schedule_delayed_work(&iso_pi(sk)->conn->timeout_work, timeout);
 }
@@ -187,10 +190,10 @@ static void iso_sock_set_timer(struct sock *sk, long timeout)
 static void iso_sock_clear_timer(struct sock *sk)
 {
 	if (!iso_pi(sk)->conn)
-		return;
+		return;/*没有关联conn，则直接返回*/
 
 	BT_DBG("sock %p state %d", sk, sk->sk_state);
-	cancel_delayed_work(&iso_pi(sk)->conn->timeout_work);
+	cancel_delayed_work(&iso_pi(sk)->conn->timeout_work);/*取消超时处理*/
 }
 
 /* ---- ISO connections ---- */
@@ -200,6 +203,7 @@ static struct iso_conn *iso_conn_add(struct hci_conn *hcon)
 
 	conn = iso_conn_hold_unless_zero(conn);
 	if (conn) {
+		/*iso_conn存在,如果未设置conn->hcon,则在此处设置*/
 		if (!conn->hcon) {
 			iso_conn_lock(conn);
 			conn->hcon = hcon;
@@ -209,11 +213,12 @@ static struct iso_conn *iso_conn_add(struct hci_conn *hcon)
 		return conn;
 	}
 
+	/*申请iso_conn*/
 	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn)
 		return NULL;
 
-	kref_init(&conn->ref);
+	kref_init(&conn->ref);/*初始化引用计数*/
 	spin_lock_init(&conn->lock);
 	INIT_DELAYED_WORK(&conn->timeout_work, iso_sock_timeout);
 
@@ -293,13 +298,16 @@ static int __iso_chan_add(struct iso_conn *conn, struct sock *sk,
 	BT_DBG("conn %p", conn);
 
 	if (iso_pi(sk)->conn == conn && conn->sk == sk)
+		/*socket已关联此iso_conn并且iso_conn也关联此socket*/
 		return 0;
 
 	if (conn->sk) {
+		/*conn已设置socket，但与当前socket不一致*/
 		BT_ERR("conn->sk already set");
 		return -EBUSY;
 	}
 
+	/*设置双方关联*/
 	iso_pi(sk)->conn = conn;
 	conn->sk = sk;
 
@@ -309,6 +317,7 @@ static int __iso_chan_add(struct iso_conn *conn, struct sock *sk,
 	return 0;
 }
 
+/*conn与socket相互关联*/
 static int iso_chan_add(struct iso_conn *conn, struct sock *sk,
 			struct sock *parent)
 {
@@ -341,6 +350,7 @@ static int iso_connect_bis(struct sock *sk)
 	hdev = hci_get_route(&iso_pi(sk)->dst, &iso_pi(sk)->src,
 			     iso_pi(sk)->src_type);
 	if (!hdev)
+		/*查找源设备失败，不可达*/
 		return -EHOSTUNREACH;
 
 	hci_dev_lock(hdev);
@@ -387,6 +397,7 @@ static int iso_connect_bis(struct sock *sk)
 			iso_pi(sk)->bc_sid = hcon->sid;
 	}
 
+	/*复用iso_conn或者创建iso_conn*/
 	conn = iso_conn_add(hcon);
 	if (!conn) {
 		hci_conn_drop(hcon);
@@ -396,6 +407,7 @@ static int iso_connect_bis(struct sock *sk)
 
 	lock_sock(sk);
 
+	/*iso_conn与socket相互关联*/
 	err = iso_chan_add(conn, sk, NULL);
 	if (err) {
 		release_sock(sk);
@@ -436,6 +448,7 @@ static int iso_connect_cis(struct sock *sk)
 	hdev = hci_get_route(&iso_pi(sk)->dst, &iso_pi(sk)->src,
 			     iso_pi(sk)->src_type);
 	if (!hdev)
+		/*查找出接口失败*/
 		return -EHOSTUNREACH;
 
 	hci_dev_lock(hdev);
@@ -525,7 +538,7 @@ static struct bt_iso_qos *iso_sock_get_qos(struct sock *sk)
 static int iso_send_frame(struct sock *sk, struct sk_buff *skb,
 			  const struct sockcm_cookie *sockc)
 {
-	struct iso_conn *conn = iso_pi(sk)->conn;
+	struct iso_conn *conn = iso_pi(sk)->conn;/*取得此socket对应的iso_conn*/
 	struct bt_iso_qos *qos = iso_sock_get_qos(sk);
 	struct hci_iso_data_hdr *hdr;
 	int len = 0;
@@ -533,26 +546,28 @@ static int iso_send_frame(struct sock *sk, struct sk_buff *skb,
 	BT_DBG("sk %p len %d", sk, skb->len);
 
 	if (skb->len > qos->ucast.out.sdu)
-		return -EMSGSIZE;
+		return -EMSGSIZE;/*报文长度过大*/
 
 	len = skb->len;
 
 	/* Push ISO data header */
-	hdr = skb_push(skb, HCI_ISO_DATA_HDR_SIZE);
-	hdr->sn = cpu_to_le16(conn->tx_sn++);
+	hdr = skb_push(skb, HCI_ISO_DATA_HDR_SIZE);/*添加iso data header*/
+	hdr->sn = cpu_to_le16(conn->tx_sn++);/*添加psn*/
 	hdr->slen = cpu_to_le16(hci_iso_data_len_pack(len,
 						      HCI_ISO_STATUS_VALID));
 
 	if (sk->sk_state == BT_CONNECTED) {
+		/*必须达到connected状态，才能发送iso报文*/
 		hci_setup_tx_timestamp(skb, 1, sockc);
 		hci_send_iso(conn->hcon, skb);
 	} else {
-		len = -ENOTCONN;
+		len = -ENOTCONN;/*socket未达到connected状态，报错*/
 	}
 
 	return len;
 }
 
+/*iso报文送socket*/
 static void iso_recv_frame(struct iso_conn *conn, struct sk_buff *skb)
 {
 	struct sock *sk;
@@ -562,7 +577,7 @@ static void iso_recv_frame(struct iso_conn *conn, struct sk_buff *skb)
 	iso_conn_unlock(conn);
 
 	if (!sk)
-		goto drop;
+		goto drop;/*无关联的socket,丢包*/
 
 	BT_DBG("sk %p len %d", sk, skb->len);
 
@@ -582,6 +597,7 @@ static struct sock *__iso_get_sock_listen_by_addr(bdaddr_t *src, bdaddr_t *dst)
 {
 	struct sock *sk;
 
+	/*遍历所有iso_sk,检查是否有listen状态，且src,dst一致的socket*/
 	sk_for_each(sk, &iso_sk_list.head) {
 		if (sk->sk_state != BT_LISTEN)
 			continue;
@@ -603,16 +619,16 @@ static struct sock *__iso_get_sock_listen_by_sid(bdaddr_t *ba, bdaddr_t *bc,
 
 	sk_for_each(sk, &iso_sk_list.head) {
 		if (sk->sk_state != BT_LISTEN)
-			continue;
+			continue;/*跳过非listen状态的socket*/
 
 		if (bacmp(&iso_pi(sk)->src, ba))
-			continue;
+			continue;/*跳过源地址不匹配的*/
 
 		if (bacmp(&iso_pi(sk)->dst, bc))
-			continue;
+			continue;/*跳过目的地址不匹配的*/
 
 		if (iso_pi(sk)->bc_sid == sid)
-			return sk;
+			return sk;/*且首个sid必须匹配的，才能返回*/
 	}
 
 	return NULL;
@@ -903,6 +919,7 @@ static struct sock *iso_sock_alloc(struct net *net, struct socket *sock,
 	return sk;
 }
 
+/*创建iso_socket*/
 static int iso_sock_create(struct net *net, struct socket *sock, int protocol,
 			   int kern)
 {
@@ -1003,6 +1020,7 @@ done:
 	return err;
 }
 
+/*设置源地址，更新socket状态为BT_BOUND*/
 static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 			 int addr_len)
 {
@@ -1014,7 +1032,7 @@ static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 
 	if (!addr || addr_len < sizeof(struct sockaddr_iso) ||
 	    addr->sa_family != AF_BLUETOOTH)
-		return -EINVAL;
+		return -EINVAL;/*必须绑定bluetooth地址*/
 
 	lock_sock(sk);
 
@@ -1035,15 +1053,16 @@ static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 
 	if (sk->sk_type != SOCK_SEQPACKET) {
 		err = -EINVAL;
-		goto done;
+		goto done;/*仅支持seqpacket*/
 	}
 
 	/* Check if the address type is of LE type */
 	if (!bdaddr_type_is_le(sa->iso_bdaddr_type)) {
 		err = -EINVAL;
-		goto done;
+		goto done;/*地址类型不得为le*/
 	}
 
+	/*设置源地址*/
 	bacpy(&iso_pi(sk)->src, &sa->iso_bdaddr);
 	iso_pi(sk)->src_type = sa->iso_bdaddr_type;
 
@@ -1054,15 +1073,15 @@ static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 			goto done;
 	}
 
-	sk->sk_state = BT_BOUND;
+	sk->sk_state = BT_BOUND;/*标记bind已调用*/
 
 done:
 	release_sock(sk);
 	return err;
 }
 
-static int iso_sock_connect(struct socket *sock, struct sockaddr *addr,
-			    int alen, int flags)
+static int iso_sock_connect(struct socket *sock, struct sockaddr *addr/*目的地址*/,
+			    int alen/*地址长度*/, int flags)
 {
 	struct sockaddr_iso *sa = (struct sockaddr_iso *)addr;
 	struct sock *sk = sock->sk;
@@ -1072,28 +1091,31 @@ static int iso_sock_connect(struct socket *sock, struct sockaddr *addr,
 
 	if (alen < sizeof(struct sockaddr_iso) ||
 	    addr->sa_family != AF_BLUETOOTH)
-		return -EINVAL;
+		return -EINVAL;/*必须为bluetooth socket*/
 
 	if (sk->sk_state != BT_OPEN && sk->sk_state != BT_BOUND)
-		return -EBADFD;
+		return -EBADFD;/*连接时状态必须是以上两种之一*/
 
 	if (sk->sk_type != SOCK_SEQPACKET)
-		return -EINVAL;
+		return -EINVAL;/*仅支持seqpacket*/
 
 	/* Check if the address type is of LE type */
 	if (!bdaddr_type_is_le(sa->iso_bdaddr_type))
-		return -EINVAL;
+		return -EINVAL;/*地址类型不得为le*/
 
 	lock_sock(sk);
 
+	/*设置socket目的地址及目的地址类型*/
 	bacpy(&iso_pi(sk)->dst, &sa->iso_bdaddr);
 	iso_pi(sk)->dst_type = sa->iso_bdaddr_type;
 
 	release_sock(sk);
 
 	if (bacmp(&iso_pi(sk)->dst, BDADDR_ANY))
+		/*目地址为any情况下，采用cis连接*/
 		err = iso_connect_cis(sk);
 	else
+		/*目的地址不为any,采用bis方式连接*/
 		err = iso_connect_bis(sk);
 
 	if (err)
@@ -1124,7 +1146,7 @@ static int iso_listen_bis(struct sock *sk)
 
 	if (__iso_get_sock_listen_by_sid(&iso_pi(sk)->src, &iso_pi(sk)->dst,
 					 iso_pi(sk)->bc_sid))
-		err = -EADDRINUSE;
+		err = -EADDRINUSE;/*存在有与src,dst,bc_sid一致的冲突socket*/
 
 	write_unlock(&iso_sk_list.lock);
 
@@ -1134,7 +1156,7 @@ static int iso_listen_bis(struct sock *sk)
 	hdev = hci_get_route(&iso_pi(sk)->dst, &iso_pi(sk)->src,
 			     iso_pi(sk)->src_type);
 	if (!hdev)
-		return -EHOSTUNREACH;
+		return -EHOSTUNREACH;/*未找到源设备*/
 
 	hci_dev_lock(hdev);
 	lock_sock(sk);
@@ -1161,6 +1183,7 @@ static int iso_listen_bis(struct sock *sk)
 		goto unlock;
 	}
 
+	/*conn与sk相互关联*/
 	err = iso_chan_add(conn, sk, NULL);
 	if (err) {
 		hci_conn_drop(hcon);
@@ -1183,7 +1206,7 @@ static int iso_listen_cis(struct sock *sk)
 	write_lock(&iso_sk_list.lock);
 
 	if (__iso_get_sock_listen_by_addr(&iso_pi(sk)->src, &iso_pi(sk)->dst))
-		err = -EADDRINUSE;
+		err = -EADDRINUSE;/*存在冲突的socket*/
 
 	write_unlock(&iso_sk_list.lock);
 
@@ -1202,29 +1225,30 @@ static int iso_sock_listen(struct socket *sock, int backlog)
 
 	if (sk->sk_state != BT_BOUND) {
 		err = -EBADFD;
-		goto done;
+		goto done;/*必须已调用bind*/
 	}
 
 	if (sk->sk_type != SOCK_SEQPACKET) {
 		err = -EINVAL;
-		goto done;
+		goto done;/*仅支持seqpacket*/
 	}
 
 	if (!bacmp(&iso_pi(sk)->dst, BDADDR_ANY)) {
+		/*目地地址为any,cis方式listen,检查是否有冲突*/
 		err = iso_listen_cis(sk);
 	} else {
 		/* Drop sock lock to avoid potential
 		 * deadlock with the hdev lock.
 		 */
 		release_sock(sk);
-		err = iso_listen_bis(sk);
+		err = iso_listen_bis(sk);/*目的地址非any*/
 		lock_sock(sk);
 	}
 
 	if (err)
 		goto done;
 
-	sk->sk_max_ack_backlog = backlog;
+	sk->sk_max_ack_backlog = backlog;/*设置backlog*/
 	sk->sk_ack_backlog = 0;
 
 	sk->sk_state = BT_LISTEN;
@@ -1331,7 +1355,7 @@ done:
 }
 
 static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
-			    int peer)
+			    int peer/*是否取对端信息*/)
 {
 	struct sockaddr_iso *sa = (struct sockaddr_iso *)addr;
 	struct sock *sk = sock->sk;
@@ -1342,6 +1366,7 @@ static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
 	addr->sa_family = AF_BLUETOOTH;
 
 	if (peer) {
+		/*取对端地址信息*/
 		struct hci_conn *hcon = iso_pi(sk)->conn ?
 					iso_pi(sk)->conn->hcon : NULL;
 
@@ -1349,6 +1374,7 @@ static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
 		sa->iso_bdaddr_type = iso_pi(sk)->dst_type;
 
 		if (hcon && hcon->type == BIS_LINK) {
+			/*针对BIS_LINK,填充sid*/
 			sa->iso_bc->bc_sid = iso_pi(sk)->bc_sid;
 			sa->iso_bc->bc_num_bis = iso_pi(sk)->bc_num_bis;
 			memcpy(sa->iso_bc->bc_bis, iso_pi(sk)->bc_bis,
@@ -1356,6 +1382,7 @@ static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
 			len += sizeof(struct sockaddr_iso_bc);
 		}
 	} else {
+		/*取本端地址信息*/
 		bacpy(&sa->iso_bdaddr, &iso_pi(sk)->src);
 		sa->iso_bdaddr_type = iso_pi(sk)->src_type;
 	}
@@ -1364,7 +1391,7 @@ static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
 }
 
 static int iso_sock_sendmsg(struct socket *sock, struct msghdr *msg,
-			    size_t len)
+			    size_t len/*msg长度*/)
 {
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb, **frag;
@@ -1392,14 +1419,15 @@ static int iso_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	lock_sock(sk);
 
 	if (sk->sk_state != BT_CONNECTED) {
-		release_sock(sk);
+		release_sock(sk);/*不处于connected状态，无法发送*/
 		return -ENOTCONN;
 	}
 
-	mtu = iso_pi(sk)->conn->hcon->mtu;
+	mtu = iso_pi(sk)->conn->hcon->mtu;/*取连接mtu信息*/
 
 	release_sock(sk);
 
+	/*填充首片*/
 	skb = bt_skb_sendmsg(sk, msg, len, mtu, HCI_ISO_DATA_HDR_SIZE, 0);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
@@ -1409,17 +1437,18 @@ static int iso_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	BT_DBG("skb %p len %d", sk, skb->len);
 
 	/* Continuation fragments */
-	frag = &skb_shinfo(skb)->frag_list;
+	frag = &skb_shinfo(skb)->frag_list;/*分片指针，准备填充后续分片*/
 	while (len) {
 		struct sk_buff *tmp;
 
+		/*继续复制后续的片断*/
 		tmp = bt_skb_sendmsg(sk, msg, len, mtu, 0, 0);
 		if (IS_ERR(tmp)) {
 			kfree_skb(skb);
 			return PTR_ERR(tmp);
 		}
 
-		*frag = tmp;
+		*frag = tmp;/*指向分片*/
 
 		len  -= tmp->len;
 
@@ -1428,12 +1457,13 @@ static int iso_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 
 		BT_DBG("frag %p len %d", *frag, tmp->len);
 
-		frag = &(*frag)->next;
+		frag = &(*frag)->next;/*准备填充下一片*/
 	}
 
 	lock_sock(sk);
 
 	if (sk->sk_state == BT_CONNECTED)
+		/*发送数据*/
 		err = iso_send_frame(sk, skb, &sockc);
 	else
 		err = -ENOTCONN;
@@ -2316,6 +2346,7 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 		if (ts) {
 			struct hci_iso_ts_data_hdr *hdr;
 
+			/*ts字段，及sn等字段均在报文中*/
 			hdr = skb_pull_data(skb, HCI_ISO_TS_DATA_HDR_SIZE);
 			if (!hdr) {
 				BT_ERR("Frame is too short (len %d)", skb->len);
@@ -2324,11 +2355,13 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 
 			/*  Record the timestamp to skb */
 			hwts = skb_hwtstamps(skb);
+			/*利用ts填充硬件时间签*/
 			hwts->hwtstamp = us_to_ktime(le32_to_cpu(hdr->ts));
 
-			sn = __le16_to_cpu(hdr->sn);
-			len = __le16_to_cpu(hdr->slen);
+			sn = __le16_to_cpu(hdr->sn);/*取Packet_Sequence_Number字段*/
+			len = __le16_to_cpu(hdr->slen);/*取ISO_SDU_Length字段（含标记）*/
 		} else {
+			/*ts字段不存在，sn,len字段存在*/
 			struct hci_iso_data_hdr *hdr;
 
 			hdr = skb_pull_data(skb, HCI_ISO_DATA_HDR_SIZE);
@@ -2341,8 +2374,9 @@ void iso_recv(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 			len = __le16_to_cpu(hdr->slen);
 		}
 
+		/*取len中包含的标记字段*/
 		flags  = hci_iso_data_flags(len);
-		len    = hci_iso_data_len(len);
+		len    = hci_iso_data_len(len);/*移除标记后取实际长度*/
 
 		BT_DBG("Start: total len %d, frag len %d flags 0x%4.4x sn %d",
 		       len, skb->len, flags, sn);
@@ -2462,12 +2496,12 @@ static const struct proto_ops iso_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= iso_sock_release,
-	.bind		= iso_sock_bind,
-	.connect	= iso_sock_connect,
+	.bind		= iso_sock_bind,/*设置源地址*/
+	.connect	= iso_sock_connect,/*设置目的地址，connect实现*/
 	.listen		= iso_sock_listen,
 	.accept		= iso_sock_accept,
 	.getname	= iso_sock_getname,
-	.sendmsg	= iso_sock_sendmsg,
+	.sendmsg	= iso_sock_sendmsg,/*报文发送*/
 	.recvmsg	= iso_sock_recvmsg,
 	.poll		= bt_sock_poll,
 	.ioctl		= bt_sock_ioctl,

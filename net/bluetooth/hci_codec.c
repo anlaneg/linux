@@ -73,7 +73,7 @@ static void hci_read_codec_capabilities(struct hci_dev *hdev, __u8 transport,
 			}
 
 			skb = __hci_cmd_sync_sk(hdev, HCI_OP_READ_LOCAL_CODEC_CAPS,
-						sizeof(*cmd), cmd, 0, HCI_CMD_TIMEOUT, NULL);
+						sizeof(*cmd), cmd, 0/*此操作无关联event*/, HCI_CMD_TIMEOUT, NULL);
 			if (IS_ERR(skb)) {
 				bt_dev_err(hdev, "Failed to read codec capabilities (%ld)",
 					   PTR_ERR(skb));

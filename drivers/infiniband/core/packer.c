@@ -36,8 +36,9 @@
 
 #include <rdma/ib_pack.h>
 
-static u64 value_read(int offset, int size, void *structure)
+static u64 value_read(int offset/*偏移量*/, int size/*读取的内容字节数目*/, void *structure/*结构体指针*/)
 {
+	/*自structure + offset位置开始读取size字节*/
 	switch (size) {
 	case 1: return                *(u8  *) (structure + offset);
 	case 2: return be16_to_cpup((__be16 *) (structure + offset));
@@ -59,20 +60,22 @@ static u64 value_read(int offset, int size, void *structure)
  * ib_pack() packs a list of structure fields into a buffer,
  * controlled by the array of fields in @desc.
  */
-void ib_pack(const struct ib_field        *desc,
-	     int                           desc_len,
+void ib_pack(const struct ib_field        *desc/*field描述符*/,
+	     int                           desc_len/*desc数组长度*/,
 	     void                         *structure,
-	     void                         *buf)
+	     void                         *buf/*字段填充位置*/)
 {
 	int i;
 
 	for (i = 0; i < desc_len; ++i) {
 		if (desc[i].size_bits <= 32) {
+			/*字段小于32bits的*/
 			int shift;
 			u32 val;
 			__be32 mask;
 			__be32 *addr;
 
+			/*高位上有shift bit是需要丢弃掉的，非本字段数据，这里处理为直接挤出去*/
 			shift = 32 - desc[i].offset_bits - desc[i].size_bits;
 			if (desc[i].struct_size_bytes)
 				val = value_read(desc[i].struct_offset_bytes,
@@ -81,9 +84,11 @@ void ib_pack(const struct ib_field        *desc,
 			else
 				val = 0;
 
+			/*同样的mask*/
 			mask = cpu_to_be32(((1ull << desc[i].size_bits) - 1) << shift);
 			addr = (__be32 *) buf + desc[i].offset_words;
-			*addr = (*addr & ~mask) | (cpu_to_be32(val) & mask);
+			/*这里填写的内容均被提升了shift的倍数*/
+			*addr = (*addr & ~mask)/*保留buffer中保存的旧值*/ | (cpu_to_be32(val) & mask)/*取得的值*/;
 		} else if (desc[i].size_bits <= 64) {
 			int shift;
 			u64 val;

@@ -24,12 +24,12 @@ enum {
 };
 
 struct ib_field {
-	size_t struct_offset_bytes;
-	size_t struct_size_bytes;
-	int    offset_words;
-	int    offset_bits;
-	int    size_bits;
-	char  *field_name;
+	size_t struct_offset_bytes;/*field在结构体中起始位置（字节数）*/
+	size_t struct_size_bytes;/*field占用的大小(字节数)*/
+	int    offset_words;/*4字节做为1个偏移量，目标填充位置距离起点偏移量*/
+	int    offset_bits;/*bit偏移量*/
+	int    size_bits;/*占用的bit数*/
+	char  *field_name;/*field名称*/
 };
 
 #define RESERVED \

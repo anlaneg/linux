@@ -1463,6 +1463,7 @@ void sco_recv_scodata(struct hci_conn *hcon, struct sk_buff *skb)
 	BT_DBG("conn %p len %u", conn, skb->len);
 
 	if (skb->len) {
+		/*数据长度不为0，走sco_recv*/
 		sco_recv_frame(conn, skb);
 		return;
 	}

@@ -222,6 +222,7 @@ static inline ktime_t ns_to_ktime(u64 ns)
 	return ns;
 }
 
+/*us转ns*/
 static inline ktime_t us_to_ktime(u64 us)
 {
 	return us * NSEC_PER_USEC;

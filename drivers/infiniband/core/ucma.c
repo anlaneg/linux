@@ -307,10 +307,10 @@ static int ucma_connect_event_handler(struct rdma_cm_id *cm_id,
 	struct ucma_event *uevent;
 
 	if (!atomic_add_unless(&listen_ctx->backlog, -1, 0))
-		return -ENOMEM;
+		return -ENOMEM;/*backlog达到零，出错*/
 	ctx = ucma_alloc_ctx(listen_ctx->file);
 	if (!ctx)
-		goto err_backlog;
+		goto err_backlog;/*无对应的context*/
 	ucma_set_ctx_cm_id(ctx, cm_id);
 
 	uevent = ucma_create_uevent(listen_ctx, event);
@@ -326,7 +326,7 @@ static int ucma_connect_event_handler(struct rdma_cm_id *cm_id,
 	/*添加uevent到list，以便用户态来读取*/
 	list_add_tail(&uevent->list, &ctx->file->event_list);
 	mutex_unlock(&ctx->file->mut);
-	wake_up_interruptible(&ctx->file->poll_wait);
+	wake_up_interruptible(&ctx->file->poll_wait);/*唤醒等待者*/
 	return 0;
 
 err_alloc:
@@ -345,7 +345,7 @@ static int ucma_event_handler(struct rdma_cm_id *cm_id/*event关联的cm_id*/,
 	struct ucma_context *ctx = cm_id->context;
 
 	if (event->event == RDMA_CM_EVENT_CONNECT_REQUEST)
-		/*connect reqeust事件添加(这种kernel直接处理)*/
+		/*connect reqeust事件添加到event_list*/
 		return ucma_connect_event_handler(cm_id, event);
 
 	/*
@@ -1071,6 +1071,7 @@ static ssize_t ucma_query(struct ucma_file *file,
 		ret = ucma_query_addr(ctx, response, out_len);
 		break;
 	case RDMA_USER_CM_QUERY_PATH:
+		/*响应path查询*/
 		ret = ucma_query_path(ctx, response, out_len);
 		break;
 	case RDMA_USER_CM_QUERY_GID:
@@ -1087,6 +1088,7 @@ static ssize_t ucma_query(struct ucma_file *file,
 	return ret;
 }
 
+/*填充connect paramter*/
 static void ucma_copy_conn_param(struct rdma_cm_id *id,
 				 struct rdma_conn_param *dst,
 				 struct rdma_ucm_conn_param *src)
@@ -1103,6 +1105,7 @@ static void ucma_copy_conn_param(struct rdma_cm_id *id,
 	dst->qkey = (id->route.addr.src_addr.ss_family == AF_IB) ? src->qkey : 0;
 }
 
+/*用户态rdma_connect调用将触发kernel执行此函数*/
 static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 			    int in_len, int out_len)
 {
@@ -1114,7 +1117,7 @@ static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 	int ret;
 
 	if (in_len < offsetofend(typeof(cmd), reserved))
-		return -EINVAL;
+		return -EINVAL;/*输入参数过小*/
 	in_size = min_t(size_t, in_len, sizeof(cmd));
 	if (copy_from_user(&cmd, inbuf, in_size))
 		return -EFAULT;
@@ -1135,7 +1138,7 @@ static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 	}
 
 	mutex_lock(&ctx->mutex);
-	ret = rdma_connect_ece(ctx->cm_id, &conn_param, &ece);/*执行connect*/
+	ret = rdma_connect_ece(ctx->cm_id, &conn_param/*连接参数*/, &ece);/*执行connect*/
 	mutex_unlock(&ctx->mutex);
 	ucma_put_ctx(ctx);
 	return ret;
@@ -1770,7 +1773,7 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_JOIN_IP_MCAST] = ucma_join_ip_multicast,
 	[RDMA_USER_CM_CMD_LEAVE_MCAST]	 = ucma_leave_multicast,
 	[RDMA_USER_CM_CMD_MIGRATE_ID]	 = ucma_migrate_id,
-	[RDMA_USER_CM_CMD_QUERY]	 = ucma_query,
+	[RDMA_USER_CM_CMD_QUERY]	 = ucma_query, /*响应path查询*/
 	[RDMA_USER_CM_CMD_BIND]		 = ucma_bind,/*通过bind命令来绑定(非ip协议）*/
 	[RDMA_USER_CM_CMD_RESOLVE_ADDR]	 = ucma_resolve_addr,
 	[RDMA_USER_CM_CMD_JOIN_MCAST]	 = ucma_join_multicast

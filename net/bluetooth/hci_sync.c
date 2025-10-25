@@ -170,7 +170,7 @@ static void hci_request_init(struct hci_request *req, struct hci_dev *hdev)
 
 /* This function requires the caller holds hdev->req_lock. */
 struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode/*操作码*/, u32 plen/*param参数长度*/,
-				  const void *param, u8 event, u32 timeout/*执行超时时间*/,
+				  const void *param, u8 event/*关联的event*/, u32 timeout/*执行超时时间*/,
 				  struct sock *sk)
 {
 	struct hci_request req;
@@ -244,7 +244,7 @@ struct sk_buff *__hci_cmd_sync(struct hci_dev *hdev, u16 opcode, u32 plen,
 			       const void *param, u32 timeout)
 {
 	/*发送命令并获得响应的SKB*/
-	return __hci_cmd_sync_sk(hdev, opcode, plen, param, 0, timeout, NULL);
+	return __hci_cmd_sync_sk(hdev, opcode, plen, param, 0/*关联的event为0*/, timeout, NULL);
 }
 EXPORT_SYMBOL(__hci_cmd_sync);
 
@@ -278,7 +278,7 @@ EXPORT_SYMBOL(__hci_cmd_sync_ev);
 
 /* This function requires the caller holds hdev->req_lock. */
 int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数长度*/,
-			     const void *param/*参数*/, u8 event, u32 timeout,
+			     const void *param/*参数*/, u8 event/*opcode关联的event*/, u32 timeout,
 			     struct sock *sk)
 {
 	struct sk_buff *skb;
@@ -2696,7 +2696,7 @@ struct sk_buff *hci_read_local_oob_data_sync(struct hci_dev *hdev,
 	u16 opcode = extended ? HCI_OP_READ_LOCAL_OOB_EXT_DATA :
 					HCI_OP_READ_LOCAL_OOB_DATA;
 
-	return __hci_cmd_sync_sk(hdev, opcode, 0, NULL, 0, HCI_CMD_TIMEOUT, sk);
+	return __hci_cmd_sync_sk(hdev, opcode, 0, NULL, 0/*关联的event为0*/, HCI_CMD_TIMEOUT, sk);
 }
 
 static struct conn_params *conn_params_copy(struct list_head *list, size_t *n)
@@ -3669,8 +3669,9 @@ static int hci_read_local_version_sync(struct hci_dev *hdev)
 /* Read BD Address */
 static int hci_read_bd_addr_sync(struct hci_dev *hdev)
 {
+	/*在BR/EDR模式下，此命令读取BT控制器地址；在LE模式下，此命令读取PDA，如果没有PDA地址，返回全零*/
 	return __hci_cmd_sync_status(hdev, HCI_OP_READ_BD_ADDR,
-				     0, NULL, HCI_CMD_TIMEOUT);
+				     0/*无参数*/, NULL, HCI_CMD_TIMEOUT);
 }
 
 #define HCI_INIT(_func) \
@@ -6898,6 +6899,7 @@ int hci_update_adv_data(struct hci_dev *hdev, u8 instance)
 				  UINT_PTR(instance), NULL);
 }
 
+/*acl connect 创建*/
 static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 {
 	struct hci_conn *conn = data;
@@ -6917,13 +6919,14 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	 * request for discovery again when this flag becomes false.
 	 */
 	if (test_bit(HCI_INQUIRY, &hdev->flags)) {
+		/*有inquiry操作在执行，先发送inquiry取消*/
 		err = __hci_cmd_sync_status(hdev, HCI_OP_INQUIRY_CANCEL, 0,
 					    NULL, HCI_CMD_TIMEOUT);
 		if (err)
 			bt_dev_warn(hdev, "Failed to cancel inquiry %d", err);
 	}
 
-	conn->state = BT_CONNECT;
+	conn->state = BT_CONNECT;/*变更为connect状态*/
 	conn->out = true;
 	conn->role = HCI_ROLE_MASTER;
 
@@ -6932,8 +6935,8 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	conn->link_policy = hdev->link_policy;
 
 	memset(&cp, 0, sizeof(cp));
-	bacpy(&cp.bdaddr, &conn->dst);
-	cp.pscan_rep_mode = 0x02;
+	bacpy(&cp.bdaddr, &conn->dst);/*设置cmd目的地址*/
+	cp.pscan_rep_mode = 0x02;/*R2*/
 
 	ie = hci_inquiry_cache_lookup(hdev, &conn->dst);
 	if (ie) {
@@ -6953,16 +6956,17 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	else
 		cp.role_switch = 0x00;
 
-	return __hci_cmd_sync_status_sk(hdev, HCI_OP_CREATE_CONN,
+	/*请求创建到cp.bdaddr的连接*/
+	return __hci_cmd_sync_status_sk(hdev, HCI_OP_CREATE_CONN/*创建连接*/,
 					sizeof(cp), &cp,
-					HCI_EV_CONN_COMPLETE,
+					HCI_EV_CONN_COMPLETE/*连接完成事件*/,
 					conn->conn_timeout, NULL);
 }
 
 int hci_connect_acl_sync(struct hci_dev *hdev, struct hci_conn *conn)
 {
 	/*排队执行hci_acl_create_conn_sync*/
-	return hci_cmd_sync_queue_once(hdev, hci_acl_create_conn_sync, conn,
+	return hci_cmd_sync_queue_once(hdev, hci_acl_create_conn_sync/*acl连接创建*/, conn,
 				       NULL/*无destroy函数*/);
 }
 
@@ -7075,6 +7079,7 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+/*执行LE Periodic Advertising Create Sync command*/
 static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 {
 	struct hci_cp_le_pa_create_sync cp;
@@ -7083,10 +7088,10 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	int err;
 
 	if (!hci_conn_valid(hdev, conn))
-		return -ECANCELED;
+		return -ECANCELED;/*此conn未添加到dev->conn_hash*/
 
 	if (conn->sync_handle != HCI_SYNC_HANDLE_INVALID)
-		return -EINVAL;
+		return -EINVAL;/*sync_handle必须为invalid*/
 
 	if (hci_dev_test_and_set_flag(hdev, HCI_PA_SYNC))
 		return -EBUSY;
@@ -7114,8 +7119,9 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	 * it.
 	 */
 	if (conn->sid == HCI_SID_INVALID)
+		/*执行HCI_OP_NOP命令（软件实现）*/
 		__hci_cmd_sync_status_sk(hdev, HCI_OP_NOP, 0, NULL,
-					 HCI_EV_LE_EXT_ADV_REPORT,
+					 HCI_EV_LE_EXT_ADV_REPORT/*对应的事件*/,
 					 conn->conn_timeout, NULL);
 
 	memset(&cp, 0, sizeof(cp));
@@ -7138,7 +7144,7 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	 * Advertising_Create_Sync command is pending, the Controller shall
 	 * return the error code Command Disallowed (0x0C).
 	 */
-	err = __hci_cmd_sync_status_sk(hdev, HCI_OP_LE_PA_CREATE_SYNC,
+	err = __hci_cmd_sync_status_sk(hdev, HCI_OP_LE_PA_CREATE_SYNC/*指明cmd*/,
 				       sizeof(cp), &cp,
 				       HCI_EV_LE_PA_SYNC_ESTABLISHED,
 				       conn->conn_timeout, NULL);

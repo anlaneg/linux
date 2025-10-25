@@ -1033,7 +1033,7 @@ static void cma_id_put(struct rdma_id_private *id_priv)
 
 /*创建rdma_id_private结构体*/
 static struct rdma_id_private *
-__rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
+__rdma_create_id(struct net *net, rdma_cm_event_handler event_handler/*cm事件处理回调*/,
 		 void *context, enum rdma_ucm_port_space ps,
 		 enum ib_qp_type qp_type, const struct rdma_id_private *parent)
 {
@@ -1045,7 +1045,7 @@ __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
 
 	id_priv->state = RDMA_CM_IDLE;/*设置初始化状态*/
 	id_priv->id.context = context;
-	/*设置event在kernel中的交付函数，例如采用ucma_event_hadler*/
+	/*设置event在kernel中的交付函数*/
 	id_priv->id.event_handler = event_handler;
 	id_priv->id.ps = ps;
 	id_priv->id.qp_type = qp_type;
@@ -1075,6 +1075,7 @@ __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
 	return id_priv;
 }
 
+/*用于kernel创建rdma_cm_id*/
 struct rdma_cm_id *
 __rdma_create_kernel_id(struct net *net, rdma_cm_event_handler event_handler/*cm事件处理回调*/,
 			void *context, enum rdma_ucm_port_space ps,
@@ -1091,7 +1092,8 @@ __rdma_create_kernel_id(struct net *net, rdma_cm_event_handler event_handler/*cm
 }
 EXPORT_SYMBOL(__rdma_create_kernel_id);
 
-struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler,
+/*用于用户态创建rdma_cm_id*/
+struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler/*cm事件处理回调*/,
 				       void *context,
 				       enum rdma_ucm_port_space ps,
 				       enum ib_qp_type qp_type)
@@ -2224,6 +2226,7 @@ static int cma_cm_event_handler(struct rdma_id_private *id_priv,
 	return ret;
 }
 
+/*调用connect端cm事件处理回调*/
 static int cma_ib_handler(struct ib_cm_id *cm_id,
 			  const struct ib_cm_event *ib_event)
 {
@@ -2264,6 +2267,7 @@ static int cma_ib_handler(struct ib_cm_id *cm_id,
 		break;
 	case IB_CM_RTU_RECEIVED:
 	case IB_CM_USER_ESTABLISHED:
+		/*est事件*/
 		event.event = RDMA_CM_EVENT_ESTABLISHED;
 		break;
 	case IB_CM_DREQ_ERROR:
@@ -2297,6 +2301,7 @@ static int cma_ib_handler(struct ib_cm_id *cm_id,
 		goto out;
 	}
 
+	/*处理event*/
 	ret = cma_cm_event_handler(id_priv, &event);
 	if (ret) {
 		/* Destroy the CM ID by returning a non-zero value. */
@@ -2446,7 +2451,7 @@ static int cma_ib_check_req_qp_type(const struct rdma_cm_id *id,
 		(!id->qp_type));
 }
 
-/*服务端listen时收到cm事件回调处理*/
+/*服务端listen时收到连接cm请求事件回调处理*/
 static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 			      const struct ib_cm_event *ib_event)
 {
@@ -2476,14 +2481,13 @@ static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 	}
 
 	offset = cma_user_data_offset(listen_id);
-	event.event = RDMA_CM_EVENT_CONNECT_REQUEST;
+	event.event = RDMA_CM_EVENT_CONNECT_REQUEST;/*指明收到连接请求事件*/
 	if (ib_event->event == IB_CM_SIDR_REQ_RECEIVED) {
 		conn_id = cma_ib_new_udp_id(&listen_id->id, ib_event, net_dev);
 		event.param.ud.private_data = ib_event->private_data + offset;
 		event.param.ud.private_data_len =
 				IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE - offset;
 	} else {
-		/*收到连接请求*/
 		conn_id = cma_ib_new_conn_id(&listen_id->id, ib_event, net_dev);
 		cma_set_req_event_data(&event, &ib_event->param.req_rcvd,
 				       ib_event->private_data, offset);
@@ -2711,7 +2715,7 @@ static int cma_ib_listen(struct rdma_id_private *id_priv)
 	addr = cma_src_addr(id_priv);/*取源地址*/
 	svc_id = rdma_get_service_id(&id_priv->id, addr);/*取service_id*/
 	id = ib_cm_insert_listen(id_priv->id.device,
-				 cma_ib_req_handler/*cm请求处理函数*/, svc_id);
+				 cma_ib_req_handler/*cm连接请求处理函数*/, svc_id);
 	if (IS_ERR(id))
 		return PTR_ERR(id);
 	id_priv->cm_id.ib = id;/*设置cm_id_private*/
@@ -4486,7 +4490,7 @@ static int cma_connect_ib(struct rdma_id_private *id_priv,
 		       conn_param->private_data_len);/*复制私有数据到新申请的位置*/
 
 	/*创建ib_cm_id*/
-	id = ib_create_cm_id(id_priv->id.device, cma_ib_handler, id_priv);
+	id = ib_create_cm_id(id_priv->id.device, cma_ib_handler/*client端cm事件处理*/, id_priv);
 	if (IS_ERR(id)) {
 		ret = PTR_ERR(id);
 		goto out;

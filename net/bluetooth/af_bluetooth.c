@@ -674,7 +674,7 @@ int bt_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case TIOCOUTQ:
 		if (sk->sk_state == BT_LISTEN)
-			return -EINVAL;
+			return -EINVAL;/*不支持listen状态下设置*/
 
 		amount = sk->sk_sndbuf - sk_wmem_alloc_get(sk);
 		if (amount < 0)

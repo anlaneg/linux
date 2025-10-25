@@ -60,10 +60,10 @@ struct inquiry_entry {
 	struct list_head	all;		/* inq_cache.all */
 	struct list_head	list;		/* unknown or resolve */
 	enum {
-		NAME_NOT_KNOWN,
+		NAME_NOT_KNOWN,/*名称未知*/
 		NAME_NEEDED,
 		NAME_PENDING,
-		NAME_KNOWN,
+		NAME_KNOWN,/*名称已知*/
 	} name_state;
 	__u32			timestamp;
 	struct inquiry_data	data;
@@ -127,10 +127,10 @@ enum suspended_state {
 
 struct hci_conn_hash {
 	struct list_head list;
-	unsigned int     acl_num;/*此链表上acl_link hci_conn的数量*/
+	unsigned int     acl_num;/*此链表上acl link hci_conn的数量*/
 	unsigned int     sco_num;
 	unsigned int     iso_num;
-	unsigned int     le_num;/*此链表上le_link的数量*/
+	unsigned int     le_num;/*此链表上le link的数量*/
 	unsigned int     le_num_peripheral;
 };
 
@@ -383,11 +383,11 @@ struct hci_dev {
 	__u8		mesh_ad_types[16];
 	__u8		mesh_send_ref;
 	__u8		commands[64];
-	__u8		hci_ver;/*版本*/
-	__u16		hci_rev;
-	__u8		lmp_ver;
-	__u16		manufacturer;
-	__u16		lmp_subver;
+	__u8		hci_ver;/*controller支持的hci版本号*/
+	__u16		hci_rev;/*controller实现的子版本号*/
+	__u8		lmp_ver;/*controller支持的lmp版本号*/
+	__u16		manufacturer;/*制造商公司标识*/
+	__u16		lmp_subver;/*lmp子版本号*/
 	__u16		voice_setting;
 	__u8		num_iac;
 	__u16		stored_max_keys;
@@ -469,7 +469,7 @@ struct hci_dev {
 
 	DECLARE_BITMAP(quirk_flags, __HCI_NUM_QUIRKS);
 
-	atomic_t	cmd_cnt;/*cmd_q队列长度*/
+	atomic_t	cmd_cnt;/*cmd_q队列长度（可向对端发送数目）*/
 	unsigned int	acl_cnt;
 	unsigned int	sco_cnt;
 	unsigned int	le_cnt;
@@ -694,10 +694,10 @@ struct hci_conn {
 	__u16		handle;/*conn对应的handle*/
 	__u16		sync_handle;
 	__u8		sid;
-	__u16		state;
-	__u16		mtu;
-	__u8		mode;
-	__u8		type;/*conn类型，例如：ACL_LINK*/
+	__u16		state;/*连接状态，例如BT_LISTEN*/
+	__u16		mtu;/*发送时，按此变量进行分片处理*/
+	__u8		mode;/*例如：HCI_CM_ACTIVE*/
+	__u8		type;/*conn link类型，例如：ACL_LINK*/
 	__u8		role;/*conn角色,例如:HCI_ROLE_MASTER*/
 	bool		out;
 	__u8		attempt;
@@ -715,7 +715,7 @@ struct hci_conn {
 	__u32		passkey_notify;
 	__u8		passkey_entered;
 	__u16		disc_timeout;
-	__u16		conn_timeout;
+	__u16		conn_timeout;/*连接超时时间*/
 	__u16		setting;
 	__u16		auth_payload_timeout;
 	__u16		le_conn_min_interval;
@@ -755,12 +755,12 @@ struct hci_conn {
 
 	unsigned int	sent;
 
-	struct sk_buff_head data_q;
+	struct sk_buff_head data_q;/*保存此connect上的data queue*/
 	struct list_head chan_list;
 
 	struct tx_queue tx_q;
 
-	struct delayed_work disc_work;
+	struct delayed_work disc_work;/*连接超时处理（断开连接）*/
 	struct delayed_work auto_accept_work;
 	struct delayed_work idle_work;
 	struct delayed_work le_conn_timeout;
@@ -771,7 +771,7 @@ struct hci_conn {
 	struct hci_dev	*hdev;/*此连接对应的Hci设备*/
 	void		*l2cap_data;
 	void		*sco_data;
-	void		*iso_data;
+	void		*iso_data;/*iso连接(struct iso_conn)*/
 
 	struct list_head link_list;
 	struct hci_conn	*parent;
@@ -1003,6 +1003,7 @@ static inline bool hci_conn_sc_enabled(struct hci_conn *conn)
 	       test_bit(HCI_CONN_SC_ENABLED, &conn->flags);
 }
 
+/*将hci_connect加入到hdev->conn_hash表中*/
 static inline void hci_conn_hash_add(struct hci_dev *hdev, struct hci_conn *c)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
@@ -1057,6 +1058,7 @@ static inline void hci_conn_hash_del(struct hci_dev *hdev, struct hci_conn *c)
 	}
 }
 
+/*取此hci设备上不同link type对应的连接数目*/
 static inline unsigned int hci_conn_num(struct hci_dev *hdev, __u8 type)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
@@ -1206,6 +1208,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_handle(struct hci_dev *hdev,
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->handle == handle) {
+			/*handle相等，connection命中*/
 			rcu_read_unlock();
 			return c;
 		}
@@ -1364,22 +1367,25 @@ hci_conn_hash_lookup_big_sync_pend(struct hci_dev *hdev,
 	return NULL;
 }
 
+/*匹配类型为BIS_LINK且状态为state,role为role,*/
 static inline struct hci_conn *
-hci_conn_hash_lookup_big_state(struct hci_dev *hdev, __u8 handle, __u16 state,
-			       __u8 role)
+hci_conn_hash_lookup_big_state(struct hci_dev *hdev, __u8 handle, __u16 state/*状态必须匹配*/,
+			       __u8 role/*角色必须匹配*/)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
 	struct hci_conn  *c;
 
 	rcu_read_lock();
 
+	/*遍历所有connect*/
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type != BIS_LINK || c->state != state || c->role != role)
 			continue;
 
 		if (handle == c->iso_qos.bcast.big) {
+			/*handle必须匹配*/
 			rcu_read_unlock();
-			return c;
+			return c;/*返回对应的hci_conn*/
 		}
 	}
 
@@ -1631,7 +1637,7 @@ static inline struct hci_conn *hci_conn_hold(struct hci_conn *conn)
 	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
 
 	atomic_inc(&conn->refcnt);
-	cancel_delayed_work(&conn->disc_work);
+	cancel_delayed_work(&conn->disc_work);/*取消connect超时处理*/
 
 	return conn;
 }
@@ -1661,9 +1667,9 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 			break;
 		}
 
-		cancel_delayed_work(&conn->disc_work);
+		cancel_delayed_work(&conn->disc_work);/*移除先前的work*/
 		queue_delayed_work(conn->hdev->workqueue,
-				   &conn->disc_work, timeo);
+				   &conn->disc_work, timeo);/*更新其超时时间后重入队*/
 	}
 }
 
@@ -2020,6 +2026,7 @@ static inline int hci_proto_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr,
 {
 	switch (type) {
 	case ACL_LINK:
+		/*收到link类型为ACL的连接请求*/
 		return l2cap_connect_ind(hdev, bdaddr);
 
 	case SCO_LINK:

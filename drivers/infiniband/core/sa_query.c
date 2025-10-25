@@ -184,20 +184,24 @@ static DEFINE_XARRAY_FLAGS(queries, XA_FLAGS_ALLOC | XA_FLAGS_LOCK_IRQ);
 static DEFINE_SPINLOCK(tid_lock);
 static u32 tid;
 
+/*sa_path_rec结构体，某字段描述信息*/
 #define PATH_REC_FIELD(field) \
+	/*结构体字段偏移量*/\
 	.struct_offset_bytes = offsetof(struct sa_path_rec, field),	\
+	/*结构体字段长度*/\
 	.struct_size_bytes   = sizeof_field(struct sa_path_rec, field),	\
+	/*字段名称*/\
 	.field_name          = "sa_path_rec:" #field
 
 static const struct ib_field path_rec_table[] = {
 	{ PATH_REC_FIELD(service_id),
 	  .offset_words = 0,
 	  .offset_bits  = 0,
-	  .size_bits    = 64 },
+	  .size_bits    = 64 },/*占用u64_t*/
 	{ PATH_REC_FIELD(dgid),
 	  .offset_words = 2,
 	  .offset_bits  = 0,
-	  .size_bits    = 128 },
+	  .size_bits    = 128 },/*占用16byte*/
 	{ PATH_REC_FIELD(sgid),
 	  .offset_words = 6,
 	  .offset_bits  = 0,
@@ -1384,9 +1388,9 @@ void ib_sa_unpack_path(void *attribute, struct sa_path_rec *rec)
 }
 EXPORT_SYMBOL(ib_sa_unpack_path);
 
-void ib_sa_pack_path(struct sa_path_rec *rec, void *attribute)
+void ib_sa_pack_path(struct sa_path_rec *rec/*源位置*/, void *attribute/*填充的目标位置*/)
 {
-	ib_pack(path_rec_table, ARRAY_SIZE(path_rec_table), rec, attribute);
+	ib_pack(path_rec_table, ARRAY_SIZE(path_rec_table), rec/*源数据*/, attribute/*目标位置*/);
 }
 EXPORT_SYMBOL(ib_sa_pack_path);
 

@@ -557,6 +557,7 @@ void hci_sco_setup(struct hci_conn *conn, __u8 status)
 	}
 }
 
+/*连接超时处理（断开连接）*/
 static void hci_conn_timeout(struct work_struct *work)
 {
 	struct hci_conn *conn = container_of(work, struct hci_conn,
@@ -923,9 +924,9 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 		fallthrough;
 	case LE_LINK:
 		if (hdev->le_mtu && hdev->le_mtu < HCI_MIN_LE_MTU)
-			return ERR_PTR(-ECONNREFUSED);
+			return ERR_PTR(-ECONNREFUSED);/*mtu过于小*/
 		if (!hdev->le_mtu && hdev->acl_mtu < HCI_MIN_LE_MTU)
-			return ERR_PTR(-ECONNREFUSED);
+			return ERR_PTR(-ECONNREFUSED);/*acl mtu过于小*/
 		break;
 	case SCO_LINK:
 	case ESCO_LINK:
@@ -1018,7 +1019,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 	INIT_LIST_HEAD(&conn->chan_list);
 	INIT_LIST_HEAD(&conn->link_list);
 
-	INIT_DELAYED_WORK(&conn->disc_work, hci_conn_timeout);
+	INIT_DELAYED_WORK(&conn->disc_work, hci_conn_timeout);/*连接超时处理（断开连接）*/
 	INIT_DELAYED_WORK(&conn->auto_accept_work, hci_conn_auto_accept);
 	INIT_DELAYED_WORK(&conn->idle_work, hci_conn_idle);
 	INIT_DELAYED_WORK(&conn->le_conn_timeout, le_conn_timeout);
@@ -1043,7 +1044,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 }
 
 /*分配hci connect handle,并创建hci connect*/
-struct hci_conn *hci_conn_add_unset(struct hci_dev *hdev, int type,
+struct hci_conn *hci_conn_add_unset(struct hci_dev *hdev, int type/*link类型*/,
 				    bdaddr_t *dst/*目的地址*/, u8 role)
 {
 	int handle;
@@ -1052,14 +1053,14 @@ struct hci_conn *hci_conn_add_unset(struct hci_dev *hdev, int type,
 
 	handle = hci_conn_hash_alloc_unset(hdev);
 	if (unlikely(handle < 0))
-		/*分配handle失败*/
+		/*分配connect handle失败*/
 		return ERR_PTR(-ECONNREFUSED);
 
 	return __hci_conn_add(hdev, type, dst, role, handle);
 }
 
 /*添加hci connect*/
-struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,
+struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type/*link类型*/, bdaddr_t *dst,
 			      u8 role, u16 handle)
 {
 	if (handle > HCI_CONN_HANDLE_MAX)
@@ -1190,7 +1191,7 @@ void hci_conn_del(struct hci_conn *conn)
 /*查找源设备*/
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, uint8_t src_type)
 {
-	int use_src = bacmp(src, BDADDR_ANY);/*是否不为any地址*/
+	int use_src = bacmp(src, BDADDR_ANY);/*src是否不为any地址*/
 	struct hci_dev *hdev = NULL, *d;
 
 	BT_DBG("%pMR -> %pMR", src, dst);
@@ -1649,7 +1650,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 	/*查询到dst是否已有连接*/
 	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
 	if (!acl) {
-		/*无此连接，创建一个*/
+		/*无此连接，创建一个acl link*/
 		acl = hci_conn_add_unset(hdev, ACL_LINK, dst, HCI_ROLE_MASTER);
 		if (IS_ERR(acl))
 			return acl;
@@ -1658,7 +1659,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 	hci_conn_hold(acl);
 
 	acl->conn_reason = conn_reason;
-	if (acl->state == BT_OPEN || acl->state == BT_CLOSED) {
+	if (acl->state == BT_OPEN/*初始状态*/ || acl->state == BT_CLOSED) {
 		int err;
 
 		acl->sec_level = BT_SECURITY_LOW;
@@ -2100,6 +2101,7 @@ struct hci_conn *hci_pa_create_sync(struct hci_dev *hdev, bdaddr_t *dst,
 
 	bt_dev_dbg(hdev, "dst %pMR type %d sid %d", dst, dst_type, sid);
 
+	/*创建PA_LINK connect,角色指定为slave*/
 	conn = hci_conn_add_unset(hdev, PA_LINK, dst, HCI_ROLE_SLAVE);
 	if (IS_ERR(conn))
 		return conn;
@@ -2168,6 +2170,7 @@ struct hci_conn *hci_bind_bis(struct hci_dev *hdev, bdaddr_t *dst, __u8 sid,
 	conn = hci_conn_hash_lookup_big_state(hdev, qos->bcast.big, BT_OPEN,
 					      HCI_ROLE_MASTER);
 	if (conn) {
+		/*查询到合乎要求的hci_conn,返回*/
 		memcpy(qos, &conn->iso_qos, sizeof(*qos));
 		conn->state = BT_CONNECTED;
 		return conn;
@@ -3011,7 +3014,7 @@ void hci_conn_tx_queue(struct hci_conn *conn, struct sk_buff *skb)
 			return;
 		break;
 	default:
-		return;
+		return;/*遇到不支持的link类型*/
 	}
 
 	if (skb->sk && (skb_shinfo(skb)->tx_flags & SKBTX_COMPLETION_TSTAMP))

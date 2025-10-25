@@ -1111,7 +1111,7 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 			      size_t len)
 {
 	struct sock *sk = sock->sk;
-	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
+	struct l2cap_chan *chan = l2cap_pi(sk)->chan;/*取此socket对应的channel*/
 	struct sockcm_cookie sockc;
 	int err;
 
@@ -1855,15 +1855,15 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 	} else {
 		switch (sk->sk_type) {
 		case SOCK_RAW:
-			chan->chan_type = L2CAP_CHAN_RAW;/*channel类型为raw*/
+			chan->chan_type = L2CAP_CHAN_RAW;/*type为raw时，channel类型为raw*/
 			break;
 		case SOCK_DGRAM:
-			chan->chan_type = L2CAP_CHAN_CONN_LESS;
+			chan->chan_type = L2CAP_CHAN_CONN_LESS;/*type为dgram时，channel类型为conn_less*/
 			bt_sk(sk)->skb_msg_name = l2cap_skb_msg_name;
 			break;
 		case SOCK_SEQPACKET:
 		case SOCK_STREAM:
-			chan->chan_type = L2CAP_CHAN_CONN_ORIENTED;
+			chan->chan_type = L2CAP_CHAN_CONN_ORIENTED;/*type为seqpacket,stream类型为oriented*/
 			break;
 		}
 
@@ -1963,8 +1963,8 @@ static const struct proto_ops l2cap_sock_ops = {
 	.listen		= l2cap_sock_listen,
 	.accept		= l2cap_sock_accept,
 	.getname	= l2cap_sock_getname,
-	.sendmsg	= l2cap_sock_sendmsg,
-	.recvmsg	= l2cap_sock_recvmsg,
+	.sendmsg	= l2cap_sock_sendmsg,/*报文发送*/
+	.recvmsg	= l2cap_sock_recvmsg,/*报文接收*/
 	.poll		= bt_sock_poll,
 	.ioctl		= bt_sock_ioctl,
 	.gettstamp	= sock_gettstamp,
@@ -1978,7 +1978,7 @@ static const struct proto_ops l2cap_sock_ops = {
 static const struct net_proto_family l2cap_sock_family_ops = {
 	.family	= PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
-	.create	= l2cap_sock_create,
+	.create	= l2cap_sock_create,/*l2cap socket创建*/
 };
 
 int __init l2cap_init_sockets(void)
