@@ -296,7 +296,7 @@ void bt_err_ratelimited(const char *fmt, ...);
 /* Connection and socket states */
 enum bt_sock_state {
 	BT_CONNECTED = 1, /* Equal to TCP_ESTABLISHED to make net code happy */
-	BT_OPEN,
+	BT_OPEN,/*初始化为此状态*/
 	BT_BOUND,/*标记bind已调用*/
 	BT_LISTEN,
 	BT_CONNECT,

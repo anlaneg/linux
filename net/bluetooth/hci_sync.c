@@ -20,6 +20,7 @@
 #include "aosp.h"
 #include "leds.h"
 
+/*设置cmd同步执行结果,唤醒在req_wait_q上的等待者*/
 static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行结果*/, u16 opcode,
 				  struct sk_buff *skb/*响应报文*/)
 {
@@ -45,7 +46,7 @@ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行�
 		hdev->req_rsp = skb_get(skb);/*记录设备同步返回的skb*/
 	}
 
-	wake_up_interruptible(&hdev->req_wait_q);
+	wake_up_interruptible(&hdev->req_wait_q);/*唤醒req_wait_q上的等待者*/
 }
 
 /*申请cmd packet*/
@@ -192,7 +193,7 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode/*操作码*/,
 	if (err < 0)
 		return ERR_PTR(err);
 
-	/*阻塞等待req_status发生变换(等待RX方向处理响应)*/
+	/*阻塞在req_wait_q等待req_status发生变换(等待RX方向处理响应)*/
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
 					       hdev->req_status != HCI_REQ_PEND,
 					       timeout);
@@ -284,7 +285,7 @@ int __hci_cmd_sync_status_sk(struct hci_dev *hdev, u16 opcode, u32 plen/*参数�
 	struct sk_buff *skb;
 	u8 status;
 
-	/*执行同步cmd,并获取响应,构造opcode对应的skb并发送等待响应*/
+	/*执行同步cmd,并获取响应,构造opcode对应的skb并发送等待响应(这类OPCODE仅响应status)*/
 	skb = __hci_cmd_sync_sk(hdev, opcode, plen, param, event, timeout, sk);
 
 	/* If command return a status event, skb will be set to -ENODATA */
@@ -5958,6 +5959,7 @@ int hci_update_connectable_sync(struct hci_dev *hdev)
 
 int hci_inquiry_sync(struct hci_dev *hdev, u8 length, u8 num_rsp)
 {
+	/*见Assigned_Numbers 2.2 Special LAPs*/
 	const u8 giac[3] = { 0x33, 0x8b, 0x9e };
 	const u8 liac[3] = { 0x00, 0x8b, 0x9e };
 	struct hci_cp_inquiry cp;
@@ -5965,22 +5967,26 @@ int hci_inquiry_sync(struct hci_dev *hdev, u8 length, u8 num_rsp)
 	bt_dev_dbg(hdev, "");
 
 	if (test_bit(HCI_INQUIRY, &hdev->flags))
-		return 0;
+		return 0;/*设备已在执行inquiry*/
 
 	hci_dev_lock(hdev);
-	hci_inquiry_cache_flush(hdev);
+	hci_inquiry_cache_flush(hdev);/*清空cache*/
 	hci_dev_unlock(hdev);
 
 	memset(&cp, 0, sizeof(cp));
 
 	if (hdev->discovery.limited)
+		/*有限发现,采用liac*/
 		memcpy(&cp.lap, liac, sizeof(cp.lap));
 	else
 		memcpy(&cp.lap, giac, sizeof(cp.lap));
 
-	cp.length = length;
-	cp.num_rsp = num_rsp;
+	cp.length = length;/*最大持续时间*/
+	cp.num_rsp = num_rsp;/*最大响应数*/
 
+	/*enter Inquiry Mode,发现附近其它的controller(这个命令无返回参数,但会使得hci产生事件:
+	 * HCI_Command_Status, HCI_Inquiry_Result,HCI_Inquiry_Result_with_RSSI,
+	 * HCI_Extended_Inquiry_Result,HCI_Inquiry_Complete) */
 	return __hci_cmd_sync_status(hdev, HCI_OP_INQUIRY,
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }
@@ -6935,19 +6941,21 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	conn->link_policy = hdev->link_policy;
 
 	memset(&cp, 0, sizeof(cp));
-	bacpy(&cp.bdaddr, &conn->dst);/*设置cmd目的地址*/
+	bacpy(&cp.bdaddr, &conn->dst);/*设置要连接的目的地址*/
 	cp.pscan_rep_mode = 0x02;/*R2*/
 
 	ie = hci_inquiry_cache_lookup(hdev, &conn->dst);
 	if (ie) {
+		/*对端地址在inquiry cache中*/
 		if (inquiry_entry_age(ie) <= INQUIRY_ENTRY_AGE_MAX) {
+			/*cache有效,利用cache中的参数*/
 			cp.pscan_rep_mode = ie->data.pscan_rep_mode;
 			cp.pscan_mode     = ie->data.pscan_mode;
 			cp.clock_offset   = ie->data.clock_offset |
 					    cpu_to_le16(0x8000);
 		}
 
-		memcpy(conn->dev_class, ie->data.dev_class, 3);
+		memcpy(conn->dev_class, ie->data.dev_class, 3);/*填写对端的dev_class*/
 	}
 
 	cp.pkt_type = cpu_to_le16(conn->pkt_type);

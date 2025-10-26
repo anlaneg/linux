@@ -372,7 +372,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 		/* No registration request supplied */
 		if (!send_handler)
 			goto error1;
-		if (registration_flags & IB_MAD_USER_ib_register_mad_agentRMPP)
+		if (registration_flags & IB_MAD_USER_RMPP)
 			goto error1;
 	}
 

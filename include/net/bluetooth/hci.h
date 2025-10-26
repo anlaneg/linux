@@ -788,6 +788,7 @@ struct hci_cp_inquiry {
 
 #define HCI_OP_EXIT_PERIODIC_INQ	0x0404
 
+/*创建连接*/
 #define HCI_OP_CREATE_CONN		0x0405
 struct hci_cp_create_conn {
 	bdaddr_t bdaddr;
@@ -880,9 +881,10 @@ struct hci_cp_change_conn_link_key {
 	__le16   handle;
 } __packed;
 
+/*请求远端名称*/
 #define HCI_OP_REMOTE_NAME_REQ		0x0419
 struct hci_cp_remote_name_req {
-	bdaddr_t bdaddr;
+	bdaddr_t bdaddr;/*设备地址*/
 	__u8     pscan_rep_mode;
 	__u8     pscan_mode;
 	__le16   clock_offset;
@@ -909,9 +911,10 @@ struct hci_cp_read_remote_ext_features {
 	__u8     page;
 } __packed;
 
+/*取对端版本号*/
 #define HCI_OP_READ_REMOTE_VERSION	0x041d
 struct hci_cp_read_remote_version {
-	__le16   handle;
+	__le16   handle;/*连接handle*/
 } __packed;
 
 #define HCI_OP_READ_CLOCK_OFFSET	0x041f
@@ -1696,12 +1699,13 @@ struct hci_cp_le_set_scan_rsp_data {
 #define LE_SCAN_PASSIVE			0x00
 #define LE_SCAN_ACTIVE			0x01
 
+/*设置LE扫描参数*/
 #define HCI_OP_LE_SET_SCAN_PARAM	0x200b
 struct hci_cp_le_set_scan_param {
-	__u8    type;
-	__le16  interval;
-	__le16  window;
-	__u8    own_address_type;
+	__u8    type;/*扫描类型,当前有两种:主动扫描(0X01),被动扫描(0X00,被动扫描不向外发送pdu)*/
+	__le16  interval;/*扫描间隔*/
+	__le16  window;/*扫描持续时长,如果interval与window相等,则应不间断扫描*/
+	__u8    own_address_type;/*扫描PDU报文中自身地址类型*/
 	__u8    filter_policy;
 } __packed;
 
@@ -1710,10 +1714,11 @@ struct hci_cp_le_set_scan_param {
 #define LE_SCAN_FILTER_DUP_DISABLE	0x00
 #define LE_SCAN_FILTER_DUP_ENABLE	0x01
 
+/*设置le扫描开启/关闭*/
 #define HCI_OP_LE_SET_SCAN_ENABLE	0x200c
 struct hci_cp_le_set_scan_enable {
-	__u8     enable;
-	__u8     filter_dup;
+	__u8     enable;/*0X00表示关闭,0X01表示开启*/
+	__u8     filter_dup;/*是否关闭重复广播报文的报告,当ENABLE为0X00时,此参数无效*/
 } __packed;
 
 #define HCI_LE_USE_PEER_ADDR		0x00
@@ -2246,7 +2251,7 @@ struct inquiry_info {
 } __packed;
 
 struct hci_ev_inquiry_result {
-	__u8    num;
+	__u8    num;/*指出info数组长度*/
 	struct inquiry_info info[];
 };
 
@@ -2337,12 +2342,15 @@ struct hci_ev_cmd_complete {
 } __packed;
 
 /*表示命令正在被执行
- * (the Controller is currently performing the task for this command.)*/
+ * (the Controller is currently performing the task for this command.)
+ * This event is used to indicate that the command described by the Command_Opcode
+parameter has been received
+ * */
 #define HCI_EV_CMD_STATUS		0x0f
 struct hci_ev_cmd_status {
-	__u8     status;
+	__u8     status;/*命令状态,如为0,则表示成功接收,且正在被执行*/
 	__u8     ncmd;
-	__le16   opcode;
+	__le16   opcode;/*请求时采用的opcode(可以为0)*/
 } __packed;
 
 #define HCI_EV_HARDWARE_ERROR		0x10
@@ -2661,10 +2669,11 @@ struct hci_ev_le_conn_complete {
 #define ADDR_LE_DEV_PUBLIC_RESOLVED	0x02
 #define ADDR_LE_DEV_RANDOM_RESOLVED	0x03
 
+/*此subevent指明的为LE广告(广播)报告*/
 #define HCI_EV_LE_ADVERTISING_REPORT	0x02
 struct hci_ev_le_advertising_info {
 	__u8	 type;
-	__u8	 bdaddr_type;
+	__u8	 bdaddr_type;/*地址类型*/
 	bdaddr_t bdaddr;
 	__u8	 length;
 	__u8	 data[];

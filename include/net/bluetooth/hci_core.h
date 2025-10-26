@@ -46,10 +46,15 @@
 
 /* HCI Core structures */
 struct inquiry_data {
-	bdaddr_t	bdaddr;
-	__u8		pscan_rep_mode;
+	bdaddr_t	bdaddr;/*设备地址*/
+	__u8		pscan_rep_mode;/*指Page Scan Repetition Mode,有rO,r1,r2*/
 	__u8		pscan_period_mode;
 	__u8		pscan_mode;
+	/*蓝牙的dev_class即设备类别（Class of Device，CoD），是用于标识蓝牙设备
+	 * 的类型、功能和服务类别的核心参数。它是一个 24 位的数值，分为4部分，
+	 * 分别是Major Service Classes（占13-23bit）、Major Device Class（占8-12bit）
+	 * 和Minor Device Class（占2-7bit）, and a fixed value of 0b00
+	 * in the two least significant bits.*/
 	__u8		dev_class[3];
 	__le16		clock_offset;
 	__s8		rssi;
@@ -57,6 +62,7 @@ struct inquiry_data {
 };
 
 struct inquiry_entry {
+	/*用于串到all链表*/
 	struct list_head	all;		/* inq_cache.all */
 	struct list_head	list;		/* unknown or resolve */
 	enum {
@@ -72,14 +78,17 @@ struct inquiry_entry {
 struct discovery_state {
 	int			type;
 	enum {
-		DISCOVERY_STOPPED,
+		DISCOVERY_STOPPED,/*停止发现*/
 		DISCOVERY_STARTING,
 		DISCOVERY_FINDING,
 		DISCOVERY_RESOLVING,
-		DISCOVERY_STOPPING,
+		DISCOVERY_STOPPING,/*正在停止发现*/
 	} state;
+	/*所有被发现的均需挂在此链表*/
 	struct list_head	all;	/* All devices found during inquiry */
+	/*名称未知的挂在此链表*/
 	struct list_head	unknown;	/* Name state not known */
+	/*需要解析名称的(挂在此链上的设备名称会被解析)*/
 	struct list_head	resolve;	/* Name needs to be resolved */
 	__u32			timestamp;
 	bdaddr_t		last_adv_addr;
@@ -90,7 +99,7 @@ struct discovery_state {
 	u8			last_adv_data_len;
 	bool			report_invalid_rssi;
 	bool			result_filtering;
-	bool			limited;
+	bool			limited;/*是否为有限discovery*/
 	s8			rssi;
 	u16			uuid_count;
 	u8			(*uuids)[16];
@@ -220,9 +229,9 @@ struct smp_irk {
 struct link_key {
 	struct list_head list;
 	struct rcu_head rcu;
-	bdaddr_t bdaddr;
-	u8 type;
-	u8 val[HCI_LINK_KEY_SIZE];
+	bdaddr_t bdaddr;/*指明KEY关联的设备地址*/
+	u8 type;/*设备地址类型*/
+	u8 val[HCI_LINK_KEY_SIZE];/*key值*/
 	u8 pin_len;
 };
 
@@ -331,6 +340,7 @@ struct adv_monitor {
 
 #define HCI_MAX_SHORT_NAME_LENGTH	10
 
+/*连接最大数*/
 #define HCI_CONN_HANDLE_MAX		0x0eff
 #define HCI_CONN_HANDLE_UNSET(_handle)	(_handle > HCI_CONN_HANDLE_MAX)
 
@@ -369,6 +379,11 @@ struct hci_dev {
 	__u8		short_name[HCI_MAX_SHORT_NAME_LENGTH];/*设备短名称*/
 	__u8		eir[HCI_MAX_EIR_LENGTH];
 	__u16		appearance;
+	/*蓝牙的dev_class即设备类别（Class of Device，CoD），是用于标识蓝牙设备
+	 * 的类型、功能和服务类别的核心参数。它是一个 24 位的数值，分为4部分，
+	 * 分别是Major Service Classes（占13-23bit,共11bits）、Major Device Class（占8-12bit,共5bits）
+	 * 和Minor Device Class（占2-7bit,共6bits）, and a fixed value of 0b00
+	 * in the two least significant bits.*/
 	__u8		dev_class[3];
 	__u8		major_class;
 	__u8		minor_class;
@@ -469,7 +484,7 @@ struct hci_dev {
 
 	DECLARE_BITMAP(quirk_flags, __HCI_NUM_QUIRKS);
 
-	atomic_t	cmd_cnt;/*cmd_q队列长度（可向对端发送数目）*/
+	atomic_t	cmd_cnt;/*驱动实现为最大值为1,用于表示controller是否可继续接收命令*/
 	unsigned int	acl_cnt;
 	unsigned int	sco_cnt;
 	unsigned int	le_cnt;
@@ -558,7 +573,7 @@ struct hci_dev {
 	struct mutex		mgmt_pending_lock;
 	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
 	struct list_head	reject_list;
-	struct list_head	accept_list;
+	struct list_head	accept_list;/*用于挂接容许连接的BR设备列表*/
 	struct list_head	uuids;/*用于串连一组设置的uuid*/
 	struct list_head	link_keys;
 	struct list_head	long_term_keys;
@@ -700,7 +715,7 @@ struct hci_conn {
 	__u8		type;/*conn link类型，例如：ACL_LINK*/
 	__u8		role;/*conn角色,例如:HCI_ROLE_MASTER*/
 	bool		out;
-	__u8		attempt;
+	__u8		attempt;/*尝试连接次数*/
 	__u8		dev_class[3];
 	__u8		features[HCI_MAX_PAGES][8];
 	__u16		pkt_type;
@@ -741,7 +756,7 @@ struct hci_conn {
 
 	unsigned long	flags;
 
-	enum conn_reasons conn_reason;/*连接原因*/
+	enum conn_reasons conn_reason;/*连接原因,例如:CONN_REASON_L2CAP_CHAN*/
 	__u8		abort_reason;
 
 	__u32		clock;
@@ -924,11 +939,13 @@ bool hci_discovery_active(struct hci_dev *hdev);
 
 void hci_discovery_set_state(struct hci_dev *hdev, int state);
 
+/*检查cache是否为空,如为空,则返回true*/
 static inline int inquiry_cache_empty(struct hci_dev *hdev)
 {
 	return list_empty(&hdev->discovery.all);
 }
 
+/*inquiry cache最后一次更新截止到现在过去了多久*/
 static inline long inquiry_cache_age(struct hci_dev *hdev)
 {
 	struct discovery_state *c = &hdev->discovery;
@@ -1219,7 +1236,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_handle(struct hci_dev *hdev,
 }
 
 static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
-							__u8 type, bdaddr_t *ba)
+							__u8 type/*链路类型*/, bdaddr_t *ba)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
 	struct hci_conn  *c;

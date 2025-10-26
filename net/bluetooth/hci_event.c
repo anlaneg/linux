@@ -45,7 +45,7 @@
 /* Handle HCI Event packets */
 
 static void *hci_ev_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
-			     u8 ev, size_t len)
+			     u8 ev/*指明事件编号*/, size_t len)
 {
 	void *data;
 
@@ -2232,8 +2232,9 @@ static void hci_cs_inquiry(struct hci_dev *hdev, __u8 status)
 	bt_dev_dbg(hdev, "status 0x%2.2x", status);
 
 	if (status)
-		return;
+		return;/*inquiry请求不正功,忽略*/
 
+	/*如果之前的确发送过HCI_OP_INQUIRY请求,则标记设备正在进行INQUIRY处理*/
 	if (hci_sent_cmd_data(hdev, HCI_OP_INQUIRY))
 		set_bit(HCI_INQUIRY, &hdev->flags);
 }
@@ -2247,7 +2248,7 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 
 	cp = hci_sent_cmd_data(hdev, HCI_OP_CREATE_CONN);
 	if (!cp)
-		return;
+		return;/*未发送过create conn,直接返回*/
 
 	hci_dev_lock(hdev);
 
@@ -2258,12 +2259,12 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 	if (status) {
 		/*建立连接失败*/
 		if (conn && conn->state == BT_CONNECT) {
-			conn->state = BT_CLOSED;
+			conn->state = BT_CLOSED;/*转为closed状态*/
 			hci_connect_cfm(conn, status);
 			hci_conn_del(conn);
 		}
 	} else {
-		/*建立连接成功*/
+		/*建立连接命令正在执行,如还没有创建连接,创建并指定为master*/
 		if (!conn) {
 			conn = hci_conn_add_unset(hdev, ACL_LINK, &cp->bdaddr,
 						  HCI_ROLE_MASTER);
@@ -2388,6 +2389,7 @@ static int hci_outgoing_auth_needed(struct hci_dev *hdev,
 	return 1;
 }
 
+/*请求远端设备E的名称*/
 static int hci_resolve_name(struct hci_dev *hdev,
 				   struct inquiry_entry *e)
 {
@@ -2409,7 +2411,7 @@ static bool hci_resolve_next_name(struct hci_dev *hdev)
 	struct inquiry_entry *e;
 
 	if (list_empty(&discov->resolve))
-		return false;
+		return false;/*没有待解析的*/
 
 	/* We should stop if we already spent too much time resolving names. */
 	if (time_after(jiffies, discov->name_resolve_timeout)) {
@@ -2421,6 +2423,7 @@ static bool hci_resolve_next_name(struct hci_dev *hdev)
 	if (!e)
 		return false;
 
+	/*解析e名称*/
 	if (hci_resolve_name(hdev, e) == 0) {
 		e->name_state = NAME_PENDING;
 		return true;
@@ -2452,20 +2455,23 @@ static void hci_check_pending_name(struct hci_dev *hdev, struct hci_conn *conn,
 	if (discov->state != DISCOVERY_RESOLVING)
 		return;
 
+	/*在inquiry cache中查询NAME PENDING状态的设备*/
 	e = hci_inquiry_cache_lookup_resolve(hdev, bdaddr, NAME_PENDING);
 	/* If the device was not found in a list of found devices names of which
 	 * are pending. there is no need to continue resolving a next name as it
 	 * will be done upon receiving another Remote Name Request Complete
 	 * Event */
 	if (!e)
-		return;
+		return;/*没有找到,退出*/
 
 	list_del(&e->list);
 
+	/*设置设备名称状态*/
 	e->name_state = name ? NAME_KNOWN : NAME_NOT_KNOWN;
 	mgmt_remote_name(hdev, bdaddr, ACL_LINK, 0x00, e->data.rssi,
-			 name, name_len);
+			 name, name_len);/*向用户态通知*/
 
+	/*如有待请求的名称,则继续请求*/
 	if (hci_resolve_next_name(hdev))
 		return;
 
@@ -2483,7 +2489,7 @@ static void hci_cs_remote_name_req(struct hci_dev *hdev, __u8 status)
 	/* If successful wait for the name req complete event before
 	 * checking for the need to do authentication */
 	if (!status)
-		return;
+		return;/*请求失败*/
 
 	cp = hci_sent_cmd_data(hdev, HCI_OP_REMOTE_NAME_REQ);
 	if (!cp)
@@ -2491,6 +2497,7 @@ static void hci_cs_remote_name_req(struct hci_dev *hdev, __u8 status)
 
 	hci_dev_lock(hdev);
 
+	/*与此设备是否存在acl link*/
 	conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->bdaddr);
 
 	if (hci_dev_test_flag(hdev, HCI_MGMT))
@@ -3001,6 +3008,7 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+/*收到HCI_EV_INQUIRY_RESULT*/
 static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 				   struct sk_buff *skb)
 {
@@ -3010,6 +3018,7 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 
 	if (!hci_ev_skb_pull(hdev, skb, HCI_EV_INQUIRY_RESULT,
 			     flex_array_size(ev, info, ev->num)))
+		/*SKB长度不足*/
 		return;
 
 	bt_dev_dbg(hdev, "num %d", ev->num);
@@ -3022,22 +3031,24 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 
 	hci_dev_lock(hdev);
 
+	/*遍历所有查询结果,填充inquiry cache*/
 	for (i = 0; i < ev->num; i++) {
 		struct inquiry_info *info = &ev->info[i];
 		u32 flags;
 
-		bacpy(&data.bdaddr, &info->bdaddr);
+		bacpy(&data.bdaddr, &info->bdaddr);/*设备地址*/
 		data.pscan_rep_mode	= info->pscan_rep_mode;
 		data.pscan_period_mode	= info->pscan_period_mode;
 		data.pscan_mode		= info->pscan_mode;
 		memcpy(data.dev_class, info->dev_class, 3);
-		data.clock_offset	= info->clock_offset;
+		data.clock_offset	= info->clock_offset;/*时间偏移*/
 		data.rssi		= HCI_RSSI_INVALID;
 		data.ssp_mode		= 0x00;
 
 		/*缓存响应*/
-		flags = hci_inquiry_cache_update(hdev, &data, false);
+		flags = hci_inquiry_cache_update(hdev, &data, false/*名称未知*/);
 
+		/*通知发现设备*/
 		mgmt_device_found(hdev, &info->bdaddr, ACL_LINK, 0x00,
 				  info->dev_class, HCI_RSSI_INVALID,
 				  flags, NULL, 0, NULL, 0, 0);
@@ -3074,6 +3085,7 @@ static int hci_read_enc_key_size(struct hci_dev *hdev, struct hci_conn *conn)
 	return hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE, sizeof(cp), &cp);
 }
 
+/*处理事件HCI_Connection_Complete*/
 static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 				  struct sk_buff *skb)
 {
@@ -3091,7 +3103,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 		 * just unlock as there is nothing to cleanup.
 		 */
 		if (ev->status)
-			goto unlock;/*连接创建失败，本端也没有找到，直接返回*/
+			goto unlock;/*连接创建失败，且本端也没有找到conn，直接返回*/
 
 		/* Connection may not exist if auto-connected. Check the bredr
 		 * allowlist to see if this device is allowed to auto connect.
@@ -3106,6 +3118,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 		    hci_bdaddr_list_lookup_with_flags(&hdev->accept_list,
 						      &ev->bdaddr,
 						      BDADDR_BREDR)) {
+			/*本端无conn,但创建连接成功,accept_list上也有此设备信息(容许此设备连接),添加此conn并置为slave角色*/
 			conn = hci_conn_add_unset(hdev, ev->link_type,
 						  &ev->bdaddr, HCI_ROLE_SLAVE);
 			if (IS_ERR(conn)) {
@@ -3114,8 +3127,9 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 			}
 		} else {
 			if (ev->link_type != SCO_LINK)
-				goto unlock;
+				goto unlock;/*非sco_link,报错*/
 
+			/*检查是否有创建的conn*/
 			conn = hci_conn_hash_lookup_ba(hdev, ESCO_LINK,
 						       &ev->bdaddr);
 			if (!conn)
@@ -3132,6 +3146,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 	 * whether the connection is already set up.
 	 */
 	if (!HCI_CONN_HANDLE_UNSET(conn->handle)) {
+		/*无handle,报错*/
 		bt_dev_err(hdev, "Ignoring HCI_Connection_Complete for existing connection");
 		goto unlock;
 	}
@@ -3140,10 +3155,10 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 		/*连接创建成功，更新connect handle*/
 		status = hci_conn_set_handle(conn, __le16_to_cpu(ev->handle));
 		if (status)
-			goto done;
+			goto done;/*更新handle失败*/
 
 		if (conn->type == ACL_LINK) {
-			conn->state = BT_CONFIG;
+			conn->state = BT_CONFIG;/*连接进入config状态*/
 			hci_conn_hold(conn);
 
 			if (!conn->out && !hci_conn_ssp_enabled(conn) &&
@@ -3152,7 +3167,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 			else
 				conn->disc_timeout = HCI_DISCONN_TIMEOUT;
 		} else
-			conn->state = BT_CONNECTED;
+			conn->state = BT_CONNECTED;/*连接进入到connected状态*/
 
 		hci_debugfs_create_conn(conn);
 		hci_conn_add_sysfs(conn);
@@ -3170,6 +3185,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 
 			key = hci_find_link_key(hdev, &ev->bdaddr);
 			if (key) {
+				/*取得此设备对应的link key*/
 				set_bit(HCI_CONN_ENCRYPT, &conn->flags);
 				hci_read_enc_key_size(hdev, conn);
 				hci_encrypt_cfm(conn, ev->status);
@@ -3181,7 +3197,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 			struct hci_cp_read_remote_features cp;
 			cp.handle = ev->handle;
 			hci_send_cmd(hdev, HCI_OP_READ_REMOTE_FEATURES,
-				     sizeof(cp), &cp);
+				     sizeof(cp), &cp);/*读取远端功能*/
 
 			hci_update_scan(hdev);
 		}
@@ -3227,7 +3243,7 @@ static void hci_reject_conn(struct hci_dev *hdev, bdaddr_t *bdaddr)
 	hci_send_cmd(hdev, HCI_OP_REJECT_CONN_REQ, sizeof(cp), &cp);
 }
 
-/*收到连接请求事件*/
+/*收到对端连接请求事件*/
 static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 				 struct sk_buff *skb)
 {
@@ -3517,7 +3533,7 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
-/*对端响应了remte name complete event*/
+/*收到remote name complete event*/
 static void hci_remote_name_evt(struct hci_dev *hdev, void *data,
 				struct sk_buff *skb)
 {
@@ -3534,10 +3550,11 @@ static void hci_remote_name_evt(struct hci_dev *hdev, void *data,
 		goto check_auth;
 
 	if (ev->status == 0)
-		/*请求成功*/
+		/*请求远端名称成功*/
 		hci_check_pending_name(hdev, conn, &ev->bdaddr/*设备地址*/, ev->name/*设备名称*/,
 				       strnlen(ev->name, HCI_MAX_NAME_LENGTH)/*名称长度*/);
 	else
+		/*请求远端名称失败*/
 		hci_check_pending_name(hdev, conn, &ev->bdaddr, NULL, 0);
 
 check_auth:
@@ -3720,6 +3737,7 @@ static void hci_remote_features_evt(struct hci_dev *hdev, void *data,
 		memset(&cp, 0, sizeof(cp));
 		bacpy(&cp.bdaddr, &conn->dst);
 		cp.pscan_rep_mode = 0x02;
+		/*请求设备名称*/
 		hci_send_cmd(hdev, HCI_OP_REMOTE_NAME_REQ, sizeof(cp), &cp);
 	} else {
 		mgmt_device_connected(hdev, conn, NULL, 0);
@@ -3746,9 +3764,10 @@ static inline void handle_cmd_cnt_and_timer(struct hci_dev *hdev, u8 ncmd)
 			cancel_delayed_work(&hdev->ncmd_timer);
 			atomic_set(&hdev->cmd_cnt, 1);
 		} else {
+			/*当前controller不能接收cmd,*/
 			if (!hci_dev_test_flag(hdev, HCI_CMD_DRAIN_WORKQUEUE))
 				queue_delayed_work(hdev->workqueue, &hdev->ncmd_timer,
-						   HCI_NCMD_TIMEOUT);
+						   HCI_NCMD_TIMEOUT);/*定时器启动,如果触发将注入事件错误事件*/
 		}
 	}
 	rcu_read_unlock();
@@ -4298,12 +4317,12 @@ static const struct hci_cs {
 	void (*func)(struct hci_dev *hdev, __u8 status);
 } hci_cs_table[] = {
 	HCI_CS(HCI_OP_INQUIRY, hci_cs_inquiry),
-	HCI_CS(HCI_OP_CREATE_CONN, hci_cs_create_conn),
+	HCI_CS(HCI_OP_CREATE_CONN, hci_cs_create_conn),/*收到创建连接命令状态响应*/
 	HCI_CS(HCI_OP_DISCONNECT, hci_cs_disconnect),
 	HCI_CS(HCI_OP_ADD_SCO, hci_cs_add_sco),
 	HCI_CS(HCI_OP_AUTH_REQUESTED, hci_cs_auth_requested),
 	HCI_CS(HCI_OP_SET_CONN_ENCRYPT, hci_cs_set_conn_encrypt),
-	HCI_CS(HCI_OP_REMOTE_NAME_REQ, hci_cs_remote_name_req),
+	HCI_CS(HCI_OP_REMOTE_NAME_REQ, hci_cs_remote_name_req),/*收到远端设备名称命令状态响应*/
 	HCI_CS(HCI_OP_READ_REMOTE_FEATURES, hci_cs_read_remote_features),
 	HCI_CS(HCI_OP_READ_REMOTE_EXT_FEATURES,
 	       hci_cs_read_remote_ext_features),
@@ -4321,20 +4340,28 @@ static const struct hci_cs {
 	HCI_CS(HCI_OP_LE_CREATE_BIG, hci_cs_le_create_big),
 };
 
+/*这个函数关联的是HCI_EV_CMD_STATUS事件,此事件用于描述opcode已被收到
+ * 控制器当前正在执行此命令.后续会有complete事件通知;
+ * 如果此命令不能开始执行,此事件中的status以非零的方式指明错误码.
+ * 当ev->ncmd为零时表示控制器当前不能再继续收取HOST发送的cmd,HOST需要停止;
+ * 注意:当controller容许再次发送时,controller会通过此事件发送ncmd不为零,且opcode为0的来表明;
+ * */
 static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
-			       struct sk_buff *skb, u16 *opcode, u8 *status,
+			       struct sk_buff *skb, u16 *opcode/*出参,请求时采用的opcode*/, u8 *status/*出参,命令状态*/,
 			       hci_req_complete_t *req_complete/*出参，complete回调*/,
 			       hci_req_complete_skb_t *req_complete_skb/*出参，complete回调*/)
 {
 	struct hci_ev_cmd_status *ev = data;
 	int i;
 
-	*opcode = __le16_to_cpu(ev->opcode);
-	*status = ev->status;
+	*opcode = __le16_to_cpu(ev->opcode);/*请求时采用的opcode*/
+	*status = ev->status;/*命令按收状态*/
 
 	bt_dev_dbg(hdev, "opcode 0x%4.4x", *opcode);
 
-	/*检查此opcode是否从属于hci_cs_table*/
+	/*收到了CMD_STATS事件,其表明用于响应opcode,这里先检查此opcode
+	 * 是否包含于hci_cs_table中,使这些opcode可以针对响应结果做一些处理
+	 * 例如INQUIRY请求,会检查是否之前发起过inquiry,如有,则打上HCI_INQUIRY标记,用于处理inquiry其它的event*/
 	for (i = 0; i < ARRAY_SIZE(hci_cs_table); i++) {
 		if (hci_cs_table[i].op == *opcode) {
 			/*从属于hci_cs_table,直接调用回调*/
@@ -4352,7 +4379,8 @@ static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
 	 * complete event).
 	 */
 	if (ev->status || (hdev->req_skb && !hci_skb_event(hdev->req_skb))) {
-		hci_req_cmd_complete(hdev, *opcode, ev->status, req_complete,
+		/*cmd执行错误 或者有req_skb,但req_skb未关联event*/
+		hci_req_cmd_complete(hdev, *opcode, ev->status/*指明执行出错*/, req_complete,
 				     req_complete_skb);
 		if (hci_dev_test_flag(hdev, HCI_CMD_PENDING)) {
 			bt_dev_err(hdev, "unexpected event for opcode 0x%4.4x",
@@ -4361,7 +4389,7 @@ static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
 		}
 	}
 
-	/*仍有cmd,继续触发cmd_work运行*/
+	/*如果controller可继续接收,且cmd队列不为空,则继续触发cmd_work运行*/
 	if (atomic_read(&hdev->cmd_cnt) && !skb_queue_empty(&hdev->cmd_q))
 		queue_work(hdev->workqueue, &hdev->cmd_work);
 }
@@ -4784,7 +4812,7 @@ static void hci_inquiry_result_with_rssi_evt(struct hci_dev *hdev, void *edata,
 	bt_dev_dbg(hdev, "num_rsp %d", ev->num);
 
 	if (!ev->num)
-		return;
+		return;/*数量为零,直接返回*/
 
 	if (hci_dev_test_flag(hdev, HCI_PERIODIC_INQ))
 		return;
@@ -4816,7 +4844,7 @@ static void hci_inquiry_result_with_rssi_evt(struct hci_dev *hdev, void *edata,
 			data.rssi		= info->rssi;
 			data.ssp_mode		= 0x00;
 
-			flags = hci_inquiry_cache_update(hdev, &data, false);
+			flags = hci_inquiry_cache_update(hdev, &data, false/*名称未知*/);
 
 			mgmt_device_found(hdev, &info->bdaddr, ACL_LINK, 0x00,
 					  info->dev_class, info->rssi,
@@ -4824,6 +4852,7 @@ static void hci_inquiry_result_with_rssi_evt(struct hci_dev *hdev, void *edata,
 		}
 	} else if (skb->len == array_size(ev->num,
 					  sizeof(struct inquiry_info_rssi))) {
+		/*按inquiry_info_rssi格式进行响应*/
 		struct inquiry_info_rssi *info;
 
 		for (i = 0; i < ev->num; i++) {
@@ -4833,12 +4862,13 @@ static void hci_inquiry_result_with_rssi_evt(struct hci_dev *hdev, void *edata,
 					       HCI_EV_INQUIRY_RESULT_WITH_RSSI,
 					       sizeof(*info));
 			if (!info) {
+				/*长度有误*/
 				bt_dev_err(hdev, "Malformed HCI Event: 0x%2.2x",
 					   HCI_EV_INQUIRY_RESULT_WITH_RSSI);
 				goto unlock;
 			}
 
-			bacpy(&data.bdaddr, &info->bdaddr);
+			bacpy(&data.bdaddr, &info->bdaddr);/*填写设备地址*/
 			data.pscan_rep_mode	= info->pscan_rep_mode;
 			data.pscan_period_mode	= info->pscan_period_mode;
 			data.pscan_mode		= 0x00;
@@ -4847,11 +4877,12 @@ static void hci_inquiry_result_with_rssi_evt(struct hci_dev *hdev, void *edata,
 			data.rssi		= info->rssi;
 			data.ssp_mode		= 0x00;
 
-			flags = hci_inquiry_cache_update(hdev, &data, false);
+			/*更新inquiry cache*/
+			flags = hci_inquiry_cache_update(hdev, &data, false/*名称未知*/);
 
 			mgmt_device_found(hdev, &info->bdaddr, ACL_LINK, 0x00,
 					  info->dev_class, info->rssi,
-					  flags, NULL, 0, NULL, 0, 0);
+					  flags, NULL, 0, NULL, 0, 0);/*指明发现设备*/
 		}
 	} else {
 		bt_dev_err(hdev, "Malformed HCI Event: 0x%2.2x",
@@ -5066,12 +5097,12 @@ static void hci_extended_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 
 	if (!hci_ev_skb_pull(hdev, skb, HCI_EV_EXTENDED_INQUIRY_RESULT,
 			     flex_array_size(ev, info, ev->num)))
-		return;
+		return;/*长度有误*/
 
 	bt_dev_dbg(hdev, "num %d", ev->num);
 
 	if (!ev->num)
-		return;
+		return;/*长度为零*/
 
 	if (hci_dev_test_flag(hdev, HCI_PERIODIC_INQ))
 		return;
@@ -5097,8 +5128,9 @@ static void hci_extended_inquiry_result_evt(struct hci_dev *hdev, void *edata,
 						  sizeof(info->data),
 						  EIR_NAME_COMPLETE, NULL);
 		else
-			name_known = true;
+			name_known = true;/*名称已知*/
 
+		/*更新inquiry cache*/
 		flags = hci_inquiry_cache_update(hdev, &data, name_known);
 
 		eir_len = eir_get_length(info->data, sizeof(info->data));
@@ -6233,10 +6265,11 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 	u64 instant = jiffies;
 
 	if (!ev->num)
-		return;
+		return;/*数量为0,直接返回*/
 
 	hci_dev_lock(hdev);
 
+	/*遍历所有实体*/
 	while (ev->num--) {
 		struct hci_ev_le_advertising_info *info;
 		s8 rssi;
@@ -7116,7 +7149,7 @@ static const struct hci_le_ev {
 	void (*func)(struct hci_dev *hdev, void *data, struct sk_buff *skb);
 	u16  min_len;
 	u16  max_len;
-} hci_le_ev_table[U8_MAX + 1] = {
+} hci_le_ev_table[U8_MAX + 1]/*定义subevent对应的回调*/ = {
 	/* [0x01 = HCI_EV_LE_CONN_COMPLETE] */
 	HCI_LE_EV(HCI_EV_LE_CONN_COMPLETE, hci_le_conn_complete_evt,
 		  sizeof(struct hci_ev_le_conn_complete)),
@@ -7214,7 +7247,7 @@ static void hci_le_meta_evt(struct hci_dev *hdev, void *data,
 				     req_complete_skb);
 	}
 
-	subev = &hci_le_ev_table[ev->subevent];
+	subev = &hci_le_ev_table[ev->subevent];/*取subevent对应的回调*/
 	if (!subev->func)
 		return;
 
@@ -7368,7 +7401,7 @@ unlock:
 
 #define HCI_EV_REQ_VL(_op, _func, _min_len, _max_len) \
 [_op] = { \
-	.req = true, /*请求类opcode*/\
+	.req = true, /*请求类opcode的响应*/\
 	.func_req = _func, \
 	.min_len = _min_len, \
 	.max_len = _max_len, \
@@ -7383,28 +7416,28 @@ unlock:
  * events without a callback function don't have entered.
  */
 static const struct hci_ev {
-	bool req;/*是否请求*/
+	bool req;/*用于区分不同回调*/
 	union {
 		/*非请求类回调*/
-		void (*func)(struct hci_dev *hdev, void *data,
+		void (*func)(struct hci_dev *hdev, void *data/*参数指针*/,
 			     struct sk_buff *skb);
 		/*请求类回调*/
-		void (*func_req)(struct hci_dev *hdev, void *data,
+		void (*func_req)(struct hci_dev *hdev, void *data/*参数指针*/,
 				 struct sk_buff *skb, u16 *opcode, u8 *status,
 				 hci_req_complete_t *req_complete,
 				 hci_req_complete_skb_t *req_complete_skb);
 	};
 	u16  min_len;/*opcode参数最小长度*/
 	u16  max_len;/*opcode参数最大长度*/
-} hci_ev_table[U8_MAX + 1] = {
+} hci_ev_table[U8_MAX + 1]/*用于处理收到的hci事件*/ = {
 	/* [0x01 = HCI_EV_INQUIRY_COMPLETE] */
-	HCI_EV_STATUS(HCI_EV_INQUIRY_COMPLETE, hci_inquiry_complete_evt),
+	HCI_EV_STATUS(HCI_EV_INQUIRY_COMPLETE, hci_inquiry_complete_evt),/*收到inquiry处理完成*/
 	/* [0x02 = HCI_EV_INQUIRY_RESULT] */
 	HCI_EV_VL(HCI_EV_INQUIRY_RESULT, hci_inquiry_result_evt,
-		  sizeof(struct hci_ev_inquiry_result), HCI_MAX_EVENT_SIZE),
+		  sizeof(struct hci_ev_inquiry_result), HCI_MAX_EVENT_SIZE),/*收到执行inquiry状态时返回的结果*/
 	/* [0x03 = HCI_EV_CONN_COMPLETE] */
 	HCI_EV(HCI_EV_CONN_COMPLETE, hci_conn_complete_evt,
-	       sizeof(struct hci_ev_conn_complete)),/*创建connect完成*/
+	       sizeof(struct hci_ev_conn_complete)),/*收到创建connect完成事件*/
 	/* [0x04 = HCI_EV_CONN_REQUEST] */
 	HCI_EV(HCI_EV_CONN_REQUEST, hci_conn_request_evt,
 	       sizeof(struct hci_ev_conn_request)),/*收到连接请求*/
@@ -7416,7 +7449,7 @@ static const struct hci_ev {
 	       sizeof(struct hci_ev_auth_complete)),
 	/* [0x07 = HCI_EV_REMOTE_NAME] */
 	HCI_EV(HCI_EV_REMOTE_NAME, hci_remote_name_evt,
-	       sizeof(struct hci_ev_remote_name)),/*远端名称请求完成*/
+	       sizeof(struct hci_ev_remote_name)),/*收到远端名称请求完成事件*/
 	/* [0x08 = HCI_EV_ENCRYPT_CHANGE] */
 	HCI_EV(HCI_EV_ENCRYPT_CHANGE, hci_encrypt_change_evt,
 	       sizeof(struct hci_ev_encrypt_change)),
@@ -7432,7 +7465,7 @@ static const struct hci_ev {
 		      sizeof(struct hci_ev_cmd_complete), HCI_MAX_EVENT_SIZE),
 	/* [0x0f = HCI_EV_CMD_STATUS] */
 	HCI_EV_REQ(HCI_EV_CMD_STATUS, hci_cmd_status_evt,
-		   sizeof(struct hci_ev_cmd_status)),
+		   sizeof(struct hci_ev_cmd_status)),/*收到HCI_Command_Status事件*/
 	/* [0x10 = HCI_EV_CMD_STATUS] */
 	HCI_EV(HCI_EV_HARDWARE_ERROR, hci_hardware_error_evt,
 	       sizeof(struct hci_ev_hardware_error)),/*硬件error处理*/
@@ -7441,7 +7474,7 @@ static const struct hci_ev {
 	       sizeof(struct hci_ev_role_change)),
 	/* [0x13 = HCI_EV_NUM_COMP_PKTS] */
 	HCI_EV_VL(HCI_EV_NUM_COMP_PKTS, hci_num_comp_pkts_evt,
-		  sizeof(struct hci_ev_num_comp_pkts), HCI_MAX_EVENT_SIZE),T
+		  sizeof(struct hci_ev_num_comp_pkts), HCI_MAX_EVENT_SIZE),
 	/* [0x14 = HCI_EV_MODE_CHANGE] */
 	HCI_EV(HCI_EV_MODE_CHANGE, hci_mode_change_evt,
 	       sizeof(struct hci_ev_mode_change)),
@@ -7467,7 +7500,7 @@ static const struct hci_ev {
 	HCI_EV_VL(HCI_EV_INQUIRY_RESULT_WITH_RSSI,
 		  hci_inquiry_result_with_rssi_evt,
 		  sizeof(struct hci_ev_inquiry_result_rssi),
-		  HCI_MAX_EVENT_SIZE),
+		  HCI_MAX_EVENT_SIZE),/*收到inquiry结果,包含rssi*/
 	/* [0x23 = HCI_EV_REMOTE_EXT_FEATURES] */
 	HCI_EV(HCI_EV_REMOTE_EXT_FEATURES, hci_remote_ext_features_evt,
 	       sizeof(struct hci_ev_remote_ext_features)),
@@ -7477,7 +7510,7 @@ static const struct hci_ev {
 	/* [0x2f = HCI_EV_EXTENDED_INQUIRY_RESULT] */
 	HCI_EV_VL(HCI_EV_EXTENDED_INQUIRY_RESULT,
 		  hci_extended_inquiry_result_evt,
-		  sizeof(struct hci_ev_ext_inquiry_result), HCI_MAX_EVENT_SIZE),
+		  sizeof(struct hci_ev_ext_inquiry_result), HCI_MAX_EVENT_SIZE),/*收到扩展inquiry结果*/
 	/* [0x30 = HCI_EV_KEY_REFRESH_COMPLETE] */
 	HCI_EV(HCI_EV_KEY_REFRESH_COMPLETE, hci_key_refresh_complete_evt,
 	       sizeof(struct hci_ev_key_refresh_complete)),
@@ -7516,16 +7549,16 @@ static const struct hci_ev {
 };
 
 static void hci_event_func(struct hci_dev *hdev, u8 event/*事件编号*/, struct sk_buff *skb/*事件参数*/,
-			   u16 *opcode, u8 *status,
-			   hci_req_complete_t *req_complete,
-			   hci_req_complete_skb_t *req_complete_skb)
+			   u16 *opcode/*出参*/, u8 *status/*出参,*/,
+			   hci_req_complete_t *req_complete/*出参,*/,
+			   hci_req_complete_skb_t *req_complete_skb/*出参,*/)
 {
 	/*按照event编号取对应的entity,确定要处理的回调*/
 	const struct hci_ev *ev = &hci_ev_table[event];
 	void *data;
 
 	if (!ev->func)
-		/*未提供func回调，直接返回*/
+		/*未提供func回调的event，直接返回,例如0X0c*/
 		return;
 
 	if (skb->len < ev->min_len) {

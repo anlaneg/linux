@@ -7074,6 +7074,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 						   CONN_REASON_L2CAP_CHAN);
 
 	} else {
+		/*非le方式*/
 		u8 auth_type = l2cap_get_auth_type(chan);
 		hcon = hci_connect_acl(hdev, dst, chan->sec_level, auth_type,
 				       CONN_REASON_L2CAP_CHAN/*连接原因*/, timeout);

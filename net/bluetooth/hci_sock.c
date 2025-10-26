@@ -1231,6 +1231,7 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 		return hci_dev_cmd(cmd, argp);
 
 	case HCIINQUIRY:
+		/*获取inquiry cache(可注明是否需要做inquiry处理)*/
 		return hci_inquiry(argp);
 	}
 
@@ -2052,7 +2053,7 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 			goto drop;/*不支持非以上类型的PKT*/
 		}
 
-		skb_queue_tail(&hdev->raw_q, skb);
+		skb_queue_tail(&hdev->raw_q, skb);/*报文存入raw_q*/
 		queue_work(hdev->workqueue, &hdev->tx_work);
 	}
 

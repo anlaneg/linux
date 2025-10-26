@@ -45,7 +45,7 @@ void hci_conn_add_sysfs(struct hci_conn *conn)
 
 	dev_set_name(&conn->dev, "%s:%d", hdev->name, conn->handle);/*设置在sysfs中的名称*/
 
-	/*添加进sysfs*/
+	/*添加进sysfs,例如:/sys/class/bluetooth/hci0:9*/
 	if (device_add(&conn->dev) < 0)
 		bt_dev_err(hdev, "failed to register connection device");
 }

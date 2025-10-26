@@ -363,7 +363,7 @@ static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
  *
  * Return: number of bytes needed or SIZE_MAX on overflow.
  */
-#define flex_array_size(p, member, count)				\
+#define flex_array_size(p/*指针*/, member/*成员名称*/, count/*成员数目*/)				\
 	__builtin_choose_expr(__is_constexpr(count),			\
 		(count) * sizeof(*(p)->member) + __must_be_array((p)->member),	\
 		size_mul(count, sizeof(*(p)->member) + __must_be_array((p)->member)))

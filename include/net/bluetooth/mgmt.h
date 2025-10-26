@@ -193,8 +193,8 @@ struct mgmt_link_key_info {
 #define MGMT_OP_LOAD_LINK_KEYS		0x0012
 struct mgmt_cp_load_link_keys {
 	__u8	debug_keys;
-	__le16	key_count;
-	struct	mgmt_link_key_info keys[];
+	__le16	key_count;/*KEYS数组长度*/
+	struct	mgmt_link_key_info keys[];/*要添加的key*/
 } __packed;
 #define MGMT_LOAD_LINK_KEYS_SIZE	3
 

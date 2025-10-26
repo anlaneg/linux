@@ -127,8 +127,10 @@ static int device_list_show(struct seq_file *f, void *ptr)
 	struct bdaddr_list *b;
 
 	hci_dev_lock(hdev);
+	/*显示accept_list链上设备列表*/
 	list_for_each_entry(b, &hdev->accept_list, list)
 		seq_printf(f, "%pMR (type %u)\n", &b->bdaddr, b->bdaddr_type);
+	/*显示LE已添加的设备列表*/
 	list_for_each_entry(p, &hdev->le_conn_params, list) {
 		seq_printf(f, "%pMR (type %u) %u\n", &p->addr, p->addr_type,
 			   p->auto_connect);
@@ -384,6 +386,7 @@ static int inquiry_cache_show(struct seq_file *f, void *p)
 
 DEFINE_SHOW_ATTRIBUTE(inquiry_cache);
 
+/*显示添加的link keys*/
 static int link_keys_show(struct seq_file *f, void *ptr)
 {
 	struct hci_dev *hdev = f->private;
@@ -392,7 +395,7 @@ static int link_keys_show(struct seq_file *f, void *ptr)
 	rcu_read_lock();
 	list_for_each_entry_rcu(key, &hdev->link_keys, list)
 		seq_printf(f, "%pMR %u %*phN %u\n", &key->bdaddr, key->type,
-			   HCI_LINK_KEY_SIZE, key->val, key->pin_len);
+			   HCI_LINK_KEY_SIZE, key->val/*KEY数值*/, key->pin_len);
 	rcu_read_unlock();
 
 	return 0;
@@ -1270,6 +1273,7 @@ void hci_debugfs_create_conn(struct hci_conn *conn)
 		return;
 
 	snprintf(name, sizeof(name), "%u", conn->handle);
+	/*创建连接对应的目录,例如:/sys/kernel/debug/bluetooth/hci0/9*/
 	conn->debugfs = debugfs_create_dir(name, hdev->debugfs);
 }
 

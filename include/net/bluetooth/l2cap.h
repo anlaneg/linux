@@ -64,7 +64,7 @@ struct sockaddr_l2 {
 	sa_family_t	l2_family;
 	__le16		l2_psm;/*端口号*/
 	bdaddr_t	l2_bdaddr;/*地址*/
-	__le16		l2_cid;
+	__le16		l2_cid;/*PSM与cid不可同时设置*/
 	__u8		l2_bdaddr_type;/*地址类型，例如BDADDR_BREDR*/
 };
 

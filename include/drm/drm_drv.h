@@ -532,15 +532,9 @@ static inline bool drm_dev_is_unplugged(struct drm_device *dev)
 static inline bool drm_core_check_all_features(const struct drm_device *dev,
 					       u32 features)
 {
-<<<<<<< Updated upstream
 	u32 supported = dev->driver->driver_features & dev->driver_features;/*驱动与设备均支持的features*/
 
 	return features && (supported & features) == features;/*检查给定的features是否被支持*/
-=======
-	u32 supported = dev->driver->driver_features & dev->driver_features;/*取支持的功能列表*/
-
-	return features && (supported & features) == features;/*检查此功能是否支持*/
->>>>>>> Stashed changes
 }
 
 /**

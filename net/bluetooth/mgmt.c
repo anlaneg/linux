@@ -2983,6 +2983,7 @@ unlock:
 	return err;
 }
 
+/*为此设备添加LINK KEYS*/
 static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 			  u16 len)
 {
@@ -3035,6 +3036,7 @@ static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 	if (changed)
 		new_settings(hdev, NULL);
 
+	/*遍历并添加每个key*/
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_link_key_info *key = &cp->keys[i];
 
@@ -3065,6 +3067,7 @@ static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (key->type == HCI_LK_DEBUG_COMBINATION)
 			continue;
 
+		/*为hdev添加key*/
 		hci_add_link_key(hdev, NULL, &key->addr.bdaddr, key->val,
 				 key->type, key->pin_len, NULL);
 	}
@@ -7712,6 +7715,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 			goto unlock;
 		}
 
+		/*添加到容许连接的列表*/
 		err = hci_bdaddr_list_add_with_flags(&hdev->accept_list,
 						     &cp->addr.bdaddr,
 						     cp->addr.type, 0);
@@ -7720,7 +7724,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 
 		hci_update_scan(hdev);
 
-		goto added;
+		goto added;/*返回添加成功*/
 	}
 
 	addr_type = le_addr_type(cp->addr.type);
@@ -7738,6 +7742,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 	 * hci_conn_params_lookup.
 	 */
 	if (!hci_is_identity_address(&cp->addr.bdaddr, addr_type)) {
+		/*响应参数无效*/
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_DEVICE,
 					MGMT_STATUS_INVALID_PARAMS,
 					&cp->addr, sizeof(cp->addr));
@@ -7769,6 +7774,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 	err = hci_cmd_sync_queue(hdev, add_device_sync, cmd,
 				 add_device_complete);
 	if (err < 0) {
+		/*添加设备失败*/
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_DEVICE,
 					MGMT_STATUS_FAILED, &cp->addr,
 					sizeof(cp->addr));
@@ -9396,6 +9402,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ add_uuid,                MGMT_ADD_UUID_SIZE },
 	/*响应用户态REMOVE_UUID,用于移除HCI设备上关联的一个或所有UUID*/
 	{ remove_uuid,             MGMT_REMOVE_UUID_SIZE },
+	/*为设备添加link keys*/
 	{ load_link_keys,          MGMT_LOAD_LINK_KEYS_SIZE,
 						HCI_MGMT_VAR_LEN },
 	{ load_long_term_keys,     MGMT_LOAD_LONG_TERM_KEYS_SIZE,
@@ -10472,7 +10479,7 @@ accepted:
 	mgmt_event_skb(skb, NULL);
 }
 
-void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
+void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备地址*/, u8 link_type,
 		       u8 addr_type, u8 *dev_class, s8 rssi, u32 flags,
 		       u8 *eir, u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len,
 		       u64 instant)
@@ -10509,8 +10516,10 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	if (hdev->discovery.limited) {
 		/* Check for limited discoverable bit */
 		if (dev_class) {
+			/*这里使用dev_class[1],且与0X20,即Major Service Classes的13号bit
+			 *为Limited Discoverable Mode */
 			if (!(dev_class[1] & 0x20))
-				return;
+				return;/*设备非有限发现模式,退出*/
 		} else {
 			u8 *flags = eir_get_data(eir, eir_len, EIR_FLAGS, NULL);
 			if (!flags || !(flags[0] & LE_AD_LIMITED))
@@ -10538,7 +10547,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	    link_type == ACL_LINK)
 		rssi = 0;
 
-	bacpy(&ev->addr.bdaddr, bdaddr);
+	bacpy(&ev->addr.bdaddr, bdaddr);/*设备地址*/
 	ev->addr.type = link_to_bdaddr(link_type, addr_type);
 	ev->rssi = rssi;
 	ev->flags = cpu_to_le32(flags);
@@ -10561,6 +10570,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 
 	ev->eir_len = cpu_to_le16(eir_len + scan_rsp_len);
 
+	/*通知发现设备*/
 	mgmt_adv_monitor_device_found(hdev, bdaddr, report_device, skb, NULL);
 }
 

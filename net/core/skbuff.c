@@ -2683,14 +2683,14 @@ EXPORT_SYMBOL(skb_pull);
  */
 void *skb_pull_data(struct sk_buff *skb, size_t len)
 {
-	void *data = skb->data;
+	void *data = skb->data;/*指向数据起始位置*/
 
 	if (skb->len < len)
 		return NULL;
 
-	skb_pull(skb, len);
+	skb_pull(skb, len);/*使data向后移len长度(跳过已解析长度)*/
 
-	return data;
+	return data;/*返回原数据*/
 }
 EXPORT_SYMBOL(skb_pull_data);
 

@@ -112,7 +112,7 @@ bool hci_discovery_active(struct hci_dev *hdev)
 	switch (discov->state) {
 	case DISCOVERY_FINDING:
 	case DISCOVERY_RESOLVING:
-		return true;
+		return true;/*discovery是活跃的*/
 
 	default:
 		return false;
@@ -149,6 +149,7 @@ void hci_discovery_set_state(struct hci_dev *hdev, int state)
 	bt_dev_dbg(hdev, "state %u -> %u", old_state, state);
 }
 
+/*清空discovery的cache信息*/
 void hci_inquiry_cache_flush(struct hci_dev *hdev)
 {
 	struct discovery_state *cache = &hdev->discovery;
@@ -163,6 +164,7 @@ void hci_inquiry_cache_flush(struct hci_dev *hdev)
 	INIT_LIST_HEAD(&cache->resolve);
 }
 
+/*通过bdaddr查询discovery cache(all链表)*/
 struct inquiry_entry *hci_inquiry_cache_lookup(struct hci_dev *hdev,
 					       bdaddr_t *bdaddr)
 {
@@ -173,12 +175,13 @@ struct inquiry_entry *hci_inquiry_cache_lookup(struct hci_dev *hdev,
 
 	list_for_each_entry(e, &cache->all, all) {
 		if (!bacmp(&e->data.bdaddr, bdaddr))
-			return e;
+			return e;/*在cache中查找到此地址*/
 	}
 
 	return NULL;
 }
 
+/*通过bdaddr查询discovery cache(unknown链表)*/
 struct inquiry_entry *hci_inquiry_cache_lookup_unknown(struct hci_dev *hdev,
 						       bdaddr_t *bdaddr)
 {
@@ -195,6 +198,7 @@ struct inquiry_entry *hci_inquiry_cache_lookup_unknown(struct hci_dev *hdev,
 	return NULL;
 }
 
+/*通过bdaddr,state查询discovery cache(resolve链表)*/
 struct inquiry_entry *hci_inquiry_cache_lookup_resolve(struct hci_dev *hdev,
 						       bdaddr_t *bdaddr,
 						       int state)
@@ -233,8 +237,9 @@ void hci_inquiry_cache_update_resolve(struct hci_dev *hdev,
 	list_add(&ie->list, pos);
 }
 
+/*添加/更新inquiry_entry*/
 u32 hci_inquiry_cache_update(struct hci_dev *hdev, struct inquiry_data *data,
-			     bool name_known)
+			     bool name_known/*名称是否已知*/)
 {
 	struct discovery_state *cache = &hdev->discovery;
 	struct inquiry_entry *ie;
@@ -249,16 +254,18 @@ u32 hci_inquiry_cache_update(struct hci_dev *hdev, struct inquiry_data *data,
 
 	ie = hci_inquiry_cache_lookup(hdev, &data->bdaddr);
 	if (ie) {
+		/*cache 已存在此设备*/
 		if (!ie->data.ssp_mode)
 			flags |= MGMT_DEV_FOUND_LEGACY_PAIRING;
 
 		if (ie->name_state == NAME_NEEDED &&
 		    data->rssi != ie->data.rssi) {
+			/*这种需要解析设备名称,挂在resolve链表上*/
 			ie->data.rssi = data->rssi;
 			hci_inquiry_cache_update_resolve(hdev, ie);
 		}
 
-		goto update;
+		goto update;/*跳更新*/
 	}
 
 	/* Entry not in the cache. Add new one. */
@@ -268,25 +275,26 @@ u32 hci_inquiry_cache_update(struct hci_dev *hdev, struct inquiry_data *data,
 		goto done;
 	}
 
-	list_add(&ie->all, &cache->all);
+	list_add(&ie->all, &cache->all);/*添加进cache*/
 
 	if (name_known) {
 		ie->name_state = NAME_KNOWN;
 	} else {
 		ie->name_state = NAME_NOT_KNOWN;
-		list_add(&ie->list, &cache->unknown);
+		list_add(&ie->list, &cache->unknown);/*名称未知,挂unknown链表*/
 	}
 
 update:
 	if (name_known && ie->name_state != NAME_KNOWN &&
 	    ie->name_state != NAME_PENDING) {
 		ie->name_state = NAME_KNOWN;
+		/*名称已变为已知,自原链表上移除,变更状态*/
 		list_del(&ie->list);
 	}
 
 	memcpy(&ie->data, data, sizeof(*data));
-	ie->timestamp = jiffies;
-	cache->timestamp = jiffies;
+	ie->timestamp = jiffies;/*记录ie更新时间*/
+	cache->timestamp = jiffies;/*记录cache更新时间*/
 
 	if (ie->name_state == NAME_NOT_KNOWN)
 		flags |= MGMT_DEV_FOUND_CONFIRM_NAME;
@@ -295,6 +303,7 @@ done:
 	return flags;
 }
 
+/*遍历DISCOVERY cache,将内容显示进buf中*/
 static int inquiry_cache_dump(struct hci_dev *hdev, int num, __u8 *buf)
 {
 	struct discovery_state *cache = &hdev->discovery;
@@ -303,10 +312,10 @@ static int inquiry_cache_dump(struct hci_dev *hdev, int num, __u8 *buf)
 	int copied = 0;
 
 	list_for_each_entry(e, &cache->all, all) {
-		struct inquiry_data *data = &e->data;
+		struct inquiry_data *data = &e->data;/*要DUMP的内容*/
 
 		if (copied >= num)
-			break;
+			break;/*数量超标*/
 
 		bacpy(&info->bdaddr, &data->bdaddr);
 		info->pscan_rep_mode	= data->pscan_rep_mode;
@@ -328,7 +337,7 @@ int hci_inquiry(void __user *arg)
 	__u8 __user *ptr = arg;
 	struct hci_inquiry_req ir;
 	struct hci_dev *hdev;
-	int err = 0, do_inquiry = 0, max_rsp;
+	int err = 0, do_inquiry = 0/*默认不查询,直接dump*/, max_rsp;
 	__u8 *buf;
 
 	if (copy_from_user(&ir, ptr, sizeof(ir)))
@@ -361,15 +370,16 @@ int hci_inquiry(void __user *arg)
 	}
 
 	hci_dev_lock(hdev);
-	if (inquiry_cache_age(hdev) > INQUIRY_CACHE_AGE_MAX ||
-	    inquiry_cache_empty(hdev) || ir.flags & IREQ_CACHE_FLUSH) {
-		hci_inquiry_cache_flush(hdev);
-		do_inquiry = 1;
+	if (inquiry_cache_age(hdev) > INQUIRY_CACHE_AGE_MAX/*距离上次更新已过去max_age*/ ||
+	    inquiry_cache_empty(hdev)/*本来就是空的*/ || ir.flags & IREQ_CACHE_FLUSH/*要求flush*/) {
+		hci_inquiry_cache_flush(hdev);/*清空cache*/
+		do_inquiry = 1;/*需要做查询*/
 	}
 	hci_dev_unlock(hdev);
 
 	if (do_inquiry) {
 		hci_req_sync_lock(hdev);
+		/*请求controller进入inquiry处理*/
 		err = hci_inquiry_sync(hdev, ir.length, ir.num_rsp);
 		hci_req_sync_unlock(hdev);
 
@@ -379,17 +389,21 @@ int hci_inquiry(void __user *arg)
 		/* Wait until Inquiry procedure finishes (HCI_INQUIRY flag is
 		 * cleared). If it is interrupted by a signal, return -EINTR.
 		 */
+		/*在上面hci_inquiry_sync执行时,当controller响应CMD status Event,指明命令正在执行时,
+		 * HCI_INQUIRY标记会被置上,故当我们在等待此标记变化前此标记为真,
+		 * 当收到cmd complete/inquiry_cancel命令后标记将被清除*/
 		if (wait_on_bit(&hdev->flags, HCI_INQUIRY,
 				TASK_INTERRUPTIBLE)) {
 			err = -EINTR;
 			goto done;
 		}
+		/*执行inquiry完成,所有发现的设备已填充到inquiry cache中*/
 	}
 
 	/* for unlimited number of responses we will use buffer with
 	 * 255 entries
 	 */
-	max_rsp = (ir.num_rsp == 0) ? 255 : ir.num_rsp;
+	max_rsp = (ir.num_rsp == 0) ? 255 : ir.num_rsp;/*最大响应数目*/
 
 	/* cache_dump can't sleep. Therefore we allocate temp buffer and then
 	 * copy it to the user space.
@@ -401,11 +415,12 @@ int hci_inquiry(void __user *arg)
 	}
 
 	hci_dev_lock(hdev);
-	ir.num_rsp = inquiry_cache_dump(hdev, max_rsp, buf);
+	ir.num_rsp = inquiry_cache_dump(hdev, max_rsp, buf);/*DUMP inquiry cache*/
 	hci_dev_unlock(hdev);
 
 	BT_DBG("num_rsp %d", ir.num_rsp);
 
+	/*将结果传递给用户态*/
 	if (!copy_to_user(ptr, &ir, sizeof(ir))) {
 		ptr += sizeof(ir);
 		if (copy_to_user(ptr, buf, sizeof(struct inquiry_info) *
@@ -1119,7 +1134,7 @@ bool hci_is_blocked_key(struct hci_dev *hdev, u8 type, u8 val[16])
 	rcu_read_lock();
 	list_for_each_entry_rcu(b, &hdev->blocked_keys, list) {
 		if (b->type == type && !memcmp(b->val, val, sizeof(b->val))) {
-			blocked = true;
+			blocked = true;/*此keys被阻塞*/
 			break;
 		}
 	}
@@ -1133,6 +1148,7 @@ struct link_key *hci_find_link_key(struct hci_dev *hdev, bdaddr_t *bdaddr)
 	struct link_key *k;
 
 	rcu_read_lock();
+	/*利用设备地址查询其对应的link_key*/
 	list_for_each_entry_rcu(k, &hdev->link_keys, list) {
 		if (bacmp(bdaddr, &k->bdaddr) == 0) {
 			rcu_read_unlock();
@@ -1140,6 +1156,7 @@ struct link_key *hci_find_link_key(struct hci_dev *hdev, bdaddr_t *bdaddr)
 			if (hci_is_blocked_key(hdev,
 					       HCI_BLOCKED_KEY_TYPE_LINKKEY,
 					       k->val)) {
+				/*如此key被阻塞,则直接返回NULL*/
 				bt_dev_warn_ratelimited(hdev,
 							"Link key blocked for %pMR",
 							&k->bdaddr);
@@ -1305,14 +1322,16 @@ struct link_key *hci_add_link_key(struct hci_dev *hdev, struct hci_conn *conn,
 
 	old_key = hci_find_link_key(hdev, bdaddr);
 	if (old_key) {
+		/*有旧的KEY*/
 		old_key_type = old_key->type;
 		key = old_key;
 	} else {
+		/*无旧的key*/
 		old_key_type = conn ? conn->key_type : 0xff;
 		key = kzalloc(sizeof(*key), GFP_KERNEL);
 		if (!key)
 			return NULL;
-		list_add_rcu(&key->list, &hdev->link_keys);
+		list_add_rcu(&key->list, &hdev->link_keys);/*添加此设备对应的key*/
 	}
 
 	BT_DBG("%s key for %pMR type %u", hdev->name, bdaddr, type);
@@ -1328,8 +1347,8 @@ struct link_key *hci_add_link_key(struct hci_dev *hdev, struct hci_conn *conn,
 	}
 
 	bacpy(&key->bdaddr, bdaddr);
-	memcpy(key->val, val, HCI_LINK_KEY_SIZE);
-	key->pin_len = pin_len;
+	memcpy(key->val, val, HCI_LINK_KEY_SIZE);/*更新key*/
+	key->pin_len = pin_len;/*更新pin长度*/
 
 	if (type == HCI_LK_CHANGED_COMBINATION)
 		key->type = old_key_type;
@@ -1521,7 +1540,7 @@ static void hci_ncmd_timeout(struct work_struct *work)
 		return;
 
 	/* This is an irrecoverable state, inject hardware error event */
-	hci_reset_dev(hdev);
+	hci_reset_dev(hdev);/*注入硬件错误事件*/
 }
 
 struct oob_data *hci_find_remote_oob_data(struct hci_dev *hdev,
@@ -1531,10 +1550,10 @@ struct oob_data *hci_find_remote_oob_data(struct hci_dev *hdev,
 
 	list_for_each_entry(data, &hdev->remote_oob_data, list) {
 		if (bacmp(bdaddr, &data->bdaddr) != 0)
-			continue;
+			continue;/*地址不相等*/
 		if (data->bdaddr_type != bdaddr_type)
-			continue;
-		return data;
+			continue;/*地址类型不相等*/
+		return data;/*完全相等,返回data*/
 	}
 
 	return NULL;
@@ -2123,7 +2142,7 @@ hci_bdaddr_list_lookup_with_flags(struct list_head *bdaddr_list,
 
 	list_for_each_entry(b, bdaddr_list, list) {
 		if (!bacmp(&b->bdaddr, bdaddr) && b->bdaddr_type == type)
-			return b;
+			return b;/*地址与地址类型相等,认定为匹配,返回*/
 	}
 
 	return NULL;
@@ -2264,7 +2283,7 @@ struct hci_conn_params *hci_conn_params_lookup(struct hci_dev *hdev,
 	list_for_each_entry(params, &hdev->le_conn_params, list) {
 		if (bacmp(&params->addr, addr) == 0 &&
 		    params->addr_type == addr_type) {
-			return params;
+			return params;/*指定的地址及地址类型查找匹配,返回*/
 		}
 	}
 
@@ -2609,7 +2628,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv/*私有结构体大小*/)
 	init_waitqueue_head(&hdev->req_wait_q);
 
 	INIT_DELAYED_WORK(&hdev->cmd_timer, hci_cmd_timeout);
-	INIT_DELAYED_WORK(&hdev->ncmd_timer, hci_ncmd_timeout);
+	INIT_DELAYED_WORK(&hdev->ncmd_timer, hci_ncmd_timeout);/*controller长时间无法接收事件,注入硬件错误*/
 
 	hci_devcd_setup(hdev);
 
@@ -2942,6 +2961,7 @@ EXPORT_SYMBOL(hci_resume_dev);
 /* Reset HCI device */
 int hci_reset_dev(struct hci_dev *hdev)
 {
+	/*主动产生硬件错误事件,并向上传递.事件参数0X01,其后的0X00??*/
 	static const u8 hw_err[] = { HCI_EV_HARDWARE_ERROR, 0x01, 0x00 };
 	struct sk_buff *skb;
 
@@ -3219,7 +3239,7 @@ static void *hci_cmd_data(struct sk_buff *skb, __u16 opcode)
 	hdr = (void *)skb->data;
 
 	if (hdr->opcode != cpu_to_le16(opcode))
-		return NULL;
+		return NULL;/*skb中的cmd不是opcode,返回NULL*/
 
 	return skb->data + HCI_COMMAND_HDR_SIZE;/*返回此opcode请求时对应的参数*/
 }
@@ -3230,10 +3250,10 @@ void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode)
 	void *data;
 
 	/* Check if opcode matches last sent command */
-	data = hci_cmd_data(hdev->sent_cmd, opcode);/*先查发送过的cmd*/
+	data = hci_cmd_data(hdev->sent_cmd, opcode);/*先查之前发送过的cmd,是否有此opcode*/
 	if (!data)
 		/* Check if opcode matches last request */
-		data = hci_cmd_data(hdev->req_skb, opcode);/*再查req_skb*/
+		data = hci_cmd_data(hdev->req_skb, opcode);/*再查req_skb,是否有此opcode*/
 
 	return data;
 }
@@ -4118,7 +4138,8 @@ static void hci_rx_work(struct work_struct *work)
 
 		if (atomic_read(&hdev->promisc)) {
 			/* Send copy to the sockets */
-			hci_send_to_sock(hdev, skb);/*如果设备有socket开启混杂，则复制一份镜像给hci socket*/
+			/*如果设备有socket开启混杂，则复制一份镜像给hci socket*/
+			hci_send_to_sock(hdev, skb);
 		}
 
 		/* If the device has been opened in HCI_USER_CHANNEL,

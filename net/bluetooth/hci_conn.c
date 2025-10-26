@@ -1301,12 +1301,12 @@ u8 hci_conn_set_handle(struct hci_conn *conn, u16 handle)
 	bt_dev_dbg(hdev, "hcon %p handle 0x%4.4x", conn, handle);
 
 	if (conn->handle == handle)
-		return 0;/*handle无变更*/
+		return 0;/*handle相等直接返回*/
 
 	if (handle > HCI_CONN_HANDLE_MAX) {
 		bt_dev_err(hdev, "Invalid handle: 0x%4.4x > 0x%4.4x",
 			   handle, HCI_CONN_HANDLE_MAX);
-		return HCI_ERROR_INVALID_PARAMETERS;
+		return HCI_ERROR_INVALID_PARAMETERS;/*参数有误*/
 	}
 
 	/* If abort_reason has been sent it means the connection is being
@@ -1631,6 +1631,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 	struct hci_conn *acl;
 
 	if (!hci_dev_test_flag(hdev, HCI_BREDR_ENABLED)) {
+		/*设备必须开启bredr*/
 		if (lmp_bredr_capable(hdev))
 			return ERR_PTR(-ECONNREFUSED);
 
@@ -1647,7 +1648,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 		return ERR_PTR(-ECONNREFUSED);
 	}
 
-	/*查询到dst是否已有连接*/
+	/*查询类型为acl_link的到dst是否已有连接*/
 	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
 	if (!acl) {
 		/*无此连接，创建一个acl link*/
@@ -1667,7 +1668,7 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 		acl->auth_type = auth_type;
 		acl->conn_timeout = timeout;
 
-		err = hci_connect_acl_sync(hdev, acl);
+		err = hci_connect_acl_sync(hdev, acl);/*创建acl类型连接*/
 		if (err) {
 			hci_conn_del(acl);
 			return ERR_PTR(err);
