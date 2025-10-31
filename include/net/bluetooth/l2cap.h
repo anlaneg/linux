@@ -529,10 +529,11 @@ struct l2cap_chan {
 	__u16		omtu;
 	__u16		flush_to;
 	__u8		mode;
-	__u8		chan_type;/*CHANNEL类型*/
+	/*CHANNEL类型,如采用raw，则L2CAP_CHAN_RAW；如采用SOCK_SEQPACKET，则L2CAP_CHAN_CONN_ORIENTED*/
+	__u8		chan_type;
 	__u8		chan_policy;
 
-	__u8		sec_level;
+	__u8		sec_level;/*例如：BT_SECURITY_MEDIUM*/
 
 	__u8		ident;
 

@@ -39,13 +39,16 @@
 
 #define VERSION "1.3"
 
+/*是否省略srcmac*/
 static bool compress_src = true;
+/*是否省略dstmac*/
 static bool compress_dst = true;
 
 /*记录系统所有bnep_session*/
 static LIST_HEAD(bnep_session_list);
 static DECLARE_RWSEM(bnep_session_sem);
 
+/*利用目的mac查找bnep_session*/
 static struct bnep_session *__bnep_get_session(u8 *dst)
 {
 	struct bnep_session *s;
@@ -59,18 +62,19 @@ static struct bnep_session *__bnep_get_session(u8 *dst)
 	return NULL;
 }
 
-/*bnep_session加入到全局队列*/
+/*将bnep_session加入到全局队列*/
 static void __bnep_link_session(struct bnep_session *s)
 {
 	list_add(&s->list, &bnep_session_list);
 }
 
+/*将bnep_session自全局队列上移除*/
 static void __bnep_unlink_session(struct bnep_session *s)
 {
 	list_del(&s->list);
 }
 
-static int bnep_send(struct bnep_session *s, void *data, size_t len)
+static int bnep_send(struct bnep_session *s, void *data/*要发送的内容*/, size_t len/*要发送的内容长度*/)
 {
 	struct socket *sock = s->sock;
 	struct kvec iv = { data, len };
@@ -78,12 +82,13 @@ static int bnep_send(struct bnep_session *s, void *data, size_t len)
 	return kernel_sendmsg(sock, &s->msg, &iv, 1, len);
 }
 
+/*向送响应报文*/
 static int bnep_send_rsp(struct bnep_session *s, u8 ctrl, u16 resp)
 {
 	struct bnep_control_rsp rsp;
 	rsp.type = BNEP_CONTROL;
-	rsp.ctrl = ctrl;
-	rsp.resp = htons(resp);
+	rsp.ctrl = ctrl;/*响应ctrl类别*/
+	rsp.resp = htons(resp);/*响应值*/
 	return bnep_send(s, &rsp, sizeof(rsp));
 }
 
@@ -102,6 +107,7 @@ static inline void bnep_set_default_proto_filter(struct bnep_session *s)
 }
 #endif
 
+/*设置tx方向容许发送的协议fitler*/
 static int bnep_ctrl_set_netfilter(struct bnep_session *s, __be16 *data, int len)
 {
 	int n;
@@ -109,7 +115,7 @@ static int bnep_ctrl_set_netfilter(struct bnep_session *s, __be16 *data, int len
 	if (len < 2)
 		return -EILSEQ;
 
-	n = get_unaligned_be16(data);
+	n = get_unaligned_be16(data);/*取长度*/
 	data++;
 	len -= 2;
 
@@ -124,6 +130,7 @@ static int bnep_ctrl_set_netfilter(struct bnep_session *s, __be16 *data, int len
 		struct bnep_proto_filter *f = s->proto_filter;
 		int i;
 
+		/*填充proto_filter*/
 		for (i = 0; i < n; i++) {
 			f[i].start = get_unaligned_be16(data++);
 			f[i].end   = get_unaligned_be16(data++);
@@ -132,22 +139,28 @@ static int bnep_ctrl_set_netfilter(struct bnep_session *s, __be16 *data, int len
 			       f[i].start, f[i].end);
 		}
 
+		/*未填充的proto_filter，初始化为0*/
 		if (i < BNEP_MAX_PROTO_FILTERS)
 			memset(f + i, 0, sizeof(*f));
 
+		/*长度为0时，填充默认的proto_filter*/
 		if (n == 0)
 			bnep_set_default_proto_filter(s);
 
+		/*响应“成功”报文*/
 		bnep_send_rsp(s, BNEP_FILTER_NET_TYPE_RSP, BNEP_SUCCESS);
 	} else {
+		/*内容过长，响应失败*/
 		bnep_send_rsp(s, BNEP_FILTER_NET_TYPE_RSP, BNEP_FILTER_LIMIT_REACHED);
 	}
 #else
+	/*响应不支持*/
 	bnep_send_rsp(s, BNEP_FILTER_NET_TYPE_RSP, BNEP_FILTER_UNSUPPORTED_REQ);
 #endif
 	return 0;
 }
 
+/*设置tx方向容许发送的组播报文范围（不精确）*/
 static int bnep_ctrl_set_mcfilter(struct bnep_session *s, u8 *data, int len)
 {
 	int n;
@@ -175,34 +188,34 @@ static int bnep_ctrl_set_mcfilter(struct bnep_session *s, u8 *data, int len)
 		s->mc_filter = 0;
 
 		/* Always send broadcast */
-		set_bit(bnep_mc_hash(s->dev->broadcast), (ulong *) &s->mc_filter);
+		set_bit(bnep_mc_hash(s->dev->broadcast), (ulong *) &s->mc_filter);/*添加广播mac，总容许*/
 
 		/* Add address ranges to the multicast hash */
 		for (; n > 0; n--) {
 			u8 a1[6], *a2;
 
-			memcpy(a1, data, ETH_ALEN);
+			memcpy(a1, data, ETH_ALEN);/*取a1 mac配置*/
 			data += ETH_ALEN;
-			a2 = data;
+			a2 = data;/*取a2 mac配置*/
 			data += ETH_ALEN;
 
 			BT_DBG("mc filter %pMR -> %pMR", a1, a2);
 
 			/* Iterate from a1 to a2 */
-			set_bit(bnep_mc_hash(a1), (ulong *) &s->mc_filter);
+			set_bit(bnep_mc_hash(a1), (ulong *) &s->mc_filter);/*添加容许mac a1*/
 			while (memcmp(a1, a2, 6) < 0 && s->mc_filter != ~0LL) {
 				/* Increment a1 */
 				i = 5;
 				while (i >= 0 && ++a1[i--] == 0)
 					;
 
-				set_bit(bnep_mc_hash(a1), (ulong *) &s->mc_filter);
+				set_bit(bnep_mc_hash(a1), (ulong *) &s->mc_filter);/*添加容许mac a2*/
 			}
 		}
 	}
 
 	BT_DBG("mc filter hash 0x%llx", s->mc_filter);
-
+	/*响应“成功”报文*/
 	bnep_send_rsp(s, BNEP_FILTER_MULTI_ADDR_RSP, BNEP_SUCCESS);
 #else
 	bnep_send_rsp(s, BNEP_FILTER_MULTI_ADDR_RSP, BNEP_FILTER_UNSUPPORTED_REQ);
@@ -212,7 +225,7 @@ static int bnep_ctrl_set_mcfilter(struct bnep_session *s, u8 *data, int len)
 
 static int bnep_rx_control(struct bnep_session *s, void *data, int len)
 {
-	u8  cmd = *(u8 *)data;
+	u8  cmd = *(u8 *)data;/*取control message type*/
 	int err = 0;
 
 	data++;
@@ -224,7 +237,7 @@ static int bnep_rx_control(struct bnep_session *s, void *data, int len)
 	case BNEP_FILTER_NET_TYPE_RSP:
 	case BNEP_FILTER_MULTI_ADDR_RSP:
 		/* Ignore these for now */
-		break;
+		break;/*忽略以上响应报文*/
 
 	case BNEP_FILTER_NET_TYPE_SET:
 		err = bnep_ctrl_set_netfilter(s, data, len);
@@ -238,6 +251,7 @@ static int bnep_rx_control(struct bnep_session *s, void *data, int len)
 		/* Successful response should be sent only once */
 		if (test_bit(BNEP_SETUP_RESPONSE, &s->flags) &&
 		    !test_and_set_bit(BNEP_SETUP_RSP_SENT, &s->flags))
+			/*已置setup_response标记，且未置setup_rsp_sent标记，则响应成功*/
 			err = bnep_send_rsp(s, BNEP_SETUP_CONN_RSP,
 					    BNEP_SUCCESS);
 		else
@@ -246,6 +260,7 @@ static int bnep_rx_control(struct bnep_session *s, void *data, int len)
 		break;
 
 	default: {
+		/*其它全部回复未知*/
 			u8 pkt[3];
 			pkt[0] = BNEP_CONTROL;
 			pkt[1] = BNEP_CMD_NOT_UNDERSTOOD;
@@ -299,6 +314,9 @@ static u8 __bnep_rx_hlen[] = {
 	ETH_ALEN + 2  /* BNEP_COMPRESSED_DST_ONLY */
 };
 
+/*rx方向处理，收到的skb可能是1。control报文；2。非control报文；
+ * 这两类报文均可能包含BNEP_EXT_HEADER(当前仅支持包含control header)
+ * 对于control报文进行响应或忽略；对于非control报文送网络协议栈*/
 static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 {
 	struct net_device *dev = s->dev;
@@ -316,7 +334,7 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 		goto badframe;/*type保存的值必小于sizeof(__bnep_rx_hlen)*/
 
 	if ((type & BNEP_TYPE_MASK) == BNEP_CONTROL) {
-		/*处理control类报文*/
+		/*收到control类报文，处理*/
 		if (bnep_rx_control(s, skb->data, skb->len) < 0) {
 			dev->stats.tx_errors++;
 			kfree_skb(skb);
@@ -324,6 +342,7 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 		}
 
 		if (!(type & BNEP_EXT_HEADER)) {
+			/*无扩展头，则前面control处理流程已处理完成，释放此报文*/
 			kfree_skb(skb);
 			return 0;
 		}
@@ -346,12 +365,14 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 			return 0;
 		}
 	} else {
+		/*非ctrl报文*/
 		skb_reset_mac_header(skb);
 
 		/* Verify and pull out header */
 		if (!skb_pull(skb, __bnep_rx_hlen[type & BNEP_TYPE_MASK]))
-			goto badframe;
+			goto badframe;/*按类型校验header长度失败，丢世*/
 
+		/*此情况下前两个字节为三层协议编号，例如0x800*/
 		s->eh.h_proto = get_unaligned((__be16 *) (skb->data - 2));
 	}
 
@@ -381,11 +402,11 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 	/* Decompress header and construct ether frame */
 	switch (type & BNEP_TYPE_MASK) {
 	case BNEP_COMPRESSED:
-		__skb_put_data(nskb, &s->eh, ETH_HLEN);
+		__skb_put_data(nskb, &s->eh, ETH_HLEN);/*skb中没有以太头*/
 		break;
 
 	case BNEP_COMPRESSED_SRC_ONLY:
-		__skb_put_data(nskb, s->eh.h_dest, ETH_ALEN);
+		__skb_put_data(nskb, s->eh.h_dest, ETH_ALEN);/*skb只有srcmac*/
 		__skb_put_data(nskb, skb_mac_header(skb), ETH_ALEN);
 		put_unaligned(s->eh.h_proto, (__be16 *) __skb_put(nskb, 2));
 		break;
@@ -398,12 +419,13 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 
 	case BNEP_GENERAL:
 		__skb_put_data(nskb, skb_mac_header(skb), ETH_ALEN * 2);
-		put_unaligned(s->eh.h_proto, (__be16 *) __skb_put(nskb, 2));
+		put_unaligned(s->eh.h_proto, (__be16 *) __skb_put(nskb, 2));/*普通报文，自skb中取mac*/
 		break;
 	}
 
+	/*复制skb其它内容到nskb*/
 	skb_copy_from_linear_data(skb, __skb_put(nskb, skb->len), skb->len);
-	kfree_skb(skb);
+	kfree_skb(skb);/*释放skb*/
 
 	dev->stats.rx_packets++;
 	nskb->ip_summed = CHECKSUM_NONE;
@@ -418,19 +440,20 @@ badframe:
 }
 
 static u8 __bnep_tx_types[] = {
-	BNEP_GENERAL,
+	BNEP_GENERAL,/*0号，srcmac,dstmac均不可省略*/
 	BNEP_COMPRESSED_SRC_ONLY,
 	BNEP_COMPRESSED_DST_ONLY,
-	BNEP_COMPRESSED
+	BNEP_COMPRESSED/*3号，srcmac,dstmac均可省略*/
 };
 
+/*skb报文是一个以太包，先通过srcmac,dstmac检查是否可省略相应mac,并通过type传递省略情况*/
 static int bnep_tx_frame(struct bnep_session *s, struct sk_buff *skb)
 {
-	struct ethhdr *eh = (void *) skb->data;
+	struct ethhdr *eh = (void *) skb->data;/*以太头*/
 	struct socket *sock = s->sock;
 	struct kvec iv[3];
 	int len = 0, il = 0;
-	u8 type = 0;
+	u8 type = 0;/*报文类型初始化为0，即srcmac,dstmac均不可省略*/
 
 	BT_DBG("skb %p dev %p type %u", skb, skb->dev, skb->pkt_type);
 
@@ -439,38 +462,38 @@ static int bnep_tx_frame(struct bnep_session *s, struct sk_buff *skb)
 		goto send;
 	}
 
-	iv[il++] = (struct kvec) { &type, 1 };
+	iv[il++] = (struct kvec) { &type, 1 };/*1字节，指明省略情况*/
 	len++;
 
 	if (compress_src && ether_addr_equal(eh->h_dest, s->eh.h_source))
-		type |= 0x01;
+		type |= 0x01;/*srcmac可省略*/
 
 	if (compress_dst && ether_addr_equal(eh->h_source, s->eh.h_dest))
-		type |= 0x02;
+		type |= 0x02;/*dstmac可省略*/
 
 	if (type)
-		skb_pull(skb, ETH_ALEN * 2);
+		skb_pull(skb, ETH_ALEN * 2);/*跳过以太头*/
 
-	type = __bnep_tx_types[type];
+	type = __bnep_tx_types[type];/*取以太头省略情况*/
 	switch (type) {
 	case BNEP_COMPRESSED_SRC_ONLY:
-		iv[il++] = (struct kvec) { eh->h_source, ETH_ALEN };
+		iv[il++] = (struct kvec) { eh->h_source, ETH_ALEN };/*存入目的地址（恰与字面值相反）*/
 		len += ETH_ALEN;
 		break;
 
 	case BNEP_COMPRESSED_DST_ONLY:
-		iv[il++] = (struct kvec) { eh->h_dest, ETH_ALEN };
+		iv[il++] = (struct kvec) { eh->h_dest, ETH_ALEN };/*存入源地址（恰与字面值相反）*/
 		len += ETH_ALEN;
 		break;
 	}
 
 send:
-	iv[il++] = (struct kvec) { skb->data, skb->len };
+	iv[il++] = (struct kvec) { skb->data, skb->len };/*存入报文内容（无以太头）*/
 	len += skb->len;
 
 	/* FIXME: linearize skb */
 	{
-		len = kernel_sendmsg(sock, &s->msg, iv, il, len);/*发送*/
+		len = kernel_sendmsg(sock, &s->msg, iv, il, len/*发送总长度*/);/*交给发送bnep_session发送*/
 	}
 	kfree_skb(skb);
 
@@ -585,11 +608,11 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 	if (req->flags & ~valid_flags)
 		return -EINVAL;
 
-	baswap((void *) dst, &l2cap_pi(sock->sk)->chan->dst);/*目的mac*/
-	baswap((void *) src, &l2cap_pi(sock->sk)->chan->src);/*源mac*/
+	baswap((void *) dst, &l2cap_pi(sock->sk)->chan->dst);/*设置目的mac dst*/
+	baswap((void *) src, &l2cap_pi(sock->sk)->chan->src);/*设置源mac src*/
 
 	/* session struct allocated as private part of net_device */
-	dev = alloc_netdev(sizeof(struct bnep_session),
+	dev = alloc_netdev(sizeof(struct bnep_session)/*netdev的私有结构指定为bnep session*/,
 			   (*req->device) ? req->device : "bnep%d",
 			   NET_NAME_UNKNOWN,
 			   bnep_net_setup);/*创建bnep网络设备*/
@@ -601,10 +624,10 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 	ss = __bnep_get_session(dst);
 	if (ss && ss->state == BT_CONNECTED) {
 		err = -EEXIST;
-		goto failed;
+		goto failed;/*此session已存在*/
 	}
 
-	s = netdev_priv(dev);/*取bnep网络设备私有结构*/
+	s = netdev_priv(dev);/*取bnep网络设备私有结构，即bnep_session*/
 
 	/* This is rx header therefore addresses are swapped.
 	 * ie. eh.h_dest is our local address. */
@@ -642,10 +665,10 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 	if (err)
 		goto failed;
 
-	__bnep_link_session(s);
+	__bnep_link_session(s);/*将session加入全局链表*/
 
 	__module_get(THIS_MODULE);
-	/*这个线程负责报文在netdev与socket之间搬送*/
+	/*这个线程负责报文在netdev与socket之间的搬送*/
 	s->task = kthread_run(bnep_session, s, "kbnepd %s", dev->name);
 	if (IS_ERR(s->task)) {
 		/* Session thread start failed, gotta cleanup. */
@@ -696,11 +719,11 @@ static void __bnep_copy_ci(struct bnep_conninfo *ci, struct bnep_session *s)
 	u32 valid_flags = BIT(BNEP_SETUP_RESPONSE);
 
 	memset(ci, 0, sizeof(*ci));
-	memcpy(ci->dst, s->eh.h_source, ETH_ALEN);
+	memcpy(ci->dst, s->eh.h_source, ETH_ALEN);/*设备地址*/
 	strcpy(ci->device, s->dev->name);/*复制bnep设备名称*/
 	ci->flags = s->flags & valid_flags;
 	ci->state = s->state;
-	ci->role  = s->role;
+	ci->role  = s->role;/*复制本端角色*/
 }
 
 /*按请求填充bnep_session列表*/
@@ -711,11 +734,13 @@ int bnep_get_connlist(struct bnep_connlist_req *req)
 
 	down_read(&bnep_session_sem);
 
+	/*遍历所有session*/
 	list_for_each_entry(s, &bnep_session_list, list) {
 		struct bnep_conninfo ci;
 
 		__bnep_copy_ci(&ci, s);
 
+		/*填充session信息给用户态*/
 		if (copy_to_user(req->ci, &ci, sizeof(ci))) {
 			err = -EFAULT;
 			break;

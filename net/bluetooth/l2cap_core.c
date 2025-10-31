@@ -176,7 +176,7 @@ static struct l2cap_chan *__l2cap_global_chan_by_addr(__le16 psm, bdaddr_t *src,
 			continue;
 
 		if (c->sport == psm && !bacmp(&c->src, src))
-			return c;
+			return c;/*psm 与src均相等*/
 	}
 	return NULL;
 }
@@ -200,10 +200,11 @@ int l2cap_add_psm(struct l2cap_chan *chan, bdaddr_t *src, __le16 psm)
 		chan->sport = psm;
 		err = 0;
 	} else {
-		/*PSm为零的情况*/
+		/*psm为零的情况*/
 		u16 p, start, end, incr;
 
 		if (chan->src_type == BDADDR_BREDR) {
+			/*BR/EDR的动态port范围*/
 			start = L2CAP_PSM_DYN_START;
 			end = L2CAP_PSM_AUTO_END;
 			incr = 2;
@@ -214,12 +215,12 @@ int l2cap_add_psm(struct l2cap_chan *chan, bdaddr_t *src, __le16 psm)
 			incr = 1;
 		}
 
-		/*遍历start,end在其间查找空间的port*/
+		/*遍历start,end在其间查找空间的port，每次检测增量为incr*/
 		err = -EINVAL;
 		for (p = start; p <= end; p += incr)
 			if (!__l2cap_global_chan_by_addr(cpu_to_le16(p), src,
 							 chan->src_type)) {
-				/*这个psm可以使用*/
+				/*不存在与这个psm冲突的chan,这个psm可以使用*/
 				chan->psm   = cpu_to_le16(p);
 				chan->sport = cpu_to_le16(p);
 				err = 0;
@@ -812,6 +813,7 @@ static void l2cap_chan_connect_reject(struct l2cap_chan *chan)
 	rsp.result = cpu_to_le16(result);
 	rsp.status = cpu_to_le16(L2CAP_CS_NO_INFO);
 
+	/*发送响应*/
 	l2cap_send_cmd(conn, chan->ident, L2CAP_CONN_RSP, sizeof(rsp), &rsp);
 }
 
@@ -1244,6 +1246,7 @@ void l2cap_send_conn_req(struct l2cap_chan *chan)
 
 	set_bit(CONF_CONNECT_PEND, &chan->conf_state);
 
+	/*发送l2cap conn req命令*/
 	l2cap_send_cmd(conn, chan->ident, L2CAP_CONN_REQ, sizeof(req), &req);
 }
 

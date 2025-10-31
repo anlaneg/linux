@@ -47,6 +47,7 @@ static int bnep_net_close(struct net_device *dev)
 	return 0;
 }
 
+/*构造组播列表控制报文，交给sk->sk_write_queue*/
 static void bnep_net_set_mc_list(struct net_device *dev)
 {
 #ifdef CONFIG_BT_BNEP_MC_FILTER
@@ -69,13 +70,13 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 	__skb_put(skb, sizeof(*r));
 
 	r->type = BNEP_CONTROL;
-	r->ctrl = BNEP_FILTER_MULTI_ADDR_SET;
+	r->ctrl = BNEP_FILTER_MULTI_ADDR_SET;/*设置组播地址*/
 
 	if (dev->flags & (IFF_PROMISC | IFF_ALLMULTI)) {
 		u8 start[ETH_ALEN] = { 0x01 };
 
 		/* Request all addresses */
-		__skb_put_data(skb, start, ETH_ALEN);
+		__skb_put_data(skb, start, ETH_ALEN);/*这种要全部容许，下发从0x01...-0xff之间*/
 		__skb_put_data(skb, dev->broadcast, ETH_ALEN);
 		r->len = htons(ETH_ALEN * 2);
 	} else {
@@ -84,13 +85,13 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 
 		if (dev->flags & IFF_BROADCAST) {
 			__skb_put_data(skb, dev->broadcast, ETH_ALEN);
-			__skb_put_data(skb, dev->broadcast, ETH_ALEN);
+			__skb_put_data(skb, dev->broadcast, ETH_ALEN);/*这种只容许广播mac,下发一个*/
 		}
 
 		/* FIXME: We should group addresses here. */
 
 		i = 0;
-		netdev_for_each_mc_addr(ha, dev) {
+		netdev_for_each_mc_addr(ha, dev) {/*填写dev设备上所有组播*/
 			if (i == BNEP_MAX_MULTICAST_FILTERS)
 				break;
 			__skb_put_data(skb, ha->addr, ETH_ALEN);
@@ -101,7 +102,7 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 		r->len = htons(skb->len - len);
 	}
 
-	skb_queue_tail(&sk->sk_write_queue, skb);
+	skb_queue_tail(&sk->sk_write_queue, skb);/*将此skb挂在sk->sk_write_queue上*/
 	wake_up_interruptible(sk_sleep(sk));
 #endif
 }
@@ -109,7 +110,7 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 static int bnep_net_set_mac_addr(struct net_device *dev, void *arg)
 {
 	BT_DBG("%s", dev->name);
-	return 0;
+	return 0;/*空实现*/
 }
 
 static void bnep_net_timeout(struct net_device *dev, unsigned int txqueue)
@@ -154,7 +155,7 @@ static int bnep_net_proto_filter(struct sk_buff *skb, struct bnep_session *s)
 
 	for (i = 0; i < BNEP_MAX_PROTO_FILTERS && f[i].end; i++) {
 		if (proto >= f[i].start && proto <= f[i].end)
-			return 0;/*协议容许通过*/
+			return 0;/*协议在此范围内容许通过*/
 	}
 
 	BT_DBG("BNEP: filtered skb %p, proto 0x%.4x", skb, proto);

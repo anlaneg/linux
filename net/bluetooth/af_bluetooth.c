@@ -719,6 +719,7 @@ int bt_sock_wait_state(struct sock *sk, int state, unsigned long timeo)
 	set_current_state(TASK_INTERRUPTIBLE);
 	while (sk->sk_state != state) {
 		if (!timeo) {
+			/*超时时间为0*/
 			err = -EINPROGRESS;
 			break;
 		}
@@ -729,7 +730,7 @@ int bt_sock_wait_state(struct sock *sk, int state, unsigned long timeo)
 		}
 
 		release_sock(sk);
-		timeo = schedule_timeout(timeo);
+		timeo = schedule_timeout(timeo);/*等待socket状态变更*/
 		lock_sock(sk);
 		set_current_state(TASK_INTERRUPTIBLE);
 

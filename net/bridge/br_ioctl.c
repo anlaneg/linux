@@ -406,6 +406,7 @@ int br_ioctl_stub(struct net *net, unsigned int cmd, void __user *uarg)
 	struct ifreq ifr;
 
 	if (cmd == SIOCBRADDIF || cmd == SIOCBRDELIF) {
+		/*添加/删除接口*/
 		void __user *data;
 		char *colon;
 
@@ -416,7 +417,7 @@ int br_ioctl_stub(struct net *net, unsigned int cmd, void __user *uarg)
 			return -EFAULT;
 
 		ifr.ifr_name[IFNAMSIZ - 1] = 0;
-		colon = strchr(ifr.ifr_name, ':');
+		colon = strchr(ifr.ifr_name, ':');/*如接口名称有':'，则替换为'\0'*/
 		if (colon)
 			*colon = 0;
 	}
@@ -446,8 +447,10 @@ int br_ioctl_stub(struct net *net, unsigned int cmd, void __user *uarg)
 
 		buf[IFNAMSIZ-1] = 0;
 		if (cmd == SIOCBRADDBR)
+			/*添加bridge*/
 			ret = br_add_bridge(net, buf);
 		else
+			/*删除bridge*/
 			ret = br_del_bridge(net, buf);
 	}
 		break;

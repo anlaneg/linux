@@ -82,7 +82,7 @@ static int l2cap_validate_le_psm(u16 psm)
 	return 0;
 }
 
-static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
+static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr/*要绑定的地址*/, int alen)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -109,14 +109,14 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 		/* We only allow ATT user space socket */
 		if (la.l2_cid &&
 		    la.l2_cid != cpu_to_le16(L2CAP_CID_ATT))
-			return -EINVAL;
+			return -EINVAL;/*地址类型为le时，用户态cid只能是L2CAP_CID_ATT*/
 	}
 
 	lock_sock(sk);
 
 	if (sk->sk_state != BT_OPEN) {
 		err = -EBADFD;
-		goto done;
+		goto done;/*仅可在open状态时调用*/
 	}
 
 	if (la.l2_psm) {
@@ -152,7 +152,7 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	case L2CAP_CHAN_CONN_ORIENTED:
 		if (__le16_to_cpu(la.l2_psm) == L2CAP_PSM_SDP ||
 		    __le16_to_cpu(la.l2_psm) == L2CAP_PSM_RFCOMM)
-			chan->sec_level = BT_SECURITY_SDP;
+			chan->sec_level = BT_SECURITY_SDP;/*针对以上两种psm,设置BT_SECURITY_SDP*/
 		break;
 	case L2CAP_CHAN_RAW:
 		chan->sec_level = BT_SECURITY_SDP;
@@ -259,6 +259,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	    chan->mode != L2CAP_MODE_EXT_FLOWCTL)
 		chan->mode = L2CAP_MODE_LE_FLOWCTL;
 
+	/*执行连接*/
 	err = l2cap_chan_connect(chan, la.l2_psm, __le16_to_cpu(la.l2_cid),
 				 &la.l2_bdaddr, la.l2_bdaddr_type,
 				 READ_ONCE(sk->sk_sndtimeo));
@@ -268,7 +269,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	lock_sock(sk);
 
 	err = bt_sock_wait_state(sk, BT_CONNECTED,
-				 sock_sndtimeo(sk, flags & O_NONBLOCK));
+				 sock_sndtimeo(sk, flags & O_NONBLOCK));/*等待状态变更*/
 
 	release_sock(sk);
 
@@ -609,9 +610,10 @@ static int l2cap_sock_getsockopt(struct socket *sock, int level, int optname,
 	case BT_DEFER_SETUP:
 		if (sk->sk_state != BT_BOUND && sk->sk_state != BT_LISTEN) {
 			err = -EINVAL;
-			break;
+			break;/*只能在bind,listen情况下调用*/
 		}
 
+		/*返回socket是否有DEFER_SETUP标记*/
 		if (put_user(test_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags),
 			     (u32 __user *) optval))
 			err = -EFAULT;
@@ -712,6 +714,7 @@ static int l2cap_sock_getsockopt(struct socket *sock, int level, int optname,
 	return err;
 }
 
+/*mtu过小检查*/
 static bool l2cap_valid_mtu(struct l2cap_chan *chan, u16 mtu)
 {
 	switch (chan->scid) {
@@ -744,15 +747,18 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 	switch (optname) {
 	case L2CAP_OPTIONS:
 		if (bdaddr_type_is_le(chan->src_type)) {
+			/*低功耗不容许这样设置*/
 			err = -EINVAL;
 			break;
 		}
 
 		if (sk->sk_state == BT_CONNECTED) {
+			/*已完成连接则不容许设置*/
 			err = -EINVAL;
 			break;
 		}
 
+		/*先设置当前值*/
 		opts.imtu     = chan->imtu;
 		opts.omtu     = chan->omtu;
 		opts.flush_to = chan->flush_to;
@@ -761,6 +767,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 		opts.max_tx   = chan->max_tx;
 		opts.txwin_size = chan->tx_win;
 
+		/*利用用户设置的值填充opts*/
 		err = copy_safe_from_sockptr(&opts, sizeof(opts), optval,
 					     optlen);
 		if (err)
@@ -794,6 +801,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 		if (err < 0)
 			break;
 
+		/*使用参数给定的值*/
 		chan->mode = opts.mode;
 
 		BT_DBG("mode 0x%2.2x", chan->mode);
@@ -898,6 +906,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 	BT_DBG("sk %p", sk);
 
 	if (level == SOL_L2CAP)
+		/*设置sol_l2cap*/
 		return l2cap_sock_setsockopt_old(sock, optname, optval, optlen);
 
 	if (level != SOL_BLUETOOTH)
@@ -910,6 +919,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		if (chan->chan_type != L2CAP_CHAN_CONN_ORIENTED &&
 		    chan->chan_type != L2CAP_CHAN_FIXED &&
 		    chan->chan_type != L2CAP_CHAN_RAW) {
+			/*不是以上三种，则报错*/
 			err = -EINVAL;
 			break;
 		}
@@ -922,14 +932,14 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 
 		if (sec.level < BT_SECURITY_LOW ||
 		    sec.level > BT_SECURITY_FIPS) {
-			err = -EINVAL;
+			err = -EINVAL;/*设置的level不正确*/
 			break;
 		}
 
-		chan->sec_level = sec.level;
+		chan->sec_level = sec.level;/*设置为用户指明的sec level*/
 
 		if (!chan->conn)
-			break;
+			break;/*connect还未创建，则跳出*/
 
 		conn = chan->conn;
 
@@ -959,7 +969,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 
 	case BT_DEFER_SETUP:
 		if (sk->sk_state != BT_BOUND && sk->sk_state != BT_LISTEN) {
-			err = -EINVAL;
+			err = -EINVAL;/*仅支持bind,listen情况*/
 			break;
 		}
 
@@ -968,6 +978,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		if (opt) {
+			/*设置DEFER_SETUP标记*/
 			set_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
 			set_bit(FLAG_DEFER_SETUP, &chan->flags);
 		} else {
@@ -1959,7 +1970,7 @@ static const struct proto_ops l2cap_sock_ops = {
 	.owner		= THIS_MODULE,
 	.release	= l2cap_sock_release,
 	.bind		= l2cap_sock_bind,
-	.connect	= l2cap_sock_connect,
+	.connect	= l2cap_sock_connect,/*执行到对端的连接*/
 	.listen		= l2cap_sock_listen,
 	.accept		= l2cap_sock_accept,
 	.getname	= l2cap_sock_getname,

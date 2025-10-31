@@ -27,10 +27,15 @@
 #define BNEP_SVC_GN	0x1117
 
 /* Packet types */
+/*普通报文（含完整以太头）*/
 #define BNEP_GENERAL			0x00
+/*控制类报文*/
 #define BNEP_CONTROL			0x01
+/*不含以太头*/
 #define BNEP_COMPRESSED			0x02
+/*仅含srcmac*/
 #define BNEP_COMPRESSED_SRC_ONLY	0x03
+/*仅含dstmac*/
 #define BNEP_COMPRESSED_DST_ONLY	0x04
 
 /* Control types */
@@ -38,6 +43,7 @@
 #define BNEP_SETUP_CONN_REQ		0x01
 #define BNEP_SETUP_CONN_RSP		0x02
 #define BNEP_FILTER_NET_TYPE_SET	0x03
+/*BNEP_FILTER_NET_TYPE_SET响应cmd*/
 #define BNEP_FILTER_NET_TYPE_RSP	0x04
 #define BNEP_FILTER_MULTI_ADDR_SET	0x05
 #define BNEP_FILTER_MULTI_ADDR_RSP	0x06
@@ -84,6 +90,7 @@ struct bnep_set_filter_req {
 	__u8 list[];
 } __packed;
 
+/*控制类响应报文*/
 struct bnep_control_rsp {
 	__u8 type;
 	__u8 ctrl;
@@ -110,15 +117,17 @@ struct bnep_connadd_req {
 	int   sock;		/* Connected socket */
 	__u32 flags;
 	__u16 role;
-	/*网络设备名称*/
+	/*指定的网络设备名称*/
 	char  device[16];	/* Name of the Ethernet device */
 };
 
+/*删除链接*/
 struct bnep_conndel_req {
 	__u32 flags;
 	__u8  dst[ETH_ALEN];
 };
 
+/*连接信息*/
 struct bnep_conninfo {
 	__u32 flags;
 	__u16 role;
@@ -132,6 +141,7 @@ struct bnep_connlist_req {
 	struct bnep_conninfo __user *ci;
 };
 
+/*协议起始号，如果两者一致，则仅一个协议号*/
 struct bnep_proto_filter {
 	__u16 start;
 	__u16 end;
@@ -152,10 +162,10 @@ struct bnep_session {
 	atomic_t      terminate;/*标非0时，此bnep_session需要销毁*/
 	struct task_struct *task;/*kernel线程bnep_session对应的task*/
 
-	struct ethhdr eh;
-	struct msghdr msg;
+	struct ethhdr eh;/*以太头信息*/
+	struct msghdr msg;/*临时变量，通完这sendmsg接口发送报文用*/
 
-	struct bnep_proto_filter proto_filter[BNEP_MAX_PROTO_FILTERS];/*被记录的协议可以出去*/
+	struct bnep_proto_filter proto_filter[BNEP_MAX_PROTO_FILTERS];/*被记录的协议可以出去（start,end方式）*/
 	unsigned long long mc_filter;/*被命中的目的mac可以出去*/
 
 	/*对应的l2cap socket,此socket收到的报文（sk->sk_receive_queue）将转netdev收取*/

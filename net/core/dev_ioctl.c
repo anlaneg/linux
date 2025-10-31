@@ -525,6 +525,7 @@ static int dev_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 
+	/*有此回调的调用此回调完成处理*/
 	if (ops->ndo_siocdevprivate) {
 		int ret = -ENODEV;
 
@@ -536,6 +537,7 @@ static int dev_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 		return ret;
 	}
 
+	/*无此回调的响应不支持*/
 	return -EOPNOTSUPP;
 }
 

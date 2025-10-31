@@ -30,6 +30,7 @@
 
 #include "bnep.h"
 
+/*用于记录系统所有bnep socket*/
 static struct bt_sock_list bnep_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(bnep_sk_list.lock)
 };
@@ -64,14 +65,15 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 	switch (cmd) {
 	case BNEPCONNADD:
-		/*添加连接，注入socket形成基于蓝牙的netdev网络*/
+		/*添加连接，注入l2cap socket形成基于蓝牙的netdev网络*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
+		/*复制用户态指明的参数*/
 		if (copy_from_user(&ca, argp, sizeof(ca)))
 			return -EFAULT;
 
-		/*由fd获取socket*/
+		/*由ca.sock获取nsock*/
 		nsock = sockfd_lookup(ca.sock, &err);
 		if (!nsock)
 			return err;

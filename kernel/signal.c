@@ -205,8 +205,8 @@ int next_signal(struct sigpending *pending, sigset_t *mask)
 	unsigned long i, *s, *m, x;
 	int sig = 0;
 
-	s = pending->signal.sig;
-	m = mask->sig;
+	s = pending->signal.sig;/*pending的信号*/
+	m = mask->sig;/*关注的信号mask*/
 
 	/*
 	 * Handle the first word specially: it contains the
@@ -214,10 +214,11 @@ int next_signal(struct sigpending *pending, sigset_t *mask)
 	 */
 	x = *s &~ *m;
 	if (x) {
+		/*包含被关注的信号*/
 		if (x & SYNCHRONOUS_MASK)
 			x &= SYNCHRONOUS_MASK;
 		sig = ffz(~x) + 1;
-		return sig;
+		return sig;/*返回信号值*/
 	}
 
 	switch (_NSIG_WORDS) {
@@ -550,7 +551,7 @@ bool unhandled_signal(struct task_struct *tsk, int sig)
 	return !tsk->ptrace;
 }
 
-static void collect_signal(int sig, struct sigpending *list, kernel_siginfo_t *info,
+static void collect_signal(int sig, struct sigpending *list/*信号pending链表*/, kernel_siginfo_t *info,
 			   struct sigqueue **timer_sigq)
 {
 	struct sigqueue *q, *first = NULL;
@@ -561,9 +562,11 @@ static void collect_signal(int sig, struct sigpending *list, kernel_siginfo_t *i
 	*/
 	list_for_each_entry(q, &list->list, list) {
 		if (q->info.si_signo == sig) {
+			/*匹配到信号sig*/
 			if (first)
+				/*非首次匹配此信号*/
 				goto still_pending;
-			first = q;
+			first = q;/*首次匹配到此信号*/
 		}
 	}
 
@@ -571,8 +574,8 @@ static void collect_signal(int sig, struct sigpending *list, kernel_siginfo_t *i
 
 	if (first) {
 still_pending:
-		list_del_init(&first->list);
-		copy_siginfo(info, &first->info);
+		list_del_init(&first->list);/*移除此sigqueue*/
+		copy_siginfo(info, &first->info);/*复制此信号信息到info*/
 
 		/*
 		 * posix-timer signals are preallocated and freed when the last
@@ -585,7 +588,7 @@ still_pending:
 			*timer_sigq = first;
 		else
 			__sigqueue_free(first);
-	} else {
+	} else {/*信号不在pending链上，填充info*/
 		/*
 		 * Ok, it wasn't in the queue.  This must be
 		 * a fast-pathed signal or we must have been
@@ -600,8 +603,8 @@ still_pending:
 	}
 }
 
-static int __dequeue_signal(struct sigpending *pending, sigset_t *mask,
-			    kernel_siginfo_t *info, struct sigqueue **timer_sigq)
+static int __dequeue_signal(struct sigpending *pending, sigset_t *mask/*关注的信号mask*/,
+			    kernel_siginfo_t *info/*出参，信号关联信息*/, struct sigqueue **timer_sigq)
 {
 	int sig = next_signal(pending, mask);
 
@@ -615,7 +618,7 @@ static int __dequeue_signal(struct sigpending *pending, sigset_t *mask,
  * caller provided siginfo and return the signal number. Otherwise return
  * 0.
  */
-int dequeue_signal(sigset_t *mask, kernel_siginfo_t *info, enum pid_type *type)
+int dequeue_signal(sigset_t *mask/*关注的信号mask*/, kernel_siginfo_t *info, enum pid_type *type)
 {
 	struct task_struct *tsk = current;
 	struct sigqueue *timer_sigq;

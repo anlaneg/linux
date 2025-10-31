@@ -74,7 +74,7 @@ static inline void sigaddset(sigset_t *set, int _sig)
 
 static inline void sigdelset(sigset_t *set, int _sig)
 {
-    //自sigset中移除指定信号
+    //自sigset中移除指定信号_sig
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
 		set->sig[0] &= ~(1UL << sig);

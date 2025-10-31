@@ -1262,6 +1262,7 @@ int br_ioctl_call(struct net *net, unsigned int cmd, void __user *uarg)
 
 	mutex_lock(&br_ioctl_mutex);
 	if (br_ioctl_hook)
+		/*调用ioctl hook*/
 		err = br_ioctl_hook(net, cmd, uarg);
 	mutex_unlock(&br_ioctl_mutex);
 
@@ -1332,6 +1333,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	sk = sock->sk;
 	net = sock_net(sk);
 	if (unlikely(cmd >= SIOCDEVPRIVATE && cmd <= (SIOCDEVPRIVATE + 15))) {
+		/*针对由SIOCDEVPRIVATE开头的cmd*/
 		struct ifreq ifr;
 		void __user *data;
 		bool need_copyout;
@@ -1361,7 +1363,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			err = put_user(f_getown(sock->file),
 				       (int __user *)argp);
 			break;
-			//处理br相关的ioctl命令
+			//处理br相关的几个ioctl命令
 		case SIOCGIFBR:
 		case SIOCSIFBR:
 		case SIOCBRADDBR:

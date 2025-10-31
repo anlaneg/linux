@@ -689,7 +689,7 @@ void __br_set_topology_change(struct net_bridge *br, unsigned char val)
 
 void __br_set_forward_delay(struct net_bridge *br, unsigned long t)
 {
-	br->bridge_forward_delay = t;
+	br->bridge_forward_delay = t;/*设置延迟时间*/
 	if (br_is_root_bridge(br))
 		br->forward_delay = br->bridge_forward_delay;
 }
@@ -702,7 +702,7 @@ int br_set_forward_delay(struct net_bridge *br, unsigned long val)
 	spin_lock_bh(&br->lock);
 	if (br->stp_enabled != BR_NO_STP &&
 	    (t < BR_MIN_FORWARD_DELAY || t > BR_MAX_FORWARD_DELAY))
-		goto unlock;
+		goto unlock;/*检查delay时间的合法性*/
 
 	__br_set_forward_delay(br, t);
 	err = 0;

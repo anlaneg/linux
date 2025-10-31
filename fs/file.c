@@ -1459,10 +1459,10 @@ static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 	struct files_struct *files = current->files;
 
 	if ((flags & ~O_CLOEXEC) != 0)
-		return -EINVAL;
+		return -EINVAL;/*只支持cloexec标记*/
 
 	if (unlikely(oldfd == newfd))
-		return -EINVAL;
+		return -EINVAL;/*两者不得相等*/
 
 	if (newfd >= rlimit(RLIMIT_NOFILE))
 		/*新的fd超过此进程设置的最大数*/
@@ -1472,7 +1472,7 @@ static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 	err = expand_files(files, newfd);
 	file = files_lookup_fd_locked(files, oldfd);
 	if (unlikely(!file))
-		goto Ebadf;
+		goto Ebadf;/*oldfd无对应的file*/
 	if (unlikely(err < 0)) {
 		if (err == -EMFILE)
 			goto Ebadf;
@@ -1511,15 +1511,16 @@ SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
 	return ksys_dup3(oldfd, newfd, 0);
 }
 
+/*系统调用dup(int fd)*/
 SYSCALL_DEFINE1(dup, unsigned int, fildes)
 {
 	int ret = -EBADF;
-	struct file *file = fget_raw(fildes);
+	struct file *file = fget_raw(fildes);/*取得fildes对应的file*/
 
 	if (file) {
-		ret = get_unused_fd_flags(0);
+		ret = get_unused_fd_flags(0);/*新申请一个fd,指明exec时此fd不关闭*/
 		if (ret >= 0)
-			fd_install(ret, file);
+			fd_install(ret, file);/*此fd与file映射*/
 		else
 			fput(file);
 	}

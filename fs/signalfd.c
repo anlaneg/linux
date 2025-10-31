@@ -53,13 +53,15 @@ static __poll_t signalfd_poll(struct file *file, poll_table *wait)
 	struct signalfd_ctx *ctx = file->private_data;
 	__poll_t events = 0;
 
+	/*将自已加入等待队列*/
 	poll_wait(file, &current->sighand->signalfd_wqh, wait);
 
 	spin_lock_irq(&current->sighand->siglock);
+	/*检测是否有关心的信号(ctx->sigmask)发生*/
 	if (next_signal(&current->pending, &ctx->sigmask) ||
 	    next_signal(&current->signal->shared_pending,
 			&ctx->sigmask))
-		events |= EPOLLIN;
+		events |= EPOLLIN;/*有信号，触发pollin事件*/
 	spin_unlock_irq(&current->sighand->siglock);
 
 	return events;
@@ -77,7 +79,7 @@ static int signalfd_copyinfo(struct iov_iter *to, kernel_siginfo_t const *kinfo)
 	/*
 	 * Unused members should be zero ...
 	 */
-	memset(&new, 0, sizeof(new));
+	memset(&new, 0, sizeof(new));/*kinfo填充到new*/
 
 	/*
 	 * If you change siginfo_t structure, please be sure
@@ -145,6 +147,7 @@ static int signalfd_copyinfo(struct iov_iter *to, kernel_siginfo_t const *kinfo)
 		break;
 	}
 
+	/*复制new的内容到to中*/
 	if (!copy_to_iter_full(&new, sizeof(struct signalfd_siginfo), to))
 		return -EFAULT;
 
@@ -163,7 +166,7 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 	switch (ret) {
 	case 0:
 		if (!nonblock)
-			break;
+			break;/*容许阻塞，跳出，等待*/
 		ret = -EAGAIN;
 		fallthrough;
 	default:
@@ -171,26 +174,29 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 		return ret;
 	}
 
+	/*加入等待队列*/
 	add_wait_queue(&current->sighand->signalfd_wqh, &wait);
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		ret = dequeue_signal(&ctx->sigmask, info, &type);
 		if (ret != 0)
+			/*dequeue信号成功*/
 			break;
 		if (signal_pending(current)) {
 			ret = -ERESTARTSYS;
 			break;
 		}
 		spin_unlock_irq(&current->sighand->siglock);
-		schedule();
+		schedule();/*调度走当前进程*/
 		spin_lock_irq(&current->sighand->siglock);
 	}
 	spin_unlock_irq(&current->sighand->siglock);
 
+	/*当前进程移出等待队列*/
 	remove_wait_queue(&current->sighand->signalfd_wqh, &wait);
 	__set_current_state(TASK_RUNNING);
 
-	return ret;
+	return ret;/*信号值*/
 }
 
 /*
@@ -209,8 +215,10 @@ static ssize_t signalfd_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	count /= sizeof(struct signalfd_siginfo);
 	if (!count)
+		/*不足填充*/
 		return -EINVAL;
 
+	/*是否非阻塞*/
 	nonblock = file->f_flags & O_NONBLOCK || iocb->ki_flags & IOCB_NOWAIT;
 	do {
 		ret = signalfd_dequeue(ctx, &info, nonblock);
@@ -238,27 +246,30 @@ static void signalfd_show_fdinfo(struct seq_file *m, struct file *f)
 }
 #endif
 
+/*用于signalfd对应的file ops*/
 static const struct file_operations signalfd_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= signalfd_show_fdinfo,
 #endif
 	.release	= signalfd_release,
 	.poll		= signalfd_poll,
-	.read_iter	= signalfd_read_iter,
+	.read_iter	= signalfd_read_iter,/*用于实现信号读取*/
 	.llseek		= noop_llseek,
 };
 
-static int do_signalfd4(int ufd, sigset_t *mask, int flags)
+static int do_signalfd4(int ufd, sigset_t *mask, int flags/*标记*/)
 {
 	struct signalfd_ctx *ctx;
 
 	/* Check the SFD_* constants for consistency.  */
 	BUILD_BUG_ON(SFD_CLOEXEC != O_CLOEXEC);
-	BUILD_BUG_ON(SFD_NONBLOCK != O_NONBLOCK);
+	BUILD_BUG_ON(SFD_NONBLOCK != O_NONBLOCK);/*标记定义必须一致*/
 
 	if (flags & ~(SFD_CLOEXEC | SFD_NONBLOCK))
+		/*遇到不认识的标记*/
 		return -EINVAL;
 
+	/*mask中不得到SIGKILL,SIGSTOP*/
 	sigdelsetmask(mask, sigmask(SIGKILL) | sigmask(SIGSTOP));
 	signotset(mask);
 
@@ -273,18 +284,21 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 
 		ufd = get_unused_fd_flags(flags & O_CLOEXEC);
 		if (ufd < 0) {
+			/*无可用fd*/
 			kfree(ctx);
 			return ufd;
 		}
 
+		/*申请signal file*/
 		file = anon_inode_getfile_fmode("[signalfd]", &signalfd_fops,
-					ctx, O_RDWR | (flags & O_NONBLOCK),
+					ctx/*指定私有结构体*/, O_RDWR | (flags & O_NONBLOCK),
 					FMODE_NOWAIT);
 		if (IS_ERR(file)) {
 			put_unused_fd(ufd);
 			kfree(ctx);
 			return PTR_ERR(file);
 		}
+		/*file与fd关联*/
 		fd_install(ufd, file);
 	} else {
 		CLASS(fd, f)(ufd);
@@ -292,12 +306,12 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 			return -EBADF;
 		ctx = fd_file(f)->private_data;
 		if (fd_file(f)->f_op != &signalfd_fops)
-			return -EINVAL;
+			return -EINVAL;/*非signal fd*/
 		spin_lock_irq(&current->sighand->siglock);
 		ctx->sigmask = *mask;
 		spin_unlock_irq(&current->sighand->siglock);
 
-		wake_up(&current->sighand->signalfd_wqh);
+		wake_up(&current->sighand->signalfd_wqh);/*唤醒等待者*/
 	}
 
 	return ufd;
@@ -341,6 +355,7 @@ static long do_compat_signalfd4(int ufd,
 	return do_signalfd4(ufd, &mask, flags);
 }
 
+/*定义系统调用signalfd4*/
 COMPAT_SYSCALL_DEFINE4(signalfd4, int, ufd,
 		     const compat_sigset_t __user *, user_mask,
 		     compat_size_t, sigsetsize,

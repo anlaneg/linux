@@ -31,7 +31,7 @@ struct sigqueue {
 
 struct sigpending {
 	struct list_head list;
-	sigset_t signal;
+	sigset_t signal;/*list中包含的信号*/
 };
 
 struct sigaction {
