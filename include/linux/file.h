@@ -41,6 +41,7 @@ struct fd {
 #define FDPUT_FPUT       1
 #define FDPUT_POS_UNLOCK 2
 
+/*struct fd*结构体转struct file* */
 #define fd_file(f) ((struct file *)((f).word & ~(FDPUT_FPUT|FDPUT_POS_UNLOCK)))
 static inline bool fd_empty(struct fd f)
 {
@@ -81,7 +82,8 @@ static inline void fdput_pos(struct fd f)
 	fdput(f);
 }
 
-DEFINE_CLASS(fd, struct fd, fdput(_T), fdget(fd), int fd)
+/*定义结构体fd的初始化方式及销毁方式*/
+DEFINE_CLASS(fd, struct fd, fdput(_T)/*减少引用*/, fdget(fd)/*增加引用*/, int fd)
 DEFINE_CLASS(fd_raw, struct fd, fdput(_T), fdget_raw(fd), int fd)
 DEFINE_CLASS(fd_pos, struct fd, fdput_pos(_T), fdget_pos(fd), int fd)
 

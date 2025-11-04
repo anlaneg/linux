@@ -856,29 +856,29 @@ static int l2cap_set_mode(struct l2cap_chan *chan, u8 mode)
 	switch (mode) {
 	case BT_MODE_BASIC:
 		if (bdaddr_type_is_le(chan->src_type))
-			return -EINVAL;
+			return -EINVAL;/*不支持le配置*/
 		mode = L2CAP_MODE_BASIC;
 		clear_bit(CONF_STATE2_DEVICE, &chan->conf_state);
 		break;
 	case BT_MODE_ERTM:
 		if (!disable_ertm || bdaddr_type_is_le(chan->src_type))
-			return -EINVAL;
+			return -EINVAL;/*不支持le配置*/
 		mode = L2CAP_MODE_ERTM;
 		break;
 	case BT_MODE_STREAMING:
 		if (!disable_ertm || bdaddr_type_is_le(chan->src_type))
-			return -EINVAL;
+			return -EINVAL;/*不支持le配置*/
 		mode = L2CAP_MODE_STREAMING;
 		break;
 	case BT_MODE_LE_FLOWCTL:
 		if (!bdaddr_type_is_le(chan->src_type))
-			return -EINVAL;
+			return -EINVAL;/*不支持非le配置*/
 		mode = L2CAP_MODE_LE_FLOWCTL;
 		break;
 	case BT_MODE_EXT_FLOWCTL:
 		/* TODO: Add support for ECRED PDUs to BR/EDR */
 		if (!bdaddr_type_is_le(chan->src_type))
-			return -EINVAL;
+			return -EINVAL;/*不支持非le配置*/
 		mode = L2CAP_MODE_EXT_FLOWCTL;
 		break;
 	default:
@@ -1091,7 +1091,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 
 		if (chan->chan_type != L2CAP_CHAN_CONN_ORIENTED) {
 			err = -EINVAL;
-			break;
+			break;/*只容许此type设置*/
 		}
 
 		err = copy_safe_from_sockptr(&mode, sizeof(mode), optval,
@@ -1101,7 +1101,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 
 		BT_DBG("mode %u", mode);
 
-		err = l2cap_set_mode(chan, mode);
+		err = l2cap_set_mode(chan, mode);/*更改mode*/
 		if (err)
 			break;
 
@@ -1657,15 +1657,15 @@ static void l2cap_sock_state_change_cb(struct l2cap_chan *chan, int state,
 }
 
 static struct sk_buff *l2cap_sock_alloc_skb_cb(struct l2cap_chan *chan,
-					       unsigned long hdr_len,
-					       unsigned long len, int nb)
+					       unsigned long hdr_len/*头部长度*/,
+					       unsigned long len/*负责长度*/, int nb/*是否非阻塞*/)
 {
 	struct sock *sk = chan->data;
 	struct sk_buff *skb;
 	int err;
 
 	l2cap_chan_unlock(chan);
-	skb = bt_skb_send_alloc(sk, hdr_len + len, nb, &err);
+	skb = bt_skb_send_alloc(sk, hdr_len + len/*总长度*/, nb, &err);
 	l2cap_chan_lock(chan);
 
 	if (!skb)
@@ -1675,7 +1675,7 @@ static struct sk_buff *l2cap_sock_alloc_skb_cb(struct l2cap_chan *chan,
 	 * reacquired thus we need to recheck channel state.
 	 */
 	if (chan->state != BT_CONNECTED) {
-		kfree_skb(skb);
+		kfree_skb(skb);/*非connected*/
 		return ERR_PTR(-ENOTCONN);
 	}
 
@@ -1884,7 +1884,7 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 			chan->mode = L2CAP_MODE_ERTM;
 			set_bit(CONF_STATE2_DEVICE, &chan->conf_state);
 		} else {
-			chan->mode = L2CAP_MODE_BASIC;
+			chan->mode = L2CAP_MODE_BASIC;/*默认为basic mode*/
 		}
 
 		l2cap_chan_set_defaults(chan);
@@ -1894,7 +1894,7 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 	chan->flush_to = L2CAP_DEFAULT_FLUSH_TO;
 
 	chan->data = sk;
-	chan->ops = &l2cap_chan_ops;
+	chan->ops = &l2cap_chan_ops;/*l2cap channel操作集*/
 
 	l2cap_publish_rx_avail(chan);
 }
@@ -1958,7 +1958,7 @@ static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 	if (!sk)
 		return -ENOMEM;
 
-	l2cap_sock_init(sk, NULL);
+	l2cap_sock_init(sk, NULL/*无父socket*/);
 	bt_sock_link(&l2cap_sk_list, sk);
 	return 0;
 }

@@ -529,7 +529,8 @@ struct l2cap_chan {
 	__u16		omtu;
 	__u16		flush_to;
 	__u8		mode;
-	/*CHANNEL类型,如采用raw，则L2CAP_CHAN_RAW；如采用SOCK_SEQPACKET，则L2CAP_CHAN_CONN_ORIENTED*/
+	/*CHANNEL类型,如采用raw，则L2CAP_CHAN_RAW；
+	 * 如采用SOCK_SEQPACKET,SOCK_STREAM，则L2CAP_CHAN_CONN_ORIENTED*/
 	__u8		chan_type;
 	__u8		chan_policy;
 
@@ -610,9 +611,9 @@ struct l2cap_chan {
 	struct list_head	list;
 	struct list_head	global_l;
 
-	void			*data;
+	void			*data;/*指向socket*/
 	const struct l2cap_ops	*ops;
-	struct mutex		lock;
+	struct mutex		lock;/*保护channel*/
 };
 
 struct l2cap_ops {
@@ -632,9 +633,10 @@ struct l2cap_ops {
 	void			(*set_shutdown) (struct l2cap_chan *chan);
 	long			(*get_sndtimeo) (struct l2cap_chan *chan);
 	struct pid		*(*get_peer_pid) (struct l2cap_chan *chan);
+	/*申请并初始化skb,指定skb总长度hdr_len + len*/
 	struct sk_buff		*(*alloc_skb) (struct l2cap_chan *chan,
 					       unsigned long hdr_len,
-					       unsigned long len, int nb);
+					       unsigned long len, int nb/*是否非阻塞*/);
 	int			(*filter) (struct l2cap_chan * chan,
 					   struct sk_buff *skb);
 };
@@ -643,7 +645,7 @@ struct l2cap_conn {
 	struct hci_conn		*hcon;
 	struct hci_chan		*hchan;
 
-	unsigned int		mtu;
+	unsigned int		mtu;/*此连接可发送的最大长度*/
 
 	__u32			feat_mask;
 	__u8			remote_fixed_chan;

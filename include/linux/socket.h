@@ -85,10 +85,15 @@ struct msghdr {
 			    struct iov_iter *from, size_t length);
 };
 
+/*用户态使用的msghdr结构体*/
 struct user_msghdr {
+	/*地址结构体指针*/
 	void		__user *msg_name;	/* ptr to socket address structure */
+	/*地址结构体大小*/
 	int		msg_namelen;		/* size of socket address structure */
+	/*数据iovec数组*/
 	struct iovec	__user *msg_iov;	/* scatter/gather array */
+	/*iovec数组长度*/
 	__kernel_size_t	msg_iovlen;		/* # elements in msg_iov */
 	void		__user *msg_control;	/* ancillary data */
 	__kernel_size_t	msg_controllen;		/* ancillary data buffer length */

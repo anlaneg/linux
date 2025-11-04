@@ -523,13 +523,13 @@ static inline struct sk_buff *bt_skb_alloc(unsigned int len/*内容长度*/, gfp
 }
 
 static inline struct sk_buff *bt_skb_send_alloc(struct sock *sk,
-					unsigned long len, int nb, int *err)
+					unsigned long len/*报文长度*/, int nb/*是否非阻塞*/, int *err/*出参，错误码*/)
 {
 	struct sk_buff *skb;
 
 	skb = sock_alloc_send_skb(sk, len + BT_SKB_RESERVE, nb, err);
 	if (skb)
-		skb_reserve(skb, BT_SKB_RESERVE);
+		skb_reserve(skb, BT_SKB_RESERVE);/*预留对应字节*/
 
 	if (!skb && *err)
 		return NULL;

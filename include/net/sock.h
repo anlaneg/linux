@@ -1923,10 +1923,10 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 				     int *errcode, int max_page_order);
 
 static inline struct sk_buff *sock_alloc_send_skb(struct sock *sk,
-						  unsigned long size,
-						  int noblock, int *errcode)
+						  unsigned long size/*报文总长度*/,
+						  int noblock/*是否非阻塞*/, int *errcode/*出参，错误码*/)
 {
-	return sock_alloc_send_pskb(sk, size, 0, noblock, errcode, 0);
+	return sock_alloc_send_pskb(sk, size, 0, noblock, errcode, 0/*最大申请1页*/);
 }
 
 void *sock_kmalloc(struct sock *sk, int size, gfp_t priority);

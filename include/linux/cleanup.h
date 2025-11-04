@@ -259,8 +259,8 @@ const volatile void * __must_check_fn(const volatile void *val)
  *	// use 'f' without concern
  */
 
-#define DEFINE_CLASS(_name, _type, _exit, _init, _init_args...)		\
-typedef _type class_##_name##_t;					\
+#define DEFINE_CLASS(_name, _type/*结构体类型*/, _exit/*此结构体销毁处理逻辑*/, _init/*此结构体初始化处理逻辑*/, _init_args...)		\
+typedef _type class_##_name##_t;/*定义结构体类型别名，使其名称可以由name推导出来*/		\
 static inline void class_##_name##_destructor(_type *p)			\
 { _type _T = *p; _exit; }						\
 static inline _type class_##_name##_constructor(_init_args)		\
@@ -273,6 +273,7 @@ static inline void class_##_name##ext##_destructor(class_##_name##_t *p)\
 static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 { class_##_name##_t t = _init; return t; }
 
+/*定义变量var，绑定其资源清理函数并调用其构造函数（使用时此语句后需跟调用参数）*/
 #define CLASS(_name, var)						\
 	class_##_name##_t var __cleanup(class_##_name##_destructor) =	\
 		class_##_name##_constructor

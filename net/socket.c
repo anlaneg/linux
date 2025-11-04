@@ -2649,13 +2649,13 @@ int __copy_msghdr(struct msghdr *kmsg,
 		kmsg->msg_namelen = 0;
 
 	if (kmsg->msg_namelen < 0)
-		return -EINVAL;
+		return -EINVAL;/*不能小于零*/
 
 	if (kmsg->msg_namelen > sizeof(struct sockaddr_storage))
-		kmsg->msg_namelen = sizeof(struct sockaddr_storage);
+		kmsg->msg_namelen = sizeof(struct sockaddr_storage);/*不得大于此结构体*/
 
 	if (save_addr)
-		*save_addr = msg->msg_name;
+		*save_addr = msg->msg_name;/*仅记录地址的内存地址*/
 
 	if (msg->msg_name && kmsg->msg_namelen) {
 		if (!save_addr) {
@@ -2679,13 +2679,14 @@ int __copy_msghdr(struct msghdr *kmsg,
 }
 
 static int copy_msghdr_from_user(struct msghdr *kmsg,
-				 struct user_msghdr __user *umsg,
+				 struct user_msghdr __user *umsg/*用户态传入的msg*/,
 				 struct sockaddr __user **save_addr,
 				 struct iovec **iov)
 {
 	struct user_msghdr msg;
 	ssize_t err;
 
+	/*结构体倒一手，为什么？*/
 	if (copy_from_user(&msg, umsg, sizeof(*umsg)))
 		return -EFAULT;
 
@@ -2934,7 +2935,7 @@ SYSCALL_DEFINE4(sendmmsg, int, fd, struct mmsghdr __user *, mmsg,
 }
 
 static int recvmsg_copy_msghdr(struct msghdr *msg,
-			       struct user_msghdr __user *umsg, unsigned flags,
+			       struct user_msghdr __user *umsg/*用户态传入的msg*/, unsigned flags,
 			       struct sockaddr __user **uaddr,
 			       struct iovec **iov)
 {
@@ -2967,7 +2968,7 @@ static int ____sys_recvmsg(struct socket *sock, struct msghdr *msg_sys,
 	int len;
 	ssize_t err;
 
-	msg_sys->msg_name = &addr;
+	msg_sys->msg_name = &addr;/*当前为收取，故msg_name是一个出参，这里指向临时变量*/
 	cmsg_ptr = (unsigned long)msg_sys->msg_control;
 	msg_sys->msg_flags = flags & (MSG_CMSG_CLOEXEC|MSG_CMSG_COMPAT);
 
@@ -2975,18 +2976,19 @@ static int ____sys_recvmsg(struct socket *sock, struct msghdr *msg_sys,
 	msg_sys->msg_namelen = 0;
 
 	if (sock->file->f_flags & O_NONBLOCK)
-		flags |= MSG_DONTWAIT;
+		flags |= MSG_DONTWAIT;/*此socket被标记为非阻塞时，打上此标记*/
 
 	if (unlikely(nosec))
 		err = sock_recvmsg_nosec(sock, msg_sys, flags);
 	else
-		err = sock_recvmsg(sock, msg_sys, flags);
+		err = sock_recvmsg(sock, msg_sys, flags);/*执行收取*/
 
 	if (err < 0)
 		goto out;
 	len = err;
 
 	if (uaddr != NULL) {
+		/*向用户态uaddr填写地址内容*/
 		err = move_addr_to_user(&addr,
 					msg_sys->msg_namelen, uaddr,
 					uaddr_len);
@@ -3018,6 +3020,7 @@ static int ___sys_recvmsg(struct socket *sock, struct user_msghdr __user *msg,
 	struct sockaddr __user *uaddr;
 	ssize_t err;
 
+	/*复制msg内容到msg_sys中*/
 	err = recvmsg_copy_msghdr(msg_sys, msg, flags, &uaddr, &iov);
 	if (err < 0)
 		return err;
@@ -3045,20 +3048,22 @@ long __sys_recvmsg(int fd, struct user_msghdr __user *msg, unsigned int flags,
 	struct socket *sock;
 
 	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
-		return -EINVAL;
+		return -EINVAL;/*此时不得有MSG_CMSG_COMPAT标记*/
 
-	//由fd获得sock
+	//定义变量f,增加fd引用，并指明在fd离来作用域时减少其引用.
 	CLASS(fd, f)(fd);
 
 	if (fd_empty(f))
 		return -EBADF;
-	sock = sock_from_file(fd_file(f));
+	sock = sock_from_file(fd_file(f));/*fd转socket*/
 	if (unlikely(!sock))
+		/*此fd非socket fd,报错*/
 		return -ENOTSOCK;
 
 	return ___sys_recvmsg(sock, msg, &msg_sys, flags, 0);
 }
 
+/*用于实现recvmsg消息调用*/
 SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
 		unsigned int, flags)
 {

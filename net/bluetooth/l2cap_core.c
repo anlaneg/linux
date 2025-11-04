@@ -1012,7 +1012,7 @@ static void l2cap_do_send(struct l2cap_chan *chan, struct sk_buff *skb)
 		flags = ACL_START;
 
 	bt_cb(skb)->force_active = test_bit(FLAG_FORCE_ACTIVE, &chan->flags);
-	hci_send_acl(chan->conn->hchan, skb, flags);
+	hci_send_acl(chan->conn->hchan, skb, flags);/*挂接要发送的报文到队列*/
 }
 
 static void __unpack_enhanced_control(u16 enh, struct l2cap_ctrl *control)
@@ -1935,18 +1935,18 @@ static void l2cap_retrans_timeout(struct work_struct *work)
 }
 
 static void l2cap_streaming_send(struct l2cap_chan *chan,
-				 struct sk_buff_head *skbs)
+				 struct sk_buff_head *skbs/*待发送的一组skb*/)
 {
 	struct sk_buff *skb;
 	struct l2cap_ctrl *control;
 
 	BT_DBG("chan %p, skbs %p", chan, skbs);
 
-	skb_queue_splice_tail_init(skbs, &chan->tx_q);
+	skb_queue_splice_tail_init(skbs, &chan->tx_q);/*将skbs移动到tx_q*/
 
 	while (!skb_queue_empty(&chan->tx_q)) {
 
-		skb = skb_dequeue(&chan->tx_q);
+		skb = skb_dequeue(&chan->tx_q);/*出一个skb*/
 
 		bt_cb(skb)->l2cap.retries = 1;
 		control = &bt_cb(skb)->l2cap;
@@ -1954,14 +1954,15 @@ static void l2cap_streaming_send(struct l2cap_chan *chan,
 		control->reqseq = 0;
 		control->txseq = chan->next_tx_seq;
 
-		__pack_control(chan, control, skb);
+		__pack_control(chan, control, skb);/*更新control字段*/
 
 		if (chan->fcs == L2CAP_FCS_CRC16) {
+			/*更新fcs字段*/
 			u16 fcs = crc16(0, (u8 *) skb->data, skb->len);
 			put_unaligned_le16(fcs, skb_put(skb, L2CAP_FCS_SIZE));
 		}
 
-		l2cap_do_send(chan, skb);
+		l2cap_do_send(chan, skb);/*报文发送*/
 
 		BT_DBG("Sent txseq %u", control->txseq);
 
@@ -2225,6 +2226,7 @@ static inline int l2cap_skbuff_fromiovec(struct l2cap_chan *chan,
 	/* Continuation fragments (no L2CAP header) */
 	frag = &skb_shinfo(skb)->frag_list;
 	while (len) {
+		/*需要分片，申请更多skb*/
 		struct sk_buff *tmp;
 
 		count = min_t(unsigned int, conn->mtu, len);
@@ -2246,7 +2248,7 @@ static inline int l2cap_skbuff_fromiovec(struct l2cap_chan *chan,
 		skb->len += (*frag)->len;
 		skb->data_len += (*frag)->len;
 
-		frag = &(*frag)->next;
+		frag = &(*frag)->next;/*串成串*/
 	}
 
 	return sent;
@@ -2294,18 +2296,20 @@ static struct sk_buff *l2cap_create_basic_pdu(struct l2cap_chan *chan,
 
 	BT_DBG("chan %p len %zu", chan, len);
 
-	count = min_t(unsigned int, (conn->mtu - L2CAP_HDR_SIZE), len);
+	count = min_t(unsigned int, (conn->mtu - L2CAP_HDR_SIZE)/*可发送的最大负载*/, len/*实际负责*/);
 
+	/*申请skb*/
 	skb = chan->ops->alloc_skb(chan, L2CAP_HDR_SIZE, count,
 				   msg->msg_flags & MSG_DONTWAIT);
 	if (IS_ERR(skb))
 		return skb;
 
 	/* Create L2CAP header */
-	lh = skb_put(skb, L2CAP_HDR_SIZE);
+	lh = skb_put(skb, L2CAP_HDR_SIZE);/*填写l2cap header*/
 	lh->cid = cpu_to_le16(chan->dcid);
 	lh->len = cpu_to_le16(len);
 
+	/*复制msg到skb,如必要，制作分片*/
 	err = l2cap_skbuff_fromiovec(chan, msg, len, count, skb);
 	if (unlikely(err < 0)) {
 		kfree_skb(skb);
@@ -2338,13 +2342,14 @@ static struct sk_buff *l2cap_create_iframe_pdu(struct l2cap_chan *chan,
 
 	count = min_t(unsigned int, (conn->mtu - hlen), len);
 
+	/*申请skb*/
 	skb = chan->ops->alloc_skb(chan, hlen, count,
 				   msg->msg_flags & MSG_DONTWAIT);
 	if (IS_ERR(skb))
 		return skb;
 
 	/* Create L2CAP header */
-	lh = skb_put(skb, L2CAP_HDR_SIZE);
+	lh = skb_put(skb, L2CAP_HDR_SIZE);/*填写l2cap header*/
 	lh->cid = cpu_to_le16(chan->dcid);
 	lh->len = cpu_to_le16(len + (hlen - L2CAP_HDR_SIZE));
 
@@ -2357,7 +2362,7 @@ static struct sk_buff *l2cap_create_iframe_pdu(struct l2cap_chan *chan,
 	if (sdulen)
 		put_unaligned_le16(sdulen, skb_put(skb, L2CAP_SDULEN_SIZE));
 
-	err = l2cap_skbuff_fromiovec(chan, msg, len, count, skb);
+	err = l2cap_skbuff_fromiovec(chan, msg, len, count, skb);/*msg转换到skb(可能有分片)*/
 	if (unlikely(err < 0)) {
 		kfree_skb(skb);
 		return ERR_PTR(err);
@@ -2419,7 +2424,7 @@ static int l2cap_segment_sdu(struct l2cap_chan *chan,
 		bt_cb(skb)->l2cap.sar = sar;
 		__skb_queue_tail(seg_queue, skb);
 
-		len -= pdu_len;
+		len -= pdu_len;/*长度减少（可能分有多片）*/
 		if (sdu_len)
 			sdu_len = 0;
 
@@ -2611,16 +2616,17 @@ int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 	case L2CAP_MODE_BASIC:
 		/* Check outgoing MTU */
 		if (len > chan->omtu)
+			/*发送长度不得大于channel的output mtu*/
 			return -EMSGSIZE;
 
 		/* Create a basic PDU */
-		skb = l2cap_create_basic_pdu(chan, msg, len);
+		skb = l2cap_create_basic_pdu(chan, msg, len);/*添加l2cap header*/
 		if (IS_ERR(skb))
 			return PTR_ERR(skb);
 
 		l2cap_tx_timestamp(skb, sockc, len);
 
-		l2cap_do_send(chan, skb);
+		l2cap_do_send(chan, skb);/*发送报文*/
 		err = len;
 		break;
 
@@ -2638,7 +2644,7 @@ int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 		 * since it's possible to block while waiting for memory
 		 * allocation.
 		 */
-		err = l2cap_segment_sdu(chan, &seg_queue, msg, len);
+		err = l2cap_segment_sdu(chan, &seg_queue, msg, len);/*添加l2cap header,并分片*/
 
 		if (err)
 			break;
@@ -2648,7 +2654,7 @@ int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 			l2cap_tx(chan, NULL, &seg_queue, L2CAP_EV_DATA_REQUEST);
 		} else {
 			l2cap_tx_timestamp_seg(&seg_queue, sockc, len);
-			l2cap_streaming_send(chan, &seg_queue);
+			l2cap_streaming_send(chan, &seg_queue);/*stream方式发送*/
 		}
 
 		err = len;
@@ -7717,6 +7723,7 @@ void l2cap_exit(void)
 	l2cap_cleanup_sockets();
 }
 
+/*是否禁用ertn*/
 module_param(disable_ertm, bool, 0644);
 MODULE_PARM_DESC(disable_ertm, "Disable enhanced retransmission mode");
 

@@ -2000,6 +2000,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	copied = data_skb->len;
 	if (len < copied) {
+		/*指明返回的内容是被截短的*/
 		msg->msg_flags |= MSG_TRUNC;
 		copied = len;
 	}
@@ -2007,6 +2008,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	err = skb_copy_datagram_msg(data_skb, 0, msg, copied);
 
 	if (msg->msg_name) {
+		/*msg_name不为空，填写地址*/
 		DECLARE_SOCKADDR(struct sockaddr_nl *, addr, msg->msg_name);
 		addr->nl_family = AF_NETLINK;
 		addr->nl_pad    = 0;
@@ -2023,6 +2025,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	memset(&scm, 0, sizeof(scm));
 	scm.creds = *NETLINK_CREDS(skb);
 	if (flags & MSG_TRUNC)
+		/*指明了MSG_TRUNC标记，返回报文实际长度*/
 		copied = data_skb->len;
 
 	skb_free_datagram(sk, skb);

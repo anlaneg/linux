@@ -2994,7 +2994,7 @@ static long sock_wait_for_wmem(struct sock *sk, long timeo)
  */
 
 struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
-				     unsigned long data_len, int noblock,
+				     unsigned long data_len, int noblock/*是否非阻塞*/,
 				     int *errcode, int max_page_order)
 {
 	struct sk_buff *skb;
