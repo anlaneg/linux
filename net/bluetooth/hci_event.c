@@ -69,7 +69,7 @@ static void *hci_cc_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
 }
 
 static void *hci_le_ev_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
-				u8 ev, size_t len)
+				u8 ev/*事件编号*/, size_t len)
 {
 	void *data;
 
@@ -2792,8 +2792,8 @@ static u8 ev_bdaddr_type(struct hci_dev *hdev, u8 type, bool *resolved)
 	return type;
 }
 
-static void cs_le_create_conn(struct hci_dev *hdev, bdaddr_t *peer_addr,
-			      u8 peer_addr_type, u8 own_address_type,
+static void cs_le_create_conn(struct hci_dev *hdev, bdaddr_t *peer_addr/*对端地址*/,
+			      u8 peer_addr_type/*对端地址类型*/, u8 own_address_type,
 			      u8 filter_policy)
 {
 	struct hci_conn *conn;
@@ -2801,7 +2801,7 @@ static void cs_le_create_conn(struct hci_dev *hdev, bdaddr_t *peer_addr,
 	conn = hci_conn_hash_lookup_le(hdev, peer_addr,
 				       peer_addr_type);
 	if (!conn)
-		return;
+		return;/*连接不存在,直接返回*/
 
 	own_address_type = ev_bdaddr_type(hdev, own_address_type, NULL);
 
@@ -2830,16 +2830,16 @@ static void hci_cs_le_create_conn(struct hci_dev *hdev, u8 status)
 	 * request completion callbacks used for connecting.
 	 */
 	if (status)
-		return;
+		return;/*创建连接失败*/
 
 	cp = hci_sent_cmd_data(hdev, HCI_OP_LE_CREATE_CONN);
 	if (!cp)
-		return;
+		return;/*未发送le创建连接命令*/
 
 	hci_dev_lock(hdev);
 
 	cs_le_create_conn(hdev, &cp->peer_addr, cp->peer_addr_type,
-			  cp->own_address_type, cp->filter_policy);
+			  cp->own_address_type/*本端地址类型*/, cp->filter_policy);
 
 	hci_dev_unlock(hdev);
 }
@@ -2855,14 +2855,15 @@ static void hci_cs_le_ext_create_conn(struct hci_dev *hdev, u8 status)
 	 * request completion callbacks used for connecting.
 	 */
 	if (status)
-		return;
+		return;/*失败*/
 
 	cp = hci_sent_cmd_data(hdev, HCI_OP_LE_EXT_CREATE_CONN);
 	if (!cp)
-		return;
+		return;/*未发送*/
 
 	hci_dev_lock(hdev);
 
+	/*创建LE连接*/
 	cs_le_create_conn(hdev, &cp->peer_addr, cp->peer_addr_type,
 			  cp->own_addr_type, cp->filter_policy);
 
@@ -4332,10 +4333,10 @@ static const struct hci_cs {
 	HCI_CS(HCI_OP_SNIFF_MODE, hci_cs_sniff_mode),
 	HCI_CS(HCI_OP_EXIT_SNIFF_MODE, hci_cs_exit_sniff_mode),
 	HCI_CS(HCI_OP_SWITCH_ROLE, hci_cs_switch_role),
-	HCI_CS(HCI_OP_LE_CREATE_CONN, hci_cs_le_create_conn),
+	HCI_CS(HCI_OP_LE_CREATE_CONN, hci_cs_le_create_conn),/*收到le创建连接命令状态响应*/
 	HCI_CS(HCI_OP_LE_READ_REMOTE_FEATURES, hci_cs_le_read_remote_features),
 	HCI_CS(HCI_OP_LE_START_ENC, hci_cs_le_start_enc),
-	HCI_CS(HCI_OP_LE_EXT_CREATE_CONN, hci_cs_le_ext_create_conn),
+	HCI_CS(HCI_OP_LE_EXT_CREATE_CONN, hci_cs_le_ext_create_conn),/*收到le ext创建连接命令状态响应*/
 	HCI_CS(HCI_OP_LE_CREATE_CIS, hci_cs_le_create_cis),
 	HCI_CS(HCI_OP_LE_CREATE_BIG, hci_cs_le_create_big),
 };
@@ -5684,8 +5685,9 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 		 * just unlock as there is nothing to cleanup.
 		 */
 		if (status)
-			goto unlock;
+			goto unlock;/*创建LE CONNECT失败*/
 
+		/*不存在,创建一个*/
 		conn = hci_conn_add_unset(hdev, LE_LINK, bdaddr, role);
 		if (IS_ERR(conn)) {
 			bt_dev_err(hdev, "connection err: %ld", PTR_ERR(conn));
@@ -5725,6 +5727,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 	 * whether the connection is already set up.
 	 */
 	if (!HCI_CONN_HANDLE_UNSET(conn->handle)) {
+		/*连接对应的handle未设置*/
 		bt_dev_err(hdev, "Ignoring HCI_Connection_Complete for existing connection");
 		goto unlock;
 	}
@@ -5768,6 +5771,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 
 	/* Drop the connection if the device is blocked */
 	if (hci_bdaddr_list_lookup(&hdev->reject_list, &conn->dst, addr_type)) {
+		/*对端地址在reject_list中,拒绝*/
 		hci_conn_drop(conn);
 		goto unlock;
 	}
@@ -5807,7 +5811,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 		cp.handle = __cpu_to_le16(conn->handle);
 
 		hci_send_cmd(hdev, HCI_OP_LE_READ_REMOTE_FEATURES,
-			     sizeof(cp), &cp);
+			     sizeof(cp), &cp);/*读取远端功能*/
 
 		hci_conn_hold(conn);
 	} else {
@@ -6044,7 +6048,7 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
 	return NULL;
 }
 
-static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
+static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型*/, bdaddr_t *bdaddr,
 			       u8 bdaddr_type, bdaddr_t *direct_addr,
 			       u8 direct_addr_type, u8 phy, u8 sec_phy, s8 rssi,
 			       u8 *data, u8 len, bool ext_adv, bool ctl_time,
@@ -6057,6 +6061,7 @@ static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
 	u32 flags;
 	u8 *ptr;
 
+	/*检查事件类型*/
 	switch (type) {
 	case LE_ADV_IND:
 	case LE_ADV_DIRECT_IND:
@@ -6071,6 +6076,7 @@ static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
 	}
 
 	if (len > max_adv_len(hdev)) {
+		/*长度有误*/
 		bt_dev_err_ratelimited(hdev,
 				       "adv larger than maximum supported");
 		return;
@@ -6258,6 +6264,7 @@ static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
 	clear_pending_adv_report(hdev);
 }
 
+/*收到le_advertising_report事件*/
 static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 				  struct sk_buff *skb)
 {
@@ -6278,18 +6285,19 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 					  HCI_EV_LE_ADVERTISING_REPORT,
 					  sizeof(*info));
 		if (!info)
-			break;
+			break;/*长度不足*/
 
 		if (!hci_le_ev_skb_pull(hdev, skb, HCI_EV_LE_ADVERTISING_REPORT,
 					info->length + 1))
-			break;
+			break;/*内容长度不足*/
 
 		if (info->length <= max_adv_len(hdev)) {
+			/*长度合规*/
 			rssi = info->data[info->length];
 			process_adv_report(hdev, info->type, &info->bdaddr,
 					   info->bdaddr_type, NULL, 0,
 					   HCI_ADV_PHY_1M, 0, rssi,
-					   info->data, info->length, false,
+					   info->data/*data参数*/, info->length/*data参数长度*/, false,
 					   false, instant);
 		} else {
 			bt_dev_err(hdev, "Dropping invalid advertising data");
@@ -7152,11 +7160,11 @@ static const struct hci_le_ev {
 } hci_le_ev_table[U8_MAX + 1]/*定义subevent对应的回调*/ = {
 	/* [0x01 = HCI_EV_LE_CONN_COMPLETE] */
 	HCI_LE_EV(HCI_EV_LE_CONN_COMPLETE, hci_le_conn_complete_evt,
-		  sizeof(struct hci_ev_le_conn_complete)),
+		  sizeof(struct hci_ev_le_conn_complete)),/*收到le connect complete事件*/
 	/* [0x02 = HCI_EV_LE_ADVERTISING_REPORT] */
 	HCI_LE_EV_VL(HCI_EV_LE_ADVERTISING_REPORT, hci_le_adv_report_evt,
 		     sizeof(struct hci_ev_le_advertising_report),
-		     HCI_MAX_EVENT_SIZE),
+		     HCI_MAX_EVENT_SIZE),/*收到le_advertising_report事件*/
 	/* [0x03 = HCI_EV_LE_CONN_UPDATE_COMPLETE] */
 	HCI_LE_EV(HCI_EV_LE_CONN_UPDATE_COMPLETE,
 		  hci_le_conn_update_complete_evt,
@@ -7249,12 +7257,12 @@ static void hci_le_meta_evt(struct hci_dev *hdev, void *data,
 
 	subev = &hci_le_ev_table[ev->subevent];/*取subevent对应的回调*/
 	if (!subev->func)
-		return;
+		return;/*此子事件无回调,直接返回*/
 
 	if (skb->len < subev->min_len) {
 		bt_dev_err(hdev, "unexpected subevent 0x%2.2x length: %u < %u",
 			   ev->subevent, skb->len, subev->min_len);
-		return;
+		return;/*长度有误*/
 	}
 
 	/* Just warn if the length is over max_len size it still be
@@ -7268,6 +7276,7 @@ static void hci_le_meta_evt(struct hci_dev *hdev, void *data,
 	if (!data)
 		return;
 
+	/*触发回调*/
 	subev->func(hdev, data, skb);
 }
 
@@ -7543,7 +7552,7 @@ static const struct hci_ev {
 	       sizeof(struct hci_ev_remote_host_features)),
 	/* [0x3e = HCI_EV_LE_META] */
 	HCI_EV_REQ_VL(HCI_EV_LE_META, hci_le_meta_evt,
-		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),
+		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),/*LE meta消息处理完成*/
 	/* [0xff = HCI_EV_VENDOR] */
 	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
 };

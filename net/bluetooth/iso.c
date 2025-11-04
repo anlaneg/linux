@@ -312,6 +312,7 @@ static int __iso_chan_add(struct iso_conn *conn, struct sock *sk,
 	conn->sk = sk;
 
 	if (parent)
+		/*有父socket,加入到accept_q队列,后续accept会接入此socket*/
 		bt_accept_enqueue(parent, sk, true);
 
 	return 0;

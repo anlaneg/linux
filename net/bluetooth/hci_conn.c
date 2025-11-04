@@ -1028,7 +1028,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type/*conn类�
 
 	hci_dev_hold(hdev);
 
-	hci_conn_hash_add(hdev, conn);/*添加conn*/
+	hci_conn_hash_add(hdev, conn);/*添加conn到hci*/
 
 	/* The SCO and eSCO connections will only be notified when their
 	 * setup has been completed. This is different to ACL links which
@@ -1378,6 +1378,7 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 	if (conn) {
 		bacpy(&conn->dst, dst);
 	} else {
+		/*创建LE_LINK*/
 		conn = hci_conn_add_unset(hdev, LE_LINK, dst, role);
 		if (IS_ERR(conn))
 			return conn;
@@ -1651,12 +1652,13 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地�
 	/*查询类型为acl_link的到dst是否已有连接*/
 	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
 	if (!acl) {
-		/*无此连接，创建一个acl link*/
+		/*无此连接，创建一个到此dst的acl link*/
 		acl = hci_conn_add_unset(hdev, ACL_LINK, dst, HCI_ROLE_MASTER);
 		if (IS_ERR(acl))
 			return acl;
 	}
 
+	/*复用已存在的连接*/
 	hci_conn_hold(acl);
 
 	acl->conn_reason = conn_reason;
@@ -2711,6 +2713,7 @@ int hci_get_auth_info(struct hci_dev *hdev, void __user *arg)
 	return copy_to_user(arg, &req, sizeof(req)) ? -EFAULT : 0;
 }
 
+/*针对hci_conn创建hci_chan*/
 struct hci_chan *hci_chan_create(struct hci_conn *conn)
 {
 	struct hci_dev *hdev = conn->hdev;
@@ -2762,10 +2765,12 @@ void hci_chan_list_flush(struct hci_conn *conn)
 
 	BT_DBG("hcon %p", conn);
 
+	/*遍历此connect下所有channel,并释放*/
 	list_for_each_entry_safe(chan, n, &conn->chan_list, list)
 		hci_chan_del(chan);
 }
 
+/*通过handle查找conn下对应的hci_chan*/
 static struct hci_chan *__hci_chan_lookup_handle(struct hci_conn *hcon,
 						 __u16 handle)
 {
@@ -2787,6 +2792,7 @@ struct hci_chan *hci_chan_lookup_handle(struct hci_dev *hdev, __u16 handle)
 
 	rcu_read_lock();
 
+	/*遍历此hci dev下所有conn,查找其下编号为handle的channel*/
 	list_for_each_entry_rcu(hcon, &h->list, list) {
 		hchan = __hci_chan_lookup_handle(hcon, handle);
 		if (hchan)
@@ -3039,7 +3045,7 @@ void hci_conn_tx_queue(struct hci_conn *conn, struct sk_buff *skb)
 			goto count_only;
 	}
 
-	skb_queue_tail(&comp->queue, skb);
+	skb_queue_tail(&comp->queue, skb);/*将要发送的报文存在conn->tx_q上*/
 	return;
 
 count_only:

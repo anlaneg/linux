@@ -473,7 +473,7 @@ struct sock {
 	};
 
 	void			(*sk_data_ready)(struct sock *sk);
-	long			sk_rcvtimeo;
+	long			sk_rcvtimeo;/*收超时时间*/
 	int			sk_rcvlowat;
 	__cacheline_group_end(sock_read_rx);
 

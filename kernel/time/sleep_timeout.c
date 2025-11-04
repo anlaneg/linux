@@ -24,7 +24,7 @@ static void process_timeout(struct timer_list *t)
 {
 	struct process_timer *timeout = timer_container_of(timeout, t, timer);
 
-	wake_up_process(timeout->task);
+	wake_up_process(timeout->task);/*唤醒参数指定的进程*/
 }
 
 /**
@@ -83,6 +83,7 @@ signed long __sched schedule_timeout(signed long timeout)
 		 * that will tell you if something is gone wrong and where.
 		 */
 		if (timeout < 0) {
+			/*timeout不能小于零*/
 			pr_err("%s: wrong timeout value %lx\n", __func__, timeout);
 			dump_stack();
 			__set_current_state(TASK_RUNNING);
@@ -90,14 +91,14 @@ signed long __sched schedule_timeout(signed long timeout)
 		}
 	}
 
-	expire = timeout + jiffies;
+	expire = timeout + jiffies;/*到期时间*/
 
 	timer.task = current;
-	timer_setup_on_stack(&timer.timer, process_timeout, 0);
+	timer_setup_on_stack(&timer.timer, process_timeout, 0);/*到期后将本进程唤醒*/
 	timer.timer.expires = expire;
 	add_timer(&timer.timer);
-	schedule();
-	timer_delete_sync(&timer.timer);
+	schedule();/*调度走,待timer发生*/
+	timer_delete_sync(&timer.timer);/*timer已发生,移除此timer*/
 
 	/* Remove the timer from the object tracker */
 	timer_destroy_on_stack(&timer.timer);

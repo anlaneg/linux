@@ -2179,7 +2179,7 @@ static inline struct sk_buff *skb_peek(const struct sk_buff_head *list_)
 
 	if (skb == (struct sk_buff *)list_)
 		skb = NULL;
-	return skb;
+	return skb;/*不断链,仅peek*/
 }
 
 /**
@@ -2287,6 +2287,7 @@ static inline void __skb_queue_head_init(struct sk_buff_head *list)
  */
 static inline void skb_queue_head_init(struct sk_buff_head *list)
 {
+	/*初始化锁,初始化list*/
 	spin_lock_init(&list->lock);
 	__skb_queue_head_init(list);
 }

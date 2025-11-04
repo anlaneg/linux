@@ -289,6 +289,7 @@ static void __sco_chan_add(struct sco_conn *conn, struct sock *sk,
 	conn->sk = sk;
 
 	if (parent)
+		/*有父socket,加入到accept_q队列,后续accept会接入此socket*/
 		bt_accept_enqueue(parent, sk, true);
 }
 

@@ -161,7 +161,7 @@ struct sock *bt_sock_alloc(struct net *net, struct socket *sock,
 		return NULL;
 
 	sock_init_data(sock, sk);
-	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
+	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);/*初始化accept_q*/
 
 	sock_reset_flag(sk, SOCK_ZAPPED);
 
@@ -218,6 +218,7 @@ bool bt_sock_linked(struct bt_sock_list *l, struct sock *s)
 }
 EXPORT_SYMBOL(bt_sock_linked);
 
+/*将新接入的sk挂接到parent的accept_q队列上*/
 void bt_accept_enqueue(struct sock *parent, struct sock *sk, bool bh)
 {
 	const struct cred *old_cred;
@@ -232,7 +233,7 @@ void bt_accept_enqueue(struct sock *parent, struct sock *sk, bool bh)
 	else
 		lock_sock_nested(sk, SINGLE_DEPTH_NESTING);
 
-	list_add_tail(&bt_sk(sk)->accept_q, &bt_sk(parent)->accept_q);
+	list_add_tail(&bt_sk(sk)->accept_q, &bt_sk(parent)->accept_q);/*将此socket加入到accept_q列表*/
 	bt_sk(sk)->parent = parent;
 
 	/* Copy credentials from parent since for incoming connections the
@@ -253,7 +254,7 @@ void bt_accept_enqueue(struct sock *parent, struct sock *sk, bool bh)
 	else
 		release_sock(sk);
 
-	sk_acceptq_added(parent);
+	sk_acceptq_added(parent);/*增加parent的backlog*/
 }
 EXPORT_SYMBOL(bt_accept_enqueue);
 
@@ -290,6 +291,7 @@ restart:
 		 * bt_accept_unlink() due to serialisation caused by sk locking
 		 */
 		if (!bt_sk(sk)->parent) {
+			/*此socket无parent,直接丢弃*/
 			BT_DBG("sk %p, already unlinked", sk);
 			release_sock(sk);
 			sock_put(sk);
@@ -312,13 +314,13 @@ restart:
 		}
 
 		if (sk->sk_state == BT_CONNECTED || !newsock ||
-		    test_bit(BT_SK_DEFER_SETUP, &bt_sk(parent)->flags)) {
+		    test_bit(BT_SK_DEFER_SETUP, &bt_sk(parent)->flags)/*有defer_setup标记的也返回*/) {
 			bt_accept_unlink(sk);
 			if (newsock)
 				sock_graft(sk, newsock);
 
 			release_sock(sk);
-			return sk;
+			return sk;/*返回接入的socket*/
 		}
 
 		release_sock(sk);
@@ -532,7 +534,7 @@ static inline __poll_t bt_accept_poll(struct sock *parent)
 
 	list_for_each_entry_safe(s, n, &bt_sk(parent)->accept_q, accept_q) {
 		sk = (struct sock *)s;
-		if (sk->sk_state == BT_CONNECTED ||
+		if (sk->sk_state == BT_CONNECTED /*队列有成员且状态为connected则返回*/||
 		    (test_bit(BT_SK_DEFER_SETUP, &bt_sk(parent)->flags) &&
 		     sk->sk_state == BT_CONNECT2))
 			return EPOLLIN | EPOLLRDNORM;
@@ -550,6 +552,7 @@ __poll_t bt_sock_poll(struct file *file, struct socket *sock,
 	poll_wait(file, sk_sleep(sk), wait);
 
 	if (sk->sk_state == BT_LISTEN)
+		/*对于listen socket,其POLL accept队列*/
 		return bt_accept_poll(sk);
 
 	if (sk->sk_err || !skb_queue_empty_lockless(&sk->sk_error_queue))

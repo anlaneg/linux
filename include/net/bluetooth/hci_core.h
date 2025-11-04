@@ -137,10 +137,10 @@ enum suspended_state {
 struct hci_conn_hash {
 	struct list_head list;
 	unsigned int     acl_num;/*此链表上acl link hci_conn的数量*/
-	unsigned int     sco_num;
-	unsigned int     iso_num;
-	unsigned int     le_num;/*此链表上le link的数量*/
-	unsigned int     le_num_peripheral;
+	unsigned int     sco_num;/*此链表上SCO_LINK&ESCO_LINK hci_conn的数量*/
+	unsigned int     iso_num;/*此链表上CIS_LINK&BIS_LINK&PA_LINK hci_conn的数量*/
+	unsigned int     le_num;/*此链表上le link hci_conn的数量*/
+	unsigned int     le_num_peripheral;/*此链表上le_link且role为HCI_ROLE_SLAVE的hci_conn数量*/
 };
 
 struct bdaddr_list {
@@ -485,7 +485,7 @@ struct hci_dev {
 	DECLARE_BITMAP(quirk_flags, __HCI_NUM_QUIRKS);
 
 	atomic_t	cmd_cnt;/*驱动实现为最大值为1,用于表示controller是否可继续接收命令*/
-	unsigned int	acl_cnt;
+	unsigned int	acl_cnt;/*ACL报文数(每发送一个减1)*/
 	unsigned int	sco_cnt;
 	unsigned int	le_cnt;
 	unsigned int	iso_cnt;
@@ -572,7 +572,7 @@ struct hci_dev {
 	struct list_head	mesh_pending;
 	struct mutex		mgmt_pending_lock;
 	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
-	struct list_head	reject_list;
+	struct list_head	reject_list;/*用于挂接拒绝连接的设备列表*/
 	struct list_head	accept_list;/*用于挂接容许连接的BR设备列表*/
 	struct list_head	uuids;/*用于串连一组设置的uuid*/
 	struct list_head	link_keys;
@@ -698,13 +698,13 @@ struct hci_conn {
 	atomic_t	refcnt;
 
 	bdaddr_t	dst;/*对端地址*/
-	__u8		dst_type;
+	__u8		dst_type;/*对端地址类型*/
 	bdaddr_t	src;/*本端地址*/
-	__u8		src_type;
+	__u8		src_type;/*本端地址类型*/
 	bdaddr_t	init_addr;
 	__u8		init_addr_type;
-	bdaddr_t	resp_addr;
-	__u8		resp_addr_type;
+	bdaddr_t	resp_addr;/*对端地址*/
+	__u8		resp_addr_type;/*对端地址类型*/
 	__u8		adv_instance;
 	__u16		handle;/*conn对应的handle*/
 	__u16		sync_handle;
@@ -768,10 +768,10 @@ struct hci_conn {
 	__u8		remote_auth;
 	__u8		remote_id;
 
-	unsigned int	sent;
+	unsigned int	sent;/*发送报文数统计*/
 
 	struct sk_buff_head data_q;/*保存此connect上的data queue*/
-	struct list_head chan_list;
+	struct list_head chan_list;/*用于保存从属于此connect的hci_chan*/
 
 	struct tx_queue tx_q;
 
@@ -784,7 +784,7 @@ struct hci_conn {
 	struct dentry	*debugfs;
 
 	struct hci_dev	*hdev;/*此连接对应的Hci设备*/
-	void		*l2cap_data;
+	void		*l2cap_data;/*指向l2cap connect*/
 	void		*sco_data;
 	void		*iso_data;/*iso连接(struct iso_conn)*/
 
@@ -808,11 +808,11 @@ struct hci_link {
 
 struct hci_chan {
 	struct list_head list;
-	__u16 handle;
-	struct hci_conn *conn;
+	__u16 handle;/*channel 唯一标识(以每个hci dev下唯一)*/
+	struct hci_conn *conn;/*指向其对应的connect*/
 	struct sk_buff_head data_q;
-	unsigned int	sent;
-	__u8		state;
+	unsigned int	sent;/*发送数统计*/
+	__u8		state;/*状态,例如BT_CONNECTED*/
 };
 
 struct hci_conn_params {
@@ -1051,7 +1051,7 @@ static inline void hci_conn_hash_del(struct hci_dev *hdev, struct hci_conn *c)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
 
-	list_del_rcu(&c->list);
+	list_del_rcu(&c->list);/*自链表上移除*/
 	synchronize_rcu();
 
 	switch (c->type) {
@@ -1061,7 +1061,7 @@ static inline void hci_conn_hash_del(struct hci_dev *hdev, struct hci_conn *c)
 	case LE_LINK:
 		h->le_num--;
 		if (c->role == HCI_ROLE_SLAVE)
-			h->le_num_peripheral--;
+			h->le_num_peripheral--;/*且role为SLAVE,计数减少*/
 		break;
 	case SCO_LINK:
 	case ESCO_LINK:
@@ -1096,6 +1096,7 @@ static inline unsigned int hci_conn_num(struct hci_dev *hdev, __u8 type)
 	}
 }
 
+/*此hci设备上各conn的总数*/
 static inline unsigned int hci_conn_count(struct hci_dev *hdev)
 {
 	struct hci_conn_hash *c = &hdev->conn_hash;
@@ -1103,6 +1104,7 @@ static inline unsigned int hci_conn_count(struct hci_dev *hdev)
 	return c->acl_num + c->sco_num + c->le_num + c->iso_num;
 }
 
+/*检查conn是否在hdev->conn_hash表上*/
 static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
@@ -1122,6 +1124,7 @@ static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
 	return false;/*此connect未添加至h->list上*/
 }
 
+/*已知connect handle取对应连接的type*/
 static inline __u8 hci_conn_lookup_type(struct hci_dev *hdev, __u16 handle)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
@@ -1235,6 +1238,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_handle(struct hci_dev *hdev,
 	return NULL;
 }
 
+/*通过type,目的地址ba查找对应的hci_conn*/
 static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 							__u8 type/*链路类型*/, bdaddr_t *ba)
 {
@@ -1255,6 +1259,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 	return NULL;
 }
 
+/*通过目的地址ba及地址类型查询LE_LINK连接*/
 static inline struct hci_conn *hci_conn_hash_lookup_le(struct hci_dev *hdev,
 						       bdaddr_t *ba,
 						       __u8 ba_type)
@@ -1266,8 +1271,9 @@ static inline struct hci_conn *hci_conn_hash_lookup_le(struct hci_dev *hdev,
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type != LE_LINK)
-		       continue;
+		       continue;/*只查le_link*/
 
+		/*地址类型与目的地址相同*/
 		if (ba_type == c->dst_type && !bacmp(&c->dst, ba)) {
 			rcu_read_unlock();
 			return c;
@@ -1292,7 +1298,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_cis(struct hci_dev *hdev,
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type != CIS_LINK)
-			continue;
+			continue;/*只查cis_link*/
 
 		/* Match CIG ID if set */
 		if (cig != c->iso_qos.ucast.cig)
@@ -1324,7 +1330,7 @@ static inline struct hci_conn *hci_conn_hash_lookup_cig(struct hci_dev *hdev,
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type != CIS_LINK)
-			continue;
+			continue;/*只查cis_link*/
 
 		if (handle == c->iso_qos.ucast.cig) {
 			rcu_read_unlock();
@@ -1663,6 +1669,7 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 {
 	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
 
+	/*减少引用计数后变更为0,则执行释放*/
 	if (atomic_dec_and_test(&conn->refcnt)) {
 		unsigned long timeo;
 
@@ -2006,7 +2013,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 /* Maximum advertising length */
 /*最大广播报文长度*/
 #define max_adv_len(dev) \
-	(ext_adv_capable(dev) ? HCI_MAX_EXT_AD_LENGTH : HCI_MAX_AD_LENGTH)
+	(ext_adv_capable(dev) ? HCI_MAX_EXT_AD_LENGTH/*扩展广播长度*/ : HCI_MAX_AD_LENGTH)
 
 /* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 4, Part E page 1789:
  *

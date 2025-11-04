@@ -389,8 +389,8 @@ void baswap(bdaddr_t *dst, const bdaddr_t *src);
 
 struct bt_sock {
 	struct sock sk;
-	struct list_head accept_q;
-	struct sock *parent;
+	struct list_head accept_q;/*用于挂接到/挂接待accept的socket*/
+	struct sock *parent;/*指定其父SOCET,例如基于parent将产生的new 连接会指向其parent*/
 	unsigned long flags;
 	void (*skb_msg_name)(struct sk_buff *, void *, int *);
 	void (*skb_put_cmsg)(struct sk_buff *, struct msghdr *, struct sock *);

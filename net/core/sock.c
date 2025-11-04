@@ -2325,7 +2325,7 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
  *	@kern: is this to be a kernel socket?
  */
 struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
-		      struct proto *prot/*sock关联的协议*/, int kern)
+		      struct proto *prot/*sock关联的协议*/, int kern/*是否kern创建*/)
 {
 	struct sock *sk;
 

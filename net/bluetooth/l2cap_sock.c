@@ -184,7 +184,7 @@ done:
 }
 
 static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标地址*/,
-			      int alen/*地址长度*/, int flags)
+			      int alen/*地址长度*/, int flags/*是否阻塞*/)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -207,7 +207,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 
 	memset(&la, 0, sizeof(la));
 	len = min_t(unsigned int, sizeof(la), alen);/*alen长度不得超过sizeof(la)*/
-	memcpy(&la, addr, len);/*设置目标地址到la*/
+	memcpy(&la, addr, len);/*复制用户态设置的目标地址到la*/
 
 	if (la.l2_cid && la.l2_psm)
 		return -EINVAL;/*cid与psm同时有值*/
@@ -222,7 +222,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	 */
 	if (chan->src_type == BDADDR_BREDR && bacmp(&chan->src, BDADDR_ANY) &&
 	    bdaddr_type_is_le(la.l2_bdaddr_type)) {
-		/*源地址是bdaddr_berdr,且源地址为any,且目地址是LE类型*/
+		/*源地址是bdaddr_berdr,且源地址为any,而且目地址是LE类型*/
 		/* Old user space versions will try to incorrectly bind
 		 * the ATT socket using BDADDR_BREDR. We need to accept
 		 * this and fix up the source address type only when
@@ -259,7 +259,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	    chan->mode != L2CAP_MODE_EXT_FLOWCTL)
 		chan->mode = L2CAP_MODE_LE_FLOWCTL;
 
-	/*执行连接*/
+	/*通过channel执行连接请求*/
 	err = l2cap_chan_connect(chan, la.l2_psm, __le16_to_cpu(la.l2_cid),
 				 &la.l2_bdaddr, la.l2_bdaddr_type,
 				 READ_ONCE(sk->sk_sndtimeo));
@@ -269,7 +269,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 	lock_sock(sk);
 
 	err = bt_sock_wait_state(sk, BT_CONNECTED,
-				 sock_sndtimeo(sk, flags & O_NONBLOCK));/*等待状态变更*/
+				 sock_sndtimeo(sk, flags & O_NONBLOCK));/*等待状态变更为connected*/
 
 	release_sock(sk);
 
@@ -279,7 +279,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr/*目标
 static int l2cap_sock_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
-	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
+	struct l2cap_chan *chan = l2cap_pi(sk)->chan;/*取此socket对应的channel*/
 	int err = 0;
 
 	BT_DBG("sk %p backlog %d", sk, backlog);
@@ -288,11 +288,11 @@ static int l2cap_sock_listen(struct socket *sock, int backlog)
 
 	if (sk->sk_state != BT_BOUND) {
 		err = -EBADFD;
-		goto done;
+		goto done;/*必须已调用bind*/
 	}
 
 	if (sk->sk_type != SOCK_SEQPACKET && sk->sk_type != SOCK_STREAM) {
-		err = -EINVAL;
+		err = -EINVAL;/*LISTEN的只支持以上两种*/
 		goto done;
 	}
 
@@ -316,7 +316,7 @@ static int l2cap_sock_listen(struct socket *sock, int backlog)
 		goto done;
 	}
 
-	sk->sk_max_ack_backlog = backlog;
+	sk->sk_max_ack_backlog = backlog;/*设置最大backlog*/
 	sk->sk_ack_backlog = 0;
 
 	/* Listening channels need to use nested locking in order not to
@@ -325,7 +325,7 @@ static int l2cap_sock_listen(struct socket *sock, int backlog)
 	 */
 	atomic_set(&chan->nesting, L2CAP_NESTING_PARENT);
 
-	chan->state = BT_LISTEN;
+	chan->state = BT_LISTEN;/*置为listen状态*/
 	sk->sk_state = BT_LISTEN;
 
 done:
@@ -355,13 +355,14 @@ static int l2cap_sock_accept(struct socket *sock, struct socket *newsock,
 			break;
 		}
 
+		/*接收一个新的socket,这个socket已挂在accept_q上了*/
 		nsk = bt_accept_dequeue(sk, newsock);
 		if (nsk)
-			break;
+			break;/*获得新的socket*/
 
 		if (!timeo) {
 			err = -EAGAIN;
-			break;
+			break;/*没有新的socket且不需要阻塞,直接返回*/
 		}
 
 		if (signal_pending(current)) {
@@ -375,12 +376,12 @@ static int l2cap_sock_accept(struct socket *sock, struct socket *newsock,
 
 		lock_sock_nested(sk, L2CAP_NESTING_PARENT);
 	}
-	remove_wait_queue(sk_sleep(sk), &wait);
+	remove_wait_queue(sk_sleep(sk), &wait);/*要么成功,要么失败,总之不必再等*/
 
 	if (err)
 		goto done;
 
-	newsock->state = SS_CONNECTED;
+	newsock->state = SS_CONNECTED;/*新socket状态变更为connected*/
 
 	BT_DBG("new socket %p", nsk);
 
@@ -390,7 +391,7 @@ done:
 }
 
 static int l2cap_sock_getname(struct socket *sock, struct sockaddr *addr,
-			      int peer)
+			      int peer/*是否取peer*/)
 {
 	struct sockaddr_l2 *la = (struct sockaddr_l2 *) addr;
 	struct sock *sk = sock->sk;
@@ -401,13 +402,14 @@ static int l2cap_sock_getname(struct socket *sock, struct sockaddr *addr,
 	if (peer && sk->sk_state != BT_CONNECTED &&
 	    sk->sk_state != BT_CONNECT && sk->sk_state != BT_CONNECT2 &&
 	    sk->sk_state != BT_CONFIG)
-		return -ENOTCONN;
+		return -ENOTCONN;/*未达到连接状态,无法获取peer*/
 
 	memset(la, 0, sizeof(struct sockaddr_l2));
 	addr->sa_family = AF_BLUETOOTH;
 
 	la->l2_psm = chan->psm;
 
+	/*自channel中提取*/
 	if (peer) {
 		bacpy(&la->l2_bdaddr, &chan->dst);
 		la->l2_cid = cpu_to_le16(chan->dcid);
@@ -919,7 +921,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		if (chan->chan_type != L2CAP_CHAN_CONN_ORIENTED &&
 		    chan->chan_type != L2CAP_CHAN_FIXED &&
 		    chan->chan_type != L2CAP_CHAN_RAW) {
-			/*不是以上三种，则报错*/
+			/*不是以上三种，则报错,不容许设置*/
 			err = -EINVAL;
 			break;
 		}
@@ -978,7 +980,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		if (opt) {
-			/*设置DEFER_SETUP标记*/
+			/*不为0,设置DEFER_SETUP标记*/
 			set_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
 			set_bit(FLAG_DEFER_SETUP, &chan->flags);
 		} else {
@@ -1133,7 +1135,7 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return err;
 
 	if (msg->msg_flags & MSG_OOB)
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*不支持oob标记*/
 
 	if (sk->sk_state != BT_CONNECTED)
 		return -ENOTCONN;/*必须处于connected状态*/
@@ -1153,6 +1155,7 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return err;
 
 	l2cap_chan_lock(chan);
+	/*通过channel发送消息*/
 	err = l2cap_chan_send(chan, msg, len, &sockc);
 	l2cap_chan_unlock(chan);
 
@@ -1494,11 +1497,13 @@ static struct l2cap_chan *l2cap_sock_new_connection_cb(struct l2cap_chan *chan)
 
 	/* Check for backlog size */
 	if (sk_acceptq_is_full(parent)) {
+		/*backlog过大,报错*/
 		BT_DBG("backlog full %d", parent->sk_ack_backlog);
 		release_sock(parent);
 		return NULL;
 	}
 
+	/*创建新的socket*/
 	sk = l2cap_sock_alloc(sock_net(parent), NULL, BTPROTO_L2CAP,
 			      GFP_ATOMIC, 0);
 	if (!sk) {
@@ -1510,6 +1515,7 @@ static struct l2cap_chan *l2cap_sock_new_connection_cb(struct l2cap_chan *chan)
 
 	l2cap_sock_init(sk, parent);
 
+	/*加入到parent->accept_q队列,后续accept会接入此socket*/
 	bt_accept_enqueue(parent, sk, false);
 
 	release_sock(parent);
@@ -1650,7 +1656,7 @@ static void l2cap_sock_state_change_cb(struct l2cap_chan *chan, int state,
 {
 	struct sock *sk = chan->data;
 
-	sk->sk_state = state;
+	sk->sk_state = state;/*设置socket状态*/
 
 	if (err)
 		sk->sk_err = err;
@@ -1693,15 +1699,15 @@ static void l2cap_sock_ready_cb(struct l2cap_chan *chan)
 
 	lock_sock(sk);
 
-	parent = bt_sk(sk)->parent;
+	parent = bt_sk(sk)->parent;/*取得父连接*/
 
 	BT_DBG("sk %p, parent %p", sk, parent);
 
-	sk->sk_state = BT_CONNECTED;
-	sk->sk_state_change(sk);
+	sk->sk_state = BT_CONNECTED;/*标记SOCKET达到connected状态*/
+	sk->sk_state_change(sk);/*通过状态变更*/
 
 	if (parent)
-		parent->sk_data_ready(parent);
+		parent->sk_data_ready(parent);/*通知父socket ready(父socket是那个listen的socket)*/
 
 	release_sock(sk);
 }
@@ -1744,6 +1750,7 @@ static void l2cap_sock_set_shutdown_cb(struct l2cap_chan *chan)
 	release_sock(sk);
 }
 
+/*获取发送超时时间*/
 static long l2cap_sock_get_sndtimeo_cb(struct l2cap_chan *chan)
 {
 	struct sock *sk = chan->data;
@@ -1781,12 +1788,12 @@ static int l2cap_sock_filter(struct l2cap_chan *chan, struct sk_buff *skb)
 
 static const struct l2cap_ops l2cap_chan_ops = {
 	.name			= "L2CAP Socket Interface",
-	.new_connection		= l2cap_sock_new_connection_cb,
+	.new_connection		= l2cap_sock_new_connection_cb,/*新增新的连接*/
 	.recv			= l2cap_sock_recv_cb,
 	.close			= l2cap_sock_close_cb,
 	.teardown		= l2cap_sock_teardown_cb,
-	.state_change		= l2cap_sock_state_change_cb,
-	.ready			= l2cap_sock_ready_cb,
+	.state_change		= l2cap_sock_state_change_cb,/*变更socket状态*/
+	.ready			= l2cap_sock_ready_cb,/*配置成功后,调用此函数表明连接ready*/
 	.defer			= l2cap_sock_defer_cb,
 	.resume			= l2cap_sock_resume_cb,
 	.suspend		= l2cap_sock_suspend_cb,
@@ -1838,6 +1845,7 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 	BT_DBG("sk %p", sk);
 
 	if (parent) {
+		/*继承父节点配置*/
 		struct l2cap_chan *pchan = l2cap_pi(parent)->chan;
 
 		sk->sk_type = parent->sk_type;
@@ -1930,7 +1938,7 @@ static struct sock *l2cap_sock_alloc(struct net *net, struct socket *sock,
 
 	l2cap_chan_hold(chan);
 
-	l2cap_pi(sk)->chan = chan;
+	l2cap_pi(sk)->chan = chan;/*设置channel*/
 
 	return sk;
 }
@@ -1969,11 +1977,11 @@ static const struct proto_ops l2cap_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= l2cap_sock_release,
-	.bind		= l2cap_sock_bind,
+	.bind		= l2cap_sock_bind,/*bind psm/cid*/
 	.connect	= l2cap_sock_connect,/*执行到对端的连接*/
 	.listen		= l2cap_sock_listen,
 	.accept		= l2cap_sock_accept,
-	.getname	= l2cap_sock_getname,
+	.getname	= l2cap_sock_getname,/*取本端NAME/远端name*/
 	.sendmsg	= l2cap_sock_sendmsg,/*报文发送*/
 	.recvmsg	= l2cap_sock_recvmsg,/*报文接收*/
 	.poll		= bt_sock_poll,

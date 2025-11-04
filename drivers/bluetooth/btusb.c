@@ -2198,6 +2198,7 @@ static void btusb_notify(struct hci_dev *hdev, unsigned int evt)
 	BT_DBG("%s evt %d", hdev->name, evt);
 
 	if (hci_conn_num(hdev, SCO_LINK) != data->sco_num) {
+		/*SCO LINk数量不一致时,触发data->work*/
 		data->sco_num = hci_conn_num(hdev, SCO_LINK);
 		data->air_mode = evt;
 		schedule_work(&data->work);

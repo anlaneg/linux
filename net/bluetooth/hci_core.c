@@ -3164,8 +3164,8 @@ static int hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 static int hci_send_conn_frame(struct hci_dev *hdev, struct hci_conn *conn,
 			       struct sk_buff *skb)
 {
-	hci_conn_tx_queue(conn, skb);
-	return hci_send_frame(hdev, skb);
+	hci_conn_tx_queue(conn, skb);/*要SKB复制一份挂接到conn->tx_q*/
+	return hci_send_frame(hdev, skb);/*将skb通过send接口发送*/
 }
 
 /* Send HCI command */
@@ -3295,6 +3295,7 @@ static void hci_add_acl_hdr(struct sk_buff *skb, __u16 handle, __u16 flags)
 	struct hci_acl_hdr *hdr;
 	int len = skb->len;
 
+	/*添加acl hdr*/
 	skb_push(skb, HCI_ACL_HDR_SIZE);
 	skb_reset_transport_header(skb);
 	hdr = (struct hci_acl_hdr *)skb_transport_header(skb);
@@ -3312,16 +3313,16 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 	skb->len = skb_headlen(skb);
 	skb->data_len = 0;
 
-	hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;
+	hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明报文类型*/
 
-	hci_add_acl_hdr(skb, conn->handle, flags);
+	hci_add_acl_hdr(skb, conn->handle, flags);/*添加acl header*/
 
 	list = skb_shinfo(skb)->frag_list;
 	if (!list) {
 		/* Non fragmented */
 		BT_DBG("%s nonfrag skb %p len %d", hdev->name, skb, skb->len);
 
-		skb_queue_tail(queue, skb);
+		skb_queue_tail(queue, skb);/*仅有一片,加入队列即可*/
 	} else {
 		/* Fragmented */
 		BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
@@ -3337,8 +3338,8 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 
 		__skb_queue_tail(queue, skb);
 
-		flags &= ~ACL_START;
-		flags |= ACL_CONT;
+		flags &= ~ACL_START;/*其它片移除acl_start标记*/
+		flags |= ACL_CONT;/*其它片添加ACL_CONTINUE标记*/
 		do {
 			skb = list; list = list->next;
 
@@ -3347,14 +3348,14 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 
 			BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
 
-			__skb_queue_tail(queue, skb);
+			__skb_queue_tail(queue, skb);/*加入到队列*/
 		} while (list);
 
 		spin_unlock_bh(&queue->lock);
 	}
 }
 
-void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb, __u16 flags)
+void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb/*要发送的报文,可能有分片*/, __u16 flags)
 {
 	struct hci_dev *hdev = chan->conn->hdev;
 
@@ -3569,6 +3570,7 @@ static struct hci_chan *hci_chan_sent(struct hci_dev *hdev, __u8 type,
 
 	rcu_read_lock();
 
+	/*遍历此hci设备所有connection*/
 	list_for_each_entry_rcu(conn, &h->list, list) {
 		struct hci_chan *tmp;
 
@@ -3578,13 +3580,14 @@ static struct hci_chan *hci_chan_sent(struct hci_dev *hdev, __u8 type,
 		if (conn->state != BT_CONNECTED && conn->state != BT_CONFIG)
 			continue;
 
-		conn_num++;
+		conn_num++;/*连接数量*/
 
+		/*遍历此connect下所有channel*/
 		list_for_each_entry_rcu(tmp, &conn->chan_list, list) {
 			struct sk_buff *skb;
 
 			if (skb_queue_empty(&tmp->data_q))
-				continue;
+				continue;/*此channel data_q无数据包*/
 
 			skb = skb_peek(&tmp->data_q);
 			if (skb->priority < cur_prio)
@@ -3755,12 +3758,13 @@ static void hci_sched_acl_pkt(struct hci_dev *hdev)
 			if (skb->priority < priority)
 				break;
 
+			/*出队要发送的报文*/
 			skb = skb_dequeue(&chan->data_q);
 
 			hci_conn_enter_active_mode(chan->conn,
 						   bt_cb(skb)->force_active);
 
-			hci_send_conn_frame(hdev, chan->conn, skb);
+			hci_send_conn_frame(hdev, chan->conn, skb);/*发送报文*/
 			hdev->acl_last_tx = jiffies;
 
 			hdev->acl_cnt--;
@@ -3783,7 +3787,7 @@ static void hci_sched_acl(struct hci_dev *hdev)
 
 	/* No ACL link over BR/EDR controller */
 	if (!hci_conn_num(hdev, ACL_LINK))
-		return;
+		return;/*没有acl_link,直接返回*/
 
 	hci_sched_acl_pkt(hdev);
 }
@@ -3919,7 +3923,7 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 		hci_conn_enter_active_mode(conn, BT_POWER_FORCE_ACTIVE_OFF);
 
 		/* Send to upper protocol */
-		l2cap_recv_acldata(conn, skb, flags);/*此连接收到acl数据报文*/
+		l2cap_recv_acldata(conn, skb, flags);/*此连接收到acl数据报文,处理此报文*/
 		return;
 	} else {
 		/*没有找到连接，丢包*/

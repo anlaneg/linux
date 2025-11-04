@@ -195,8 +195,8 @@ struct l2cap_conninfo {
 
 /* L2CAP structures */
 struct l2cap_hdr {
-	__le16     len;
-	__le16     cid;
+	__le16     len;/*长度不包含L2CAP_HDR_SIZE,但包含L2CAP_CMD_HDR_SIZE及参数长度*/
+	__le16     cid;/*指定channel id*/
 } __packed;
 #define L2CAP_LEN_SIZE		2
 #define L2CAP_HDR_SIZE		4
@@ -210,9 +210,9 @@ struct l2cap_hdr {
 #define L2CAP_EXT_CTRL_SIZE	4
 
 struct l2cap_cmd_hdr {
-	__u8       code;
-	__u8       ident;
-	__le16     len;
+	__u8       code;/*对应的命令code*/
+	__u8       ident;/*标识*/
+	__le16     len;/*数据长度,不含L2CAP_CMD_HDR_SIZE长度*/
 } __packed;
 #define L2CAP_CMD_HDR_SIZE	4
 
@@ -233,7 +233,7 @@ struct l2cap_cmd_rej_cid {
 
 struct l2cap_conn_req {
 	__le16     psm;
-	__le16     scid;
+	__le16     scid;/*源channel id*/
 } __packed;
 
 struct l2cap_conn_rsp {
@@ -294,7 +294,7 @@ struct l2cap_conn_rsp {
 #define L2CAP_CS_AUTHOR_PEND	0x0002
 
 struct l2cap_conf_req {
-	__le16     dcid;
+	__le16     dcid;/*目的channel id*/
 	__le16     flags;
 	__u8       data[];
 } __packed;
@@ -317,15 +317,16 @@ struct l2cap_conf_rsp {
 #define L2CAP_CONF_FLAG_CONTINUATION	0x0001
 
 struct l2cap_conf_opt {
-	__u8       type;
-	__u8       len;
-	__u8       val[];
+	__u8       type;/*配置选项类型*/
+	__u8       len;/*仅包含val长度*/
+	__u8       val[];/*选项内容*/
 } __packed;
 #define L2CAP_CONF_OPT_SIZE	2
 
 #define L2CAP_CONF_HINT		0x80
 #define L2CAP_CONF_MASK		0x7f
 
+/*配置选项type*/
 #define L2CAP_CONF_MTU		0x01
 #define L2CAP_CONF_FLUSH_TO	0x02
 #define L2CAP_CONF_QOS		0x03
@@ -510,7 +511,7 @@ struct l2cap_seq_list {
 #define L2CAP_SEQ_LIST_TAIL	0x8000
 
 struct l2cap_chan {
-	struct l2cap_conn	*conn;
+	struct l2cap_conn	*conn;/*所属的l2cap conn*/
 	struct kref	kref;
 	atomic_t	nesting;
 
@@ -522,8 +523,8 @@ struct l2cap_chan {
 	__u8		src_type;/*源地址类型,例如:BDADDR_BREDR*/
 	__le16		psm;/*目标psm*/
 	__le16		sport;/*源port*/
-	__u16		dcid;/*目标cid*/
-	__u16		scid;
+	__u16		dcid;/*目标channel id*/
+	__u16		scid;/*源channel id*/
 
 	__u16		imtu;
 	__u16		omtu;
@@ -534,14 +535,14 @@ struct l2cap_chan {
 	__u8		chan_type;
 	__u8		chan_policy;
 
-	__u8		sec_level;/*例如：BT_SECURITY_MEDIUM*/
+	__u8		sec_level;/*设置安全级别,例如：BT_SECURITY_MEDIUM*/
 
 	__u8		ident;
 
-	__u8		conf_req[64];
-	__u8		conf_len;
+	__u8		conf_req[64];/*缓存远端发送来的配置请求*/
+	__u8		conf_len;/*用于跟踪conf_req数组中已写入的数据长度*/
 	__u8		num_conf_req;
-	__u8		num_conf_rsp;
+	__u8		num_conf_rsp;/*已发送的配置响应数*/
 
 	__u8		fcs;
 
@@ -597,7 +598,7 @@ struct l2cap_chan {
 	__u32		remote_acc_lat;
 	__u32		remote_flush_to;
 
-	struct delayed_work	chan_timer;
+	struct delayed_work	chan_timer;/*发送超时timer(用于关闭channel)*/
 	struct delayed_work	retrans_timer;/*重传timer*/
 	struct delayed_work	monitor_timer;
 	struct delayed_work	ack_timer;
@@ -618,12 +619,13 @@ struct l2cap_chan {
 
 struct l2cap_ops {
 	char			*name;
-
+	/*增加新的连接,准备accept*/
 	struct l2cap_chan	*(*new_connection) (struct l2cap_chan *chan);
 	int			(*recv) (struct l2cap_chan * chan,
 					 struct sk_buff *skb);
 	void			(*teardown) (struct l2cap_chan *chan, int err);
 	void			(*close) (struct l2cap_chan *chan);
+	/*状态变更时调用*/
 	void			(*state_change) (struct l2cap_chan *chan,
 						 int state, int err);
 	void			(*ready) (struct l2cap_chan *chan);
@@ -631,6 +633,7 @@ struct l2cap_ops {
 	void			(*resume) (struct l2cap_chan *chan);
 	void			(*suspend) (struct l2cap_chan *chan);
 	void			(*set_shutdown) (struct l2cap_chan *chan);
+	/*获取发送超时时间*/
 	long			(*get_sndtimeo) (struct l2cap_chan *chan);
 	struct pid		*(*get_peer_pid) (struct l2cap_chan *chan);
 	/*申请并初始化skb,指定skb总长度hdr_len + len*/
@@ -642,8 +645,8 @@ struct l2cap_ops {
 };
 
 struct l2cap_conn {
-	struct hci_conn		*hcon;
-	struct hci_chan		*hchan;
+	struct hci_conn		*hcon;/*对应的hci connect*/
+	struct hci_chan		*hchan;/*对应的hci channel*/
 
 	unsigned int		mtu;/*此连接可发送的最大长度*/
 
@@ -659,10 +662,10 @@ struct l2cap_conn {
 	struct sk_buff		*rx_skb;
 	__u32			rx_len;
 	__u8			tx_ident;
-	struct mutex		ident_lock;
+	struct mutex		ident_lock;/*保护tx_ident变化*/
 
 	struct sk_buff_head	pending_rx;
-	struct work_struct	pending_rx_work;
+	struct work_struct	pending_rx_work;/*负责收pending_rx上挂接的报文*/
 
 	struct delayed_work	id_addr_timer;
 
@@ -835,6 +838,7 @@ static inline void l2cap_chan_unlock(struct l2cap_chan *chan)
 	mutex_unlock(&chan->lock);
 }
 
+/*使work在timeout时间后触发*/
 static inline void l2cap_set_timer(struct l2cap_chan *chan,
 				   struct delayed_work *work, long timeout)
 {
@@ -863,6 +867,7 @@ static inline bool l2cap_clear_timer(struct l2cap_chan *chan,
 	return ret;
 }
 
+/*的t时间后启动c->chan_timer work*/
 #define __set_chan_timer(c, t) l2cap_set_timer(c, &c->chan_timer, (t))
 #define __clear_chan_timer(c) l2cap_clear_timer(c, &c->chan_timer)
 #define __clear_retrans_timer(c) l2cap_clear_timer(c, &c->retrans_timer)

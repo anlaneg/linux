@@ -6590,7 +6590,7 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 	bt_dev_dbg(hdev, "conn %p", conn);
 
 	clear_bit(HCI_CONN_SCANNING, &conn->flags);
-	conn->state = BT_CONNECT;
+	conn->state = BT_CONNECT;/*定为connect状态*/
 
 	/* If requested to connect as peripheral use directed advertising */
 	if (conn->role == HCI_ROLE_SLAVE) {

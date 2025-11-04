@@ -49,7 +49,7 @@ static u32 l2cap_feat_mask = L2CAP_FEAT_FIXED_CHAN | L2CAP_FEAT_UCD;
 
 /*记录系统中所有l2cap_chan*/
 static LIST_HEAD(chan_list);
-static DEFINE_RWLOCK(chan_list_lock);
+static DEFINE_RWLOCK(chan_list_lock);/*保护chan_list*/
 
 static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn,
 				       u8 code, u8 ident, u16 dlen, void *data);
@@ -88,6 +88,7 @@ static inline u8 bdaddr_dst_type(struct hci_conn *hcon)
 
 /* ---- L2CAP channels ---- */
 
+/*通过dcid查找l2cap_channel*/
 static struct l2cap_chan *__l2cap_get_chan_by_dcid(struct l2cap_conn *conn,
 						   u16 cid)
 {
@@ -100,6 +101,7 @@ static struct l2cap_chan *__l2cap_get_chan_by_dcid(struct l2cap_conn *conn,
 	return NULL;
 }
 
+/*检查此连接是否有指定的源CHANNEL ID的l2cap_chan*/
 static struct l2cap_chan *__l2cap_get_chan_by_scid(struct l2cap_conn *conn,
 						   u16 cid)
 {
@@ -150,6 +152,7 @@ static struct l2cap_chan *l2cap_get_chan_by_dcid(struct l2cap_conn *conn,
 	return c;
 }
 
+/*在conn中通过ident查找l2cap_chan*/
 static struct l2cap_chan *__l2cap_get_chan_by_ident(struct l2cap_conn *conn,
 						    u8 ident)
 {
@@ -242,13 +245,14 @@ int l2cap_add_scid(struct l2cap_chan *chan,  __u16 scid)
 	chan->omtu = L2CAP_DEFAULT_MTU;
 	chan->chan_type = L2CAP_CHAN_FIXED;
 
-	chan->scid = scid;
+	chan->scid = scid;/*设置源channel id*/
 
 	write_unlock(&chan_list_lock);
 
 	return 0;
 }
 
+/*为此连接申请cid*/
 static u16 l2cap_alloc_cid(struct l2cap_conn *conn)
 {
 	u16 cid, dyn_end;
@@ -258,19 +262,22 @@ static u16 l2cap_alloc_cid(struct l2cap_conn *conn)
 	else
 		dyn_end = L2CAP_CID_DYN_END;
 
+	/*遍历动态id,取一个未使用的cid*/
 	for (cid = L2CAP_CID_DYN_START; cid <= dyn_end; cid++) {
 		if (!__l2cap_get_chan_by_scid(conn, cid))
-			return cid;
+			return cid;/*未使用*/
 	}
 
 	return 0;
 }
 
+/*变更channel,socket状态*/
 static void l2cap_state_change(struct l2cap_chan *chan, int state)
 {
 	BT_DBG("chan %p %s -> %s", chan, state_to_string(chan->state),
 	       state_to_string(state));
 
+	/*变更channel状态,SOCKET状态*/
 	chan->state = state;
 	chan->ops->state_change(chan, state, 0);
 }
@@ -416,7 +423,7 @@ static void l2cap_chan_timeout(struct work_struct *work)
 {
 	struct l2cap_chan *chan = container_of(work, struct l2cap_chan,
 					       chan_timer.work);
-	struct l2cap_conn *conn = chan->conn;
+	struct l2cap_conn *conn = chan->conn;/*取此channel对应的connect*/
 	int reason;
 
 	BT_DBG("chan %p state %s", chan, state_to_string(chan->state));
@@ -431,14 +438,14 @@ static void l2cap_chan_timeout(struct work_struct *work)
 	l2cap_chan_lock(chan);
 
 	if (chan->state == BT_CONNECTED || chan->state == BT_CONFIG)
-		reason = ECONNREFUSED;
+		reason = ECONNREFUSED;/*已连接或已配置,置为连接拒绝*/
 	else if (chan->state == BT_CONNECT &&
 		 chan->sec_level != BT_SECURITY_SDP)
 		reason = ECONNREFUSED;
 	else
 		reason = ETIMEDOUT;
 
-	l2cap_chan_close(chan, reason);
+	l2cap_chan_close(chan, reason);/*关闭channel*/
 
 	chan->ops->close(chan);
 
@@ -594,6 +601,7 @@ static void l2cap_ecred_init(struct l2cap_chan *chan, u16 tx_credits)
 	}
 }
 
+/*为l2cap conn添加l2cap channel*/
 void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
 {
 	BT_DBG("conn %p, psm 0x%2.2x, dcid 0x%4.4x", conn,
@@ -606,9 +614,9 @@ void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
 	switch (chan->chan_type) {
 	case L2CAP_CHAN_CONN_ORIENTED:
 		/* Alloc CID for connection-oriented socket */
-		chan->scid = l2cap_alloc_cid(conn);
+		chan->scid = l2cap_alloc_cid(conn);/*分配一个*/
 		if (conn->hcon->type == ACL_LINK)
-			chan->omtu = L2CAP_DEFAULT_MTU;
+			chan->omtu = L2CAP_DEFAULT_MTU;/*设置默认 mTU*/
 		break;
 
 	case L2CAP_CHAN_CONN_LESS:
@@ -644,7 +652,7 @@ void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
 		hci_conn_hold(conn->hcon);
 
 	/* Append to the list since the order matters for ECRED */
-	list_add_tail(&chan->list, &conn->chan_l);
+	list_add_tail(&chan->list, &conn->chan_l);/*将此channel加入到L2cap connect*/
 }
 
 void l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
@@ -729,7 +737,7 @@ static void __l2cap_chan_list(struct l2cap_conn *conn, l2cap_chan_func_t func,
 	struct l2cap_chan *chan;
 
 	list_for_each_entry(chan, &conn->chan_l, list) {
-		func(chan, data);
+		func(chan, data);/*针对此conn上所有channel执行回调func*/
 	}
 }
 
@@ -935,6 +943,7 @@ int l2cap_chan_check_security(struct l2cap_chan *chan, bool initiator)
 				 initiator);
 }
 
+/*获取ID*/
 static u8 l2cap_get_ident(struct l2cap_conn *conn)
 {
 	u8 id;
@@ -964,12 +973,13 @@ static void l2cap_send_acl(struct l2cap_conn *conn, struct sk_buff *skb,
 	if (hci_conn_valid(conn->hcon->hdev, conn->hcon))
 		hci_send_acl(conn->hchan, skb, flags);
 	else
-		kfree_skb(skb);
+		kfree_skb(skb);/*这种直接释放报文*/
 }
 
-static void l2cap_send_cmd(struct l2cap_conn *conn, u8 ident, u8 code, u16 len,
+static void l2cap_send_cmd(struct l2cap_conn *conn, u8 ident, u8 code/*命令code*/, u16 len/*data参数长度*/,
 			   void *data)
 {
+	/*构造l2cap命令报文*/
 	struct sk_buff *skb = l2cap_build_cmd(conn, code, ident, len, data);
 	u8 flags;
 
@@ -989,6 +999,7 @@ static void l2cap_send_cmd(struct l2cap_conn *conn, u8 ident, u8 code, u16 len,
 	bt_cb(skb)->force_active = BT_POWER_FORCE_ACTIVE_ON;
 	skb->priority = HCI_PRIO_MAX;
 
+	/*发送此报文*/
 	l2cap_send_acl(conn, skb, flags);
 }
 
@@ -1178,7 +1189,7 @@ static void l2cap_send_sframe(struct l2cap_chan *chan,
 	BT_DBG("chan %p, control %p", chan, control);
 
 	if (!control->sframe)
-		return;
+		return;/*必须为sframe置为真*/
 
 	if (test_and_clear_bit(CONN_SEND_FBIT, &chan->conn_state) &&
 	    !control->poll)
@@ -1204,7 +1215,7 @@ static void l2cap_send_sframe(struct l2cap_chan *chan,
 
 	skb = l2cap_create_sframe_pdu(chan, control_field);
 	if (!IS_ERR(skb))
-		l2cap_do_send(chan, skb);
+		l2cap_do_send(chan, skb);/*发送报文*/
 }
 
 static void l2cap_send_rr_or_rnr(struct l2cap_chan *chan, bool poll)
@@ -1234,19 +1245,20 @@ static inline int __l2cap_no_conn_pending(struct l2cap_chan *chan)
 	return !test_bit(CONF_CONNECT_PEND, &chan->conf_state);
 }
 
+/*发送l2cap连接请求*/
 void l2cap_send_conn_req(struct l2cap_chan *chan)
 {
 	struct l2cap_conn *conn = chan->conn;
 	struct l2cap_conn_req req;
 
 	req.scid = cpu_to_le16(chan->scid);
-	req.psm  = chan->psm;
+	req.psm  = chan->psm;/*指明远端psm*/
 
-	chan->ident = l2cap_get_ident(conn);
+	chan->ident = l2cap_get_ident(conn);/*分配ident*/
 
 	set_bit(CONF_CONNECT_PEND, &chan->conf_state);
 
-	/*发送l2cap conn req命令*/
+	/*发送l2cap conn req命令,用于在两个设备间创建一个l2cap channel*/
 	l2cap_send_cmd(conn, chan->ident, L2CAP_CONN_REQ, sizeof(req), &req);
 }
 
@@ -1271,9 +1283,9 @@ static void l2cap_chan_ready(struct l2cap_chan *chan)
 		break;
 	}
 
-	chan->state = BT_CONNECTED;
+	chan->state = BT_CONNECTED;/*CHANNEL成功,变connected状态*/
 
-	chan->ops->ready(chan);
+	chan->ops->ready(chan);/*触发ready函数*/
 }
 
 static void l2cap_le_connect(struct l2cap_chan *chan)
@@ -1397,9 +1409,11 @@ static void l2cap_le_start(struct l2cap_chan *chan)
 	}
 }
 
+/*发送连接请求,开始创建连接*/
 static void l2cap_start_connection(struct l2cap_chan *chan)
 {
 	if (chan->conn->hcon->type == LE_LINK) {
+		/*LE模式建连*/
 		l2cap_le_start(chan);
 	} else {
 		l2cap_send_conn_req(chan);
@@ -1654,7 +1668,7 @@ static void l2cap_conn_ready(struct l2cap_conn *conn)
 	if (hcon->type == LE_LINK)
 		l2cap_le_conn_ready(conn);
 
-	queue_work(hcon->hdev->workqueue, &conn->pending_rx_work);
+	queue_work(hcon->hdev->workqueue, &conn->pending_rx_work);/*触发收包*/
 }
 
 /* Notify sockets that we cannot guaranty reliability anymore */
@@ -1783,7 +1797,7 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 	 * pending_rx_work is waiting on.
 	 */
 	if (work_pending(&conn->pending_rx_work))
-		cancel_work_sync(&conn->pending_rx_work);
+		cancel_work_sync(&conn->pending_rx_work);/*停止收包*/
 
 	cancel_delayed_work_sync(&conn->id_addr_timer);
 
@@ -1853,7 +1867,7 @@ static struct l2cap_chan *l2cap_global_chan_by_psm(int state, __le16 psm,
 
 	list_for_each_entry_safe(c, tmp, &chan_list, global_l) {
 		if (state && c->state != state)
-			continue;
+			continue;/*如果提供的state,则STATE必须相等*/
 
 		if (link_type == ACL_LINK && c->src_type != BDADDR_BREDR)
 			continue;
@@ -1861,7 +1875,7 @@ static struct l2cap_chan *l2cap_global_chan_by_psm(int state, __le16 psm,
 		if (link_type == LE_LINK && c->src_type == BDADDR_BREDR)
 			continue;
 
-		if (c->chan_type != L2CAP_CHAN_FIXED && c->psm == psm) {
+		if (c->chan_type != L2CAP_CHAN_FIXED && c->psm == psm/*PSM必须匹配*/) {
 			int src_match, dst_match;
 			int src_any, dst_any;
 
@@ -1869,11 +1883,12 @@ static struct l2cap_chan *l2cap_global_chan_by_psm(int state, __le16 psm,
 			src_match = !bacmp(&c->src, src);
 			dst_match = !bacmp(&c->dst, dst);
 			if (src_match && dst_match) {
+				/*源目的地址完全匹配*/
 				if (!l2cap_chan_hold_unless_zero(c))
 					continue;
 
 				read_unlock(&chan_list_lock);
-				return c;
+				return c;/*返回对应的channel*/
 			}
 
 			/* Closest match */
@@ -1916,16 +1931,17 @@ static void l2cap_monitor_timeout(struct work_struct *work)
 
 static void l2cap_retrans_timeout(struct work_struct *work)
 {
+	/*取得channel*/
 	struct l2cap_chan *chan = container_of(work, struct l2cap_chan,
 					       retrans_timer.work);
 
 	BT_DBG("chan %p", chan);
 
-	l2cap_chan_lock(chan);
+	l2cap_chan_lock(chan);/*加锁*/
 
 	if (!chan->conn) {
 		l2cap_chan_unlock(chan);
-		l2cap_chan_put(chan);
+		l2cap_chan_put(chan);/*释放引用*/
 		return;
 	}
 
@@ -2559,6 +2575,7 @@ static void l2cap_tx_timestamp_seg(struct sk_buff_head *queue,
 		l2cap_tx_timestamp(skb, sockc, len);
 }
 
+/*将msg转换为skb,并由channel发出*/
 int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 		    const struct sockcm_cookie *sockc)
 {
@@ -2638,7 +2655,7 @@ int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 			break;
 		}
 
-		__skb_queue_head_init(&seg_queue);
+		__skb_queue_head_init(&seg_queue);/*初始化seg队列*/
 
 		/* Do segmentation before calling in to the state machine,
 		 * since it's possible to block while waiting for memory
@@ -2839,7 +2856,7 @@ static void l2cap_tx_state_xmit(struct l2cap_chan *chan,
 		__clear_ack_timer(chan);
 		chan->tx_state = L2CAP_TX_STATE_WAIT_F;
 		break;
-	case L2CAP_EV_RETRANS_TO:
+	case L2CAP_EV_RETRANS_TO:/*重传超时*/
 		l2cap_send_rr_or_rnr(chan, 1);
 		chan->retry_count = 1;
 		__set_monitor_timer(chan);
@@ -2973,7 +2990,7 @@ static void l2cap_raw_recv(struct l2cap_conn *conn, struct sk_buff *skb)
 
 	list_for_each_entry(chan, &conn->chan_l, list) {
 		if (chan->chan_type != L2CAP_CHAN_RAW)
-			continue;
+			continue;/*仅处理raw格式的channel*/
 
 		/* Don't send frame to the channel it came from */
 		if (bt_cb(skb)->l2cap.chan == chan)
@@ -2989,7 +3006,7 @@ static void l2cap_raw_recv(struct l2cap_conn *conn, struct sk_buff *skb)
 
 /* ---- L2CAP signalling commands ---- */
 static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn, u8 code,
-				       u8 ident, u16 dlen, void *data)
+				       u8 ident, u16 dlen/*data参数长度*/, void *data)
 {
 	struct sk_buff *skb, **frag;
 	struct l2cap_cmd_hdr *cmd;
@@ -3005,23 +3022,27 @@ static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn, u8 code,
 	len = L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE + dlen;
 	count = min_t(unsigned int, conn->mtu, len);
 
+	/*申请skb*/
 	skb = bt_skb_alloc(count, GFP_KERNEL);
 	if (!skb)
 		return NULL;
 
 	lh = skb_put(skb, L2CAP_HDR_SIZE);
-	lh->len = cpu_to_le16(L2CAP_CMD_HDR_SIZE + dlen);
+	lh->len = cpu_to_le16(L2CAP_CMD_HDR_SIZE + dlen);/*指定长度*/
 
+	/*LE_LINk采用的cid与其它LINK采用的cid不同*/
 	if (conn->hcon->type == LE_LINK)
 		lh->cid = cpu_to_le16(L2CAP_CID_LE_SIGNALING);
 	else
 		lh->cid = cpu_to_le16(L2CAP_CID_SIGNALING);
 
+	/*填充cmd header*/
 	cmd = skb_put(skb, L2CAP_CMD_HDR_SIZE);
 	cmd->code  = code;
 	cmd->ident = ident;
 	cmd->len   = cpu_to_le16(dlen);
 
+	/*填写参数内容*/
 	if (dlen) {
 		count -= L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE;
 		skb_put_data(skb, data, count);
@@ -3030,9 +3051,11 @@ static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn, u8 code,
 
 	len -= skb->len;
 
+	/*数据长度可以需要放多个片,填充其它片*/
 	/* Continuation fragments (no L2CAP header) */
 	frag = &skb_shinfo(skb)->frag_list;
 	while (len) {
+		/*按mtu考虑分片*/
 		count = min_t(unsigned int, conn->mtu, len);
 
 		*frag = bt_skb_alloc(count, GFP_KERNEL);
@@ -3047,13 +3070,14 @@ static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn, u8 code,
 		frag = &(*frag)->next;
 	}
 
-	return skb;
+	return skb;/*返回命令报文*/
 
 fail:
 	kfree_skb(skb);
 	return NULL;
 }
 
+/*自ptr解析配置选项*/
 static inline int l2cap_get_conf_opt(void **ptr, int *type, int *olen,
 				     unsigned long *val)
 {
@@ -3088,14 +3112,14 @@ static inline int l2cap_get_conf_opt(void **ptr, int *type, int *olen,
 	return len;
 }
 
-static void l2cap_add_conf_opt(void **ptr, u8 type, u8 len, unsigned long val, size_t size)
+static void l2cap_add_conf_opt(void **ptr, u8 type/*选项类型*/, u8 len/*选项长度*/, unsigned long val/*选项值*/, size_t size/*ptr可容纳的最大大小*/)
 {
-	struct l2cap_conf_opt *opt = *ptr;
+	struct l2cap_conf_opt *opt = *ptr;/*选项填充位置*/
 
 	BT_DBG("type 0x%2.2x len %u val 0x%lx", type, len, val);
 
 	if (size < L2CAP_CONF_OPT_SIZE + len)
-		return;
+		return;/*长度不足以存放,返回*/
 
 	opt->type = type;
 	opt->len  = len;
@@ -3114,6 +3138,7 @@ static void l2cap_add_conf_opt(void **ptr, u8 type, u8 len, unsigned long val, s
 		break;
 
 	default:
+		/*这种不考虑字节序*/
 		memcpy(opt->val, (void *) val, len);
 		break;
 	}
@@ -3253,6 +3278,7 @@ static inline void l2cap_txwin_setup(struct l2cap_chan *chan)
 	chan->ack_win = chan->tx_win;
 }
 
+/*按conn->pkt_type设置chan->imtu*/
 static void l2cap_mtu_auto(struct l2cap_chan *chan)
 {
 	struct hci_conn *conn = chan->conn->hcon;
@@ -3296,9 +3322,10 @@ static void l2cap_mtu_auto(struct l2cap_chan *chan)
 		chan->imtu = 1021;
 }
 
+/*构造conf请求报文,设置了MTU等本端配置*/
 static int l2cap_build_conf_req(struct l2cap_chan *chan, void *data, size_t data_size)
 {
-	struct l2cap_conf_req *req = data;
+	struct l2cap_conf_req *req = data;/*配置请求报文*/
 	struct l2cap_conf_rfc rfc = { .mode = chan->mode };
 	void *ptr = req->data;
 	void *endptr = data + data_size;
@@ -3320,6 +3347,7 @@ static int l2cap_build_conf_req(struct l2cap_chan *chan, void *data, size_t data
 
 		fallthrough;
 	default:
+		/*选择并填充chan->mode*/
 		chan->mode = l2cap_select_mode(rfc.mode, chan->conn->feat_mask);
 		break;
 	}
@@ -3328,6 +3356,7 @@ done:
 	if (chan->imtu != L2CAP_DEFAULT_MTU) {
 		if (!chan->imtu)
 			l2cap_mtu_auto(chan);
+		/*非默认mtu,设置当前配置imtu到报文*/
 		l2cap_add_conf_opt(&ptr, L2CAP_CONF_MTU, 2, chan->imtu,
 				   endptr - ptr);
 	}
@@ -3348,6 +3377,7 @@ done:
 		rfc.monitor_timeout = 0;
 		rfc.max_pdu_size    = 0;
 
+		/*设置rfc到报文*/
 		l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
 				   (unsigned long) &rfc, endptr - ptr);
 		break;
@@ -3368,6 +3398,7 @@ done:
 		rfc.txwin_size = min_t(u16, chan->tx_win,
 				       L2CAP_DEFAULT_TX_WINDOW);
 
+		/*设置L2CAP_CONF_RFC*/
 		l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
 				   (unsigned long) &rfc, endptr - ptr);
 
@@ -3417,11 +3448,12 @@ done:
 	}
 
 	req->dcid  = cpu_to_le16(chan->dcid);
-	req->flags = cpu_to_le16(0);
+	req->flags = cpu_to_le16(0);/*C标记置为0*/
 
 	return ptr - data;
 }
 
+/*解析配置请求,并将响应填充到data中*/
 static int l2cap_parse_conf_req(struct l2cap_chan *chan, void *data, size_t data_size)
 {
 	struct l2cap_conf_rsp *rsp = data;
@@ -3440,6 +3472,7 @@ static int l2cap_parse_conf_req(struct l2cap_chan *chan, void *data, size_t data
 
 	BT_DBG("chan %p", chan);
 
+	/*解析配置,先将其设置的配置记录在局部变量里*/
 	while (len >= L2CAP_CONF_OPT_SIZE) {
 		len -= l2cap_get_conf_opt(&req, &type, &olen, &val);
 		if (len < 0)
@@ -3452,7 +3485,7 @@ static int l2cap_parse_conf_req(struct l2cap_chan *chan, void *data, size_t data
 		case L2CAP_CONF_MTU:
 			if (olen != 2)
 				break;
-			mtu = val;
+			mtu = val;/*记录mtu配置*/
 			break;
 
 		case L2CAP_CONF_FLUSH_TO:
@@ -3491,7 +3524,9 @@ static int l2cap_parse_conf_req(struct l2cap_chan *chan, void *data, size_t data
 
 		default:
 			if (hint)
+				/*忽略不认识的配置项*/
 				break;
+			/*记录不认识的配置响到resp中*/
 			result = L2CAP_CONF_UNKNOWN;
 			l2cap_add_conf_opt(&ptr, (u8)type, sizeof(u8), type, endptr - ptr);
 			break;
@@ -3656,10 +3691,11 @@ done:
 		}
 
 		if (result == L2CAP_CONF_SUCCESS)
+			/*置本端配置发送完成*/
 			set_bit(CONF_OUTPUT_DONE, &chan->conf_state);
 	}
 	rsp->scid   = cpu_to_le16(chan->dcid);
-	rsp->result = cpu_to_le16(result);
+	rsp->result = cpu_to_le16(result);/*填充响应结果*/
 	rsp->flags  = cpu_to_le16(0);
 
 	return ptr - data;
@@ -4009,9 +4045,11 @@ static inline int l2cap_command_rej(struct l2cap_conn *conn,
 	return 0;
 }
 
+/*br/edr模式下连接请求处理*/
 static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
-			  u8 *data, u8 rsp_code)
+			  u8 *data, u8 rsp_code/*响应code*/)
 {
+	/*请求参数*/
 	struct l2cap_conn_req *req = (struct l2cap_conn_req *) data;
 	struct l2cap_conn_rsp rsp;
 	struct l2cap_chan *chan = NULL, *pchan = NULL;
@@ -4026,10 +4064,12 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 	pchan = l2cap_global_chan_by_psm(BT_LISTEN, psm, &conn->hcon->src,
 					 &conn->hcon->dst, ACL_LINK);
 	if (!pchan) {
+		/*没有找到对应的可处理此请求的channel*/
 		result = L2CAP_CR_BAD_PSM;
 		goto response;
 	}
 
+	/*channel pchan可以接入此连接*/
 	l2cap_chan_lock(pchan);
 
 	/* Check if the ACL is secure enough (if not SDP) */
@@ -4046,15 +4086,16 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 	/* Check for valid dynamic CID range (as per Erratum 3253) */
 	if (scid < L2CAP_CID_DYN_START || scid > L2CAP_CID_DYN_END) {
 		result = L2CAP_CR_INVALID_SCID;
-		goto response;
+		goto response;/*不在范围以内*/
 	}
 
 	/* Check if we already have channel with that dcid */
 	if (__l2cap_get_chan_by_dcid(conn, scid)) {
 		result = L2CAP_CR_SCID_IN_USE;
-		goto response;
+		goto response;/*此scid已被使用*/
 	}
 
+	/*触发创建新连接,返回新的channel*/
 	chan = pchan->ops->new_connection(pchan);
 	if (!chan)
 		goto response;
@@ -4073,7 +4114,7 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 	chan->psm  = psm;
 	chan->dcid = scid;
 
-	__l2cap_chan_add(conn, chan);
+	__l2cap_chan_add(conn, chan);/*为此连接加入新建入的channel*/
 
 	dcid = chan->scid;
 
@@ -4099,15 +4140,16 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 			status = L2CAP_CS_AUTHEN_PEND;
 		}
 	} else {
-		l2cap_state_change(chan, BT_CONNECT2);
+		l2cap_state_change(chan, BT_CONNECT2);/*变更状态*/
 		result = L2CAP_CR_PEND;
 		status = L2CAP_CS_NO_INFO;
 	}
 
 response:
+	/*发送请求响应结果*/
 	rsp.scid   = cpu_to_le16(scid);
 	rsp.dcid   = cpu_to_le16(dcid);
-	rsp.result = cpu_to_le16(result);
+	rsp.result = cpu_to_le16(result);/*请求结果*/
 	rsp.status = cpu_to_le16(status);
 	l2cap_send_cmd(conn, cmd->ident, rsp_code, sizeof(rsp), &rsp);
 
@@ -4140,16 +4182,19 @@ response:
 	l2cap_chan_put(pchan);
 }
 
+/*收到连接请求*/
 static int l2cap_connect_req(struct l2cap_conn *conn,
 			     struct l2cap_cmd_hdr *cmd, u16 cmd_len, u8 *data)
 {
 	if (cmd_len < sizeof(struct l2cap_conn_req))
-		return -EPROTO;
+		return -EPROTO;/*请求连接报文长度有误*/
 
+	/*按cmd执行连接请求,并回复连接请求响应*/
 	l2cap_connect(conn, cmd, data, L2CAP_CONN_RSP);
 	return 0;
 }
 
+/*收到连接请求响应*/
 static int l2cap_connect_create_rsp(struct l2cap_conn *conn,
 				    struct l2cap_cmd_hdr *cmd, u16 cmd_len,
 				    u8 *data)
@@ -4170,6 +4215,7 @@ static int l2cap_connect_create_rsp(struct l2cap_conn *conn,
 
 	if (result == L2CAP_CR_SUCCESS && (dcid < L2CAP_CID_DYN_START ||
 					   dcid > L2CAP_CID_DYN_END))
+		/*目的cid有误*/
 		return -EPROTO;
 
 	BT_DBG("dcid 0x%4.4x scid 0x%4.4x result 0x%2.2x status 0x%2.2x",
@@ -4178,13 +4224,16 @@ static int l2cap_connect_create_rsp(struct l2cap_conn *conn,
 	if (scid) {
 		chan = __l2cap_get_chan_by_scid(conn, scid);
 		if (!chan)
+			/*此channel不存在*/
 			return -EBADSLT;
 	} else {
 		chan = __l2cap_get_chan_by_ident(conn, cmd->ident);
 		if (!chan)
+			/*此channel不存在*/
 			return -EBADSLT;
 	}
 
+	/*增加引用*/
 	chan = l2cap_chan_hold_unless_zero(chan);
 	if (!chan)
 		return -EBADSLT;
@@ -4195,20 +4244,23 @@ static int l2cap_connect_create_rsp(struct l2cap_conn *conn,
 
 	switch (result) {
 	case L2CAP_CR_SUCCESS:
+		/*请求连接成功,通过dcid查找channel*/
 		if (__l2cap_get_chan_by_dcid(conn, dcid)) {
 			err = -EBADSLT;
 			break;
 		}
 
+		/*状态变更为config*/
 		l2cap_state_change(chan, BT_CONFIG);
-		chan->ident = 0;
+		chan->ident = 0;/*将ident清零*/
 		chan->dcid = dcid;
 		clear_bit(CONF_CONNECT_PEND, &chan->conf_state);
 
 		if (test_and_set_bit(CONF_REQ_SENT, &chan->conf_state))
-			break;
+			break;/*如果已发送CONF_REQ,则跳过*/
 
-		l2cap_send_cmd(conn, l2cap_get_ident(conn), L2CAP_CONF_REQ,
+		/*发送conf req请求(填上本端的配置)*/
+		l2cap_send_cmd(conn, l2cap_get_ident(conn)/*生成ident*/, L2CAP_CONF_REQ,
 			       l2cap_build_conf_req(chan, req, sizeof(req)), req);
 		chan->num_conf_req++;
 		break;
@@ -4218,6 +4270,7 @@ static int l2cap_connect_create_rsp(struct l2cap_conn *conn,
 		break;
 
 	default:
+		/*统一按拒绝处理*/
 		l2cap_chan_del(chan, ECONNREFUSED);
 		break;
 	}
@@ -4248,8 +4301,9 @@ static void l2cap_send_efs_conf_rsp(struct l2cap_chan *chan, void *data,
 	       flags);
 
 	clear_bit(CONF_LOC_CONF_PEND, &chan->conf_state);
-	set_bit(CONF_OUTPUT_DONE, &chan->conf_state);
+	set_bit(CONF_OUTPUT_DONE, &chan->conf_state);/*置OUTPUT方向完成*/
 
+	/*发送配置响应*/
 	l2cap_send_cmd(conn, ident, L2CAP_CONF_RSP,
 		       l2cap_build_conf_rsp(chan, data,
 					    L2CAP_CONF_SUCCESS, flags), data);
@@ -4287,12 +4341,14 @@ static inline int l2cap_config_req(struct l2cap_conn *conn,
 
 	chan = l2cap_get_chan_by_scid(conn, dcid);
 	if (!chan) {
+		/*本端未找到此channel*/
 		cmd_reject_invalid_cid(conn, cmd->ident, dcid, 0);
 		return 0;
 	}
 
 	if (chan->state != BT_CONFIG && chan->state != BT_CONNECT2 &&
 	    chan->state != BT_CONNECTED) {
+		/*本端状态未达到以上情况*/
 		cmd_reject_invalid_cid(conn, cmd->ident, chan->scid,
 				       chan->dcid);
 		goto unlock;
@@ -4301,6 +4357,7 @@ static inline int l2cap_config_req(struct l2cap_conn *conn,
 	/* Reject if config buffer is too small. */
 	len = cmd_len - sizeof(*req);
 	if (chan->conf_len + len > sizeof(chan->conf_req)) {
+		/*配置长度已大于本端支持的最大buffer大小*/
 		l2cap_send_cmd(conn, cmd->ident, L2CAP_CONF_RSP,
 			       l2cap_build_conf_rsp(chan, rsp,
 			       L2CAP_CONF_REJECT, flags), rsp);
@@ -4309,9 +4366,10 @@ static inline int l2cap_config_req(struct l2cap_conn *conn,
 
 	/* Store config. */
 	memcpy(chan->conf_req + chan->conf_len, req->data, len);
-	chan->conf_len += len;
+	chan->conf_len += len;/*存入发送过来的配置*/
 
 	if (flags & L2CAP_CONF_FLAG_CONTINUATION) {
+		/*有continue标记,还有配置未发送完,响应成功继续接收*/
 		/* Incomplete config. Send empty response. */
 		l2cap_send_cmd(conn, cmd->ident, L2CAP_CONF_RSP,
 			       l2cap_build_conf_rsp(chan, rsp,
@@ -4320,14 +4378,15 @@ static inline int l2cap_config_req(struct l2cap_conn *conn,
 	}
 
 	/* Complete config. */
-	len = l2cap_parse_conf_req(chan, rsp, sizeof(rsp));
+	len = l2cap_parse_conf_req(chan, rsp, sizeof(rsp));/*配置接收完全,解析配置*/
 	if (len < 0) {
+		/*解析出错,断开连接*/
 		l2cap_send_disconn_req(chan, ECONNRESET);
 		goto unlock;
 	}
 
-	chan->ident = cmd->ident;
-	l2cap_send_cmd(conn, cmd->ident, L2CAP_CONF_RSP, len, rsp);
+	chan->ident = cmd->ident;/*记录此IDENT*/
+	l2cap_send_cmd(conn, cmd->ident, L2CAP_CONF_RSP, len, rsp);/*发送响应*/
 	if (chan->num_conf_rsp < L2CAP_CONF_MAX_CONF_RSP)
 		chan->num_conf_rsp++;
 
@@ -4345,14 +4404,17 @@ static inline int l2cap_config_req(struct l2cap_conn *conn,
 			err = l2cap_ertm_init(chan);
 
 		if (err < 0)
+			/*发送断链请求*/
 			l2cap_send_disconn_req(chan, -err);
 		else
+			/*配置成功,调用ready*/
 			l2cap_chan_ready(chan);
 
 		goto unlock;
 	}
 
 	if (!test_and_set_bit(CONF_REQ_SENT, &chan->conf_state)) {
+		/*本端未发送配置请求,置req sent状态,并发送本端配置请求*/
 		u8 buf[64];
 		l2cap_send_cmd(conn, l2cap_get_ident(conn), L2CAP_CONF_REQ,
 			       l2cap_build_conf_req(chan, buf, sizeof(buf)), buf);
@@ -4455,16 +4517,17 @@ static inline int l2cap_config_rsp(struct l2cap_conn *conn,
 		l2cap_chan_set_err(chan, ECONNRESET);
 
 		__set_chan_timer(chan, L2CAP_DISC_REJ_TIMEOUT);
-		l2cap_send_disconn_req(chan, ECONNRESET);
+		l2cap_send_disconn_req(chan, ECONNRESET);/*遇到其它结果,断链*/
 		goto done;
 	}
 
 	if (flags & L2CAP_CONF_FLAG_CONTINUATION)
 		goto done;
 
-	set_bit(CONF_INPUT_DONE, &chan->conf_state);
+	set_bit(CONF_INPUT_DONE, &chan->conf_state);/*置input方向完成*/
 
 	if (test_bit(CONF_OUTPUT_DONE, &chan->conf_state)) {
+		/*本端配置已发送完成,变更channel ready*/
 		set_default_fcs(chan);
 
 		if (chan->mode == L2CAP_MODE_ERTM ||
@@ -4640,6 +4703,7 @@ static inline int l2cap_information_rsp(struct l2cap_conn *conn,
 
 	switch (type) {
 	case L2CAP_IT_FEAT_MASK:
+		/*记录远端支持的channel mode*/
 		conn->feat_mask = get_unaligned_le32(rsp->data);
 
 		if (conn->feat_mask & L2CAP_FEAT_FIXED_CHAN) {
@@ -4811,42 +4875,45 @@ static inline int l2cap_bredr_sig_cmd(struct l2cap_conn *conn,
 		l2cap_command_rej(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_CONN_REQ:
-		err = l2cap_connect_req(conn, cmd, cmd_len, data);
+	case L2CAP_CONN_REQ:/*收到连接请求*/
+		err = l2cap_connect_req(conn, cmd, cmd_len, data);/*响应L2CAP_CONN_RSP报文*/
 		break;
 
-	case L2CAP_CONN_RSP:
-		l2cap_connect_create_rsp(conn, cmd, cmd_len, data);
+	case L2CAP_CONN_RSP:/*收到连接请求响应*/
+		l2cap_connect_create_rsp(conn, cmd, cmd_len, data);/*响应L2CAP_CONF_REQ报文*/
 		break;
 
-	case L2CAP_CONF_REQ:
+	case L2CAP_CONF_REQ:/*收到配置请求*/
+		/*这个会有两种情况1.本端主动,则收到配置请求后更新并置OUTdone;
+		 * 2.本端被动,则收到配置请求后更新并发本端请求*/
 		err = l2cap_config_req(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_CONF_RSP:
+	case L2CAP_CONF_RSP:/*收到配置响应*/
 		l2cap_config_rsp(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_DISCONN_REQ:
+	case L2CAP_DISCONN_REQ:/*收到断连请求*/
 		err = l2cap_disconnect_req(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_DISCONN_RSP:
+	case L2CAP_DISCONN_RSP:/*收到断连响应*/
 		l2cap_disconnect_rsp(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_ECHO_REQ:
+	case L2CAP_ECHO_REQ:/*收到echo请求*/
+		/*发送echo 响应*/
 		l2cap_send_cmd(conn, cmd->ident, L2CAP_ECHO_RSP, cmd_len, data);
 		break;
 
-	case L2CAP_ECHO_RSP:
+	case L2CAP_ECHO_RSP:/*收到echo响应,不处理*/
 		break;
 
-	case L2CAP_INFO_REQ:
+	case L2CAP_INFO_REQ:/*收到info req,发送响应*/
 		err = l2cap_information_req(conn, cmd, cmd_len, data);
 		break;
 
-	case L2CAP_INFO_RSP:
+	case L2CAP_INFO_RSP:/*收到响应*/
 		l2cap_information_rsp(conn, cmd, cmd_len, data);
 		break;
 
@@ -4859,6 +4926,7 @@ static inline int l2cap_bredr_sig_cmd(struct l2cap_conn *conn,
 	return err;
 }
 
+/*Le模式下连接请求*/
 static int l2cap_le_connect_req(struct l2cap_conn *conn,
 				struct l2cap_cmd_hdr *cmd, u16 cmd_len,
 				u8 *data)
@@ -5431,6 +5499,7 @@ done:
 	return 0;
 }
 
+/*LE signaling channel对应的signaling command处理*/
 static inline int l2cap_le_sig_cmd(struct l2cap_conn *conn,
 				   struct l2cap_cmd_hdr *cmd, u16 cmd_len,
 				   u8 *data)
@@ -5503,7 +5572,7 @@ static inline void l2cap_le_sig_channel(struct l2cap_conn *conn,
 	int err;
 
 	if (hcon->type != LE_LINK)
-		goto drop;
+		goto drop;/*必须为le_link*/
 
 	if (skb->len < L2CAP_CMD_HDR_SIZE)
 		goto drop;
@@ -5543,6 +5612,7 @@ static inline void l2cap_sig_send_rej(struct l2cap_conn *conn, u16 ident)
 	l2cap_send_cmd(conn, ident, L2CAP_COMMAND_REJ, sizeof(rej), &rej);
 }
 
+/*处理signaling channel中收到的signaling commands*/
 static inline void l2cap_sig_channel(struct l2cap_conn *conn,
 				     struct sk_buff *skb)
 {
@@ -5553,7 +5623,7 @@ static inline void l2cap_sig_channel(struct l2cap_conn *conn,
 	l2cap_raw_recv(conn, skb);
 
 	if (hcon->type != ACL_LINK)
-		goto drop;
+		goto drop;/*仅处理acl_link*/
 
 	while (skb->len >= L2CAP_CMD_HDR_SIZE) {
 		u16 len;
@@ -5567,12 +5637,14 @@ static inline void l2cap_sig_channel(struct l2cap_conn *conn,
 		       cmd->ident);
 
 		if (len > skb->len || !cmd->ident) {
+			/*ident不得为0或者报文长度必须一致*/
 			BT_DBG("corrupted command");
 			l2cap_sig_send_rej(conn, cmd->ident);
 			skb_pull(skb, len > skb->len ? skb->len : len);
 			continue;
 		}
 
+		/*按报文中填写的cmd处理*/
 		err = l2cap_bredr_sig_cmd(conn, cmd, len, skb->data);
 		if (err) {
 			BT_ERR("Wrong link type (%d)", err);
@@ -6719,6 +6791,7 @@ static void l2cap_data_channel(struct l2cap_conn *conn, u16 cid,
 
 	chan = l2cap_get_chan_by_scid(conn, cid);
 	if (!chan) {
+		/*此cid没有找到对应的l2cap channel*/
 		BT_DBG("unknown cid 0x%4.4x", cid);
 		/* Drop packet and return */
 		kfree_skb(skb);
@@ -6819,6 +6892,7 @@ free_skb:
 	kfree_skb(skb);
 }
 
+/*l2cap收到帧*/
 static void l2cap_recv_frame(struct l2cap_conn *conn, struct sk_buff *skb)
 {
 	struct l2cap_hdr *lh = (void *) skb->data;
@@ -6838,7 +6912,7 @@ static void l2cap_recv_frame(struct l2cap_conn *conn, struct sk_buff *skb)
 
 	if (len != skb->len) {
 		kfree_skb(skb);
-		return;
+		return;/*报文长度有误*/
 	}
 
 	/* Since we can't actively block incoming LE connections we must
@@ -6853,8 +6927,10 @@ static void l2cap_recv_frame(struct l2cap_conn *conn, struct sk_buff *skb)
 
 	BT_DBG("len %d, cid 0x%4.4x", len, cid);
 
+	/*按cid分类处理*/
 	switch (cid) {
 	case L2CAP_CID_SIGNALING:
+		/*cid指明此通道为signaling channel,处理signaling commands*/
 		l2cap_sig_channel(conn, skb);
 		break;
 
@@ -6865,15 +6941,18 @@ static void l2cap_recv_frame(struct l2cap_conn *conn, struct sk_buff *skb)
 		break;
 
 	case L2CAP_CID_LE_SIGNALING:
+		/*cid指明此通道为le signaling channel,处理signaling commands*/
 		l2cap_le_sig_channel(conn, skb);
 		break;
 
 	default:
+		/*其它cid处理*/
 		l2cap_data_channel(conn, cid, skb);
 		break;
 	}
 }
 
+/*针对pending_rx队列出队并处理收到的frame*/
 static void process_pending_rx(struct work_struct *work)
 {
 	struct l2cap_conn *conn = container_of(work, struct l2cap_conn,
@@ -6884,24 +6963,28 @@ static void process_pending_rx(struct work_struct *work)
 
 	mutex_lock(&conn->lock);
 
+	/*出队,直接收完*/
 	while ((skb = skb_dequeue(&conn->pending_rx)))
 		l2cap_recv_frame(conn, skb);
 
 	mutex_unlock(&conn->lock);
 }
 
+/*添加l2cap connect*/
 static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 {
 	struct l2cap_conn *conn = hcon->l2cap_data;
 	struct hci_chan *hchan;
 
 	if (conn)
-		return conn;
+		return conn;/*l2cap_conn conn已存在,直接返回*/
 
+	/*为此connect创建hci channel*/
 	hchan = hci_chan_create(hcon);
 	if (!hchan)
 		return NULL;
 
+	/*创建l2cap conn*/
 	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn) {
 		hci_chan_del(hchan);
@@ -6909,7 +6992,7 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	}
 
 	kref_init(&conn->ref);
-	hcon->l2cap_data = conn;
+	hcon->l2cap_data = conn;/*设置l2cap_conn*/
 	conn->hcon = hci_conn_get(hcon);
 	conn->hchan = hchan;
 
@@ -6934,7 +7017,7 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	INIT_DELAYED_WORK(&conn->info_timer, l2cap_info_timeout);
 
 	skb_queue_head_init(&conn->pending_rx);
-	INIT_WORK(&conn->pending_rx_work, process_pending_rx);
+	INIT_WORK(&conn->pending_rx_work, process_pending_rx);/*此链接收包函数*/
 	INIT_DELAYED_WORK(&conn->id_addr_timer, l2cap_conn_update_id_addr);
 
 	conn->disc_reason = HCI_ERROR_REMOTE_USER_TERM;
@@ -6966,7 +7049,7 @@ static void l2cap_chan_by_pid(struct l2cap_chan *chan, void *data)
 	struct pid *pid;
 
 	if (chan == d->chan)
-		return;
+		return;/*非参数预期的channel,返回*/
 
 	if (!test_bit(FLAG_DEFER_SETUP, &chan->flags))
 		return;
@@ -7059,10 +7142,10 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 	}
 
 	/* Set destination address and psm */
-	bacpy(&chan->dst, dst);
+	bacpy(&chan->dst, dst);/*设置目的地址*/
 	chan->dst_type = dst_type;
 
-	chan->psm = psm;
+	chan->psm = psm;/*设置目的psm*/
 	chan->dcid = cid;
 
 	if (bdaddr_type_is_le(dst_type)) {
@@ -7074,6 +7157,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 			dst_type = ADDR_LE_DEV_RANDOM;
 
 		if (hci_dev_test_flag(hdev, HCI_ADVERTISING))
+			/*LE方式连接*/
 			hcon = hci_connect_le(hdev, dst, dst_type, false,
 					      chan->sec_level, timeout,
 					      HCI_ROLE_SLAVE, 0, 0);
@@ -7083,7 +7167,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 						   CONN_REASON_L2CAP_CHAN);
 
 	} else {
-		/*非le方式*/
+		/*非le方式,执行acl连接*/
 		u8 auth_type = l2cap_get_auth_type(chan);
 		hcon = hci_connect_acl(hdev, dst, chan->sec_level, auth_type,
 				       CONN_REASON_L2CAP_CHAN/*连接原因*/, timeout);
@@ -7094,6 +7178,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 		goto done;
 	}
 
+	/*为此hci conn添加l2cap conn*/
 	conn = l2cap_conn_add(hcon);
 	if (!conn) {
 		hci_conn_drop(hcon);
@@ -7122,22 +7207,23 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 	l2cap_chan_lock(chan);
 
 	if (cid && __l2cap_get_chan_by_dcid(conn, cid)) {
+		/*cid有值时,通过cid查找到l2cap channel,报错*/
 		hci_conn_drop(hcon);
 		err = -EBUSY;
 		goto chan_unlock;
 	}
 
 	/* Update source addr of the socket */
-	bacpy(&chan->src, &hcon->src);
+	bacpy(&chan->src, &hcon->src);/*设置本端地址*/
 	chan->src_type = bdaddr_src_type(hcon);
 
-	__l2cap_chan_add(conn, chan);
+	__l2cap_chan_add(conn, chan);/*为l2cap conn添加l2cap channel*/
 
 	/* l2cap_chan_add takes its own ref so we can drop this one */
-	hci_conn_drop(hcon);
+	hci_conn_drop(hcon);/*丢掉hci connect*/
 
-	l2cap_state_change(chan, BT_CONNECT);
-	__set_chan_timer(chan, chan->ops->get_sndtimeo(chan));
+	l2cap_state_change(chan, BT_CONNECT);/*变更状态为connect*/
+	__set_chan_timer(chan, chan->ops->get_sndtimeo(chan));/*延迟启动发送超时任务*/
 
 	/* Release chan->sport so that it can be reused by other
 	 * sockets (as it's only used for listening sockets).
@@ -7148,11 +7234,12 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm/*目标psm*/, u16 cid
 
 	if (hcon->state == BT_CONNECTED) {
 		if (chan->chan_type != L2CAP_CHAN_CONN_ORIENTED) {
+			/*不面向连接的情况*/
 			__clear_chan_timer(chan);
 			if (l2cap_chan_check_security(chan, true))
 				l2cap_state_change(chan, BT_CONNECTED);
 		} else
-			l2cap_do_start(chan);
+			l2cap_do_start(chan);/*启动l2cap建连*/
 	}
 
 	err = 0;
@@ -7455,7 +7542,7 @@ static int l2cap_recv_frag(struct l2cap_conn *conn, struct sk_buff *skb,
 {
 	if (!conn->rx_skb) {
 		/* Allocate skb for the complete frame (with header) */
-		conn->rx_skb = bt_skb_alloc(len, GFP_KERNEL);
+		conn->rx_skb = bt_skb_alloc(len, GFP_KERNEL);/*自已为首片*/
 		if (!conn->rx_skb)
 			return -ENOMEM;
 		/* Init rx_len */
@@ -7467,6 +7554,7 @@ static int l2cap_recv_frag(struct l2cap_conn *conn, struct sk_buff *skb,
 
 	/* Copy as much as the rx_skb can hold */
 	len = min_t(u16, len, skb->len);
+	/*附加到skb内容到conn->rx_skb,进行片重组*/
 	skb_copy_from_linear_data(skb, skb_put(conn->rx_skb, len), len);
 	skb_pull(skb, len);
 	conn->rx_len -= len;
@@ -7541,6 +7629,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 	conn = hcon->l2cap_data;
 
 	if (!conn)
+		/*没有创建l2cap conn,添加它*/
 		conn = l2cap_conn_add(hcon);
 
 	conn = l2cap_conn_hold_unless_zero(conn);
@@ -7557,7 +7646,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 	mutex_lock(&conn->lock);
 
 	switch (flags) {
-	case ACL_START:
+	case ACL_START:/*首片*/
 	case ACL_START_NO_FLUSH:
 	case ACL_COMPLETE:
 		if (conn->rx_skb) {
@@ -7579,13 +7668,14 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 
 		if (len == skb->len) {
 			/* Complete frame received */
-			l2cap_recv_frame(conn, skb);
+			l2cap_recv_frame(conn, skb);/*处理收到的完整frame*/
 			goto unlock;
 		}
 
 		BT_DBG("Start: total len %d, frag len %u", len, skb->len);
 
 		if (skb->len > len) {
+			/*收到的内容比头部指明的长度要长,截短并处理*/
 			BT_ERR("Frame is too long (len %u, expected len %d)",
 			       skb->len, len);
 			/* PTS test cases L2CAP/COS/CED/BI-14-C and BI-15-C
@@ -7645,7 +7735,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 		}
 
 		/* Append fragment into frame (with header) */
-		l2cap_recv_frag(conn, skb, skb->len);
+		l2cap_recv_frag(conn, skb, skb->len);/*添加分片*/
 
 		if (!conn->rx_len) {
 			/* Complete frame received. l2cap_recv_frame
@@ -7654,7 +7744,7 @@ void l2cap_recv_acldata(struct hci_conn *hcon, struct sk_buff *skb, u16 flags)
 			 */
 			struct sk_buff *rx_skb = conn->rx_skb;
 			conn->rx_skb = NULL;
-			l2cap_recv_frame(conn, rx_skb);
+			l2cap_recv_frame(conn, rx_skb);/*收取完全,处理此帧*/
 		}
 		break;
 		/*其它类型报文将被丢弃*/
@@ -7680,6 +7770,7 @@ static int l2cap_debugfs_show(struct seq_file *f, void *p)
 
 	read_lock(&chan_list_lock);
 
+	/*遍历并显示对应的l2cap_chan*/
 	list_for_each_entry(c, &chan_list, global_l) {
 		seq_printf(f, "%pMR (%u) %pMR (%u) %d %d 0x%4.4x 0x%4.4x %d %d %d %d\n",
 			   &c->src, c->src_type, &c->dst, c->dst_type,

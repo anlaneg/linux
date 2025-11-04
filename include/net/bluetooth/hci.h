@@ -563,9 +563,11 @@ enum {
 
 /* Baseband links */
 #define SCO_LINK	0x00
+/*通过create_conn创建的connect*/
 #define ACL_LINK	0x01
 #define ESCO_LINK	0x02
 /* Low Energy links do not have defined link type. Use invented one */
+/*通过le_create_conn创建的CONNECT*/
 #define LE_LINK		0x80
 #define CIS_LINK	0x82
 #define BIS_LINK	0x83
@@ -1724,6 +1726,7 @@ struct hci_cp_le_set_scan_enable {
 #define HCI_LE_USE_PEER_ADDR		0x00
 #define HCI_LE_USE_ACCEPT_LIST		0x01
 
+/*低功耗连接创建*/
 #define HCI_OP_LE_CREATE_CONN		0x200d
 struct hci_cp_le_create_conn {
 	__le16   scan_interval;
@@ -2672,10 +2675,10 @@ struct hci_ev_le_conn_complete {
 /*此subevent指明的为LE广告(广播)报告*/
 #define HCI_EV_LE_ADVERTISING_REPORT	0x02
 struct hci_ev_le_advertising_info {
-	__u8	 type;
+	__u8	 type;/**/
 	__u8	 bdaddr_type;/*地址类型*/
-	bdaddr_t bdaddr;
-	__u8	 length;
+	bdaddr_t bdaddr;/*设备地址*/
+	__u8	 length;/*data数组长度*/
 	__u8	 data[];
 } __packed;
 

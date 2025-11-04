@@ -9815,7 +9815,7 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 	/* allocate buff for LE or BR/EDR adv */
 	if (conn->le_adv_data_len > 0)
 		skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_CONNECTED,
-				     sizeof(*ev) + conn->le_adv_data_len);
+				     sizeof(*ev) + conn->le_adv_data_len);/*创建connected事件*/
 	else
 		skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_CONNECTED,
 				     sizeof(*ev) + (name ? eir_precalc_len(name_len) : 0) +
@@ -9851,7 +9851,7 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 
 	ev->eir_len = cpu_to_le16(eir_len);
 
-	mgmt_event_skb(skb, NULL);
+	mgmt_event_skb(skb, NULL);/*产生事件*/
 }
 
 static void unpair_device_rsp(struct mgmt_pending_cmd *cmd, void *data)
@@ -10479,6 +10479,7 @@ accepted:
 	mgmt_event_skb(skb, NULL);
 }
 
+/*发现设备*/
 void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备地址*/, u8 link_type,
 		       u8 addr_type, u8 *dev_class, s8 rssi, u32 flags,
 		       u8 *eir, u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len,
