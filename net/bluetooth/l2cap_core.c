@@ -1726,20 +1726,20 @@ int l2cap_register_user(struct l2cap_conn *conn, struct l2cap_user *user)
 
 	if (!list_empty(&user->list)) {
 		ret = -EINVAL;
-		goto out_unlock;
+		goto out_unlock;/*已注册*/
 	}
 
 	/* conn->hchan is NULL after l2cap_conn_del() was called */
 	if (!conn->hchan) {
 		ret = -ENODEV;
-		goto out_unlock;
+		goto out_unlock;/*channel为空*/
 	}
 
-	ret = user->probe(conn, user);
+	ret = user->probe(conn, user);/*启动kernel数据搬运线程；添加hid设备*/
 	if (ret)
 		goto out_unlock;
 
-	list_add(&user->list, &conn->users);
+	list_add(&user->list, &conn->users);/*串连到conn->users*/
 	ret = 0;
 
 out_unlock:
@@ -1765,6 +1765,7 @@ out_unlock:
 }
 EXPORT_SYMBOL(l2cap_unregister_user);
 
+/*遍历conn->users上所有user,执行remove回调*/
 static void l2cap_unregister_all_users(struct l2cap_conn *conn)
 {
 	struct l2cap_user *user;

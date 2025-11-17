@@ -31,13 +31,13 @@
 /*
  * USB HID (Human Interface Device) interface class code
  */
-
+/*HID 接口设备 interface class code定义为3，见hid1_11*/
 #define USB_INTERFACE_CLASS_HID		3
 
 /*
  * USB HID interface subclass and protocol codes
  */
-
+/*这类HID设备可被BIOS/UEFI 固件直接支持，例如在os未加载时需要调整bios*/
 #define USB_INTERFACE_SUBCLASS_BOOT	1
 #define USB_INTERFACE_PROTOCOL_KEYBOARD	1
 #define USB_INTERFACE_PROTOCOL_MOUSE	2
@@ -47,7 +47,9 @@
  */
 
 enum hid_report_type {
+	/*设备到主机端*/
 	HID_INPUT_REPORT		= 0,
+	/*主机端到设备*/
 	HID_OUTPUT_REPORT		= 1,
 	HID_FEATURE_REPORT		= 2,
 

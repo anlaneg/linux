@@ -87,8 +87,10 @@ struct hid_report *hid_register_report(struct hid_device *device,
 	if (id >= HID_MAX_IDS)
 		return NULL;
 	if (report_enum->report_id_hash[id])
+		/*此id已关联有相应的report*/
 		return report_enum->report_id_hash[id];
 
+	/*此id无关联的report,申请并填充*/
 	report = kzalloc(sizeof(struct hid_report), GFP_KERNEL);
 	if (!report)
 		return NULL;
@@ -101,7 +103,7 @@ struct hid_report *hid_register_report(struct hid_device *device,
 	report->size = 0;
 	report->device = device;
 	report->application = application;
-	report_enum->report_id_hash[id] = report;
+	report_enum->report_id_hash[id] = report;/*记录此id关联的report*/
 
 	list_add_tail(&report->list, &report_enum->report_list);
 	INIT_LIST_HEAD(&report->field_entry_list);
@@ -244,9 +246,9 @@ static unsigned hid_lookup_collection(struct hid_parser *parser, unsigned type)
 
 static void complete_usage(struct hid_parser *parser, unsigned int index)
 {
-	parser->local.usage[index] &= 0xFFFF;
+	parser->local.usage[index] &= 0xFFFF;/*取原值的低16位*/
 	parser->local.usage[index] |=
-		(parser->global.usage_page & 0xFFFF) << 16;
+		(parser->global.usage_page & 0xFFFF) << 16;/*合上global.usage_page，并放在高16位*/
 }
 
 /*
@@ -259,20 +261,20 @@ static int hid_add_usage(struct hid_parser *parser, unsigned usage, u8 size)
 		hid_err(parser->device, "usage index exceeded\n");
 		return -1;
 	}
-	parser->local.usage[parser->local.usage_index] = usage;
+	parser->local.usage[parser->local.usage_index] = usage;/*填写usage*/
 
 	/*
 	 * If Usage item only includes usage id, concatenate it with
 	 * currently defined usage page
 	 */
 	if (size <= 2)
-		complete_usage(parser, parser->local.usage_index);
+		complete_usage(parser, parser->local.usage_index);/*扩充为32位*/
 
-	parser->local.usage_size[parser->local.usage_index] = size;
+	parser->local.usage_size[parser->local.usage_index] = size;/*记录长度*/
 	parser->local.collection_index[parser->local.usage_index] =
 		parser->collection_stack_ptr ?
 		parser->collection_stack[parser->collection_stack_ptr - 1] : 0;
-	parser->local.usage_index++;
+	parser->local.usage_index++;/*增长index到下一个待填充点*/
 	return 0;
 }
 
@@ -292,6 +294,7 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 
 	application = hid_lookup_collection(parser, HID_COLLECTION_APPLICATION);
 
+	/*添加此report id*/
 	report = hid_register_report(parser->device, report_type,
 				     parser->global.report_id, application);
 	if (!report) {
@@ -372,6 +375,7 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 
 static u32 item_udata(struct hid_item *item)
 {
+	/*依据item长度，返回item数值*/
 	switch (item->size) {
 	case 1: return item->data.u8;
 	case 2: return item->data.u16;
@@ -398,18 +402,21 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 {
 	__s32 raw_value;
 	switch (item->tag) {
-	case HID_GLOBAL_ITEM_TAG_PUSH:
-
+	case HID_GLOBAL_ITEM_TAG_PUSH:/*global变量压栈*/
+		/*如标准言：When a Push item is encountered,
+		 * the item state table is copied and placed on
+		 * a stack for later retrieval.*/
 		if (parser->global_stack_ptr == HID_GLOBAL_STACK_SIZE) {
+			/*栈溢出，报错*/
 			hid_err(parser->device, "global environment stack overflow\n");
 			return -1;
 		}
 
 		memcpy(parser->global_stack + parser->global_stack_ptr++,
-			&parser->global, sizeof(struct hid_global));
+			&parser->global, sizeof(struct hid_global));/*将parser->global现有状态压栈*/
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_POP:
+	case HID_GLOBAL_ITEM_TAG_POP:/*global弹栈*/
 
 		if (!parser->global_stack_ptr) {
 			hid_err(parser->device, "global environment stack underflow\n");
@@ -417,10 +424,10 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 		}
 
 		memcpy(&parser->global, parser->global_stack +
-			--parser->global_stack_ptr, sizeof(struct hid_global));
+			--parser->global_stack_ptr, sizeof(struct hid_global));/*自栈顶弹出并设置parser->global*/
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_USAGE_PAGE:
+	case HID_GLOBAL_ITEM_TAG_USAGE_PAGE:/*设置usage_page*/
 		parser->global.usage_page = item_udata(item);
 		return 0;
 
@@ -458,11 +465,11 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 			parser->global.unit_exponent = raw_value;
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_UNIT:
+	case HID_GLOBAL_ITEM_TAG_UNIT:/*填充unit*/
 		parser->global.unit = item_udata(item);
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_REPORT_SIZE:
+	case HID_GLOBAL_ITEM_TAG_REPORT_SIZE:/*填充report size*/
 		parser->global.report_size = item_udata(item);
 		if (parser->global.report_size > 256) {
 			hid_err(parser->device, "invalid report_size %d\n",
@@ -471,7 +478,7 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 		}
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:
+	case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:/*填充report count*/
 		parser->global.report_count = item_udata(item);
 		if (parser->global.report_count > HID_MAX_USAGES) {
 			hid_err(parser->device, "invalid report_count %d\n",
@@ -480,10 +487,11 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 		}
 		return 0;
 
-	case HID_GLOBAL_ITEM_TAG_REPORT_ID:
+	case HID_GLOBAL_ITEM_TAG_REPORT_ID:/*填充report id*/
 		parser->global.report_id = item_udata(item);
 		if (parser->global.report_id == 0 ||
 		    parser->global.report_id >= HID_MAX_IDS) {
+			/*report_id有误*/
 			hid_err(parser->device, "report_id %u is invalid\n",
 				parser->global.report_id);
 			return -1;
@@ -540,9 +548,10 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 			return 0;
 		}
 
+		/*添加usage及usage数据对应的size*/
 		return hid_add_usage(parser, data, item->size);
 
-	case HID_LOCAL_ITEM_TAG_USAGE_MINIMUM:
+	case HID_LOCAL_ITEM_TAG_USAGE_MINIMUM:/*设置usage_minimum*/
 
 		if (parser->local.delimiter_branch > 1) {
 			dbg_hid("alternative usage ignored\n");
@@ -606,7 +615,7 @@ static void hid_concatenate_last_usage_page(struct hid_parser *parser)
 	unsigned int current_page;
 
 	if (!parser->local.usage_index)
-		return;
+		return;/*未设置usage_index,直接返回*/
 
 	usage_page = parser->global.usage_page;
 
@@ -638,7 +647,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 
 	hid_concatenate_last_usage_page(parser);
 
-	data = item_udata(item);
+	data = item_udata(item);/*取item的值*/
 
 	switch (item->tag) {
 	case HID_MAIN_ITEM_TAG_BEGIN_COLLECTION:
@@ -677,7 +686,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 static int hid_parser_reserved(struct hid_parser *parser, struct hid_item *item)
 {
 	dbg_hid("reserved item type, tag 0x%x\n", item->tag);
-	return 0;
+	return 0;/*忽略不认识的item*/
 }
 
 /*
@@ -771,52 +780,56 @@ static void hid_device_release(struct device *dev)
  * items, though they are not used yet.
  */
 
-static const u8 *fetch_item(const __u8 *start, const __u8 *end, struct hid_item *item)
+static const u8 *fetch_item(const __u8 *start, const __u8 *end, struct hid_item *item/*出参*/)
 {
 	u8 b;
 
 	if ((end - start) <= 0)
-		return NULL;
+		return NULL;/*叁数有误*/
 
+	/*取首字节,这个字节包含item tag（占4位）, item type（占2位）, and item size（占2位）*/
 	b = *start++;
 
-	item->type = (b >> 2) & 3;
-	item->tag  = (b >> 4) & 15;
+	item->type = (b >> 2) & 3;/*取2,3bit的值，取值0,1,2,3*/
+	item->tag  = (b >> 4) & 15;/*取4，5，6，7bit对应的值*/
 
 	if (item->tag == HID_ITEM_TAG_LONG) {
-
+		/*tag为全1的情况是long time,其item size按标准规定总是2，
+		 * 但实现看起来并没有关心此点.item->size按标准规定总是从start[1]处取*/
 		item->format = HID_ITEM_FORMAT_LONG;
 
 		if ((end - start) < 2)
 			return NULL;
 
-		item->size = *start++;
-		item->tag  = *start++;
+		item->size = *start++;//取[1]字节做为item->size
+		item->tag  = *start++;/*取[2]字节,做为实际的item->tag*/
 
 		if ((end - start) < item->size)
 			return NULL;
 
-		item->data.longdata = start;
-		start += item->size;
-		return start;
+		item->data.longdata = start;/*接下来取longdata*/
+		start += item->size;/*item->size指出了longdata的长度，跳过其内容*/
+		return start;/*返回下一个item起始位置*/
 	}
 
+	/*对于short item来讲其size只能有0，1，2，4四种*/
 	item->format = HID_ITEM_FORMAT_SHORT;
+	//利用b中的0,1两bit,转换产生0,1,2,4这四种情况
 	item->size = BIT(b & 3) >> 1; /* 0, 1, 2, 3 -> 0, 1, 2, 4 */
 
 	if (end - start < item->size)
-		return NULL;
+		return NULL;/*item长度有误*/
 
 	switch (item->size) {
 	case 0:
-		break;
+		break;/*无data*/
 
 	case 1:
-		item->data.u8 = *start;
+		item->data.u8 = *start;/*取单个字节*/
 		break;
 
 	case 2:
-		item->data.u16 = get_unaligned_le16(start);
+		item->data.u16 = get_unaligned_le16(start);/*取双字节*/
 		break;
 
 	case 4:
@@ -824,7 +837,7 @@ static const u8 *fetch_item(const __u8 *start, const __u8 *end, struct hid_item 
 		break;
 	}
 
-	return start + item->size;
+	return start + item->size;/*返回下一个item起始位置*/
 }
 
 static void hid_scan_input_usage(struct hid_parser *parser, u32 usage)
@@ -922,14 +935,15 @@ static int hid_scan_report(struct hid_device *hid)
 {
 	struct hid_parser *parser;
 	struct hid_item item;
-	const __u8 *start = hid->dev_rdesc;
-	const __u8 *end = start + hid->dev_rsize;
+	const __u8 *start = hid->dev_rdesc;/*起始地址*/
+	const __u8 *end = start + hid->dev_rsize;/*终止地址*/
 	static int (*dispatch_type[])(struct hid_parser *parser,
 				      struct hid_item *item) = {
+		/*当前type占用两个bit,故共有0,1,2,3四种情况*/
 		hid_scan_main,
-		hid_parser_global,
+		hid_parser_global,/*解析设置parser->global*/
 		hid_parser_local,
-		hid_parser_reserved
+		hid_parser_reserved/*预留的，当前不支持任何字段*/
 	};
 
 	parser = vzalloc(sizeof(struct hid_parser));
@@ -944,7 +958,8 @@ static int hid_scan_report(struct hid_device *hid)
 	 * be robust against hid errors. Those errors will be raised by
 	 * hid_open_report() anyway.
 	 */
-	while ((start = fetch_item(start, end, &item)) != NULL)
+	while ((start/*更新内存起始位置*/ = fetch_item(start, end, &item)) != NULL)
+		/*按type选择回调函数，利用item填充parser*/
 		dispatch_type[item.type](parser, &item);
 
 	/*
@@ -990,6 +1005,7 @@ static int hid_scan_report(struct hid_device *hid)
  */
 int hid_parse_report(struct hid_device *hid, const __u8 *start, unsigned size)
 {
+	/*复制内存设置rdesc,rsize*/
 	hid->dev_rdesc = kmemdup(start, size, GFP_KERNEL);
 	if (!hid->dev_rdesc)
 		return -ENOMEM;
@@ -1264,7 +1280,7 @@ int hid_open_report(struct hid_device *device)
 	if (WARN_ON(device->status & HID_STAT_PARSED))
 		return -EBUSY;
 
-	start = device->bpf_rdesc;
+	start = device->bpf_rdesc;/*取描述信息*/
 	if (WARN_ON(!start))
 		return -ENODEV;
 	size = device->bpf_rsize;
@@ -1293,9 +1309,10 @@ int hid_open_report(struct hid_device *device)
 			return -ENOMEM;
 	}
 
-	device->rdesc = start;
-	device->rsize = size;
+	device->rdesc = start;/*描述信息起始位置*/
+	device->rsize = size;/*描述信息长度*/
 
+	/*负责解析描述信息*/
 	parser = vzalloc(sizeof(struct hid_parser));
 	if (!parser) {
 		ret = -ENOMEM;
@@ -1304,7 +1321,7 @@ int hid_open_report(struct hid_device *device)
 
 	parser->device = device;
 
-	end = start + size;
+	end = start + size;/*描述信息结束位置*/
 
 	device->collection = kcalloc(HID_DEFAULT_NUM_COLLECTIONS,
 				     sizeof(struct hid_collection), GFP_KERNEL);
@@ -1316,16 +1333,20 @@ int hid_open_report(struct hid_device *device)
 	for (i = 0; i < HID_DEFAULT_NUM_COLLECTIONS; i++)
 		device->collection[i].parent_idx = -1;
 
+	/*解析描述符并填充parser*/
 	ret = -EINVAL;
+	/*遍历描述符中的每一片信息item*/
 	while ((next = fetch_item(start, end, &item)) != NULL) {
 		start = next;
 
 		if (item.format != HID_ITEM_FORMAT_SHORT) {
+			/*只处理short format,处理出错*/
 			hid_err(device, "unexpected long global item\n");
 			goto err;
 		}
 
 		if (dispatch_type[item.type](parser, &item)) {
+			/*解析出错*/
 			hid_err(device, "item %u %u %u %u parsing failed\n",
 				item.format, (unsigned)item.size,
 				(unsigned)item.type, (unsigned)item.tag);
@@ -1333,6 +1354,7 @@ int hid_open_report(struct hid_device *device)
 		}
 
 		if (start == end) {
+			/*所有数据解析完成*/
 			if (parser->collection_stack_ptr) {
 				hid_err(device, "unbalanced collection at end of report description\n");
 				goto err;
@@ -1352,7 +1374,7 @@ int hid_open_report(struct hid_device *device)
 			vfree(parser);
 			device->status |= HID_STAT_PARSED;
 
-			return 0;
+			return 0;/*解析成功*/
 		}
 	}
 
@@ -1452,15 +1474,15 @@ static void implement(const struct hid_device *hid, u8 *report,
 	if (unlikely(n > 32)) {
 		hid_warn(hid, "%s() called with n (%d) > 32! (%s)\n",
 			 __func__, n, current->comm);
-		n = 32;
+		n = 32;/*最大n为32*/
 	} else if (n < 32) {
-		u32 m = (1U << n) - 1;
+		u32 m = (1U << n) - 1;/*制作掩码*/
 
 		if (unlikely(value > m)) {
 			hid_warn(hid,
 				 "%s() called with too large value %d (n: %d)! (%s)\n",
 				 __func__, value, n, current->comm);
-			value &= m;
+			value &= m;/*value的值比掩码大，则移除多余的位*/
 		}
 	}
 
@@ -1852,6 +1874,7 @@ static void hid_output_field(const struct hid_device *hid,
 static size_t hid_compute_report_size(struct hid_report *report)
 {
 	if (report->size)
+		/*返回实际指明的report size*/
 		return ((report->size - 1) >> 3) + 1;
 
 	return 0;
@@ -1960,9 +1983,9 @@ static struct hid_report *hid_get_report(struct hid_report_enum *report_enum,
 
 	/* Device uses numbered reports, data[0] is report number */
 	if (report_enum->numbered)
-		n = *data;
+		n = *data;/*取report数量*/
 
-	report = report_enum->report_id_hash[n];
+	report = report_enum->report_id_hash[n];/*取n映射的hid report(这些report时解析desc获得的）*/
 	if (report == NULL)
 		dbg_hid("undefined report_id %u received\n", n);
 
@@ -1994,15 +2017,19 @@ int __hid_request(struct hid_device *hid, struct hid_report *report,
 	}
 
 	if (reqtype == HID_REQ_SET_REPORT)
+		/*请求为set report时，buf中记录的是请求内容*/
 		hid_output_report(report, data_buf);
 
+	/*发送event并等待响应*/
 	ret = hid_hw_raw_request(hid, report->id, buf, len, report->type, reqtype);
 	if (ret < 0) {
+		/*响应失败*/
 		dbg_hid("unable to complete request: %d\n", ret);
 		goto out;
 	}
 
 	if (reqtype == HID_REQ_GET_REPORT)
+		/*请求为get report时，buf中记录的是响应内容*/
 		hid_input_report(hid, report->type, buf, ret, 0);
 
 	ret = 0;
@@ -2014,7 +2041,7 @@ out:
 EXPORT_SYMBOL_GPL(__hid_request);
 
 int hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8 *data, u32 size,
-			 int interrupt)
+			 int interrupt/*是否中断通道*/)
 {
 	struct hid_report_enum *report_enum = hid->report_enum + type;
 	struct hid_report *report;
@@ -2024,6 +2051,7 @@ int hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8 *
 	u8 *cdata = data;
 	int ret = 0;
 
+	/*查对应的hid report*/
 	report = hid_get_report(report_enum, data);
 	if (!report)
 		goto out;
@@ -2044,6 +2072,7 @@ int hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8 *
 		rsize = max_buffer_size;
 
 	if (csize < rsize) {
+		/*实际长度比预期的小，扩充长度并补零*/
 		dbg_hid("report %d is too short, (%d < %d)\n", report->id,
 				csize, rsize);
 		memset(cdata + csize, 0, rsize - csize);
@@ -2072,8 +2101,8 @@ out:
 EXPORT_SYMBOL_GPL(hid_report_raw_event);
 
 
-static int __hid_input_report(struct hid_device *hid, enum hid_report_type type,
-			      u8 *data, u32 size, int interrupt, u64 source, bool from_bpf,
+static int __hid_input_report(struct hid_device *hid, enum hid_report_type type/*report类型*/,
+			      u8 *data/*report数据*/, u32 size/*data长度*/, int interrupt/*是否来源于中断通道*/, u64 source, bool from_bpf,
 			      bool lock_already_taken)
 {
 	struct hid_report_enum *report_enum;
@@ -2093,11 +2122,13 @@ static int __hid_input_report(struct hid_device *hid, enum hid_report_type type,
 	}
 
 	if (!hid->driver) {
+		/*此时仍未指明driver,报错*/
 		ret = -ENODEV;
 		goto unlock;
 	}
+	/*取此类型report对应的结构体hid_report_enum*/
 	report_enum = hid->report_enum + type;
-	hdrv = hid->driver;
+	hdrv = hid->driver;/*取设备驱动*/
 
 	data = dispatch_hid_bpf_device_event(hid, type, data, &size, interrupt, source, from_bpf);
 	if (IS_ERR(data)) {
@@ -2108,7 +2139,7 @@ static int __hid_input_report(struct hid_device *hid, enum hid_report_type type,
 	if (!size) {
 		dbg_hid("empty report\n");
 		ret = -1;
-		goto unlock;
+		goto unlock;/*数据为0，解锁退出*/
 	}
 
 	/* Avoid unnecessary overhead if debugfs is disabled */
@@ -2118,11 +2149,13 @@ static int __hid_input_report(struct hid_device *hid, enum hid_report_type type,
 	report = hid_get_report(report_enum, data);
 
 	if (!report) {
+		/*未查找到对应的hid report*/
 		ret = -1;
 		goto unlock;
 	}
 
 	if (hdrv && hdrv->raw_event && hid_match_report(hid, report)) {
+		/*驱动有raw_event回调情况，先调用raw_event回调*/
 		ret = hdrv->raw_event(hid, report, data, size);
 		if (ret < 0)
 			goto unlock;
@@ -2147,8 +2180,8 @@ unlock:
  *
  * This is data entry for lower layers.
  */
-int hid_input_report(struct hid_device *hid, enum hid_report_type type, u8 *data, u32 size,
-		     int interrupt)
+int hid_input_report(struct hid_device *hid, enum hid_report_type type/*report类型*/, u8 *data/*report数据*/, u32 size/*data长度*/,
+		     int interrupt/*是否中断通道数据*/)
 {
 	return __hid_input_report(hid, type, data, size, interrupt, 0,
 				  false, /* from_bpf */
@@ -2159,12 +2192,14 @@ EXPORT_SYMBOL_GPL(hid_input_report);
 bool hid_match_one_id(const struct hid_device *hdev,
 		      const struct hid_device_id *id)
 {
+	/*bus,group,vendor,product匹配是否成功*/
 	return (id->bus == HID_BUS_ANY || id->bus == hdev->bus) &&
 		(id->group == HID_GROUP_ANY || id->group == hdev->group) &&
 		(id->vendor == HID_ANY_ID || id->vendor == hdev->vendor) &&
 		(id->product == HID_ANY_ID || id->product == hdev->product);
 }
 
+/*检查hdev是否可匹配id列表*/
 const struct hid_device_id *hid_match_id(const struct hid_device *hdev,
 		const struct hid_device_id *id)
 {
@@ -2184,6 +2219,7 @@ static const struct hid_device_id hid_hiddev_list[] = {
 
 static bool hid_hiddev(struct hid_device *hdev)
 {
+	/*如果可匹配，则为hiddev*/
 	return !!hid_match_id(hdev, hid_hiddev_list);
 }
 
@@ -2207,6 +2243,7 @@ report_descriptor_read(struct file *filp, struct kobject *kobj,
 	return count;
 }
 
+/*显示contry*/
 static ssize_t
 country_show(struct device *dev, struct device_attribute *attr,
 	     char *buf)
@@ -2241,9 +2278,9 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 	if (hdev->quirks & HID_QUIRK_HIDINPUT_FORCE)
 		connect_mask |= HID_CONNECT_HIDINPUT_FORCE;
 	if (hdev->bus != BUS_USB)
-		connect_mask &= ~HID_CONNECT_HIDDEV;
+		connect_mask &= ~HID_CONNECT_HIDDEV;/*非usb，移除HID_CONNECT_HIDDEV标记*/
 	if (hid_hiddev(hdev))
-		connect_mask |= HID_CONNECT_HIDDEV_FORCE;
+		connect_mask |= HID_CONNECT_HIDDEV_FORCE;/*如果hdev在hid_hiddev_list列表中，则打froce标记*/
 
 	if ((connect_mask & HID_CONNECT_HIDINPUT) && !hidinput_connect(hdev,
 				connect_mask & HID_CONNECT_HIDINPUT_FORCE))
@@ -2272,16 +2309,18 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 			(connect_mask & HID_CONNECT_FF) && hdev->ff_init)
 		hdev->ff_init(hdev);
 
+	/*显示hid设备类型*/
 	len = 0;
 	if (hdev->claimed & HID_CLAIMED_INPUT)
-		len += sprintf(buf + len, "input");
+		len += sprintf(buf + len, "input");/*有input标记时*/
 	if (hdev->claimed & HID_CLAIMED_HIDDEV)
 		len += sprintf(buf + len, "%shiddev%d", len ? "," : "",
-				((struct hiddev *)hdev->hiddev)->minor);
+				((struct hiddev *)hdev->hiddev)->minor);/*有hiddev标记时*/
 	if (hdev->claimed & HID_CLAIMED_HIDRAW)
 		len += sprintf(buf + len, "%shidraw%d", len ? "," : "",
-				((struct hidraw *)hdev->hidraw)->minor);
+				((struct hidraw *)hdev->hidraw)->minor);/*有hidraw标记时*/
 
+	/*取设备类型字符串*/
 	type = "Device";
 	for (i = 0; i < hdev->maxcollection; i++) {
 		struct hid_collection *col = &hdev->collection[i];
@@ -2293,6 +2332,7 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 		}
 	}
 
+	/*取bus字符串*/
 	switch (hdev->bus) {
 	case BUS_USB:
 		bus = "USB";
@@ -2317,14 +2357,16 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 		bus = "<UNKNOWN>";
 	}
 
+	/*创建country文件*/
 	ret = device_create_file(&hdev->dev, &dev_attr_country);
 	if (ret)
 		hid_warn(hdev,
 			 "can't create sysfs country code attribute err: %d\n", ret);
 
+	/*显示设备信息*/
 	hid_info(hdev, "%s: %s HID v%x.%02x %s [%s] on %s\n",
-		 buf, bus, hdev->version >> 8, hdev->version & 0xff,
-		 type, hdev->name, hdev->phys);
+		 buf/*设备类型标记*/, bus, hdev->version >> 8, hdev->version & 0xff,
+		 type, hdev->name/*设备名称*/, hdev->phys/*物理信息*/);
 
 	return 0;
 }
@@ -2358,14 +2400,14 @@ int hid_hw_start(struct hid_device *hdev, unsigned int connect_mask)
 {
 	int error;
 
-	error = hdev->ll_driver->start(hdev);
+	error = hdev->ll_driver->start(hdev);/*启动hid设备*/
 	if (error)
 		return error;
 
 	if (connect_mask) {
 		error = hid_connect(hdev, connect_mask);
 		if (error) {
-			hdev->ll_driver->stop(hdev);
+			hdev->ll_driver->stop(hdev);/*停止hid设备*/
 			return error;
 		}
 	}
@@ -2384,7 +2426,7 @@ EXPORT_SYMBOL_GPL(hid_hw_start);
 void hid_hw_stop(struct hid_device *hdev)
 {
 	hid_disconnect(hdev);
-	hdev->ll_driver->stop(hdev);
+	hdev->ll_driver->stop(hdev);/*停止hid设备*/
 }
 EXPORT_SYMBOL_GPL(hid_hw_stop);
 
@@ -2405,7 +2447,7 @@ int hid_hw_open(struct hid_device *hdev)
 		return ret;
 
 	if (!hdev->ll_open_count++) {
-		ret = hdev->ll_driver->open(hdev);
+		ret = hdev->ll_driver->open(hdev);/*打开hid设备*/
 		if (ret)
 			hdev->ll_open_count--;
 
@@ -2451,16 +2493,17 @@ void hid_hw_request(struct hid_device *hdev,
 		    struct hid_report *report, enum hid_class_request reqtype)
 {
 	if (hdev->ll_driver->request)
+		/*ll_driver有request回调，则直接请求*/
 		return hdev->ll_driver->request(hdev, report, reqtype);
-
+	/*通过raw_request请求*/
 	__hid_request(hdev, report, reqtype);
 }
 EXPORT_SYMBOL_GPL(hid_hw_request);
 
 int __hid_hw_raw_request(struct hid_device *hdev,
 			 unsigned char reportnum, __u8 *buf,
-			 size_t len, enum hid_report_type rtype,
-			 enum hid_class_request reqtype,
+			 size_t len/*buf长度*/, enum hid_report_type rtype/*report类型*/,
+			 enum hid_class_request reqtype/*请求类型*/,
 			 u64 source, bool from_bpf)
 {
 	unsigned int max_buffer_size = HID_MAX_BUFFER_SIZE;
@@ -2519,6 +2562,7 @@ int __hid_hw_output_report(struct hid_device *hdev, __u8 *buf, size_t len, u64 s
 	if (ret)
 		return ret;
 
+	/*report output事件*/
 	if (hdev->ll_driver->output_report)
 		return hdev->ll_driver->output_report(hdev, buf, len);
 
@@ -2641,14 +2685,16 @@ const struct hid_device_id *hid_match_device(struct hid_device *hdev,
 	struct hid_dynid *dynid;
 
 	spin_lock(&hdrv->dyn_lock);
+	/*遍历所有hid_dynid*/
 	list_for_each_entry(dynid, &hdrv->dyn_list, list) {
 		if (hid_match_one_id(hdev, &dynid->id)) {
 			spin_unlock(&hdrv->dyn_lock);
-			return &dynid->id;
+			return &dynid->id;/*匹配成功*/
 		}
 	}
 	spin_unlock(&hdrv->dyn_lock);
 
+	/*遍历id_table，检查是否匹配*/
 	return hid_match_id(hdev, hdrv->id_table);
 }
 EXPORT_SYMBOL_GPL(hid_match_device);
@@ -2690,8 +2736,9 @@ static bool hid_check_device_match(struct hid_device *hdev,
 {
 	*id = hid_match_device(hdev, hdrv);
 	if (!*id)
-		return false;
+		return false;/*device id匹配失败*/
 
+	/*驱动有match回调，通过match回调检查*/
 	if (hdrv->match)
 		return hdrv->match(hdev, hid_ignore_special_drivers);
 
@@ -2730,11 +2777,12 @@ static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
 
 	/* reset the quirks that has been previously set */
 	hdev->quirks = hid_lookup_quirk(hdev);
-	hdev->driver = hdrv;
+	hdev->driver = hdrv;/*设置设备匹配的driver*/
 
 	if (hdrv->probe) {
-		ret = hdrv->probe(hdev, id);
+		ret = hdrv->probe(hdev, id);/*利用驱动probe设备*/
 	} else { /* default probe */
+		/*使用默认的probe*/
 		ret = hid_open_report(hdev);
 		if (!ret)
 			ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
@@ -2749,6 +2797,7 @@ static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
 	 */
 
 	if (ret) {
+		/*probe失败，关闭此设备，并置驱动为NULL*/
 		devres_release_group(&hdev->dev, hdev->devres_group_id);
 		hid_close_report(hdev);
 		hdev->driver = NULL;
@@ -2760,7 +2809,7 @@ static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
 static int hid_device_probe(struct device *dev)
 {
 	struct hid_device *hdev = to_hid_device(dev);
-	struct hid_driver *hdrv = to_hid_driver(dev->driver);
+	struct hid_driver *hdrv = to_hid_driver(dev->driver);/*要尝试probe的驱动*/
 	int ret = 0;
 
 	if (down_interruptible(&hdev->driver_input_lock))
@@ -2770,6 +2819,7 @@ static int hid_device_probe(struct device *dev)
 	clear_bit(ffs(HID_STAT_REPROBED), &hdev->status);
 
 	if (!hdev->driver)
+		/*没有关联驱动，尝试关联驱动*/
 		ret = __hid_device_probe(hdev, hdrv);
 
 	if (!hdev->io_started)
@@ -2857,31 +2907,33 @@ const struct bus_type hid_bus_type = {
 	.dev_groups	= hid_dev_groups,
 	.drv_groups	= hid_drv_groups,
 	.match		= hid_bus_match,
-	.probe		= hid_device_probe,
+	.probe		= hid_device_probe,/*bus提供probe,检查设备与驱动的匹配*/
 	.remove		= hid_device_remove,
 	.uevent		= hid_uevent,
 };
 EXPORT_SYMBOL(hid_bus_type);
 
+/*hid设备添加*/
 int hid_add_device(struct hid_device *hdev)
 {
 	static atomic_t id = ATOMIC_INIT(0);
 	int ret;
 
 	if (WARN_ON(hdev->status & HID_STAT_ADDED))
-		return -EBUSY;
+		return -EBUSY;/*已添加*/
 
 	hdev->quirks = hid_lookup_quirk(hdev);
 
 	/* we need to kill them here, otherwise they will stay allocated to
 	 * wait for coming driver */
 	if (hid_ignore(hdev))
-		return -ENODEV;
+		return -ENODEV;/*设备需要被忽略的*/
 
 	/*
 	 * Check for the mandatory transport channel.
 	 */
 	 if (!hdev->ll_driver->raw_request) {
+		 /*必须提供raw_request回调*/
 		hid_err(hdev, "transport driver missing .raw_request()\n");
 		return -EINVAL;
 	 }
@@ -2894,7 +2946,7 @@ int hid_add_device(struct hid_device *hdev)
 	if (ret)
 		return ret;
 	if (!hdev->dev_rdesc)
-		return -ENODEV;
+		return -ENODEV;/*parse回调未设置rdesc，报错*/
 
 	/*
 	 * Scan generic devices for group information
@@ -2903,20 +2955,21 @@ int hid_add_device(struct hid_device *hdev)
 		hdev->group = HID_GROUP_GENERIC;
 	} else if (!hdev->group &&
 		   !(hdev->quirks & HID_QUIRK_HAVE_SPECIAL_DRIVER)) {
-		ret = hid_scan_report(hdev);
+		ret = hid_scan_report(hdev);/*扫描hid->dev_rdesc*/
 		if (ret)
 			hid_warn(hdev, "bad device descriptor (%d)\n", ret);
 	}
 
-	hdev->id = atomic_inc_return(&id);
+	hdev->id = atomic_inc_return(&id);/*分配hdev设备编号*/
 
 	/* XXX hack, any other cleaner solution after the driver core
 	 * is converted to allow more than 20 bytes as the device name? */
+	/*设置设备名称，例如：0003:0627:0001.0001*/
 	dev_set_name(&hdev->dev, "%04X:%04X:%04X.%04X", hdev->bus,
 		     hdev->vendor, hdev->product, hdev->id);
 
 	hid_debug_register(hdev, dev_name(&hdev->dev));
-	ret = device_add(&hdev->dev);
+	ret = device_add(&hdev->dev);/*添加设备到系统*/
 	if (!ret)
 		hdev->status |= HID_STAT_ADDED;
 	else
@@ -2937,6 +2990,7 @@ EXPORT_SYMBOL_GPL(hid_add_device);
  */
 struct hid_device *hid_allocate_device(void)
 {
+	/*创建hid_device*/
 	struct hid_device *hdev;
 	int ret = -ENOMEM;
 
@@ -2946,7 +3000,7 @@ struct hid_device *hid_allocate_device(void)
 
 	device_initialize(&hdev->dev);
 	hdev->dev.release = hid_device_release;
-	hdev->dev.bus = &hid_bus_type;
+	hdev->dev.bus = &hid_bus_type;/*指向hci bus*/
 	device_enable_async_suspend(&hdev->dev);
 
 	hid_close_report(hdev);

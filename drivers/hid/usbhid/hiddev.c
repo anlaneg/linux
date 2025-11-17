@@ -862,6 +862,7 @@ static char *hiddev_devnode(const struct device *dev, umode_t *mode)
 	return kasprintf(GFP_KERNEL, "usb/%s", dev_name(dev));
 }
 
+/*用于创建usb/hiddev%d设备*/
 static struct usb_class_driver hiddev_class = {
 	.name =		"hiddev%d",
 	.devnode =	hiddev_devnode,

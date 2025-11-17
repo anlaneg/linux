@@ -1106,6 +1106,7 @@ void hci_smp_ltks_clear(struct hci_dev *hdev)
 	}
 }
 
+/*清除设备上所有smp_irks*/
 void hci_smp_irks_clear(struct hci_dev *hdev)
 {
 	struct smp_irk *k, *tmp;
@@ -1126,7 +1127,7 @@ void hci_blocked_keys_clear(struct hci_dev *hdev)
 	}
 }
 
-bool hci_is_blocked_key(struct hci_dev *hdev, u8 type, u8 val[16])
+bool hci_is_blocked_key(struct hci_dev *hdev, u8 type/*key type*/, u8 val[16])
 {
 	bool blocked = false;
 	struct blocked_key *b;
@@ -1134,7 +1135,7 @@ bool hci_is_blocked_key(struct hci_dev *hdev, u8 type, u8 val[16])
 	rcu_read_lock();
 	list_for_each_entry_rcu(b, &hdev->blocked_keys, list) {
 		if (b->type == type && !memcmp(b->val, val, sizeof(b->val))) {
-			blocked = true;/*此keys被阻塞*/
+			blocked = true;/*此keys被配置为阻塞*/
 			break;
 		}
 	}
@@ -1163,7 +1164,7 @@ struct link_key *hci_find_link_key(struct hci_dev *hdev, bdaddr_t *bdaddr)
 				return NULL;
 			}
 
-			return k;
+			return k;/*返回此地址对应的key*/
 		}
 	}
 	rcu_read_unlock();
@@ -1248,12 +1249,16 @@ struct smp_ltk *hci_find_ltk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	return NULL;
 }
 
+/*此地址为rpa地址，RPA地址需通过预共享的密钥（IRK，Identity Resolving Key）
+ * 解密 RPA，还原设备的真实身份
+ * 此函数即用于查询此地址*/
 struct smp_irk *hci_find_irk_by_rpa(struct hci_dev *hdev, bdaddr_t *rpa)
 {
 	struct smp_irk *irk_to_return = NULL;
 	struct smp_irk *irk;
 
 	rcu_read_lock();
+	/*检查rpa地址*/
 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
 		if (!bacmp(&irk->rpa, rpa)) {
 			irk_to_return = irk;
@@ -1261,27 +1266,29 @@ struct smp_irk *hci_find_irk_by_rpa(struct hci_dev *hdev, bdaddr_t *rpa)
 		}
 	}
 
+	/*利用irk的key检查rpa，是否有效*/
 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
 		if (smp_irk_matches(hdev, irk->val, rpa)) {
-			bacpy(&irk->rpa, rpa);
-			irk_to_return = irk;
+			bacpy(&irk->rpa, rpa);/*更新变更后的rpa地址*/
+			irk_to_return = irk;/*命中，返回此irk*/
 			goto done;
 		}
 	}
 
 done:
 	if (irk_to_return && hci_is_blocked_key(hdev, HCI_BLOCKED_KEY_TYPE_IRK,
-						irk_to_return->val)) {
+						irk_to_return->val)/*此irk被阻塞*/) {
 		bt_dev_warn_ratelimited(hdev, "Identity key blocked for %pMR",
 					&irk_to_return->bdaddr);
-		irk_to_return = NULL;
+		irk_to_return = NULL;/*返回NULL*/
 	}
 
 	rcu_read_unlock();
 
-	return irk_to_return;
+	return irk_to_return;/*返回对应的irk*/
 }
 
+/*查找此地址对应的smp_irk*/
 struct smp_irk *hci_find_irk_by_addr(struct hci_dev *hdev, bdaddr_t *bdaddr,
 				     u8 addr_type)
 {
@@ -1290,19 +1297,20 @@ struct smp_irk *hci_find_irk_by_addr(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 	/* Identity Address must be public or static random */
 	if (addr_type == ADDR_LE_DEV_RANDOM && (bdaddr->b[5] & 0xc0) != 0xc0)
-		return NULL;
+		return NULL;/*非rpa地址*/
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
 		if (addr_type == irk->addr_type &&
 		    bacmp(bdaddr, &irk->bdaddr) == 0) {
-			irk_to_return = irk;
+			irk_to_return = irk;/*找到此地址对应的irk记录*/
 			break;
 		}
 	}
 
 	if (irk_to_return && hci_is_blocked_key(hdev, HCI_BLOCKED_KEY_TYPE_IRK,
 						irk_to_return->val)) {
+		/*但此irk记录已被block,放弃，返回NULL*/
 		bt_dev_warn_ratelimited(hdev, "Identity key blocked for %pMR",
 					&irk_to_return->bdaddr);
 		irk_to_return = NULL;
@@ -1391,6 +1399,7 @@ struct smp_ltk *hci_add_ltk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	return key;
 }
 
+/*添加smp_irk*/
 struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 			    u8 addr_type, u8 val[16], bdaddr_t *rpa)
 {
@@ -1398,6 +1407,7 @@ struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 	irk = hci_find_irk_by_addr(hdev, bdaddr, addr_type);
 	if (!irk) {
+		/*此地址无smp_irk,创建*/
 		irk = kzalloc(sizeof(*irk), GFP_KERNEL);
 		if (!irk)
 			return NULL;
@@ -1408,8 +1418,8 @@ struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 		list_add_rcu(&irk->list, &hdev->identity_resolving_keys);
 	}
 
-	memcpy(irk->val, val, 16);
-	bacpy(&irk->rpa, rpa);
+	memcpy(irk->val, val, 16);/*设置key*/
+	bacpy(&irk->rpa, rpa);/*设置rpa地址*/
 
 	return irk;
 }
@@ -1464,6 +1474,7 @@ void hci_remove_irk(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 addr_type)
 	}
 }
 
+/*检查是否已与设备bdaddr配对*/
 bool hci_bdaddr_is_paired(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 type)
 {
 	struct smp_ltk *k;
@@ -1472,7 +1483,7 @@ bool hci_bdaddr_is_paired(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 type)
 
 	if (type == BDADDR_BREDR) {
 		if (hci_find_link_key(hdev, bdaddr))
-			return true;
+			return true;/*此设备已被pair*/
 		return false;
 	}
 
@@ -1482,12 +1493,14 @@ bool hci_bdaddr_is_paired(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 type)
 	else
 		addr_type = ADDR_LE_DEV_RANDOM;
 
+	/*查询irk,并依据irk更新bdaddr(rpa问题）*/
 	irk = hci_get_irk(hdev, bdaddr, addr_type);
 	if (irk) {
 		bdaddr = &irk->bdaddr;
 		addr_type = irk->addr_type;
 	}
 
+	/*查询long_term_keys列表*/
 	rcu_read_lock();
 	list_for_each_entry_rcu(k, &hdev->long_term_keys, list) {
 		if (k->bdaddr_type == addr_type && !bacmp(bdaddr, &k->bdaddr)) {

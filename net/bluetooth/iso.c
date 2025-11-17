@@ -2523,6 +2523,7 @@ static bool iso_inited;
 
 bool iso_enabled(void)
 {
+	/*是否开启了iso socket*/
 	return iso_inited;
 }
 

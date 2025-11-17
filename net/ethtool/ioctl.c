@@ -1204,7 +1204,7 @@ static noinline_for_stack int ethtool_set_rxnfc(struct net_device *dev,
 			return -EINVAL;
 	}
 
-	rc = ops->set_rxnfc(dev, &info);
+	rc = ops->set_rxnfc(dev, &info);/*由驱动具体设置规则*/
 	if (rc)
 		return rc;
 
@@ -3420,10 +3420,12 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 	case ETHTOOL_GRXCLSRLCNT:
 	case ETHTOOL_GRXCLSRULE:
 	case ETHTOOL_GRXCLSRLALL:
+		/*获取rx分类规则*/
 		rc = ethtool_get_rxnfc(dev, ethcmd, useraddr);
 		break;
 	case ETHTOOL_SRXCLSRLDEL:
 	case ETHTOOL_SRXCLSRLINS:
+		/*添加rx 分类规则*/
 		rc = ethtool_set_rxnfc(dev, ethcmd, useraddr);
 		break;
 	case ETHTOOL_FLASHDEV:
@@ -3552,6 +3554,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 	u32 ethcmd;
 	int rc;
 
+	/*取子命令*/
 	if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd)))
 		return -EFAULT;
 
@@ -3570,6 +3573,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 	}
 
 	rtnl_lock();
+	/*加锁处理ethtool命令*/
 	rc = __dev_ethtool(net, ifr, useraddr, ethcmd, state);
 	rtnl_unlock();
 	if (rc)

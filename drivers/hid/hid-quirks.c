@@ -986,14 +986,15 @@ static const struct hid_device_id hid_mouse_ignore_list[] = {
 	{ }
 };
 
+/*此设备是否需要被忽略*/
 bool hid_ignore(struct hid_device *hdev)
 {
 	int i;
 
 	if (hdev->quirks & HID_QUIRK_NO_IGNORE)
-		return false;
+		return false;/*有明确的不忽略标记*/
 	if (hdev->quirks & HID_QUIRK_IGNORE)
-		return true;
+		return true;/*有明确的忽略标记，返回true*/
 
 	switch (hdev->vendor) {
 	case USB_VENDOR_ID_CODEMERCS:
@@ -1101,6 +1102,7 @@ static struct hid_device_id *hid_exists_dquirk(const struct hid_device *hdev)
 	struct quirks_list_struct *q;
 	struct hid_device_id *bl_entry = NULL;
 
+	/*检查此设备是否存在dquirk*/
 	list_for_each_entry(q, &dquirks_list, node) {
 		if (hid_match_one_id(hdev, &q->hid_bl_item)) {
 			bl_entry = &q->hid_bl_item;
@@ -1159,9 +1161,9 @@ static int hid_modify_dquirk(const struct hid_device_id *id,
 
 		if (hid_match_one_id(hdev, &q->hid_bl_item)) {
 
-			list_replace(&q->node, &q_new->node);
+			list_replace(&q->node, &q_new->node);/*完成替换*/
 			kfree(q);
-			list_edited = 1;
+			list_edited = 1;/*已存在，需修改*/
 			break;
 
 		}
@@ -1169,7 +1171,7 @@ static int hid_modify_dquirk(const struct hid_device_id *id,
 	}
 
 	if (!list_edited)
-		list_add_tail(&q_new->node, &dquirks_list);
+		list_add_tail(&q_new->node, &dquirks_list);/*添加进quirks列表尾部*/
 
 	mutex_unlock(&dquirks_lock);
 
@@ -1269,17 +1271,17 @@ static unsigned long hid_gets_squirk(const struct hid_device *hdev)
 	unsigned long quirks = hdev->initial_quirks;
 
 	if (hid_match_id(hdev, hid_ignore_list))
-		quirks |= HID_QUIRK_IGNORE;
+		quirks |= HID_QUIRK_IGNORE;/*设备被hid_ignore_list命中*/
 
 	if (hid_match_id(hdev, hid_mouse_ignore_list))
-		quirks |= HID_QUIRK_IGNORE_MOUSE;
+		quirks |= HID_QUIRK_IGNORE_MOUSE;/*设备被hid_mouse_ignore_list命中*/
 
 	if (hid_match_id(hdev, hid_have_special_driver))
-		quirks |= HID_QUIRK_HAVE_SPECIAL_DRIVER;
+		quirks |= HID_QUIRK_HAVE_SPECIAL_DRIVER;/*设备被hid_have_special_driver命中*/
 
 	bl_entry = hid_match_id(hdev, hid_quirks);
 	if (bl_entry != NULL)
-		quirks |= bl_entry->driver_data;
+		quirks |= bl_entry->driver_data;/*设备在hid_quirks列表中*/
 
 	if (quirks)
 		dbg_hid("Found squirk 0x%lx for HID device 0x%04x:0x%04x\n",

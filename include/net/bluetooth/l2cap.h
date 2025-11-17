@@ -681,7 +681,9 @@ struct l2cap_conn {
 
 struct l2cap_user {
 	struct list_head list;
+	/*实现为hidp_session_probe*/
 	int (*probe) (struct l2cap_conn *conn, struct l2cap_user *user);
+	/*实现为hidp_session_remove*/
 	void (*remove) (struct l2cap_conn *conn, struct l2cap_user *user);
 };
 

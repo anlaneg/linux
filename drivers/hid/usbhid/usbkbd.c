@@ -380,6 +380,7 @@ static void usb_kbd_disconnect(struct usb_interface *intf)
 	}
 }
 
+/*usb keyboard匹配*/
 static const struct usb_device_id usb_kbd_id_table[] = {
 	{ USB_INTERFACE_INFO(USB_INTERFACE_CLASS_HID, USB_INTERFACE_SUBCLASS_BOOT,
 		USB_INTERFACE_PROTOCOL_KEYBOARD) },

@@ -87,19 +87,21 @@
 #define HIDP_WAITING_FOR_SEND_ACK	11
 
 struct hidp_connadd_req {
+	/*控制socket*/
 	int   ctrl_sock;	/* Connected control socket */
+	/*中断socket*/
 	int   intr_sock;	/* Connected interrupt socket */
 	__u16 parser;
-	__u16 rd_size;
+	__u16 rd_size;/*rd_data数组长度*/
 	__u8 __user *rd_data;
-	__u8  country;
+	__u8  country;/*设备对应的country信息*/
 	__u8  subclass;
-	__u16 vendor;
+	__u16 vendor;/*设备对应的厂商信息*/
 	__u16 product;
 	__u16 version;
 	__u32 flags;
-	__u32 idle_to;
-	char  name[128];
+	__u32 idle_to;/*超时时间（超过此时间将断链）*/
+	char  name[128];/*设备名称*/
 };
 
 struct hidp_conndel_req {
@@ -118,7 +120,7 @@ struct hidp_conninfo {
 };
 
 struct hidp_connlist_req {
-	__u32  cnum;
+	__u32  cnum;/*ci数组长度*/
 	struct hidp_conninfo __user *ci;
 };
 
@@ -146,26 +148,28 @@ struct hidp_session {
 	unsigned long flags;
 
 	/* connection management */
-	bdaddr_t bdaddr;
-	struct l2cap_conn *conn;
+	bdaddr_t bdaddr;/*目的地址*/
+	struct l2cap_conn *conn;/*对应的l2cap connect*/
 	struct l2cap_user user;
-	struct socket *ctrl_sock;
-	struct socket *intr_sock;
+	struct socket *ctrl_sock;/*控制socket*/
+	struct socket *intr_sock;/*中断socket*/
+	/*用于缓存ctrl skb，这些报文将由hidp_session_run自ctrl socket上发出*/
 	struct sk_buff_head ctrl_transmit;
+	/*用于缓存中断skb，这些报文将由hidp_session_run自intr socket上发出*/
 	struct sk_buff_head intr_transmit;
-	uint ctrl_mtu;
-	uint intr_mtu;
-	unsigned long idle_to;
+	uint ctrl_mtu;/*控制通道mtu*/
+	uint intr_mtu;/*中断通道mtu*/
+	unsigned long idle_to;/*idle超时时间（超时会断开连接）；0表示无超时情况*/
 
 	/* device management */
 	struct work_struct dev_init;
 	struct input_dev *input;
-	struct hid_device *hid;
+	struct hid_device *hid;/*指明关联的hid设备*/
 	struct timer_list timer;
 
 	/* Report descriptor */
 	__u8 *rd_data;
-	uint rd_size;
+	uint rd_size;/*rd_data长度*/
 
 	/* session data */
 	unsigned char keys[8];

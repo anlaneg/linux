@@ -1953,11 +1953,11 @@ struct input_dev *input_allocate_device(void)
 	 */
 
 	dev_set_name(&dev->dev, "input%lu",
-		     (unsigned long)atomic_inc_return(&input_no));
+		     (unsigned long)atomic_inc_return(&input_no));/*设置input设备名称*/
 
 	__module_get(THIS_MODULE);
 
-	return dev;
+	return dev;/*返回申请的input device*/
 }
 EXPORT_SYMBOL(input_allocate_device);
 

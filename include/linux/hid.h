@@ -35,10 +35,11 @@
  */
 
 struct hid_item {
+	/*当前两种情况：HID_ITEM_FORMAT_LONG，HID_ITEM_FORMAT_SHORT*/
 	unsigned  format;
-	__u8      size;
-	__u8      type;
-	__u8      tag;
+	__u8      size;/*data长度,首字节中的0,1两个bit(按0,1,2,4映射)*/
+	__u8      type;/*首字节中的2,3两个bit*/
+	__u8      tag;/*首字节中的4,5,6,7四个bit*/
 	union {
 	    __u8   u8;
 	    __s8   s8;
@@ -451,9 +452,10 @@ struct hid_global {
 
 struct hid_local {
 	unsigned usage[HID_MAX_USAGES]; /* usage array */
+	/*指明usage[x]数组的长度*/
 	u8 usage_size[HID_MAX_USAGES]; /* usage size array */
 	unsigned collection_index[HID_MAX_USAGES]; /* collection index array */
-	unsigned usage_index;
+	unsigned usage_index;/*指明当前usage,usage_size的填写位置*/
 	unsigned usage_minimum;
 	unsigned delimiter_depth;
 	unsigned delimiter_branch;
@@ -576,7 +578,9 @@ struct hid_output_fifo {
 #define HID_CLAIMED_HIDRAW	BIT(2)
 #define HID_CLAIMED_DRIVER	BIT(3)
 
+/*标明设备已添加*/
 #define HID_STAT_ADDED		BIT(0)
+/*标明设备描述符信息已解析*/
 #define HID_STAT_PARSED		BIT(1)
 #define HID_STAT_DUP_DETECTED	BIT(2)
 #define HID_STAT_REPROBED	BIT(3)
@@ -610,13 +614,15 @@ struct hid_device {
 	const __u8 *dev_rdesc;						/* device report descriptor */
 	const __u8 *bpf_rdesc;						/* bpf modified report descriptor, if any */
 	const __u8 *rdesc;						/* currently used report descriptor */
-	unsigned int dev_rsize;
+	unsigned int dev_rsize;/*dev_rdesc数组长度*/
 	unsigned int bpf_rsize;
 	unsigned int rsize;
+	/*collection数组长度*/
 	unsigned int collection_size;					/* Number of allocated hid_collections */
 	struct hid_collection *collection;				/* List of HID collections */
 	unsigned int maxcollection;						/* Number of parsed collections */
 	unsigned int maxapplication;					/* Number of applications */
+	/*所属bus id，例如BUS_BLUETOOTH*/
 	__u16 bus;							/* BUS ID */
 	__u16 group;							/* Report group */
 	__u32 vendor;							/* Vendor ID */
@@ -664,6 +670,7 @@ struct hid_device {
 	void *hiddev;							/* The hiddev structure */
 	void *hidraw;
 
+	/*设备名称*/
 	char name[128];							/* Device name */
 	char phys[64];							/* Device physical location */
 	char uniq[64];							/* Device unique identifier (serial #) */
@@ -690,6 +697,7 @@ struct hid_device {
 	wait_queue_head_t debug_wait;
 	struct kref			ref;
 
+	/*设备唯一编号*/
 	unsigned int id;						/* system unique id */
 
 #ifdef CONFIG_HID_BPF
@@ -721,34 +729,35 @@ static inline void hid_set_drvdata(struct hid_device *hdev, void *data)
 
 struct hid_parser {
 	struct hid_global     global;
-	struct hid_global     global_stack[HID_GLOBAL_STACK_SIZE];
-	unsigned int          global_stack_ptr;
+	struct hid_global     global_stack[HID_GLOBAL_STACK_SIZE];/*栈内容*/
+	unsigned int          global_stack_ptr;/*当前解析栈指针，用于控制global存取*/
 	struct hid_local      local;
 	unsigned int         *collection_stack;
 	unsigned int          collection_stack_ptr;
 	unsigned int          collection_stack_size;
-	struct hid_device    *device;
+	struct hid_device    *device;/*解析对应的hid设备*/
 	unsigned int          scan_flags;
 };
 
 struct hid_class_descriptor {
-	__u8  bDescriptorType;
-	__le16 wDescriptorLength;
+	__u8  bDescriptorType;/*class描述符类型*/
+	__le16 wDescriptorLength;/*class描述符总长度*/
 } __attribute__ ((packed));
 
 struct hid_descriptor {
-	__u8  bLength;
+	__u8  bLength;/*hid描述符总大小*/
 	__u8  bDescriptorType;
 	__le16 bcdHID;
-	__u8  bCountryCode;
-	__u8  bNumDescriptors;
-	struct hid_class_descriptor rpt_desc;
+	__u8  bCountryCode;/*country编号*/
+	__u8  bNumDescriptors;/*class描述符总数*/
+	struct hid_class_descriptor rpt_desc;/*class描述符信息*/
 
-	struct hid_class_descriptor opt_descs[];
+	struct hid_class_descriptor opt_descs[];/*class描述符内容*/
 } __attribute__ ((packed));
 
 #define HID_DEVICE(b, g, ven, prod)					\
 	.bus = (b), .group = (g), .vendor = (ven), .product = (prod)
+/*指定bus为usb bus,指定vendor,product*/
 #define HID_USB_DEVICE(ven, prod)				\
 	.bus = BUS_USB, .vendor = (ven), .product = (prod)
 #define HID_BLUETOOTH_DEVICE(ven, prod)					\
@@ -817,9 +826,9 @@ struct hid_usage_id {
  */
 struct hid_driver {
 	char *name;
-	const struct hid_device_id *id_table;
+	const struct hid_device_id *id_table;/*静态设备id匹配表*/
 
-	struct list_head dyn_list;
+	struct list_head dyn_list;/*动态设备id匹配链*/
 	spinlock_t dyn_lock;
 
 	bool (*match)(struct hid_device *dev, bool ignore_special_driver);
@@ -880,7 +889,9 @@ struct hid_driver {
  * @max_buffer_size: over-ride maximum data buffer size (default: HID_MAX_BUFFER_SIZE)
  */
 struct hid_ll_driver {
+	/*启动设备*/
 	int (*start)(struct hid_device *hdev);
+	/*停止设备*/
 	void (*stop)(struct hid_device *hdev);
 
 	int (*open)(struct hid_device *hdev);
@@ -890,6 +901,7 @@ struct hid_ll_driver {
 
 	int (*parse)(struct hid_device *hdev);
 
+	/*向硬件发送reqtype的请求,并等待响应*/
 	void (*request)(struct hid_device *hdev,
 			struct hid_report *report, int reqtype);
 

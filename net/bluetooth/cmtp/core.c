@@ -295,6 +295,7 @@ static int cmtp_session(void *arg)
 		if (sk->sk_state != BT_CONNECTED)
 			break;/*状态不再处理connected,跳出*/
 
+		/*处理socket收方向*/
 		while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
 			skb_orphan(skb);
 			if (!skb_linearize(skb))

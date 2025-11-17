@@ -26,6 +26,7 @@
 
 #include "hidp.h"
 
+/*用于串连所有BTPROTO_HIDP socket*/
 static struct bt_sock_list hidp_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(hidp_sk_list.lock)
 };
@@ -77,8 +78,9 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 			sockfd_put(csock);
 			return err;/*fd指定的socket不存在*/
 		}
-		ca.name[sizeof(ca.name)-1] = 0;
+		ca.name[sizeof(ca.name)-1] = 0;/*为设备名称指定结尾*/
 
+		/*创建hidp_session*/
 		err = hidp_connection_add(&ca, csock/*控制socket*/, isock/*中断socket*/);
 		if (!err && copy_to_user(argp, &ca, sizeof(ca)))
 			err = -EFAULT;
@@ -99,7 +101,7 @@ static int do_hidp_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 		return hidp_connection_del(&cd);
 
 	case HIDPGETCONNLIST:
-		/*列出所有hidp连接*/
+		/*列出指定数量的hidp_session*/
 		if (copy_from_user(&cl, argp, sizeof(cl)))
 			return -EFAULT;
 
@@ -268,7 +270,7 @@ static int hidp_sock_create(struct net *net, struct socket *sock, int protocol,
 	sock->ops = &hidp_sock_ops;
 	sock->state = SS_UNCONNECTED;
 
-	bt_sock_link(&hidp_sk_list, sk);
+	bt_sock_link(&hidp_sk_list, sk);/*串连所有socket*/
 
 	return 0;
 }

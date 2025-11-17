@@ -3111,6 +3111,7 @@ void hid_dump_report(struct hid_device *hid, int type, u8 *data,
 			report_enum->numbered ? "" : "un");
 	hid_debug_event(hid, buf);
 
+	/*写data内容到buffer*/
 	for (i = 0; i < size; i++) {
 		snprintf(buf, HID_DEBUG_BUFSIZE - 1,
 				" %02x", data[i]);
@@ -3803,12 +3804,13 @@ static const struct file_operations hid_debug_events_fops = {
 
 void hid_debug_register(struct hid_device *hdev, const char *name)
 {
+	/*产生debugfs目录*/
 	hdev->debug_dir = debugfs_create_dir(name, hid_debug_root);
 	hdev->debug_rdesc = debugfs_create_file("rdesc", 0400,
 			hdev->debug_dir, hdev, &hid_debug_rdesc_fops);
 	hdev->debug_events = debugfs_create_file("events", 0400,
 			hdev->debug_dir, hdev, &hid_debug_events_fops);
-	hdev->debug = 1;
+	hdev->debug = 1;/*指明debug开启*/
 }
 
 void hid_debug_unregister(struct hid_device *hdev)

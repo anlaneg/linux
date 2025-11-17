@@ -193,7 +193,7 @@ struct bt_uuid {
 struct blocked_key {
 	struct list_head list;
 	struct rcu_head rcu;
-	u8 type;
+	u8 type;/*类型*/
 	u8 val[16];
 };
 
@@ -220,10 +220,10 @@ struct smp_ltk {
 struct smp_irk {
 	struct list_head list;
 	struct rcu_head rcu;
-	bdaddr_t rpa;
-	bdaddr_t bdaddr;
-	u8 addr_type;
-	u8 val[16];
+	bdaddr_t rpa;/*rpa地址*/
+	bdaddr_t bdaddr;/*设备public地址*/
+	u8 addr_type;/*地址类型*/
+	u8 val[16];/*key值*/
 };
 
 struct link_key {
@@ -573,9 +573,9 @@ struct hci_dev {
 	struct mutex		mgmt_pending_lock;
 	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
 	struct list_head	reject_list;/*用于挂接拒绝连接的设备列表*/
-	struct list_head	accept_list;/*用于挂接容许连接的BR设备列表*/
+	struct list_head	accept_list;/*用于挂接容许连接的BR设备列表,如果设备不在此连接，连接将被拒绝*/
 	struct list_head	uuids;/*用于串连一组设置的uuid*/
-	struct list_head	link_keys;
+	struct list_head	link_keys;/*用于挂接pair设备的key列表*/
 	struct list_head	long_term_keys;
 	struct list_head	identity_resolving_keys;
 	struct list_head	remote_oob_data;
@@ -584,7 +584,7 @@ struct hci_dev {
 	struct list_head	le_conn_params;
 	struct list_head	pend_le_conns;
 	struct list_head	pend_le_reports;
-	struct list_head	blocked_keys;
+	struct list_head	blocked_keys;/*用于挂接block的key列表*/
 	struct list_head	local_codecs;
 
 	struct hci_dev_stats	stat;/*设备统计信息*/
@@ -686,7 +686,7 @@ struct hci_dev {
 #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
 
 enum conn_reasons {
-	CONN_REASON_PAIR_DEVICE,
+	CONN_REASON_PAIR_DEVICE,/*pair设备时连接用*/
 	CONN_REASON_L2CAP_CHAN,
 	CONN_REASON_SCO_CONNECT,
 	CONN_REASON_ISO_CONNECT,
@@ -2206,13 +2206,20 @@ static inline void hci_role_switch_cfm(struct hci_conn *conn, __u8 status,
 	mutex_unlock(&hci_cb_list_lock);
 }
 
+/*rpa= "Resolvable Private Address"
+ * RPA 会定期自动更换（默认几分钟到几小时一次，
+ * 协议无强制周期，由设备厂商配置），
+ * 且未配对设备无法解析其真实身份，从根源上阻止跟踪。
+ * */
 static inline bool hci_bdaddr_is_rpa(bdaddr_t *bdaddr, u8 addr_type)
 {
 	if (addr_type != ADDR_LE_DEV_RANDOM)
-		return false;
+		return false;/*非私有地址，不是rpa地址*/
 
+	/*RPA地址的目的是防止设备跟踪，其中bit47固定为0
+	 * （用于区分 RPA 和 NRPA：RPA bit47=0，NRPA bit47=1）*/
 	if ((bdaddr->b[5] & 0xc0) == 0x40)
-	       return true;
+	       return true;/*确认为rpa地址*/
 
 	return false;
 }
@@ -2233,9 +2240,9 @@ static inline struct smp_irk *hci_get_irk(struct hci_dev *hdev,
 					  bdaddr_t *bdaddr, u8 addr_type)
 {
 	if (!hci_bdaddr_is_rpa(bdaddr, addr_type))
-		return NULL;
+		return NULL;/*非rpa地址，直接忽略*/
 
-	return hci_find_irk_by_rpa(hdev, bdaddr);
+	return hci_find_irk_by_rpa(hdev, bdaddr);/*取此地址对应的irk*/
 }
 
 static inline int hci_check_conn_params(u16 min, u16 max, u16 latency,

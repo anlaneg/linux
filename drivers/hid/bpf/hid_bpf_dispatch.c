@@ -42,11 +42,11 @@ dispatch_hid_bpf_device_event(struct hid_device *hdev, enum hid_report_type type
 		return ERR_PTR(-ENODEV);
 
 	if (type >= HID_REPORT_TYPES)
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);/*type无效*/
 
 	/* no program has been attached yet */
 	if (!hdev->bpf.device_data)
-		return data;
+		return data;/*无bpf程序，直接返回*/
 
 	memset(ctx_kern.data, 0, hdev->bpf.allocated_data);
 	memcpy(ctx_kern.data, data, *size);
@@ -262,7 +262,7 @@ int hid_bpf_allocate_event_data(struct hid_device *hdev)
 {
 	/* hdev->bpf.device_data is already allocated, abort */
 	if (hdev->bpf.device_data)
-		return 0;
+		return 0;/*已初始化*/
 
 	return __hid_bpf_allocate_data(hdev, &hdev->bpf.device_data, &hdev->bpf.allocated_data);
 }
@@ -604,6 +604,7 @@ int hid_bpf_connect_device(struct hid_device *hdev)
 	struct hid_bpf_ops *e;
 
 	rcu_read_lock();
+	/*遍历注册的ebpf程序，查找hid_bpf_ops*/
 	list_for_each_entry_rcu(e, &hdev->bpf.prog_list, list) {
 		if (e->hid_device_event) {
 			need_to_allocate = true;
@@ -614,7 +615,7 @@ int hid_bpf_connect_device(struct hid_device *hdev)
 
 	/* only allocate BPF data if there are programs attached */
 	if (!need_to_allocate)
-		return 0;
+		return 0;/*没有查找到ebpf程序，退出*/
 
 	return hid_bpf_allocate_event_data(hdev);
 }

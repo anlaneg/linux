@@ -41,7 +41,7 @@ static DEFINE_MUTEX(kthreads_hotplug_lock);
 struct kthread_create_info
 {
 	/* Information passed to kthread() from kthreadd. */
-	char *full_name;
+	char *full_name;/*线程名称*/
 	/*kernel线程的运行函数*/
 	int (*threadfn)(void *data);
 	void *data;

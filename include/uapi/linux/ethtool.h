@@ -1916,6 +1916,7 @@ enum ethtool_fec_config_bits {
 #define ETHTOOL_SRXCLSRLINS	0x00000032 /* Insert RX classification rule */
 #define ETHTOOL_FLASHDEV	0x00000033 /* Flash firmware to device */
 #define ETHTOOL_RESET		0x00000034 /* Reset hardware */
+/*添加n-tuple过滤*/
 #define ETHTOOL_SRXNTUPLE	0x00000035 /* Add an n-tuple filter to device */
 #define ETHTOOL_GRXNTUPLE	0x00000036 /* deprecated */
 #define ETHTOOL_GSSET_INFO	0x00000037 /* Get string set info */

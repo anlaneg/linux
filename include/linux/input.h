@@ -135,7 +135,7 @@ enum input_clock_type {
  * is called when it is being uninhibited.
  */
 struct input_dev {
-	const char *name;
+	const char *name;/*设备名称*/
 	const char *phys;
 	const char *uniq;
 	struct input_id id;

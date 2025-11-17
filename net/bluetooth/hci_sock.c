@@ -1733,7 +1733,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	/*取skb中的mgmt header*/
 	hdr = (void *)skb->data;
 	opcode = __le16_to_cpu(hdr->opcode);/*取操作符*/
-	index = __le16_to_cpu(hdr->index);/*取hci设备对应的device id*/
+	index = __le16_to_cpu(hdr->index);/*取参数指定的device id*/
 	len = __le16_to_cpu(hdr->len);/*取payload长度*/
 
 	if (len != skb->len - sizeof(*hdr)) {
@@ -1776,7 +1776,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	}
 
 	if (index != MGMT_INDEX_NONE) {
-		/*利用index查找对应的hdev*/
+		/*提供了index,利用index查找对应的hdev*/
 		hdev = hci_dev_get(index);
 		if (!hdev) {
 			/*未找到hdev设备，响应index无效*/

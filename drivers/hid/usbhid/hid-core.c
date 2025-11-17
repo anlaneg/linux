@@ -283,6 +283,7 @@ static void hid_irq_in(struct urb *urb)
 			break;
 		usbhid_mark_busy(usbhid);
 		if (!test_bit(HID_RESUME_RUNNING, &usbhid->iofl)) {
+			/*产生input report事件*/
 			hid_input_report(urb->context, HID_INPUT_REPORT,
 					 urb->transfer_buffer,
 					 urb->actual_length, 1);
@@ -1003,6 +1004,7 @@ static int usbhid_parse(struct hid_device *hid)
 				quirks |= HID_QUIRK_NOGET;
 	}
 
+	/*取HID class描述符类型*/
 	if (usb_get_extra_descriptor(interface, HID_DT_HID, &hdesc) &&
 	    (!interface->desc.bNumEndpoints ||
 	     usb_get_extra_descriptor(&interface->endpoint[0], HID_DT_HID, &hdesc))) {
@@ -1013,6 +1015,7 @@ static int usbhid_parse(struct hid_device *hid)
 	if (!hdesc->bNumDescriptors ||
 	    hdesc->bLength != sizeof(*hdesc) +
 			      (hdesc->bNumDescriptors - 1) * sizeof(*hcdesc)) {
+		/*长度有误*/
 		dbg_hid("hid descriptor invalid, bLen=%hhu bNum=%hhu\n",
 			hdesc->bLength, hdesc->bNumDescriptors);
 		return -EINVAL;
@@ -1043,6 +1046,7 @@ static int usbhid_parse(struct hid_device *hid)
 		goto err;
 	}
 
+	/*设置rdesc,rsize*/
 	ret = hid_parse_report(hid, rdesc, rsize);
 	kfree(rdesc);
 	if (ret) {
@@ -1659,9 +1663,10 @@ static int hid_reset_resume(struct usb_interface *intf)
 	return status;
 }
 
+/*匹配所有hid*/
 static const struct usb_device_id hid_usb_ids[] = {
-	{ .match_flags = USB_DEVICE_ID_MATCH_INT_CLASS,
-		.bInterfaceClass = USB_INTERFACE_CLASS_HID },
+	{ .match_flags = USB_DEVICE_ID_MATCH_INT_CLASS/*仅匹配class*/,
+		.bInterfaceClass = USB_INTERFACE_CLASS_HID/*指明为hid设备*/ },
 	{ }						/* Terminating entry */
 };
 

@@ -423,7 +423,7 @@ struct mgmt_irk_info {
 
 #define MGMT_OP_LOAD_IRKS		0x0030
 struct mgmt_cp_load_irks {
-	__le16 irk_count;
+	__le16 irk_count;/*irks数组长度*/
 	struct mgmt_irk_info irks[];
 } __packed;
 #define MGMT_LOAD_IRKS_SIZE		2
@@ -1119,6 +1119,7 @@ struct mgmt_ev_phy_configuration_changed {
 	__le32	selected_phys;
 } __packed;
 
+/*用于向用户态通知扩展功能变更event*/
 #define MGMT_EV_EXP_FEATURE_CHANGED	0x0027
 struct mgmt_ev_exp_feature_changed {
 	__u8	uuid[16];

@@ -2060,6 +2060,7 @@ static struct hid_input *hidinput_allocate(struct hid_device *hid,
 		}
 	}
 
+	/*利用hid初始化input device*/
 	input_set_drvdata(input_dev, hid);
 	input_dev->event = hidinput_input_event;
 	input_dev->open = hidinput_open;
@@ -2309,6 +2310,7 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 				hidinput = hidinput_match_application(report);
 
 			if (!hidinput) {
+				/*申请并初始化hidinput*/
 				hidinput = hidinput_allocate(hid, application);
 				if (!hidinput)
 					goto out_unwind;

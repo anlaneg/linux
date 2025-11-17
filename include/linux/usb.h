@@ -976,6 +976,7 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
 		(USB_DEVICE_ID_MATCH_DEV_CLASS | \
 		USB_DEVICE_ID_MATCH_DEV_SUBCLASS | \
 		USB_DEVICE_ID_MATCH_DEV_PROTOCOL)
+/*需要匹配class，subclass及protocol*/
 #define USB_DEVICE_ID_MATCH_INT_INFO \
 		(USB_DEVICE_ID_MATCH_INT_CLASS | \
 		USB_DEVICE_ID_MATCH_INT_SUBCLASS | \
@@ -1085,8 +1086,8 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
  * This macro is used to create a struct usb_device_id that matches a
  * specific class of interfaces.
  */
-#define USB_INTERFACE_INFO(cl, sc, pr) \
-	.match_flags = USB_DEVICE_ID_MATCH_INT_INFO, \
+#define USB_INTERFACE_INFO(cl/*类*/, sc/*子类*/, pr/*协议*/) \
+	.match_flags = USB_DEVICE_ID_MATCH_INT_INFO/*指明匹配方式*/, \
 	.bInterfaceClass = (cl), \
 	.bInterfaceSubClass = (sc), \
 	.bInterfaceProtocol = (pr)

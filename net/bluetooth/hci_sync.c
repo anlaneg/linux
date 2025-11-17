@@ -3514,7 +3514,7 @@ int hci_update_scan_sync(struct hci_dev *hdev)
 	    disconnected_accept_list_entries(hdev))
 		scan = SCAN_PAGE;
 	else
-		scan = SCAN_DISABLED;/*标用扫描*/
+		scan = SCAN_DISABLED;/*禁用扫描*/
 
 	if (hci_dev_test_flag(hdev, HCI_DISCOVERABLE))
 		scan |= SCAN_INQUIRY;

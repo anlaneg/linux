@@ -63,13 +63,15 @@ static int hid_generic_probe(struct hid_device *hdev,
 
 	hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
 
-	ret = hid_parse(hdev);
+	ret = hid_parse(hdev);/*解析描述符*/
 	if (ret)
 		return ret;
 
+	/*启动设备*/
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
 
+/*匹配所有设备*/
 static const struct hid_device_id hid_table[] = {
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_ANY, HID_ANY_ID, HID_ANY_ID) },
 	{ }
@@ -80,7 +82,7 @@ static struct hid_driver hid_generic = {
 	.name = "hid-generic",
 	.id_table = hid_table,
 	.match = hid_generic_match,
-	.probe = hid_generic_probe,
+	.probe = hid_generic_probe,/*尝试probe设备，并启动设备*/
 };
 module_hid_driver(hid_generic);
 

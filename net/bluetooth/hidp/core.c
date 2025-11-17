@@ -40,6 +40,7 @@ static DECLARE_WAIT_QUEUE_HEAD(hidp_session_wq);
 static LIST_HEAD(hidp_session_list);/*用于记录系统所有hidp session*/
 
 static unsigned char hidp_keycode[256] = {
+	/*1    2    3   4    5    6    7    8    9    10   11   12   13   14*/
 	  0,   0,   0,   0,  30,  48,  46,  32,  18,  33,  34,  35,  23,  36,
 	 37,  38,  50,  49,  24,  25,  16,  19,  31,  20,  22,  47,  17,  45,
 	 21,  44,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  28,   1,
@@ -79,6 +80,7 @@ static void hidp_copy_session(struct hidp_session *session, struct hidp_conninfo
 	ci->state = BT_CONNECTED;
 
 	if (session->input) {
+		/*填充input设备基本信息*/
 		ci->vendor  = session->input->id.vendor;
 		ci->product = session->input->id.product;
 		ci->version = session->input->id.version;
@@ -87,6 +89,7 @@ static void hidp_copy_session(struct hidp_session *session, struct hidp_conninfo
 		else
 			strscpy(ci->name, "HID Boot Device", 128);
 	} else if (session->hid) {
+		/*填充hid设备基本信息*/
 		ci->vendor  = session->hid->vendor;
 		ci->product = session->hid->product;
 		ci->version = session->hid->version;
@@ -96,8 +99,8 @@ static void hidp_copy_session(struct hidp_session *session, struct hidp_conninfo
 
 /* assemble skb, queue message on @transmit and wake up the session thread */
 static int hidp_send_message(struct hidp_session *session, struct socket *sock,
-			     struct sk_buff_head *transmit, unsigned char hdr,
-			     const unsigned char *data, int size)
+			     struct sk_buff_head *transmit/*报文缓存队列*/, unsigned char hdr/*首个字节*/,
+			     const unsigned char *data/*报文内容*/, int size/*报文长度*/)
 {
 	struct sk_buff *skb;
 	struct sock *sk = sock->sk;
@@ -106,41 +109,43 @@ static int hidp_send_message(struct hidp_session *session, struct socket *sock,
 	BT_DBG("session %p data %p size %d", session, data, size);
 
 	if (atomic_read(&session->terminate))
-		return -EIO;
+		return -EIO;/*已terminate，返回*/
 
-	skb = alloc_skb(size + 1, GFP_ATOMIC);
+	skb = alloc_skb(size + 1, GFP_ATOMIC);/*多增加一个字节，做为header*/
 	if (!skb) {
 		BT_ERR("Can't allocate memory for new frame");
 		return -ENOMEM;
 	}
 
-	skb_put_u8(skb, hdr);
+	skb_put_u8(skb, hdr);/*写入header*/
 	if (data && size > 0) {
-		skb_put_data(skb, data, size);
+		skb_put_data(skb, data, size);/*写入内容*/
 		ret = size;
 	} else {
 		ret = 0;
 	}
 
-	skb_queue_tail(transmit, skb);
+	skb_queue_tail(transmit, skb);/*加入到队列*/
 	wake_up_interruptible(sk_sleep(sk));
 
-	return ret;
+	return ret;/*写入的长度*/
 }
 
 static int hidp_send_ctrl_message(struct hidp_session *session,
-				  unsigned char hdr, const unsigned char *data,
-				  int size)
+				  unsigned char hdr/*消息header*/, const unsigned char *data/*消息体*/,
+				  int size/*消息体长度*/)
 {
+	/*向ctrl_transmit队列中添加要发送的skb*/
 	return hidp_send_message(session, session->ctrl_sock,
 				 &session->ctrl_transmit, hdr, data, size);
 }
 
 static int hidp_send_intr_message(struct hidp_session *session,
-				  unsigned char hdr, const unsigned char *data,
-				  int size)
+				  unsigned char hdr/*消息header*/, const unsigned char *data/*消息体*/,
+				  int size/*消息体长度*/)
 {
-	return hidp_send_message(session, session->intr_sock,
+	/*向intr_transmit队列中添加要发送的skb*/
+	return hidp_send_message(session, session->intr_sock/*中断socket*/,
 				 &session->intr_transmit, hdr, data, size);
 }
 
@@ -155,7 +160,7 @@ static int hidp_input_event(struct input_dev *dev, unsigned int type,
 	       session, type, code, value);
 
 	if (type != EV_LED)
-		return -1;
+		return -1;/*只支持type为EV_LED*/
 
 	newleds = (!!test_bit(LED_KANA,    dev->led) << 3) |
 		  (!!test_bit(LED_COMPOSE, dev->led) << 3) |
@@ -169,7 +174,7 @@ static int hidp_input_event(struct input_dev *dev, unsigned int type,
 	session->leds = newleds;
 
 	hdr = HIDP_TRANS_DATA | HIDP_DATA_RTYPE_OUPUT;
-	data[0] = 0x01;
+	data[0] = 0x01;/*指明为keyboard report*/
 	data[1] = newleds;
 
 	return hidp_send_intr_message(session, hdr, data, 2);
@@ -380,12 +385,13 @@ err:
 	return ret;
 }
 
-static int hidp_output_report(struct hid_device *hid, __u8 *data, size_t count)
+/*指明中断socket待向外发送的报文*/
+static int hidp_output_report(struct hid_device *hid, __u8 *data, size_t count/*data长度*/)
 {
 	struct hidp_session *session = hid->driver_data;
 
 	return hidp_send_intr_message(session,
-				      HIDP_TRANS_DATA | HIDP_DATA_RTYPE_OUPUT,
+				      HIDP_TRANS_DATA | HIDP_DATA_RTYPE_OUPUT/*指明hid header*/,
 				      data, count);
 }
 
@@ -421,12 +427,13 @@ static void hidp_idle_timeout(struct timer_list *t)
 	wake_up_interruptible(sk_sleep(session->intr_sock->sk));
 	wake_up_interruptible(sk_sleep(session->ctrl_sock->sk));
 
-	hidp_session_terminate(session);
+	hidp_session_terminate(session);/*中断此session*/
 }
 
 static void hidp_set_timer(struct hidp_session *session)
 {
 	if (session->idle_to > 0)
+		/*更新超时时间为session->idle_to*/
 		mod_timer(&session->timer, jiffies + HZ * session->idle_to);
 }
 
@@ -436,14 +443,14 @@ static void hidp_del_timer(struct hidp_session *session)
 		timer_delete_sync(&session->timer);
 }
 
-static void hidp_process_report(struct hidp_session *session, int type,
-				const u8 *data, unsigned int len, int intr)
+static void hidp_process_report(struct hidp_session *session, int type/*report类型*/,
+				const u8 *data, unsigned int len/*data长度*/, int intr/*是否中断数据*/)
 {
 	if (len > HID_MAX_BUFFER_SIZE)
 		len = HID_MAX_BUFFER_SIZE;
 
-	memcpy(session->input_buf, data, len);
-	hid_input_report(session->hid, type, session->input_buf, len, intr);
+	memcpy(session->input_buf, data, len);/*数据写入到session->input_buf*/
+	hid_input_report(session->hid, type, session->input_buf/*收到的内容*/, len, intr);/*report input事件*/
 }
 
 static void hidp_process_handshake(struct hidp_session *session,
@@ -453,7 +460,7 @@ static void hidp_process_handshake(struct hidp_session *session,
 	session->output_report_success = 0; /* default condition */
 
 	switch (param) {
-	case HIDP_HSHK_SUCCESSFUL:
+	case HIDP_HSHK_SUCCESSFUL:/*成功*/
 		/* FIXME: Call into SET_ GET_ handlers here */
 		session->output_report_success = 1;
 		break;
@@ -518,8 +525,9 @@ static int hidp_process_data(struct hidp_session *session, struct sk_buff *skb,
 			hidp_input_report(session, skb);
 
 		if (session->hid)
+			/*处理ctrl report数据*/
 			hidp_process_report(session, HID_INPUT_REPORT,
-					    skb->data, skb->len, 0);
+					    skb->data, skb->len, 0/*来源于ctrl通道*/);
 		break;
 
 	case HIDP_DATA_RTYPE_OTHER:
@@ -547,6 +555,7 @@ static int hidp_process_data(struct hidp_session *session, struct sk_buff *skb,
 	return done_with_skb;
 }
 
+/*hidp 控制帧收取*/
 static void hidp_recv_ctrl_frame(struct hidp_session *session,
 					struct sk_buff *skb)
 {
@@ -584,6 +593,7 @@ static void hidp_recv_ctrl_frame(struct hidp_session *session,
 		kfree_skb(skb);
 }
 
+/*hidp中断帧收取,并将其传递给设备*/
 static void hidp_recv_intr_frame(struct hidp_session *session,
 				struct sk_buff *skb)
 {
@@ -591,8 +601,8 @@ static void hidp_recv_intr_frame(struct hidp_session *session,
 
 	BT_DBG("session %p skb %p len %u", session, skb, skb->len);
 
-	hdr = skb->data[0];
-	skb_pull(skb, 1);
+	hdr = skb->data[0];/*取header内容*/
+	skb_pull(skb, 1);/*跳过header*/
 
 	if (hdr == (HIDP_TRANS_DATA | HIDP_DATA_RTYPE_INPUT)) {
 		hidp_set_timer(session);
@@ -602,10 +612,11 @@ static void hidp_recv_intr_frame(struct hidp_session *session,
 
 		if (session->hid) {
 			hidp_process_report(session, HID_INPUT_REPORT,
-					    skb->data, skb->len, 1);
+					    skb->data, skb->len, 1/*来源于中断通道*/);
 			BT_DBG("report len %d", skb->len);
 		}
 	} else {
+		/*不支持其它协议头*/
 		BT_DBG("Unsupported protocol header 0x%02x", hdr);
 	}
 
@@ -641,14 +652,16 @@ static void hidp_process_transmit(struct hidp_session *session,
 		/*使sock发送skb*/
 		ret = hidp_send_frame(sock, skb->data, skb->len);
 		if (ret == -EAGAIN) {
-			skb_queue_head(transmit, skb);
+			skb_queue_head(transmit, skb);/*需要重试，放回头部*/
 			break;
 		} else if (ret < 0) {
+			/*发送失败，终止此session,释放报文*/
 			hidp_session_terminate(session);
 			kfree_skb(skb);
 			break;
 		}
 
+		/*重置session timer*/
 		hidp_set_timer(session);
 		kfree_skb(skb);
 	}
@@ -730,6 +743,7 @@ static int hidp_start(struct hid_device *hid)
 	return 0;
 }
 
+/*清空ctrl,intr发送方向缓存的报文（所有未发送的报文将被丢弃）*/
 static void hidp_stop(struct hid_device *hid)
 {
 	struct hidp_session *session = hid->driver_data;
@@ -740,14 +754,15 @@ static void hidp_stop(struct hid_device *hid)
 	hid->claimed = 0;
 }
 
+/*hidp协议对应的ll_driver实现*/
 static const struct hid_ll_driver hidp_hid_driver = {
-	.parse = hidp_parse,
-	.start = hidp_start,
-	.stop = hidp_stop,
-	.open  = hidp_open,
-	.close = hidp_close,
+	.parse = hidp_parse,/*仅设置rdesc,rsize*/
+	.start = hidp_start,/*空实现*/
+	.stop = hidp_stop,/*丢弃tx方向所有报文*/
+	.open  = hidp_open,/*空实现*/
+	.close = hidp_close,/*空实现*/
 	.raw_request = hidp_raw_request,
-	.output_report = hidp_output_report,
+	.output_report = hidp_output_report,/*中断socket输出报文*/
 };
 
 /* This function sets up the hid device. It does not add it
@@ -758,12 +773,14 @@ static int hidp_setup_hid(struct hidp_session *session,
 	struct hid_device *hid;
 	int err;
 
+	/*复制req->rd_data*/
 	session->rd_data = memdup_user(req->rd_data, req->rd_size);
 	if (IS_ERR(session->rd_data))
 		return PTR_ERR(session->rd_data);
 
 	session->rd_size = req->rd_size;
 
+	/*申请hid device*/
 	hid = hid_allocate_device();
 	if (IS_ERR(hid)) {
 		err = PTR_ERR(hid);
@@ -772,7 +789,7 @@ static int hidp_setup_hid(struct hidp_session *session,
 
 	session->hid = hid;
 
-	hid->driver_data = session;
+	hid->driver_data = session;/*指向hidp session*/
 
 	hid->bus     = BUS_BLUETOOTH;
 	hid->vendor  = req->vendor;
@@ -780,22 +797,23 @@ static int hidp_setup_hid(struct hidp_session *session,
 	hid->version = req->version;
 	hid->country = req->country;
 
-	strscpy(hid->name, req->name, sizeof(hid->name));
+	strscpy(hid->name, req->name, sizeof(hid->name));/*设置设备名称*/
 
 	snprintf(hid->phys, sizeof(hid->phys), "%pMR",
-		 &l2cap_pi(session->ctrl_sock->sk)->chan->src);
+		 &l2cap_pi(session->ctrl_sock->sk)->chan->src);/*利用源地址的内存地址*/
 
 	/* NOTE: Some device modules depend on the dst address being stored in
 	 * uniq. Please be aware of this before making changes to this behavior.
 	 */
 	snprintf(hid->uniq, sizeof(hid->uniq), "%pMR",
-		 &l2cap_pi(session->ctrl_sock->sk)->chan->dst);
+		 &l2cap_pi(session->ctrl_sock->sk)->chan->dst);/*利用目的地址的内存地址*/
 
 	hid->dev.parent = &session->conn->hcon->dev;
-	hid->ll_driver = &hidp_hid_driver;
+	hid->ll_driver = &hidp_hid_driver;/*hid设备对应驱动*/
 
 	/* True if device is blocked in drivers/hid/hid-quirks.c */
 	if (hid_ignore(hid)) {
+		/*此设备需要被忽略，报错*/
 		hid_destroy_device(session->hid);
 		session->hid = NULL;
 		return -ENODEV;
@@ -817,11 +835,13 @@ static int hidp_session_dev_init(struct hidp_session *session,
 	int ret;
 
 	if (req->rd_size > 0) {
+		/*如果提供了rd信息，则优先尝试创建hid设备并初始化*/
 		ret = hidp_setup_hid(session, req);
 		if (ret && ret != -ENODEV)
 			return ret;
 	}
 
+	/*如果hid未初始化，则尝试input_dev初始化*/
 	if (!session->hid) {
 		ret = hidp_setup_input(session, req);
 		if (ret < 0)
@@ -854,11 +874,13 @@ static int hidp_session_dev_add(struct hidp_session *session)
 	 * which is dropped automatically by unregistering the devices. */
 
 	if (session->hid) {
+		/*此session关联的是hid设备，添加hid设备（默认）*/
 		ret = hid_add_device(session->hid);
 		if (ret)
 			return ret;
 		get_device(&session->hid->dev);
 	} else if (session->input) {
+		/*此session关联的是input设备，注册input设备*/
 		ret = input_register_device(session->input);
 		if (ret)
 			return ret;
@@ -893,9 +915,10 @@ static void hidp_session_dev_work(struct work_struct *work)
 						    dev_init);
 	int ret;
 
+	/*向kernel添加hid设备*/
 	ret = hidp_session_dev_add(session);
 	if (!ret)
-		atomic_inc(&session->state);
+		atomic_inc(&session->state);/*设备添加完成，变更状态为HIDP_SESSION_RUNNING*/
 	else
 		hidp_session_terminate(session);
 }
@@ -908,7 +931,7 @@ static void hidp_session_dev_work(struct work_struct *work)
  * \out. Otherwise, an error code is returned.
  * The new session object has an initial ref-count of 1.
  */
-static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
+static int hidp_session_new(struct hidp_session **out/*出参，*/, const bdaddr_t *bdaddr/*目的地址*/,
 			    struct socket *ctrl_sock,
 			    struct socket *intr_sock,
 			    const struct hidp_connadd_req *req,
@@ -927,16 +950,16 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 
 	/* object and runtime management */
 	kref_init(&session->ref);
-	atomic_set(&session->state, HIDP_SESSION_IDLING);
+	atomic_set(&session->state, HIDP_SESSION_IDLING);/*初始化状态*/
 	init_waitqueue_head(&session->state_queue);
-	session->flags = req->flags & BIT(HIDP_BLUETOOTH_VENDOR_ID);
+	session->flags = req->flags & BIT(HIDP_BLUETOOTH_VENDOR_ID);/*是否有vendor id*/
 
 	/* connection management */
 	bacpy(&session->bdaddr, bdaddr);
 	session->conn = l2cap_conn_get(conn);
 	session->user.probe = hidp_session_probe;
 	session->user.remove = hidp_session_remove;
-	INIT_LIST_HEAD(&session->user.list);
+	INIT_LIST_HEAD(&session->user.list);/*链表初始化为空*/
 	session->ctrl_sock = ctrl_sock;
 	session->intr_sock = intr_sock;
 	skb_queue_head_init(&session->ctrl_transmit);
@@ -948,13 +971,14 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 	session->idle_to = req->idle_to;
 
 	/* device management */
-	INIT_WORK(&session->dev_init, hidp_session_dev_work);
-	timer_setup(&session->timer, hidp_idle_timeout, 0);
+	INIT_WORK(&session->dev_init, hidp_session_dev_work);/*向kenrel添加hid设备*/
+	timer_setup(&session->timer, hidp_idle_timeout, 0);/*用于超时断链*/
 
 	/* session data */
 	mutex_init(&session->report_mutex);
 	init_waitqueue_head(&session->report_queue);
 
+	/*hid设备初始化*/
 	ret = hidp_session_dev_init(session, req);
 	if (ret)
 		goto err_free;
@@ -1048,6 +1072,7 @@ static int hidp_session_start_sync(struct hidp_session *session)
 {
 	unsigned int vendor, product;
 
+	/*取vendor,product*/
 	if (session->hid) {
 		vendor  = session->hid->vendor;
 		product = session->hid->product;
@@ -1059,11 +1084,15 @@ static int hidp_session_start_sync(struct hidp_session *session)
 		product = 0x0000;
 	}
 
+	/*创建kernel线程,此线程负责利用hidp_recv_intr_frame处理intr-socket上的收到的报文
+	 * 负责利用hidp_recv_ctrl_frame将ctrl-socket上收到报文
+	 * 负责发送intr-socket,ctrl-socket上缓存的待发送skb(将走bt链路发出）*/
 	session->task = kthread_run(hidp_session_thread, session,
 				    "khidpd_%04x%04x", vendor, product);
 	if (IS_ERR(session->task))
 		return PTR_ERR(session->task);
 
+	/*等待此task启动完成，状态变更为>=HIDP_SESSION_PREPARING*/
 	while (atomic_read(&session->state) <= HIDP_SESSION_IDLING)
 		wait_event(session->state_queue,
 			   atomic_read(&session->state) > HIDP_SESSION_IDLING);
@@ -1111,17 +1140,19 @@ static int hidp_session_probe(struct l2cap_conn *conn,
 	/* check that no other session for this device exists */
 	s = __hidp_session_find(&session->bdaddr);
 	if (s) {
+		/*此地址对应的hidp session已存在，probe已处理*/
 		ret = -EEXIST;
-		goto out_unlock;/*hidp session已存在*/
+		goto out_unlock;
 	}
 
 	if (session->input) {
+		/*使用了input设备情况，添加dev*/
 		ret = hidp_session_dev_add(session);
 		if (ret)
 			goto out_unlock;
 	}
 
-	ret = hidp_session_start_sync(session);
+	ret = hidp_session_start_sync(session);/*同步启动数据搬运线程*/
 	if (ret)
 		goto out_del;
 
@@ -1129,10 +1160,11 @@ static int hidp_session_probe(struct l2cap_conn *conn,
 	if (session->input)
 		atomic_inc(&session->state);
 	else
-		schedule_work(&session->dev_init);
+		schedule_work(&session->dev_init);/*调度此work,使hid设备添加进系统*/
 
-	hidp_session_get(session);
-	list_add(&session->list, &hidp_session_list);/*串连进hidp_session_list*/
+	hidp_session_get(session);/*增加引用*/
+	/*串连进hidp_session_list，标志probe工作完成*/
+	list_add(&session->list, &hidp_session_list);
 	ret = 0;
 	goto out_unlock;
 
@@ -1167,12 +1199,13 @@ static void hidp_session_remove(struct l2cap_conn *conn,
 
 	down_write(&hidp_session_sem);
 
+	/*标记停止此session，对应的kernel线程也会停止*/
 	hidp_session_terminate(session);
 
-	cancel_work_sync(&session->dev_init);
+	cancel_work_sync(&session->dev_init);/*如未执行取消此work*/
 	if (session->input ||
 	    atomic_read(&session->state) > HIDP_SESSION_PREPARING)
-		hidp_session_dev_del(session);
+		hidp_session_dev_del(session);/*移除hid设备*/
 
 	list_del(&session->list);
 
@@ -1205,12 +1238,13 @@ static void hidp_session_run(struct hidp_session *session)
 		 */
 
 		if (atomic_read(&session->terminate))
-			break;/*此session需要销毁，退出*/
+			break;/*此session需要销毁，线程退出*/
 
 		if (ctrl_sk->sk_state != BT_CONNECTED ||
 		    intr_sk->sk_state != BT_CONNECTED)
 			break;/*必须处理connected状态*/
 
+		/*处理中断socket上收到的报文*/
 		/* parse incoming intr-skbs */
 		while ((skb = skb_dequeue(&intr_sk->sk_receive_queue))) {
 			skb_orphan(skb);
@@ -1220,10 +1254,12 @@ static void hidp_session_run(struct hidp_session *session)
 				kfree_skb(skb);
 		}
 
+		/*将session->intr_transmit上的报文自中断socket上发出*/
 		/* send pending intr-skbs */
 		hidp_process_transmit(session, &session->intr_transmit,
 				      session->intr_sock);
 
+		/*处理控制socket上收到的报文*/
 		/* parse incoming ctrl-skbs */
 		while ((skb = skb_dequeue(&ctrl_sk->sk_receive_queue))) {
 			skb_orphan(skb);
@@ -1233,6 +1269,7 @@ static void hidp_session_run(struct hidp_session *session)
 				kfree_skb(skb);
 		}
 
+		/*将session->ctrl_transmit上的报文自控制socket上发出*/
 		/* send pending ctrl-skbs */
 		hidp_process_transmit(session, &session->ctrl_transmit,
 				      session->ctrl_sock);
@@ -1284,11 +1321,11 @@ static int hidp_session_thread(void *arg)
 	smp_mb__before_atomic();
 
 	/* notify synchronous startup that we're ready */
-	atomic_inc(&session->state);
-	wake_up(&session->state_queue);
+	atomic_inc(&session->state);/*先标记启动完成*/
+	wake_up(&session->state_queue);/*再唤醒在此队列等待的进程*/
 
 	/* run session */
-	hidp_session_run(session);
+	hidp_session_run(session);/*循环处理数据搬运工作*/
 
 	/* cleanup runtime environment */
 	remove_wait_queue(sk_sleep(session->intr_sock->sk), &intr_wait);
@@ -1326,31 +1363,31 @@ static int hidp_verify_sockets(struct socket *ctrl_sock,
 
 	if (bacmp(&ctrl_chan->src, &intr_chan->src) ||
 	    bacmp(&ctrl_chan->dst, &intr_chan->dst))
-		return -ENOTUNIQ;/*两个不能是同一个连接*/
+		return -ENOTUNIQ;/*两者不能是同一个连接*/
 
 	ctrl = bt_sk(ctrl_sock->sk);
 	intr = bt_sk(intr_sock->sk);
 
 	if (ctrl->sk.sk_state != BT_CONNECTED ||
 	    intr->sk.sk_state != BT_CONNECTED)
-		return -EBADFD;/*socket必须为connected*/
+		return -EBADFD;/*两个socket必须为connected*/
 
 	/* early session check, we check again during session registration */
 	session = hidp_session_find(&ctrl_chan->dst);
 	if (session) {
 		hidp_session_put(session);
-		return -EEXIST;/*对应的session已存在*/
+		return -EEXIST;/*对应的hidp session已存在*/
 	}
 
 	return 0;
 }
 
 int hidp_connection_add(const struct hidp_connadd_req *req,
-			struct socket *ctrl_sock,
-			struct socket *intr_sock)
+			struct socket *ctrl_sock/*控制通道socket*/,
+			struct socket *intr_sock/*中断通道socket*/)
 {
 	u32 valid_flags = BIT(HIDP_VIRTUAL_CABLE_UNPLUG) |
-			  BIT(HIDP_BOOT_PROTOCOL_MODE);
+			  BIT(HIDP_BOOT_PROTOCOL_MODE);/*指明支持的所有flags*/
 	struct hidp_session *session;
 	struct l2cap_conn *conn;
 	struct l2cap_chan *chan;
@@ -1368,17 +1405,20 @@ int hidp_connection_add(const struct hidp_connadd_req *req,
 	conn = NULL;
 	l2cap_chan_lock(chan);
 	if (chan->conn)
+		/*增加channel connect的引用*/
 		conn = l2cap_conn_get(chan->conn);
 	l2cap_chan_unlock(chan);
 
 	if (!conn)
-		return -EBADFD;
+		return -EBADFD;/*l2cap connect不得为空*/
 
+	/*创建hidp session，初始化hid设备*/
 	ret = hidp_session_new(&session, &chan->dst, ctrl_sock,
-			       intr_sock, req, conn);
+			       intr_sock, req, conn/*ctrl socket对应的l2cap connect*/);
 	if (ret)
 		goto out_conn;
 
+	/*启动hid设备，创建数据搬运线程*/
 	ret = l2cap_register_user(conn, &session->user);
 	if (ret)
 		goto out_session;
@@ -1426,20 +1466,22 @@ int hidp_get_connlist(struct hidp_connlist_req *req)
 
 	down_read(&hidp_session_sem);
 
+	/*遍历所有hidp_session*/
 	list_for_each_entry(session, &hidp_session_list, list) {
 		struct hidp_conninfo ci;
 
-		hidp_copy_session(session, &ci);
+		hidp_copy_session(session, &ci);/*利用session填充ci*/
 
+		/*利用ci填充req->ci*/
 		if (copy_to_user(req->ci, &ci, sizeof(ci))) {
 			err = -EFAULT;
 			break;
 		}
 
 		if (++n >= req->cnum)
-			break;
+			break;/*数量超限，跳出*/
 
-		req->ci++;
+		req->ci++;/*切换到待填充的下一个空间*/
 	}
 	req->cnum = n;
 
@@ -1453,6 +1495,7 @@ int hidp_get_conninfo(struct hidp_conninfo *ci)
 
 	session = hidp_session_find(&ci->bdaddr);
 	if (session) {
+		/*session存在,复制session内容到ci*/
 		hidp_copy_session(session, ci);
 		hidp_session_put(session);
 	}

@@ -1627,7 +1627,7 @@ done:
 
 struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst/*目的地址*/,
 				 u8 sec_level, u8 auth_type,
-				 enum conn_reasons conn_reason, u16 timeout)
+				 enum conn_reasons conn_reason/*连接原因*/, u16 timeout)
 {
 	struct hci_conn *acl;
 

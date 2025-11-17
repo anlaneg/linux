@@ -156,6 +156,7 @@ static unsigned char rdesc[] = {
 	0xc0,		/* END_COLLECTION */
 };
 
+/*写事件，从主机到设备*/
 static int uhid_write(int fd, const struct uhid_event *ev)
 {
 	ssize_t ret;
@@ -179,16 +180,16 @@ static int create(int fd)
 
 	memset(&ev, 0, sizeof(ev));
 	ev.type = UHID_CREATE;
-	strcpy((char*)ev.u.create.name, "test-uhid-device");
+	strcpy((char*)ev.u.create.name, "test-uhid-device");/*指定设备名称*/
 	ev.u.create.rd_data = rdesc;
 	ev.u.create.rd_size = sizeof(rdesc);
-	ev.u.create.bus = BUS_USB;
+	ev.u.create.bus = BUS_USB;/*指明设备所属bus*/
 	ev.u.create.vendor = 0x15d9;
 	ev.u.create.product = 0x0a37;
 	ev.u.create.version = 0;
 	ev.u.create.country = 0;
 
-	return uhid_write(fd, &ev);
+	return uhid_write(fd, &ev);/*创建设备*/
 }
 
 static void destroy(int fd)
@@ -275,15 +276,16 @@ static signed char abs_hor;
 static signed char abs_ver;
 static signed char wheel;
 
+/*按当前全局变量情况写入event给uhid*/
 static int send_event(int fd)
 {
 	struct uhid_event ev;
 
 	memset(&ev, 0, sizeof(ev));
 	ev.type = UHID_INPUT;
-	ev.u.input.size = 5;
+	ev.u.input.size = 5;/*指定data size为5*/
 
-	ev.u.input.data[0] = 0x1;
+	ev.u.input.data[0] = 0x1;/*指明report数量为1*/
 	if (btn1_down)
 		ev.u.input.data[1] |= 0x1;
 	if (btn2_down)
@@ -314,20 +316,20 @@ static int keyboard(int fd)
 
 	for (i = 0; i < ret; ++i) {
 		switch (buf[i]) {
-		case '1':
-			btn1_down = !btn1_down;
+		case '1':/*读取到'1'*/
+			btn1_down = !btn1_down;/*反转按钮1的down情况*/
 			ret = send_event(fd);
 			if (ret)
 				return ret;
 			break;
 		case '2':
-			btn2_down = !btn2_down;
+			btn2_down = !btn2_down;/*反转按钮2的down情况*/
 			ret = send_event(fd);
 			if (ret)
 				return ret;
 			break;
 		case '3':
-			btn3_down = !btn3_down;
+			btn3_down = !btn3_down;/*反转按钮3的down情况*/
 			ret = send_event(fd);
 			if (ret)
 				return ret;
@@ -396,7 +398,7 @@ int main(int argc, char **argv)
 	if (ret) {
 		fprintf(stderr, "Cannot get tty state\n");
 	} else {
-		state.c_lflag &= ~ICANON;
+		state.c_lflag &= ~ICANON;/*使用非规范模式，按字符读取，无行缓冲等*/
 		state.c_cc[VMIN] = 1;
 		ret = tcsetattr(STDIN_FILENO, TCSANOW, &state);
 		if (ret)
@@ -413,7 +415,7 @@ int main(int argc, char **argv)
 	}
 
 	fprintf(stderr, "Open uhid-cdev %s\n", path);
-	fd = open(path, O_RDWR | O_CLOEXEC);
+	fd = open(path, O_RDWR | O_CLOEXEC);/*打开uhid字符设备*/
 	if (fd < 0) {
 		fprintf(stderr, "Cannot open uhid-cdev %s: %m\n", path);
 		return EXIT_FAILURE;
@@ -448,11 +450,13 @@ int main(int argc, char **argv)
 		}
 
 		if (pfds[0].revents & POLLIN) {
+			/*stdin上的IN事件认为keyboard处理*/
 			ret = keyboard(fd);
 			if (ret)
 				break;
 		}
 		if (pfds[1].revents & POLLIN) {
+			/*uhid上的IN事件认为event处理*/
 			ret = event(fd);
 			if (ret)
 				break;

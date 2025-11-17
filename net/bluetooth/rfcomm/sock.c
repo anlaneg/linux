@@ -1041,7 +1041,9 @@ int __init rfcomm_init_sockets(void)
 	if (err < 0)
 		return err;
 
-	/*注册rfcomm协议对应的socket,通过此协议，可以实现蓝牙数据的读取*/
+	/*注册rfcomm协议对应的socket，RFCOMM 协议通过在蓝牙无线连接之上仿真
+	 * 一个标准的 RS-232 串行端口，使得这些为有线连接设计的遗留设备和应用
+	 * 程序能够无线透明地使用蓝牙技术进行通信，而无需大量修改底层软件或驱动程序。*/
 	err = bt_sock_register(BTPROTO_RFCOMM, &rfcomm_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("RFCOMM socket layer registration failed");

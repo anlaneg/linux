@@ -154,6 +154,7 @@ static const u8 debug_sk[32] = {
 		0x38, 0x5f, 0xc5, 0xa3, 0xd4, 0xf6, 0x49, 0x3f,
 };
 
+/*逆序复制src，填写dst*/
 static inline void swap_buf(const u8 *src, u8 *dst, size_t len)
 {
 	size_t i;
@@ -381,7 +382,7 @@ static int smp_e(const u8 *k, u8 *r)
 	SMP_DBG("k %16phN r %16phN", k, r);
 
 	/* The most significant octet of key corresponds to k[0] */
-	swap_buf(k, tmp, 16);
+	swap_buf(k, tmp, 16);/*k内容逆序反转填写到tmp*/
 
 	err = aes_expandkey(&ctx, tmp, 16);
 	if (err) {
@@ -390,12 +391,12 @@ static int smp_e(const u8 *k, u8 *r)
 	}
 
 	/* Most significant octet of plaintextData corresponds to data[0] */
-	swap_buf(r, data, 16);
+	swap_buf(r, data, 16);/*r内容逆序反转填写到data*/
 
-	aes_encrypt(&ctx, data, data);
+	aes_encrypt(&ctx, data, data);/*合data后，aes加密输出到data*/
 
 	/* Most significant octet of encryptedData corresponds to data[0] */
-	swap_buf(data, r, 16);
+	swap_buf(data, r, 16);/*data内容逆序反转填写到r*/
 
 	SMP_DBG("r %16phN", r);
 
@@ -468,16 +469,17 @@ static int smp_s1(const u8 k[16],
 	return err;
 }
 
+/*利用irk,r执行aes加密后，将结果的内容写入到res中*/
 static int smp_ah(const u8 irk[16], const u8 r[3], u8 res[3])
 {
 	u8 _res[16];
 	int err;
 
 	/* r' = padding || r */
-	memcpy(_res, r, 3);
-	memset(_res + 3, 0, 13);
+	memcpy(_res, r, 3);/*填3字节*/
+	memset(_res + 3, 0, 13);/*后补13个零，形成16字节*/
 
-	err = smp_e(irk, _res);
+	err = smp_e(irk, _res);/*aes加密后输出到_res*/
 	if (err) {
 		BT_ERR("Encrypt error");
 		return err;
@@ -489,11 +491,12 @@ static int smp_ah(const u8 irk[16], const u8 r[3], u8 res[3])
 	 * by taking the least significant 24 bits of the output of e as the
 	 * result of ah.
 	 */
-	memcpy(res, _res, 3);
+	memcpy(res, _res, 3);/*将加密结果的前三个字节输出到res*/
 
 	return 0;
 }
 
+/*通过irk检查bdaddr是否匹配*/
 bool smp_irk_matches(struct hci_dev *hdev, const u8 irk[16],
 		     const bdaddr_t *bdaddr)
 {
@@ -506,7 +509,7 @@ bool smp_irk_matches(struct hci_dev *hdev, const u8 irk[16],
 
 	bt_dev_dbg(hdev, "RPA %pMR IRK %*phN", bdaddr, 16, irk);
 
-	err = smp_ah(irk, &bdaddr->b[3], hash);
+	err = smp_ah(irk, &bdaddr->b[3], hash);/*利用irk及bt地址计算hash*/
 	if (err)
 		return false;
 

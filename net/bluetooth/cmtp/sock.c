@@ -246,7 +246,9 @@ int cmtp_init_sockets(void)
 	if (err < 0)
 		return err;
 
-	/*注册cmtp协议操作集*/
+	/*注册cmtp协议操作集CAPI Message Transport Protocol
+	 * (CAPI 消息传输协议) 的套接字类型。该协议主要解决了在蓝牙连接上传输
+	 * ISDN (综合业务数字网) 或 GSM (全球移动通信系统) 控制信令的问题。*/
 	err = bt_sock_register(BTPROTO_CMTP, &cmtp_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register CMTP socket");

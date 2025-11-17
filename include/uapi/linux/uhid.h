@@ -43,12 +43,12 @@ enum uhid_event_type {
 };
 
 struct uhid_create2_req {
-	__u8 name[128];
-	__u8 phys[64];
-	__u8 uniq[64];
-	__u16 rd_size;
-	__u16 bus;
-	__u32 vendor;
+	__u8 name[128];/*设备名称*/
+	__u8 phys[64];/*唯一编号，例如bt时采用源地址填充*/
+	__u8 uniq[64];/*唯一编号,例如bt时采用目的地址填充*/
+	__u16 rd_size;/*rd_data数组长度*/
+	__u16 bus;/*所属的bus*/
+	__u32 vendor;/*uhid设备厂商*/
 	__u32 product;
 	__u32 version;
 	__u32 country;
@@ -178,10 +178,10 @@ struct uhid_feature_answer_req {
  */
 
 struct uhid_event {
-	__u32 type;
+	__u32 type;/*event类型*/
 
 	union {
-		struct uhid_create_req create;
+		struct uhid_create_req create;/*UHID_CREATE类型对应的参数（建议用create2)*/
 		struct uhid_input_req input;
 		struct uhid_output_req output;
 		struct uhid_output_ev_req output_ev;
@@ -189,7 +189,7 @@ struct uhid_event {
 		struct uhid_get_report_req get_report;
 		struct uhid_feature_answer_req feature_answer;
 		struct uhid_get_report_reply_req get_report_reply;
-		struct uhid_create2_req create2;
+		struct uhid_create2_req create2;/*UHID_CREATE2类型对应的参数*/
 		struct uhid_input2_req input2;
 		struct uhid_set_report_req set_report;
 		struct uhid_set_report_reply_req set_report_reply;

@@ -3527,7 +3527,7 @@ static struct mgmt_pending_cmd *find_pairing(struct hci_conn *conn)
 
 	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
 		if (cmd->opcode != MGMT_OP_PAIR_DEVICE)
-			continue;
+			continue;/*跳过非pair device*/
 
 		if (cmd->user_data != conn)
 			continue;
@@ -3538,7 +3538,7 @@ static struct mgmt_pending_cmd *find_pairing(struct hci_conn *conn)
 	return NULL;
 }
 
-static int pairing_complete(struct mgmt_pending_cmd *cmd, u8 status)
+static int pairing_complete(struct mgmt_pending_cmd *cmd, u8 status/*命令结果*/)
 {
 	struct mgmt_rp_pair_device rp;
 	struct hci_conn *conn = cmd->user_data;
@@ -3547,6 +3547,7 @@ static int pairing_complete(struct mgmt_pending_cmd *cmd, u8 status)
 	bacpy(&rp.addr.bdaddr, &conn->dst);
 	rp.addr.type = link_to_bdaddr(conn->type, conn->dst_type);
 
+	/*响应pair device结果*/
 	err = mgmt_cmd_complete(cmd->sk, cmd->hdev->id, MGMT_OP_PAIR_DEVICE,
 				status, &rp, sizeof(rp));
 
@@ -3587,6 +3588,7 @@ static void pairing_complete_cb(struct hci_conn *conn, u8 status)
 
 	cmd = find_pairing(conn);
 	if (!cmd) {
+		/*被触发，但未找到pending的pair命令*/
 		BT_DBG("Unable to find a pending command");
 		return;
 	}
@@ -3614,6 +3616,7 @@ static void le_pairing_complete_cb(struct hci_conn *conn, u8 status)
 	mgmt_pending_remove(cmd);
 }
 
+/*和指定设备pair*/
 static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 		       u16 len)
 {
@@ -3631,11 +3634,13 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	rp.addr.type = cp->addr.type;
 
 	if (!bdaddr_type_is_valid(cp->addr.type))
+		/*地址类型有误*/
 		return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_PAIR_DEVICE,
 					 MGMT_STATUS_INVALID_PARAMS,
 					 &rp, sizeof(rp));
 
 	if (cp->io_cap > SMP_IO_KEYBOARD_DISPLAY)
+		/*io_cap有误*/
 		return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_PAIR_DEVICE,
 					 MGMT_STATUS_INVALID_PARAMS,
 					 &rp, sizeof(rp));
@@ -3643,6 +3648,7 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	hci_dev_lock(hdev);
 
 	if (!hdev_is_powered(hdev)) {
+		/*设备未powered*/
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_PAIR_DEVICE,
 					MGMT_STATUS_NOT_POWERED, &rp,
 					sizeof(rp));
@@ -3650,6 +3656,7 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	}
 
 	if (hci_bdaddr_is_paired(hdev, &cp->addr.bdaddr, cp->addr.type)) {
+		/*已pair*/
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_PAIR_DEVICE,
 					MGMT_STATUS_ALREADY_PAIRED, &rp,
 					sizeof(rp));
@@ -3660,6 +3667,7 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	auth_type = HCI_AT_DEDICATED_BONDING;
 
 	if (cp->addr.type == BDADDR_BREDR) {
+		/*建立acl连接*/
 		conn = hci_connect_acl(hdev, &cp->addr.bdaddr, sec_level,
 				       auth_type, CONN_REASON_PAIR_DEVICE,
 				       HCI_ACL_CONN_TIMEOUT);
@@ -3691,6 +3699,7 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	}
 
 	if (IS_ERR(conn)) {
+		/*创建connect失败*/
 		int status;
 
 		if (PTR_ERR(conn) == -EBUSY)
@@ -3708,6 +3717,7 @@ static int pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 	}
 
 	if (conn->connect_cfm_cb) {
+		/*这个连接已设置connect_cfm_cb*/
 		hci_conn_drop(conn);
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_PAIR_DEVICE,
 					MGMT_STATUS_BUSY, &rp, sizeof(rp));
@@ -4613,7 +4623,7 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 
 	if (hdev && hdev->get_data_path_id) {
 		if (hci_dev_test_flag(hdev, HCI_OFFLOAD_CODECS_ENABLED))
-			flags = BIT(0);
+			flags = BIT(0);/*设备开启了此功能*/
 		else
 			flags = 0;
 
@@ -4623,7 +4633,7 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	if (IS_ENABLED(CONFIG_BT_LE)) {
-		flags = iso_enabled() ? BIT(0) : 0;
+		flags = iso_enabled() ? BIT(0)/*设备开启了此功能*/ : 0;
 		memcpy(rp->features[idx].uuid, iso_socket_uuid, 16);
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
@@ -4631,11 +4641,11 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 
 	if (hdev && lmp_le_capable(hdev)) {
 		if (hci_dev_test_flag(hdev, HCI_MESH_EXPERIMENTAL))
-			flags = BIT(0);
+			flags = BIT(0);/*设备开启了此功能*/
 		else
 			flags = 0;
 
-		memcpy(rp->features[idx].uuid, mgmt_mesh_uuid, 16);
+		memcpy(rp->features[idx].uuid, mgmt_mesh_uuid, 16);/*指定功能uuid*/
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
 	}
@@ -4657,6 +4667,7 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 	return status;
 }
 
+/*向用户态产生扩展功能变更事件*/
 static int exp_feature_changed(struct hci_dev *hdev, const u8 *uuid,
 			       bool enabled, struct sock *skip)
 {
@@ -4664,7 +4675,7 @@ static int exp_feature_changed(struct hci_dev *hdev, const u8 *uuid,
 
 	memset(&ev, 0, sizeof(ev));
 	memcpy(ev.uuid, uuid, 16);
-	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
+	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);/*设置变更结果*/
 
 	/*向用户态产生事件*/
 	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
@@ -4775,7 +4786,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 
 	/* Only boolean on/off is supported */
 	if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
-		/*只支持true/false两种操作*/
+		/*只支持true/false（开启/关闭）两种操作*/
 		return mgmt_cmd_status(sk, hdev->id,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_INVALID_PARAMS);
@@ -4805,7 +4816,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 				&rp, sizeof(rp));
 
 	if (changed)
-		exp_feature_changed(hdev, mgmt_mesh_uuid, val, sk);
+		exp_feature_changed(hdev, mgmt_mesh_uuid, val/*开启/关闭*/, sk);
 
 	return err;
 }
@@ -5028,6 +5039,7 @@ static int set_iso_socket_func(struct sock *sk, struct hci_dev *hdev,
 
 	val = cp->param[0] ? true : false;
 	if (val)
+		/*iso socket开启*/
 		err = iso_init();
 	else
 		err = iso_exit();
@@ -5073,6 +5085,7 @@ static const struct mgmt_exp_feature {
 	EXP_FEAT(NULL, NULL)
 };
 
+/*设置开启/关闭扩展功能*/
 static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 			   void *data, u16 data_len)
 {
@@ -7112,11 +7125,11 @@ static bool irk_is_valid(struct mgmt_irk_info *irk)
 	case BDADDR_LE_RANDOM:
 		/* Two most significant bits shall be set */
 		if ((irk->addr.bdaddr.b[5] & 0xc0) != 0xc0)
-			return false;
+			return false;/*私有地址仅支持rpa地址*/
 		return true;
 	}
 
-	return false;
+	return false;/*地址类型有误*/
 }
 
 static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
@@ -7131,11 +7144,13 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (!lmp_le_capable(hdev))
+		/*设备不支持LE，故不能支持irks*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_LOAD_IRKS,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	irk_count = __le16_to_cpu(cp->irk_count);
 	if (irk_count > max_irk_count) {
+		/*总数超过最大值*/
 		bt_dev_err(hdev, "load_irks: too big irk_count value %u",
 			   irk_count);
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_LOAD_IRKS,
@@ -7152,10 +7167,12 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 
 	bt_dev_dbg(hdev, "irk_count %u", irk_count);
 
+	/*检查提供的irk是否有效*/
 	for (i = 0; i < irk_count; i++) {
 		struct mgmt_irk_info *key = &cp->irks[i];
 
 		if (!irk_is_valid(key))
+			/*提供的参数有误，响应用户态*/
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_LOAD_IRKS,
 					       MGMT_STATUS_INVALID_PARAMS);
@@ -7165,12 +7182,13 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 
 	hci_smp_irks_clear(hdev);
 
-	for (i = 0; i < irk_count; i++) {
+	for (i = 0; i < irk_count/*要添加的irk总数*/; i++) {
 		struct mgmt_irk_info *irk = &cp->irks[i];
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_IRK,
 				       irk->val)) {
+			/*跳过block irk*/
 			bt_dev_warn(hdev, "Skipping blocked IRK for %pMR",
 				    &irk->addr.bdaddr);
 			continue;
@@ -7816,6 +7834,7 @@ static int remove_device_sync(struct hci_dev *hdev, void *data)
 	return hci_update_passive_scan_sync(hdev);
 }
 
+/*删除hci_dev关联的所有设备或者删除指明的一个设备*/
 static int remove_device(struct sock *sk, struct hci_dev *hdev,
 			 void *data, u16 len)
 {
@@ -7904,6 +7923,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 		struct bdaddr_list *b, *btmp;
 
 		if (cp->addr.type) {
+			/*地址类型不为BR/EDR*/
 			err = mgmt_cmd_complete(sk, hdev->id,
 						MGMT_OP_REMOVE_DEVICE,
 						MGMT_STATUS_INVALID_PARAMS,
@@ -7911,6 +7931,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 			goto unlock;
 		}
 
+		/*在hdev->accept_list上移除指定的device*/
 		list_for_each_entry_safe(b, btmp, &hdev->accept_list, list) {
 			device_removed(sk, hdev, &b->bdaddr, b->bdaddr_type);
 			list_del(&b->list);
@@ -9412,7 +9433,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ pin_code_reply,          MGMT_PIN_CODE_REPLY_SIZE },
 	{ pin_code_neg_reply,      MGMT_PIN_CODE_NEG_REPLY_SIZE },
 	{ set_io_capability,       MGMT_SET_IO_CAPABILITY_SIZE },
-	{ pair_device,             MGMT_PAIR_DEVICE_SIZE },
+	{ pair_device,             MGMT_PAIR_DEVICE_SIZE },/*pair指定设备*/
 	{ cancel_pair_device,      MGMT_CANCEL_PAIR_DEVICE_SIZE },
 	{ unpair_device,           MGMT_UNPAIR_DEVICE_SIZE },
 	{ user_confirm_reply,      MGMT_USER_CONFIRM_REPLY_SIZE },
@@ -9437,6 +9458,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ set_secure_conn,         MGMT_SETTING_SIZE },
 	{ set_debug_keys,          MGMT_SETTING_SIZE },
 	{ set_privacy,             MGMT_SET_PRIVACY_SIZE },
+	/*用于为le设备添加irks*/
 	{ load_irks,               MGMT_LOAD_IRKS_SIZE,
 						HCI_MGMT_VAR_LEN },
 	{ get_conn_info,           MGMT_GET_CONN_INFO_SIZE },
@@ -9483,7 +9505,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ read_exp_features_info,  MGMT_READ_EXP_FEATURES_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED |
 						HCI_MGMT_HDEV_OPTIONAL },
-	/*用户态配置扩展功能*/
+	/*用户态配置开启/关闭扩展功能*/
 	{ set_exp_feature,         MGMT_SET_EXP_FEATURE_SIZE,
 						HCI_MGMT_VAR_LEN |
 						HCI_MGMT_HDEV_OPTIONAL },
@@ -10530,7 +10552,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备�
 
 	/* Allocate skb. The 5 extra bytes are for the potential CoD field */
 	skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_FOUND,
-			     sizeof(*ev) + eir_len + scan_rsp_len + 5);
+			     sizeof(*ev) + eir_len + scan_rsp_len + 5);/*申请skb,准备通知用户态*/
 	if (!skb)
 		return;
 
@@ -10583,6 +10605,7 @@ void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	u16 eir_len = 0;
 	u32 flags = 0;
 
+	/*发现新设备申请skb，准备通知用户态*/
 	skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_FOUND,
 			     sizeof(*ev) + (name ? eir_precalc_len(name_len) : 0));
 	if (!skb)

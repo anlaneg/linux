@@ -4998,6 +4998,7 @@ static void __dev_printk(const char *level, const struct device *dev,
 			struct va_format *vaf)
 {
 	if (dev)
+		/*指明设备的，输出驱动名称，设备名称及后续格式*/
 		dev_printk_emit(level[1] - '0', dev, "%s %s: %pV",
 				dev_driver_string(dev), dev_name(dev), vaf);
 	else
@@ -5021,13 +5022,13 @@ void _dev_printk(const char *level, const struct device *dev,
 }
 EXPORT_SYMBOL(_dev_printk);
 
-#define define_dev_printk_level(func, kern_level)		\
+#define define_dev_printk_level(func/*函数名称*/, kern_level)		\
 void func(const struct device *dev, const char *fmt, ...)	\
 {								\
 	struct va_format vaf;					\
 	va_list args;						\
 								\
-	va_start(args, fmt);					\
+	va_start(args, fmt);/*格式串*/					\
 								\
 	vaf.fmt = fmt;						\
 	vaf.va = &args;						\
