@@ -846,7 +846,7 @@ struct kvm {
 	gfn_t mmu_invalidate_range_start;
 	gfn_t mmu_invalidate_range_end;
 #endif
-	struct list_head devices;/*创建的kvm deivce列表*/
+	struct list_head devices;/*创建的所有kvm deivce列表*/
 	u64 manual_dirty_log_protect;
 	struct dentry *debugfs_dentry;
 	struct kvm_stat_data **debugfs_stat_data;
@@ -2304,8 +2304,8 @@ extern unsigned int halt_poll_ns_grow_start;
 extern unsigned int halt_poll_ns_shrink;
 
 struct kvm_device {
-	const struct kvm_device_ops *ops;
-	struct kvm *kvm;
+	const struct kvm_device_ops *ops;/*kvm设备操作集*/
+	struct kvm *kvm;/*从属于哪个kvm*/
 	void *private;
 	struct list_head vm_node;
 };
@@ -2319,13 +2319,13 @@ struct kvm_device_ops {
 	 * to do while holding the lock should be deferred to init (see
 	 * below).
 	 */
-	int (*create)(struct kvm_device *dev, u32 type);
+	int (*create)(struct kvm_device *dev, u32 type/*设备类型*/);/*创建kvm_device*/
 
 	/*
 	 * init is called after create if create is successful and is called
 	 * outside of holding kvm->lock.
 	 */
-	void (*init)(struct kvm_device *dev);
+	void (*init)(struct kvm_device *dev);/*初始kvm_device*/
 
 	/*
 	 * Destroy is responsible for freeing dev.

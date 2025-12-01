@@ -19,22 +19,26 @@ struct dmi_device_attribute{
 #define to_dmi_dev_attr(_dev_attr) \
 	container_of(_dev_attr, struct dmi_device_attribute, dev_attr)
 
+/*用于属性field显示*/
 static ssize_t sys_dmi_field_show(struct device *dev,
 				  struct device_attribute *attr,
 				  char *page)
 {
 	int field = to_dmi_dev_attr(attr)->field;
 	ssize_t len;
+	/*显示此字段配置值*/
 	len = scnprintf(page, PAGE_SIZE, "%s\n", dmi_get_system_info(field));
 	page[len-1] = '\n';
 	return len;
 }
 
+/*仅支持show属性，指定filed*/
 #define DMI_ATTR(_name, _mode, _show, _field)			\
 	{ .dev_attr = __ATTR(_name, _mode, _show, NULL),	\
 	  .field = _field }
 
-#define DEFINE_DMI_ATTR_WITH_SHOW(_name, _mode, _field)		\
+/*定义show属性*/
+#define DEFINE_DMI_ATTR_WITH_SHOW(_name/*属性名称*/, _mode, _field)		\
 static struct dmi_device_attribute sys_dmi_##_name##_attr =	\
 	DMI_ATTR(_name, _mode, sys_dmi_field_show, _field);
 
@@ -197,6 +201,7 @@ static void __init dmi_id_init_attr_table(void)
 	/* Not necessarily all DMI fields are available on all
 	 * systems, hence let's built an attribute table of just
 	 * what's available */
+	/*填充sys_dmi_attributes属性*/
 	i = 0;
 	ADD_DMI_ATTR(bios_vendor,       DMI_BIOS_VENDOR);
 	ADD_DMI_ATTR(bios_version,      DMI_BIOS_VERSION);
@@ -232,6 +237,7 @@ static int __init dmi_id_init(void)
 
 	dmi_id_init_attr_table();
 
+	/*注册dmi class*/
 	ret = class_register(&dmi_class);
 	if (ret)
 		return ret;
@@ -244,7 +250,7 @@ static int __init dmi_id_init(void)
 
 	dmi_dev->class = &dmi_class;
 	dev_set_name(dmi_dev, "id");
-	dmi_dev->groups = sys_dmi_attribute_groups;
+	dmi_dev->groups = sys_dmi_attribute_groups;/*设置属性组*/
 
 	ret = device_register(dmi_dev);
 	if (ret)

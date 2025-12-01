@@ -485,15 +485,18 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 	if (len < 2 || len > HCI_MAX_FRAME_SIZE)
 		return -EINVAL;
 
+	/*申请skb*/
 	skb = bt_skb_alloc(len, GFP_KERNEL);
 	if (!skb)
 		return -ENOMEM;
 
+	/*填写用户态传入的数据*/
 	if (!copy_from_iter_full(skb_put(skb, len), len, from)) {
 		kfree_skb(skb);
 		return -EFAULT;
 	}
 
+	/*首字节为网络类型*/
 	pkt_type = *((__u8 *) skb->data);
 	skb_pull(skb, 1);
 
@@ -509,7 +512,7 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 
 		hci_skb_pkt_type(skb) = pkt_type;
 
-		ret = hci_recv_frame(data->hdev, skb);
+		ret = hci_recv_frame(data->hdev, skb);/*收到帧*/
 		break;
 
 	case HCI_VENDOR_PKT:
@@ -582,13 +585,16 @@ static ssize_t vhci_read(struct file *file,
 			/*将此skb内容写入到userspace*/
 			ret = vhci_put_user(data, skb, buf, count);
 			if (ret < 0)
+				/*处理失败，此包仍放在首部*/
 				skb_queue_head(&data->readq, skb);
 			else
+				/*处理成功，释放此包*/
 				kfree_skb(skb);
 			break;
 		}
 
 		if (file->f_flags & O_NONBLOCK) {
+			/*队列为空，如非阻塞，返回eagain*/
 			ret = -EAGAIN;
 			break;
 		}
@@ -684,7 +690,7 @@ static const struct file_operations vhci_fops = {
 	.release	= vhci_release,
 };
 
-/*定义vhci设备*/
+/*定义vhci字符设备*/
 static struct miscdevice vhci_miscdev = {
 	.name	= "vhci",
 	.fops	= &vhci_fops,

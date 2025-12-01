@@ -2253,10 +2253,12 @@ static int set_mesh(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	if (!lmp_le_capable(hdev) ||
 	    !hci_dev_test_flag(hdev, HCI_MESH_EXPERIMENTAL))
+		/*未开启低功耗或者未设置HCI_MESH_EXPERIMENTAL标记（未开启mesh功能），报不支持*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (cp->enable != 0x00 && cp->enable != 0x01)
+		/*只支持以上两种值*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER,
 				       MGMT_STATUS_INVALID_PARAMS);
 
@@ -4039,14 +4041,17 @@ static int set_local_name(struct sock *sk, struct hci_dev *hdev, void *data,
 	if (!memcmp(hdev->dev_name, cp->name, sizeof(hdev->dev_name)) &&
 	    !memcmp(hdev->short_name, cp->short_name,
 		    sizeof(hdev->short_name))) {
+		/*无需变更*/
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_SET_LOCAL_NAME, 0,
 					data, len);
 		goto failed;
 	}
 
+	/*设置short name*/
 	memcpy(hdev->short_name, cp->short_name, sizeof(hdev->short_name));
 
 	if (!hdev_is_powered(hdev)) {
+		/*更新dev_name*/
 		memcpy(hdev->dev_name, cp->name, sizeof(hdev->dev_name));
 
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_SET_LOCAL_NAME, 0,
@@ -4764,7 +4769,7 @@ static int set_debug_func(struct sock *sk, struct hci_dev *hdev,
 #endif
 
 static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
-			      struct mgmt_cp_set_exp_feature *cp, u16 data_len)
+			      struct mgmt_cp_set_exp_feature *cp/*用于开启/关闭mesh功能*/, u16 data_len)
 {
 	struct mgmt_rp_set_exp_feature rp;
 	bool val, changed;
@@ -5066,6 +5071,7 @@ static int set_iso_socket_func(struct sock *sk, struct hci_dev *hdev,
 /*当前支持的功能set列表*/
 static const struct mgmt_exp_feature {
 	const u8 *uuid;/*功能UUID名称*/
+	/*用于开启/关闭指定功能*/
 	int (*set_func)(struct sock *sk, struct hci_dev *hdev,
 			struct mgmt_cp_set_exp_feature *cp, u16 data_len);
 } exp_features[] = {
@@ -5073,7 +5079,7 @@ static const struct mgmt_exp_feature {
 #ifdef CONFIG_BT_FEATURE_DEBUG
 	EXP_FEAT(debug_uuid, set_debug_func),
 #endif
-	EXP_FEAT(mgmt_mesh_uuid, set_mgmt_mesh_func),
+	EXP_FEAT(mgmt_mesh_uuid, set_mgmt_mesh_func/*用于开启/关闭mesh功能*/),
 	EXP_FEAT(quality_report_uuid, set_quality_report_func),
 	EXP_FEAT(offload_codecs_uuid, set_offload_codec_func),
 	EXP_FEAT(le_simultaneous_roles_uuid, set_le_simultaneous_roles_func),
@@ -5100,6 +5106,7 @@ static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 			return exp_features[i].set_func(sk, hdev, cp, data_len);
 	}
 
+	/*响应不支持此扩展功能*/
 	return mgmt_cmd_status(sk, hdev ? hdev->id : MGMT_INDEX_NONE,
 			       MGMT_OP_SET_EXP_FEATURE,
 			       MGMT_STATUS_NOT_SUPPORTED);
@@ -7623,7 +7630,7 @@ static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
 		return -EIO;
 
 	if (params->auto_connect == auto_connect)
-		return 0;
+		return 0;/*无需变更*/
 
 	hci_pend_le_list_del_init(params);
 
@@ -7712,11 +7719,13 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 
 	if (!bdaddr_type_is_valid(cp->addr.type) ||
 	    !bacmp(&cp->addr.bdaddr, BDADDR_ANY))
+		/*参数有误*/
 		return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_DEVICE,
 					 MGMT_STATUS_INVALID_PARAMS,
 					 &cp->addr, sizeof(cp->addr));
 
 	if (cp->action != 0x00 && cp->action != 0x01 && cp->action != 0x02)
+		/*仅支持以上三种action*/
 		return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_DEVICE,
 					 MGMT_STATUS_INVALID_PARAMS,
 					 &cp->addr, sizeof(cp->addr));
@@ -7726,6 +7735,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 	if (cp->addr.type == BDADDR_BREDR) {
 		/* Only incoming connections action is supported for now */
 		if (cp->action != 0x01) {
+			/*br/edr仅支持action为0x1*/
 			err = mgmt_cmd_complete(sk, hdev->id,
 						MGMT_OP_ADD_DEVICE,
 						MGMT_STATUS_INVALID_PARAMS,
@@ -7733,7 +7743,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 			goto unlock;
 		}
 
-		/*添加到容许连接的列表*/
+		/*添加到容许连接的列表，请求将被自动同意*/
 		err = hci_bdaddr_list_add_with_flags(&hdev->accept_list,
 						     &cp->addr.bdaddr,
 						     cp->addr.type, 0);
@@ -7747,6 +7757,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 
 	addr_type = le_addr_type(cp->addr.type);
 
+	/*依据参数，设置自动连接方式*/
 	if (cp->action == 0x02)
 		auto_conn = HCI_AUTO_CONN_ALWAYS;
 	else if (cp->action == 0x01)
@@ -9419,6 +9430,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	/*设置低功耗*/
 	{ set_le,                  MGMT_SETTING_SIZE },
 	{ set_dev_class,           MGMT_SET_DEV_CLASS_SIZE },
+	/*设置hci设备的local name*/
 	{ set_local_name,          MGMT_SET_LOCAL_NAME_SIZE },
 	{ add_uuid,                MGMT_ADD_UUID_SIZE },
 	/*响应用户态REMOVE_UUID,用于移除HCI设备上关联的一个或所有UUID*/
@@ -9463,6 +9475,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_VAR_LEN },
 	{ get_conn_info,           MGMT_GET_CONN_INFO_SIZE },
 	{ get_clock_info,          MGMT_GET_CLOCK_INFO_SIZE },
+	/*添加设备*/
 	{ add_device,              MGMT_ADD_DEVICE_SIZE },
 	/*用于移除hci设备上关联的所有devices或具体一个device*/
 	{ remove_device,           MGMT_REMOVE_DEVICE_SIZE },
@@ -9837,11 +9850,11 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 	/* allocate buff for LE or BR/EDR adv */
 	if (conn->le_adv_data_len > 0)
 		skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_CONNECTED,
-				     sizeof(*ev) + conn->le_adv_data_len);/*创建connected事件*/
+				     sizeof(*ev) + conn->le_adv_data_len);/*创建connected事件SKB*/
 	else
 		skb = mgmt_alloc_skb(hdev, MGMT_EV_DEVICE_CONNECTED,
 				     sizeof(*ev) + (name ? eir_precalc_len(name_len) : 0) +
-				     eir_precalc_len(sizeof(conn->dev_class)));
+				     eir_precalc_len(sizeof(conn->dev_class)));/*创建connected事件SKB*/
 
 	if (!skb)
 		return;
@@ -10653,14 +10666,16 @@ void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 {
 	struct mgmt_ev_controller_resume ev;
 
-	ev.wake_reason = reason;
+	ev.wake_reason = reason;/*原因*/
 	if (bdaddr) {
 		bacpy(&ev.addr.bdaddr, bdaddr);
 		ev.addr.type = addr_type;
 	} else {
+		/*未指明地址*/
 		memset(&ev.addr, 0, sizeof(ev.addr));
 	}
 
+	/*触发resume事件*/
 	mgmt_event(MGMT_EV_CONTROLLER_RESUME, hdev, &ev, sizeof(ev), NULL);
 }
 

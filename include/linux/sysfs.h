@@ -230,7 +230,7 @@ struct attribute_group {
  */
 
 //设置attr中的name,mode，设置show,store两个回调
-#define __ATTR(_name/*属性名称*/, _mode/*属性mode*/, _show, _store) {				\
+#define __ATTR(_name/*属性名称*/, _mode/*属性mode*/, _show/*显示回调*/, _store/*设置回调*/) {				\
 	.attr = {.name = __stringify(_name),				\
 		 .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
 	.show	= _show,						\

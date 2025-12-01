@@ -77,6 +77,7 @@ int sys_timerfd_settime(int fd, int flags,
 #endif
 }
 
+/*设置tiemrfd超时时间*/
 static __attribute__((unused))
 int timerfd_settime(int fd, int flags,
 		    const struct itimerspec *new_value, struct itimerspec *old_value)

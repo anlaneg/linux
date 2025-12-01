@@ -22,15 +22,15 @@
 #endif
 
 struct kvm_vfio_file {
-	struct list_head node;
-	struct file *file;
+	struct list_head node;/*用于关挂到list*/
+	struct file *file;/*对应的file*/
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 	struct iommu_group *iommu_group;
 #endif
 };
 
 struct kvm_vfio {
-	struct list_head file_list;
+	struct list_head file_list;/*记录添加的文件*/
 	struct mutex lock;
 	bool noncoherent;
 };
@@ -73,7 +73,7 @@ static bool kvm_vfio_file_is_valid(struct file *file)
 	if (!fn)
 		return false;
 
-	ret = fn(file);
+	ret = fn(file);/*检查此file是否有效*/
 
 	symbol_put(vfio_file_is_valid);
 
@@ -140,6 +140,7 @@ static void kvm_vfio_update_coherency(struct kvm_device *dev)
 	}
 }
 
+/*向file_list中添加file*/
 static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 {
 	struct kvm_vfio *kv = dev->private;
@@ -147,7 +148,7 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 	struct file *filp;
 	int ret = 0;
 
-	filp = fget(fd);
+	filp = fget(fd);/*取fd对应的file*/
 	if (!filp)
 		return -EBADF;
 
@@ -159,13 +160,15 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 
 	mutex_lock(&kv->lock);
 
+	/*检查此file是否存在*/
 	list_for_each_entry(kvf, &kv->file_list, node) {
 		if (kvf->file == filp) {
-			ret = -EEXIST;
+			ret = -EEXIST;/*已存在，报错*/
 			goto out_unlock;
 		}
 	}
 
+	/*创建kvf，并添加进kv->file_list列表*/
 	kvf = kzalloc(sizeof(*kvf), GFP_KERNEL_ACCOUNT);
 	if (!kvf) {
 		ret = -ENOMEM;
@@ -185,6 +188,7 @@ out_fput:
 	return ret;
 }
 
+/*移除file_list中的file*/
 static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 {
 	struct kvm_vfio *kv = dev->private;
@@ -201,9 +205,9 @@ static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 
 	list_for_each_entry(kvf, &kv->file_list, node) {
 		if (kvf->file != fd_file(f))
-			continue;
+			continue;/*不是要删除的文件，忽略*/
 
-		list_del(&kvf->node);
+		list_del(&kvf->node);/*自链表上移除*/
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 		kvm_spapr_tce_release_vfio_group(dev->kvm, kvf);
 #endif
@@ -273,12 +277,12 @@ static int kvm_vfio_set_file(struct kvm_device *dev, long attr,
 	case KVM_DEV_VFIO_FILE_ADD:
 		if (get_user(fd, argp))
 			return -EFAULT;
-		return kvm_vfio_file_add(dev, fd);
+		return kvm_vfio_file_add(dev, fd);/*添加此file*/
 
 	case KVM_DEV_VFIO_FILE_DEL:
 		if (get_user(fd, argp))
 			return -EFAULT;
-		return kvm_vfio_file_del(dev, fd);
+		return kvm_vfio_file_del(dev, fd);/*移除此file*/
 
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 	case KVM_DEV_VFIO_GROUP_SET_SPAPR_TCE:
@@ -360,10 +364,10 @@ static int kvm_vfio_create(struct kvm_device *dev, u32 type)
 	lockdep_assert_held(&dev->kvm->lock);
 
 	/* Only one VFIO "device" per VM */
-	//每个vm有一个vfio
+	//每个vm只有一个vfio
 	list_for_each_entry(tmp, &dev->kvm->devices, vm_node)
 		if (tmp->ops == &kvm_vfio_ops)
-			return -EBUSY;
+			return -EBUSY;/*此kvm设备中已有一个vfio-ops的设备*/
 
 	kv = kzalloc(sizeof(*kv), GFP_KERNEL_ACCOUNT);
 	if (!kv)
@@ -372,7 +376,7 @@ static int kvm_vfio_create(struct kvm_device *dev, u32 type)
 	INIT_LIST_HEAD(&kv->file_list);
 	mutex_init(&kv->lock);
 
-	dev->private = kv;
+	dev->private = kv;/*设置设备私有数据*/
 
 	return 0;
 }

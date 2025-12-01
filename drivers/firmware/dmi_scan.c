@@ -949,7 +949,7 @@ EXPORT_SYMBOL(dmi_first_match);
  */
 const char *dmi_get_system_info(int field)
 {
-	return dmi_ident[field];
+	return dmi_ident[field];/*取field配置*/
 }
 EXPORT_SYMBOL(dmi_get_system_info);
 

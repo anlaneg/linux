@@ -2676,7 +2676,7 @@ struct hci_ev_le_conn_complete {
 /*此subevent指明的为LE广告(广播)报告*/
 #define HCI_EV_LE_ADVERTISING_REPORT	0x02
 struct hci_ev_le_advertising_info {
-	__u8	 type;/**/
+	__u8	 type;/*类型见7.7.65.2 LE Advertising Report event*/
 	__u8	 bdaddr_type;/*地址类型*/
 	bdaddr_t bdaddr;/*设备地址*/
 	__u8	 length;/*data数组长度*/

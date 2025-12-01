@@ -1334,7 +1334,7 @@ static void kvm_destroy_vm(struct kvm *kvm)
 
 void kvm_get_kvm(struct kvm *kvm)
 {
-	refcount_inc(&kvm->users_count);
+	refcount_inc(&kvm->users_count);/*增加引用*/
 }
 EXPORT_SYMBOL_GPL(kvm_get_kvm);
 
@@ -4735,6 +4735,7 @@ static int kvm_device_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct kvm_device *dev = filp->private_data;
 
 	if (dev->ops->mmap)
+		/*如有mmap,则调用*/
 		return dev->ops->mmap(dev, vma);
 
 	return -ENODEV;
@@ -4748,7 +4749,7 @@ static int kvm_device_ioctl_attr(struct kvm_device *dev,
 	struct kvm_device_attr attr;
 
 	if (!accessor)
-		return -EPERM;
+		return -EPERM;/*回调必须提供*/
 
 	if (copy_from_user(&attr, (void __user *)arg, sizeof(attr)))
 		return -EFAULT;
@@ -4766,6 +4767,7 @@ static long kvm_device_ioctl(struct file *filp, unsigned int ioctl,
 
 	switch (ioctl) {
 	case KVM_SET_DEVICE_ATTR:
+		/*实际调用ops->set_attr*/
 		return kvm_device_ioctl_attr(dev, dev->ops->set_attr, arg);
 	case KVM_GET_DEVICE_ATTR:
 		return kvm_device_ioctl_attr(dev, dev->ops->get_attr, arg);
@@ -4826,7 +4828,7 @@ int kvm_register_device_ops(const struct kvm_device_ops *ops, u32 type)
 	if (type >= ARRAY_SIZE(kvm_device_ops_table))
 		return -ENOSPC;
 
-	//如果已注册， 则返回已存在
+	//如果已注册，则返回已存在
 	if (kvm_device_ops_table[type] != NULL)
 		return -EEXIST;
 
@@ -4855,14 +4857,14 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	if (cd->type >= ARRAY_SIZE(kvm_device_ops_table))
 		return -ENODEV;
 
-	//取出此type对应的ops
+	//取出此设备type对应的ops
 	type = array_index_nospec(cd->type, ARRAY_SIZE(kvm_device_ops_table));
 	ops = kvm_device_ops_table[type];
 	if (ops == NULL)
 		return -ENODEV;
 
 	if (test)
-		return 0;
+		return 0;/*有测试标记，不实际创建*/
 
 	//创建kvm device
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL_ACCOUNT);
@@ -4889,7 +4891,7 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 
 	kvm_get_kvm(kvm);
 
-	//实现此kvm设备与fd关联
+	//分配并实现此kvm设备与fd关联
 	ret = anon_inode_getfd(ops->name, &kvm_device_fops, dev, O_RDWR | O_CLOEXEC);
 	if (ret < 0) {
 		kvm_put_kvm_no_destroy(kvm);
