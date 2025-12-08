@@ -433,7 +433,7 @@ struct sock *bt_accept_dequeue(struct sock *parent, struct socket *newsock);
 
 /* Skb helpers */
 struct l2cap_ctrl {
-	u8	sframe:1,
+	u8	sframe:1,/*用于指明帧类型，0为I-Frame(信息帧）,1为S-Frame(管理帧）*/
 		poll:1,
 		final:1,
 		fcs:1,
@@ -441,8 +441,8 @@ struct l2cap_ctrl {
 		super:2;
 
 	u16	reqseq;
-	u16	txseq;
-	u8	retries;
+	u16	txseq;/*TxSeq(Send sequence number),记录*/
+	u8	retries;/*记录重传次数*/
 	__le16  psm;
 	bdaddr_t bdaddr;
 	struct l2cap_chan *chan;

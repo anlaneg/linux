@@ -256,9 +256,12 @@ struct l2cap_conn_rsp {
 #define L2CAP_PSM_LE_DYN_END	0x00ff
 
 /* channel identifier */
+/*信号channel1*/
 #define L2CAP_CID_SIGNALING	0x0001
+/*无连接channel使用此cid*/
 #define L2CAP_CID_CONN_LESS	0x0002
 #define L2CAP_CID_ATT		0x0004
+/*信号channel2*/
 #define L2CAP_CID_LE_SIGNALING	0x0005
 #define L2CAP_CID_SMP		0x0006
 #define L2CAP_CID_SMP_BREDR	0x0007
@@ -346,6 +349,7 @@ struct l2cap_conf_rfc {
 	__le16     max_pdu_size;
 } __packed;
 
+/*基本模式*/
 #define L2CAP_MODE_BASIC	0x00
 #define L2CAP_MODE_RETRANS	0x01
 #define L2CAP_MODE_FLOWCTL	0x02
@@ -526,10 +530,10 @@ struct l2cap_chan {
 	__u16		dcid;/*目标channel id*/
 	__u16		scid;/*源channel id*/
 
-	__u16		imtu;
-	__u16		omtu;
+	__u16		imtu;/*入方向mtu*/
+	__u16		omtu;/*出方向mtu*/
 	__u16		flush_to;
-	__u8		mode;
+	__u8		mode;/*channel模式，有多种模式，例如L2CAP_MODE_BASIC*/
 	/*CHANNEL类型,如采用raw，则L2CAP_CHAN_RAW；
 	 * 如采用SOCK_SEQPACKET,SOCK_STREAM，则L2CAP_CHAN_CONN_ORIENTED*/
 	__u8		chan_type;
@@ -544,15 +548,16 @@ struct l2cap_chan {
 	__u8		num_conf_req;
 	__u8		num_conf_rsp;/*已发送的配置响应数*/
 
+	/*frame check sequence (FCS) (when present) fields，FCS is optional,当前有两种情况1种是0，1种是16bits*/
 	__u8		fcs;
 
 	__u16		tx_win;
 	__u16		tx_win_max;
 	__u16		ack_win;
-	__u8		max_tx;
+	__u8		max_tx;/*容许的最大重传次数（为0时无效）*/
 	__u16		retrans_timeout;
 	__u16		monitor_timeout;
-	__u16		mps;
+	__u16		mps;/*payload长度校验。the maximum PDU payload size*/
 
 	__u16		tx_credits;
 	__u16		rx_credits;
@@ -573,7 +578,7 @@ struct l2cap_chan {
 	__u16		buffer_seq;
 	__u16		srej_save_reqseq;
 	__u16		last_acked_seq;
-	__u16		frames_sent;
+	__u16		frames_sent;/*已发送报文数目*/
 	__u16		unacked_frames;
 	__u8		retry_count;
 	__u16		sdu_len;
@@ -627,7 +632,7 @@ struct l2cap_ops {
 	void			(*close) (struct l2cap_chan *chan);
 	/*状态变更时调用*/
 	void			(*state_change) (struct l2cap_chan *chan,
-						 int state, int err);
+						 int state/*新状态*/, int err);
 	void			(*ready) (struct l2cap_chan *chan);
 	void			(*defer) (struct l2cap_chan *chan);
 	void			(*resume) (struct l2cap_chan *chan);
@@ -691,9 +696,13 @@ struct l2cap_user {
 #define L2CAP_INFO_FEAT_MASK_REQ_SENT	0x04
 #define L2CAP_INFO_FEAT_MASK_REQ_DONE	0x08
 
+/*用于抓包等目的，报文在处理前可复制一份给raw channel*/
 #define L2CAP_CHAN_RAW			1
+/*无连接型的l2cap channel*/
 #define L2CAP_CHAN_CONN_LESS		2
+/*面向连接型的l2cap channel*/
 #define L2CAP_CHAN_CONN_ORIENTED	3
+/*当channel指定为fixed时，必须指明CID*/
 #define L2CAP_CHAN_FIXED		4
 
 /* ----- L2CAP socket info ----- */
@@ -746,7 +755,7 @@ enum {
 	FLAG_FORCE_ACTIVE,
 	FLAG_FORCE_RELIABLE,
 	FLAG_FLUSHABLE,
-	FLAG_EXT_CTRL,
+	FLAG_EXT_CTRL,/*标记使用the Extended Control Field格式*/
 	FLAG_EFS_ENABLE,
 	FLAG_DEFER_SETUP,
 	FLAG_LE_CONN_REQ_SENT,

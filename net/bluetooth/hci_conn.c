@@ -2732,7 +2732,7 @@ struct hci_chan *hci_chan_create(struct hci_conn *conn)
 
 	chan->conn = hci_conn_get(conn);
 	skb_queue_head_init(&chan->data_q);
-	chan->state = BT_CONNECTED;
+	chan->state = BT_CONNECTED;/*指定为connected*/
 
 	list_add_rcu(&chan->list, &conn->chan_list);
 

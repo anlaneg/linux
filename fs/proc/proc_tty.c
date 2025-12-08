@@ -30,8 +30,9 @@ static void show_tty_range(struct seq_file *m, struct tty_driver *p,
 	seq_printf(m, "/dev/%-8s ", p->name);
 	if (p->num > 1) {
 		seq_printf(m, "%3d %d-%d ", MAJOR(from), MINOR(from),
-			MINOR(from) + num - 1);
+			MINOR(from) + num - 1);/*显示minor数目范围*/
 	} else {
+		/*仅一个minor时*/
 		seq_printf(m, "%3d %7d ", MAJOR(from), MINOR(from));
 	}
 	switch (p->type) {
@@ -71,11 +72,11 @@ static int show_tty_driver(struct seq_file *m, void *v)
 	dev_t from = MKDEV(p->major, p->minor_start);
 	dev_t to = from + p->num;
 
-	if (&p->tty_drivers == tty_drivers.next) {
+	if (&p->tty_drivers == tty_drivers.next) {/*显示首个节点时先显示pseudo-drivers*/
 		/* pseudo-drivers first */
 		seq_printf(m, "%-20s /dev/%-8s ", "/dev/tty", "tty");
 		seq_printf(m, "%3d %7d ", TTYAUX_MAJOR, 0);
-		seq_puts(m, "system:/dev/tty\n");
+		seq_puts(m, "system:/dev/tty\n");/*完成换行*/
 		seq_printf(m, "%-20s /dev/%-8s ", "/dev/console", "console");
 		seq_printf(m, "%3d %7d ", TTYAUX_MAJOR, 1);
 		seq_puts(m, "system:console\n");
@@ -105,7 +106,7 @@ static int show_tty_driver(struct seq_file *m, void *v)
 static void *t_start(struct seq_file *m, loff_t *pos)
 {
 	mutex_lock(&tty_mutex);
-	return seq_list_start(&tty_drivers, *pos);
+	return seq_list_start(&tty_drivers, *pos);/*取tty_drivers第N个*/
 }
 
 static void *t_next(struct seq_file *m, void *v, loff_t *pos)
@@ -174,5 +175,5 @@ void __init proc_tty_init(void)
 	 */
 	proc_tty_driver = proc_mkdir_mode("tty/driver", S_IRUSR|S_IXUSR, NULL);
 	proc_create_seq("tty/ldiscs", 0, NULL, &tty_ldiscs_seq_ops);
-	proc_create_seq("tty/drivers", 0, NULL, &tty_drivers_op);
+	proc_create_seq("tty/drivers", 0, NULL, &tty_drivers_op);/*显示tty驱动列表*/
 }

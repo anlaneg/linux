@@ -152,7 +152,7 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 
 /*bluetooth socket申请*/
 struct sock *bt_sock_alloc(struct net *net, struct socket *sock,
-			   struct proto *prot, int proto, gfp_t prio, int kern/*是否kernel创建*/)
+			   struct proto *prot/*协议*/, int proto, gfp_t prio, int kern/*是否kernel创建*/)
 {
 	struct sock *sk;
 

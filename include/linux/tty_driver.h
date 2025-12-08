@@ -530,8 +530,8 @@ struct tty_driver {
 	const char	*driver_name;/*驱动名称*/
 	const char	*name;
 	int	name_base;
-	int	major;
-	int	minor_start;
+	int	major;/*major编号*/
+	int	minor_start;/*minor起始编号*/
 	unsigned int	num;
 	enum tty_driver_type type;
 	enum tty_driver_subtype subtype;
@@ -543,9 +543,9 @@ struct tty_driver {
 	/*
 	 * Pointer to the tty data structures
 	 */
-	struct tty_struct **ttys;
-	struct tty_port **ports;
-	struct ktermios **termios;
+	struct tty_struct **ttys;/*num个tty_struct结构体*/
+	struct tty_port **ports;/*num个tty_port结构体*/
+	struct ktermios **termios;/*num个ktermios结构体*/
 	void *driver_state;
 
 	/*

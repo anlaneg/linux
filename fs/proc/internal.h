@@ -49,7 +49,7 @@ struct proc_dir_entry {
 		int (*single_show)(struct seq_file *, void *);
 	};
 	proc_write_t write;
-	void *data;
+	void *data;/*回调对应的参数*/
 	unsigned int state_size;
 	unsigned int low_ino;
 	nlink_t nlink;

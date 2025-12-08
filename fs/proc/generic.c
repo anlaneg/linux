@@ -680,7 +680,7 @@ static const struct proc_ops proc_single_ops = {
 
 struct proc_dir_entry *proc_create_single_data(const char *name/*文件名称*/, umode_t mode,
 		struct proc_dir_entry *parent/*目录*/,
-		int (*show)(struct seq_file *, void *), void *data)
+		int (*show/*文件显示回调*/)(struct seq_file *, void *), void *data/*回调函数参数*/)
 {
 	struct proc_dir_entry *p;
 

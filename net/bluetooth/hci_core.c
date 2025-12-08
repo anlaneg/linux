@@ -56,7 +56,7 @@ LIST_HEAD(hci_dev_list);/*串连系统中所有hci_dev*/
 DEFINE_RWLOCK(hci_dev_list_lock);
 
 /* HCI callback list */
-LIST_HEAD(hci_cb_list);
+LIST_HEAD(hci_cb_list);/*串连系统中所有struct hci_cb*/
 DEFINE_MUTEX(hci_cb_list_lock);
 
 /* HCI ID Numbering */
@@ -3108,6 +3108,7 @@ int hci_register_cb(struct hci_cb *cb)
 	BT_DBG("%p name %s", cb, cb->name);
 
 	mutex_lock(&hci_cb_list_lock);
+	/*注册hci回调*/
 	list_add_tail(&cb->list, &hci_cb_list);
 	mutex_unlock(&hci_cb_list_lock);
 
@@ -3312,10 +3313,11 @@ static void hci_add_acl_hdr(struct sk_buff *skb, __u16 handle, __u16 flags)
 	skb_push(skb, HCI_ACL_HDR_SIZE);
 	skb_reset_transport_header(skb);
 	hdr = (struct hci_acl_hdr *)skb_transport_header(skb);
-	hdr->handle = cpu_to_le16(hci_handle_pack(handle, flags));
-	hdr->dlen   = cpu_to_le16(len);
+	hdr->handle = cpu_to_le16(hci_handle_pack(handle, flags));/*揉合handle,flags*/
+	hdr->dlen   = cpu_to_le16(len);/*填充长度*/
 }
 
+/*将报文按分片（首片有ACL_START标记，如其后有仍有分片添加ACL_CONT标记）拆开串连到queue上*/
 static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 			  struct sk_buff *skb, __u16 flags)
 {
@@ -3326,16 +3328,16 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 	skb->len = skb_headlen(skb);
 	skb->data_len = 0;
 
-	hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明报文类型*/
+	hci_skb_pkt_type(skb) = HCI_ACLDATA_PKT;/*指明报文类型为ACLDATA*/
 
-	hci_add_acl_hdr(skb, conn->handle, flags);/*添加acl header*/
+	hci_add_acl_hdr(skb, conn->handle, flags);/*添加acl header(指明连接handle)*/
 
 	list = skb_shinfo(skb)->frag_list;
 	if (!list) {
 		/* Non fragmented */
 		BT_DBG("%s nonfrag skb %p len %d", hdev->name, skb, skb->len);
 
-		skb_queue_tail(queue, skb);/*仅有一片,加入队列即可*/
+		skb_queue_tail(queue, skb);/*当前仅有一片,加入队列即可*/
 	} else {
 		/* Fragmented */
 		BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
@@ -3349,10 +3351,10 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 		 */
 		spin_lock_bh(&queue->lock);
 
-		__skb_queue_tail(queue, skb);
+		__skb_queue_tail(queue, skb);/*首片加入队列*/
 
-		flags &= ~ACL_START;/*其它片移除acl_start标记*/
-		flags |= ACL_CONT;/*其它片添加ACL_CONTINUE标记*/
+		flags &= ~ACL_START;/*其它片需移除acl_start标记*/
+		flags |= ACL_CONT;/*其它片需添加ACL_CONTINUE标记*/
 		do {
 			skb = list; list = list->next;
 
@@ -3361,20 +3363,22 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 
 			BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
 
-			__skb_queue_tail(queue, skb);/*加入到队列*/
+			__skb_queue_tail(queue, skb);/*遍历分片并加入到队列*/
 		} while (list);
 
 		spin_unlock_bh(&queue->lock);
 	}
 }
 
+/*增加acl header,hci channel发送报文*/
 void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb/*要发送的报文,可能有分片*/, __u16 flags)
 {
 	struct hci_dev *hdev = chan->conn->hdev;
 
 	BT_DBG("%s chan %p flags 0x%4.4x", hdev->name, chan, flags);
 
-	hci_queue_acl(chan, &chan->data_q, skb, flags);/*存入到chan->data_q*/
+	/*增加acl header并将skb拆成独立报文后存入到chan->data_q*/
+	hci_queue_acl(chan, &chan->data_q, skb, flags);
 
 	queue_work(hdev->workqueue, &hdev->tx_work);/*触发tx_work*/
 }
@@ -4192,7 +4196,7 @@ static void hci_rx_work(struct work_struct *work)
 
 		case HCI_ACLDATA_PKT:
 			/*ACLDATA用于host与hci controller之间互传的报文，
-			 * 报文会按连接投递，l2cap_recv_acldata*/
+			 * 报文会按连接投递，当前收到acl header报文，处理它*/
 			BT_DBG("%s ACL data packet", hdev->name);
 			hci_acldata_packet(hdev, skb);
 			break;

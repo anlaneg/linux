@@ -853,6 +853,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 	return err;
 }
 
+/*设置channel mode*/
 static int l2cap_set_mode(struct l2cap_chan *chan, u8 mode)
 {
 	switch (mode) {
@@ -1155,7 +1156,7 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return err;
 
 	l2cap_chan_lock(chan);
-	/*通过channel发送消息*/
+	/*通过channel发送消息，增加l2cap header*/
 	err = l2cap_chan_send(chan, msg, len, &sockc);
 	l2cap_chan_unlock(chan);
 
@@ -1651,8 +1652,8 @@ static void l2cap_sock_teardown_cb(struct l2cap_chan *chan, int err)
 
 }
 
-static void l2cap_sock_state_change_cb(struct l2cap_chan *chan, int state,
-				       int err)
+static void l2cap_sock_state_change_cb(struct l2cap_chan *chan, int state/*新状态*/,
+				       int err/*错误码*/)
 {
 	struct sock *sk = chan->data;
 
@@ -1919,7 +1920,7 @@ static struct sock *l2cap_sock_alloc(struct net *net, struct socket *sock,
 	struct sock *sk;
 	struct l2cap_chan *chan;
 
-	sk = bt_sock_alloc(net, sock, &l2cap_proto, proto, prio, kern);
+	sk = bt_sock_alloc(net, sock, &l2cap_proto/*指定协议*/, proto, prio, kern);
 	if (!sk)
 		return NULL;
 

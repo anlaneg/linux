@@ -250,6 +250,7 @@ bool copy_to_iter_full(const void *addr, size_t bytes, struct iov_iter *i)
 	return false;
 }
 
+/*自i中复制bytes个字节到addr中*/
 static __always_inline __must_check
 bool copy_from_iter_full(void *addr, size_t bytes, struct iov_iter *i)
 {

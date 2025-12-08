@@ -546,7 +546,11 @@ enum {
 #define ACL_START_NO_FLUSH	0x00
 /*非首片*/
 #define ACL_CONT		0x01
-/*首片自动可刷新报文*/
+/*首片自动可刷新报文
+ * automatically-flushable：“自动刷新的”，
+ * 指该数据包会被协议栈按照预设规则（如超时、缓冲区阈值等）自动清除或丢弃，
+ * 无需等待接收方额外确认，常用于传输对实时性要求高、允许少量丢失的数据
+ * */
 #define ACL_START		0x02
 #define ACL_COMPLETE		0x03
 #define ACL_ACTIVE_BCAST	0x04
@@ -3025,6 +3029,7 @@ static inline struct hci_iso_hdr *hci_iso_hdr(const struct sk_buff *skb)
 #define hci_opcode_ocf(op)		(op & 0x03ff)
 
 /* ACL handle and flags pack/unpack */
+/*填充acl data中的handle与flags*/
 #define hci_handle_pack(h, f)	((__u16) ((h & 0x0fff)|(f << 12)))
 /*acl data中首个u16中低12位为handle*/
 #define hci_handle(h)		(h & 0x0fff)

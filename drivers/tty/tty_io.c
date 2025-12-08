@@ -308,6 +308,7 @@ static struct tty_driver *get_tty_driver(dev_t device, int *index)
 {
 	struct tty_driver *p;
 
+	/*遍历所有tty driver*/
 	list_for_each_entry(p, &tty_drivers, tty_drivers) {
 		dev_t base = MKDEV(p->major, p->minor_start);
 
@@ -3437,6 +3438,7 @@ int tty_register_driver(struct tty_driver *driver)
 	struct device *d;
 
 	if (!driver->major) {
+		/*申请动态major，并占用*/
 		error = alloc_chrdev_region(&dev, driver->minor_start,
 						driver->num, driver->name);
 		if (!error) {
@@ -3444,6 +3446,7 @@ int tty_register_driver(struct tty_driver *driver)
 			driver->minor_start = MINOR(dev);
 		}
 	} else {
+		/*占用major*/
 		dev = MKDEV(driver->major, driver->minor_start);
 		error = register_chrdev_region(dev, driver->num, driver->name);
 	}

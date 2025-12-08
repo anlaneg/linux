@@ -706,7 +706,7 @@ struct hci_conn {
 	bdaddr_t	resp_addr;/*对端地址*/
 	__u8		resp_addr_type;/*对端地址类型*/
 	__u8		adv_instance;
-	__u16		handle;/*conn对应的handle*/
+	__u16		handle;/*conn对应的handle，指明对应的连接(占用12bit，有效范围：0x000 to 0xEFF）*/
 	__u16		sync_handle;
 	__u8		sid;
 	__u16		state;/*连接状态，例如BT_LISTEN*/
@@ -1929,6 +1929,8 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_le_br_capable(dev)     (!!((dev)->features[0][6] & LMP_SIMUL_LE_BR))
 /*设备是否有ssp能力*/
 #define lmp_ssp_capable(dev)       ((dev)->features[0][6] & LMP_SIMPLE_PAIR)
+/*Non-automatically-flushable：“非自动刷新”，指该数据包不会被协议栈自动清除或丢弃，
+ * 需满足特定条件（如接收方确认、超时等）才会进行后续处理，用于保障关键数据的可靠传输。*/
 #define lmp_no_flush_capable(dev)  ((dev)->features[0][6] & LMP_NO_FLUSH)
 #define lmp_lsto_capable(dev)      ((dev)->features[0][7] & LMP_LSTO)
 #define lmp_inq_tx_pwr_capable(dev) ((dev)->features[0][7] & LMP_INQ_TX_PWR)
@@ -2082,6 +2084,7 @@ struct hci_cb {
 
 	char *name;
 
+	/*连接确认回调*/
 	void (*connect_cfm)	(struct hci_conn *conn, __u8 status);
 	void (*disconn_cfm)	(struct hci_conn *conn, __u8 status);
 	void (*security_cfm)	(struct hci_conn *conn, __u8 status,
@@ -2090,17 +2093,20 @@ struct hci_cb {
 	void (*role_switch_cfm)	(struct hci_conn *conn, __u8 status, __u8 role);
 };
 
-static inline void hci_connect_cfm(struct hci_conn *conn, __u8 status)
+/*连接确认*/
+static inline void hci_connect_cfm(struct hci_conn *conn/*确认对应的连接*/, __u8 status/*状态*/)
 {
 	struct hci_cb *cb;
 
 	mutex_lock(&hci_cb_list_lock);
+	/*有回调的，触发所有回调*/
 	list_for_each_entry(cb, &hci_cb_list, list) {
 		if (cb->connect_cfm)
 			cb->connect_cfm(conn, status);
 	}
 	mutex_unlock(&hci_cb_list_lock);
 
+	/*连接本身有确认回调的，调用确认回调*/
 	if (conn->connect_cfm_cb)
 		conn->connect_cfm_cb(conn, status);
 }
