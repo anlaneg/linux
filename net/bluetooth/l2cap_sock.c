@@ -109,7 +109,7 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr/*要绑定
 		/* We only allow ATT user space socket */
 		if (la.l2_cid &&
 		    la.l2_cid != cpu_to_le16(L2CAP_CID_ATT))
-			return -EINVAL;/*地址类型为le时，用户态cid只能是L2CAP_CID_ATT*/
+			return -EINVAL;/*地址类型为le时，用户态cid只支持是L2CAP_CID_ATT*/
 	}
 
 	lock_sock(sk);

@@ -243,7 +243,7 @@ int l2cap_add_scid(struct l2cap_chan *chan,  __u16 scid)
 
 	/* Override the defaults (which are for conn-oriented) */
 	chan->omtu = L2CAP_DEFAULT_MTU;
-	chan->chan_type = L2CAP_CHAN_FIXED;
+	chan->chan_type = L2CAP_CHAN_FIXED;/*使用scid情况下,Channel type为fixed*/
 
 	chan->scid = scid;/*设置源channel id*/
 
@@ -614,7 +614,7 @@ void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
 	switch (chan->chan_type) {
 	case L2CAP_CHAN_CONN_ORIENTED:/*面向连接类型，申请src cid*/
 		/* Alloc CID for connection-oriented socket */
-		chan->scid = l2cap_alloc_cid(conn);/*分配一个cid*/
+		chan->scid = l2cap_alloc_cid(conn);/*面向连接,分配一个cid*/
 		if (conn->hcon->type == ACL_LINK)
 			chan->omtu = L2CAP_DEFAULT_MTU;/*设置默认mTU*/
 		break;

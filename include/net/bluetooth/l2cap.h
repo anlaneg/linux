@@ -527,7 +527,7 @@ struct l2cap_chan {
 	__u8		src_type;/*源地址类型,例如:BDADDR_BREDR*/
 	__le16		psm;/*目标psm*/
 	__le16		sport;/*源port*/
-	__u16		dcid;/*目标channel id*/
+	__u16		dcid;/*目标channel id(与psm两者不能同时为非零)*/
 	__u16		scid;/*源channel id*/
 
 	__u16		imtu;/*入方向mtu*/
@@ -536,7 +536,7 @@ struct l2cap_chan {
 	__u8		mode;/*channel模式，有多种模式，例如L2CAP_MODE_BASIC*/
 	/*CHANNEL类型,如采用raw，则L2CAP_CHAN_RAW；
 	 * 如采用SOCK_SEQPACKET,SOCK_STREAM，则L2CAP_CHAN_CONN_ORIENTED*/
-	__u8		chan_type;
+	__u8		chan_type;/*使用scid情况下,Channel type为fixed*/
 	__u8		chan_policy;
 
 	__u8		sec_level;/*设置安全级别,例如：BT_SECURITY_MEDIUM*/
