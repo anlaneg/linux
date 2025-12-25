@@ -1516,6 +1516,7 @@ static int __net_init nl_fib_lookup_init(struct net *net)
 		.input	= nl_fib_input,
 	};
 
+	/*注册Fib lookup socket*/
 	sk = netlink_kernel_create(net, NETLINK_FIB_LOOKUP, &cfg);
 	if (!sk)
 		return -EAFNOSUPPORT;

@@ -78,19 +78,20 @@ struct genl_info;
  */
 struct genl_family {
 	unsigned int		hdrsize;
-	char			name[GENL_NAMSIZ];
+	char			name[GENL_NAMSIZ];/*family名称*/
 	unsigned int		version;
 	unsigned int		maxattr;
-	/*是否支持netns*/
+	/*是否支持netns，如果false,则仅支持init_net*/
 	u8			netnsok:1;
 	/*是否支持并行操作，如果不支持，则会进行genetlink消息加锁*/
 	u8			parallel_ops:1;
-	/*ops数组结构体长度*/
+	/*ops结构体数组长度*/
 	u8			n_ops;
-	/*small数组结构体长度*/
+	/*small结构体数组长度*/
 	u8			n_small_ops;
+	/*split结构体数组长度*/
 	u8			n_split_ops;
-	//组播组数目（mcgrps结sqqcwsg大小）
+	//组播组数目（mcgrps结构体大小）
 	u8			n_mcgrps;
 	u8			resv_start_op;
 	const struct nla_policy *policy;
@@ -102,6 +103,7 @@ struct genl_family {
 	void			(*post_doit)(const struct genl_split_ops *ops,
 					     struct sk_buff *skb,
 					     struct genl_info *info);
+	/*用于绑定组播组*/
 	int			(*bind)(int mcgrp);
 	void			(*unbind)(int mcgrp);
 	const struct genl_ops *	ops;/*先在此ops中查询cmd对应的ops*/
@@ -110,18 +112,18 @@ struct genl_family {
 	const struct genl_multicast_group *mcgrps;/*组播组名称*/
 	struct module		*module;
 
-	size_t			sock_priv_size;
+	size_t			sock_priv_size;/*私有结构大小*/
 	void			(*sock_priv_init)(void *priv);
 	void			(*sock_priv_destroy)(void *priv);
 
 /* private: internal use only */
 	/* protocol family identifier */
-	int			id;
+	int			id;/*为genl分配的family id*/
 	/* starting number of multicast group IDs in this family */
-	//为组播组分配的起始id
+	//为此genl组播组分配的起始id，从这个序号开始，对应mcgrps中的每个元素
 	unsigned int		mcgrp_offset;
 	/* list of per-socket privs */
-	struct xarray		*sock_privs;
+	struct xarray		*sock_privs;/*私有数据（per socket)*/
 };
 
 /**
@@ -183,6 +185,7 @@ static inline void *genl_info_userhdr(const struct genl_info *info)
 
 enum genl_validate_flags {
 	GENL_DONT_VALIDATE_STRICT		= BIT(0),
+	/*用于指明不需要validate dump*/
 	GENL_DONT_VALIDATE_DUMP			= BIT(1),
 	GENL_DONT_VALIDATE_DUMP_STRICT		= BIT(2),
 };
@@ -202,7 +205,7 @@ enum genl_validate_flags {
 struct genl_small_ops {
 	int	(*doit)(struct sk_buff *skb, struct genl_info *info);
 	int	(*dumpit)(struct sk_buff *skb, struct netlink_callback *cb);
-	u8	cmd;
+	u8	cmd;/*命令字*/
 	u8	internal_flags;
 	u8	flags;
 	u8	validate;
@@ -228,9 +231,11 @@ struct genl_ops {
 	int		       (*dumpit)(struct sk_buff *skb,
 					 struct netlink_callback *cb);
 	int		       (*done)(struct netlink_callback *cb);
+	/*如果此值不提供，则使用family->policy*/
 	const struct nla_policy *policy;
+	/*最大属值数目，如果此值不提供，则使用family->maxattr*/
 	unsigned int		maxattr;
-	u8			cmd;//命令字
+	u8			cmd;//提供的命令字
 	u8			internal_flags;
 	u8			flags;
 	u8			validate;
@@ -264,16 +269,19 @@ struct genl_ops {
 struct genl_split_ops {
 	union {
 		struct {
+			/*执行doit前回调此函数*/
 			int (*pre_doit)(const struct genl_split_ops *ops,
 					struct sk_buff *skb,
 					struct genl_info *info);
 			int (*doit)(struct sk_buff *skb,
 				    struct genl_info *info);
+			/*执行doit后回调此函数*/
 			void (*post_doit)(const struct genl_split_ops *ops,
 					  struct sk_buff *skb,
 					  struct genl_info *info);
 		};
 		struct {
+			/*dump情况下使用此三个回调*/
 			int (*start)(struct netlink_callback *cb);
 			int (*dumpit)(struct sk_buff *skb,
 				      struct netlink_callback *cb);
@@ -497,13 +505,13 @@ static inline void genlmsg_cancel(struct sk_buff *skb, void *hdr)
 static inline int
 genlmsg_multicast_netns_filtered(const struct genl_family *family,
 				 struct net *net, struct sk_buff *skb,
-				 u32 portid, unsigned int group, gfp_t flags,
+				 u32 portid, unsigned int group/*组播组在family中的编号*/, gfp_t flags,
 				 netlink_filter_fn filter,
 				 void *filter_data)
 {
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return -EINVAL;
-	group = family->mcgrp_offset + group;
+	group = family->mcgrp_offset + group;/*取组播组实际编号*/
 	return nlmsg_multicast_filtered(net->genl_sock, skb, portid, group,
 					flags, filter, filter_data);
 }
@@ -642,7 +650,7 @@ static inline int genl_set_err(const struct genl_family *family,
 {
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return -EINVAL;
-	/*向此组播知会通知*/
+	/*转换成实际组播组编号，并向此组播知会通知*/
 	group = family->mcgrp_offset + group;
 	return netlink_set_err(net->genl_sock, portid, group, code);
 }
@@ -652,6 +660,7 @@ static inline int genl_has_listeners(const struct genl_family *family,
 {
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return -EINVAL;
+	/*转换成实际组播组编号*/
 	group = family->mcgrp_offset + group;
 	return netlink_has_listeners(net->genl_sock, group);
 }

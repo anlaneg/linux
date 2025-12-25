@@ -55,19 +55,23 @@ static void genl_unlock_all(void)
 	up_write(&cb_lock);
 }
 
+/*genl操作加锁处理*/
 static void genl_op_lock(const struct genl_family *family)
 {
+	/*如果family不支持并行操作，则加锁*/
 	if (!family->parallel_ops)
 		genl_lock();
 }
 
+/*genl操作解锁处理*/
 static void genl_op_unlock(const struct genl_family *family)
 {
+	/*如果family不支持并行操作，则解锁*/
 	if (!family->parallel_ops)
 		genl_unlock();
 }
 
-/*负责分配netlink gernal family id*/
+/*负责分配netlink gernal family id（实现id与name之间的映射）*/
 static DEFINE_IDR(genl_fam_idr);
 
 /*
@@ -92,6 +96,7 @@ static unsigned long mc_group_start = 0x3 | BIT(GENL_ID_CTRL) |
 				      BIT(GENL_ID_VFS_DQUOT) |
 				      BIT(GENL_ID_PMCRAID);
 static unsigned long *mc_groups = &mc_group_start;
+/*记录mc_groups空间占用了多少个unsigned long*/
 static unsigned long mc_groups_longs = 1;
 
 /* We need the last attribute with non-zero ID therefore a 2-entry array */
@@ -158,11 +163,11 @@ struct genl_op_iter {
 };
 
 static void genl_op_from_full(const struct genl_family *family,
-			      unsigned int i, struct genl_ops *op)
+			      unsigned int i, struct genl_ops *op/*出叁，取i号ops*/)
 {
 	*op = family->ops[i];
 
-	/*使用family中提供的maxattr,policy成员*/
+	/*如未设置，则使用family中提供的maxattr,policy成员*/
 	if (!op->maxattr)
 		op->maxattr = family->maxattr;
 	if (!op->policy)
@@ -183,12 +188,13 @@ static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
 			return 0;
 		}
 
+	/*在family->ops中没有查找到*/
 	return -ENOENT;
 }
 
 /*利用family中的i号small_ops，填充op*/
 static void genl_op_from_small(const struct genl_family *family,
-			       unsigned int i, struct genl_ops *op)
+			       unsigned int i, struct genl_ops *op/*出参，取i号small_ops*/)
 {
 	memset(op, 0, sizeof(*op));
 	op->doit	= family->small_ops[i].doit;/*取small_ops指明的doit*/
@@ -198,6 +204,7 @@ static void genl_op_from_small(const struct genl_family *family,
 	op->flags	= family->small_ops[i].flags;
 	op->validate	= family->small_ops[i].validate;
 
+	/*直接取family中的设置*/
 	op->maxattr = family->maxattr;
 	op->policy = family->policy;
 
@@ -216,6 +223,7 @@ static int genl_get_cmd_small(u32 cmd, const struct genl_family *family,
 			return 0;
 		}
 
+	/*在family->small_ops中没有查找到此cmd*/
 	return -ENOENT;
 }
 
@@ -237,6 +245,7 @@ static void genl_op_from_split(struct genl_op_iter *iter)
 	if (i + cnt < family->n_split_ops &&
 	    family->split_ops[i + cnt].flags & GENL_CMD_CAP_DUMP &&
 	    (!cnt || family->split_ops[i + cnt].cmd == iter->doit.cmd)) {
+		/*此ops处理dump,填充iter*/
 		iter->dumpit = family->split_ops[i + cnt];
 		genl_op_fill_in_reject_policy_split(family, &iter->dumpit);
 		cnt++;
@@ -257,23 +266,24 @@ genl_get_cmd_split(u32 cmd, u8 flag, const struct genl_family *family,
 
 	for (i = 0; i < family->n_split_ops; i++)
 		if (family->split_ops[i].cmd == cmd &&
-		    family->split_ops[i].flags & flag) {
+		    family->split_ops[i].flags & flag/*flag也必须匹配*/) {
 			*op = family->split_ops[i];
 			return 0;
 		}
 
+	/*在family->n_split_ops中也没有找到*/
 	return -ENOENT;
 }
 
 static int
-genl_cmd_full_to_split(struct genl_split_ops *op,
+genl_cmd_full_to_split(struct genl_split_ops *op/*出参，填充ops*/,
 		       const struct genl_family *family,
 		       const struct genl_ops *full, u8 flags)
 {
 	if ((flags & GENL_CMD_CAP_DO && !full->doit) ||
 	    (flags & GENL_CMD_CAP_DUMP && !full->dumpit)) {
 		memset(op, 0, sizeof(*op));
-		/*指明了do,但没有提供doit回调，指明了dump，但没有提供dumpit*/
+		/*指明了do,但没有提供doit回调，或者指明了dump，但没有提供dumpit回调*/
 		return -ENOENT;
 	}
 
@@ -294,6 +304,7 @@ genl_cmd_full_to_split(struct genl_split_ops *op,
 		op->policy	= NULL;
 		op->maxattr	= 0;
 	} else {
+		/*需要dump,则填充policy,maxattr*/
 		op->policy	= full->policy;
 		op->maxattr	= full->maxattr;
 	}
@@ -311,8 +322,8 @@ genl_cmd_full_to_split(struct genl_split_ops *op,
 
 /* Must make sure that op is initialized to 0 on failure */
 static int
-genl_get_cmd(u32 cmd, u8 flags, const struct genl_family *family,
-	     struct genl_split_ops *op)
+genl_get_cmd(u32 cmd/*要执行的命令*/, u8 flags, const struct genl_family *family,
+	     struct genl_split_ops *op/*出参，cmd对应的ops*/)
 {
 	struct genl_ops full;
 	int err;
@@ -329,6 +340,7 @@ genl_get_cmd(u32 cmd, u8 flags, const struct genl_family *family,
 	/*最后在family->n_split_ops中查询*/
 	err = genl_get_cmd_split(cmd, flags, family, op);
 	if (err)
+		/*查找失败，清空op内容*/
 		memset(op, 0, sizeof(*op));
 	return err;
 }
@@ -357,11 +369,13 @@ genl_op_iter_init(const struct genl_family *family, struct genl_op_iter *iter)
 
 	iter->flags = 0;
 
+	/*返回ops总数*/
 	return iter->family->n_ops +
 		iter->family->n_small_ops +
 		iter->family->n_split_ops;
 }
 
+/*由于有三种格式，此函数用于将其中两种格式转换为split_ops并进行枚举*/
 static bool genl_op_iter_next(struct genl_op_iter *iter)
 {
 	const struct genl_family *family = iter->family;
@@ -369,24 +383,27 @@ static bool genl_op_iter_next(struct genl_op_iter *iter)
 	struct genl_ops op;
 
 	if (iter->entry_idx < family->n_ops) {
-	    	/*i索引小于n_ops,此时读取family->ops[i]并填充op*/
+	    /*i索引小于n_ops,此时读取family->ops[i]并填充op*/
 		genl_op_from_full(family, iter->entry_idx, &op);
 	} else if (iter->entry_idx < family->n_ops + family->n_small_ops) {
-	    	/*自small_ops提取信息，填充op*/
+	    /*此时自small_ops提取信息，填充op*/
 		genl_op_from_small(family, iter->entry_idx - family->n_ops,
 				   &op);
 	} else if (iter->entry_idx <
 		   family->n_ops + family->n_small_ops + family->n_split_ops) {
+		/*此时自split_ops中提供信息，并填充op*/
 		legacy_op = false;
 		/* updates entry_idx */
 		genl_op_from_split(iter);
 	} else {
+		/*已遍历完成*/
 		return false;
 	}
 
 	iter->cmd_idx++;
 
 	if (legacy_op) {
+		/*对于legacy_op,op直接填充iter*/
 		iter->entry_idx++;
 
 		genl_cmd_full_to_split(&iter->doit, family,
@@ -395,6 +412,7 @@ static bool genl_op_iter_next(struct genl_op_iter *iter)
 				       &op, GENL_CMD_CAP_DUMP);
 	}
 
+	/*更新cmd与flags*/
 	iter->cmd = iter->doit.cmd | iter->dumpit.cmd;
 	iter->flags = iter->doit.flags | iter->dumpit.flags;
 
@@ -412,7 +430,7 @@ static unsigned int genl_op_iter_idx(struct genl_op_iter *iter)
 	return iter->cmd_idx;
 }
 
-/*申请n_groups个可连续分配groups*/
+/*在mc_groups中申请n_groups个可连续分配groups*/
 static int genl_allocate_reserve_groups(int n_groups, int *first_id/*返回首个可分配groups*/)
 {
 	unsigned long *new_groups;
@@ -491,7 +509,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 	bool groups_allocated = false;
 
 	if (!n_groups)
-	    /*组播组数量为0，直接退出*/
+	    /*组播组数量为0，不处理，直接退出*/
 		return 0;
 
 	/*组播组名称校验处理*/
@@ -499,9 +517,9 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		const struct genl_multicast_group *grp = &family->mcgrps[i];
 
 		if (WARN_ON(grp->name[0] == '\0'))
-		    /*用称为空，报错*/
+		    /*名称为空，报错*/
 			return -EINVAL;
-		/*group名称中必须包含'\0'*/
+		/*group名称必须以'\0'结束*/
 		if (WARN_ON(!string_is_terminated(grp->name, GENL_NAMSIZ)))
 			return -EINVAL;
 	}
@@ -527,7 +545,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 			return err;
 	}
 
-	/*记录此family的起始id*/
+	/*记录此family的组播组的起始id*/
 	family->mcgrp_offset = first_id;
 
 	/* if still initializing, can't and don't need to realloc bitmaps */
@@ -563,6 +581,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 	}
 
 	if (groups_allocated && err) {
+		/*出错，回退*/
 		for (i = 0; i < family->n_mcgrps; i++)
 			clear_bit(family->mcgrp_offset + i, mc_groups);
 	}
@@ -578,6 +597,7 @@ static void genl_unregister_mc_groups(const struct genl_family *family)
 	netlink_table_grab();
 	rcu_read_lock();
 	for_each_net_rcu(net) {
+		/*遍历删除此family的所有组播组*/
 		for (i = 0; i < family->n_mcgrps; i++)
 			__netlink_clear_multicast_users(
 				net->genl_sock, family->mcgrp_offset + i);
@@ -591,7 +611,7 @@ static void genl_unregister_mc_groups(const struct genl_family *family)
 		if (grp_id != 1)
 			clear_bit(grp_id, mc_groups);
 		genl_ctrl_event(CTRL_CMD_DELMCAST_GRP, family,
-				&family->mcgrps[i], grp_id);
+				&family->mcgrps[i], grp_id);/*删除组播组事件*/
 	}
 }
 
@@ -599,7 +619,7 @@ static bool genl_split_op_check(const struct genl_split_ops *op)
 {
 	if (WARN_ON(hweight8(op->flags & (GENL_CMD_CAP_DO |
 					  GENL_CMD_CAP_DUMP)) != 1))
-		return true;
+		return true;/*同时支持do与dump*/
 	return false;
 }
 
@@ -610,14 +630,15 @@ static int genl_validate_ops(const struct genl_family *family)
 	unsigned int s;
 
 	if (WARN_ON(family->n_ops && !family->ops) ||
-	    //参数有误，有ops计数，但无ops指针
+	    //参数有误，有ops数组大小，但无ops指针
 	    WARN_ON(family->n_small_ops && !family->small_ops) ||
 	    WARN_ON(family->n_split_ops && !family->split_ops))
 		return -EINVAL;
 
+	/*遍历此family的所有cmd*/
 	for (genl_op_iter_init(family, &i); genl_op_iter_next(&i); ) {
 		if (!(i.flags & (GENL_CMD_CAP_DO | GENL_CMD_CAP_DUMP)))
-			return -EINVAL;
+			return -EINVAL;/*标记有误，当前只支持以上两种标记*/
 
 		if (WARN_ON(i.cmd >= family->resv_start_op &&
 			    (i.doit.validate || i.dumpit.validate)))
@@ -626,13 +647,13 @@ static int genl_validate_ops(const struct genl_family *family)
 		genl_op_iter_copy(&j, &i);
 		while (genl_op_iter_next(&j)) {
 			if (i.cmd == j.cmd)
-				return -EINVAL;
+				return -EINVAL;/*cmd不得重复*/
 		}
 	}
 
 	if (family->n_split_ops) {
 		if (genl_split_op_check(&family->split_ops[0]))
-			return -EINVAL;
+			return -EINVAL;/*首个ops不能同时支持do&dump*/
 	}
 
 	for (s = 1; s < family->n_split_ops; s++) {
@@ -642,14 +663,14 @@ static int genl_validate_ops(const struct genl_family *family)
 		b = &family->split_ops[s];
 
 		if (genl_split_op_check(b))
-			return -EINVAL;
+			return -EINVAL;/*不能同时支持do&dump*/
 
 		/* Check sort order */
 		if (a->cmd < b->cmd) {
 			continue;
 		} else if (a->cmd > b->cmd) {
 			WARN_ON(1);
-			return -EINVAL;
+			return -EINVAL;/*cmd必须按顺序在table中排列*/
 		}
 
 		if (a->internal_flags != b->internal_flags ||
@@ -670,6 +691,7 @@ static int genl_validate_ops(const struct genl_family *family)
 	return 0;
 }
 
+/*申请genl family的私有数据*/
 static void *genl_sk_priv_alloc(struct genl_family *family)
 {
 	void *priv;
@@ -678,6 +700,7 @@ static void *genl_sk_priv_alloc(struct genl_family *family)
 	if (!priv)
 		return ERR_PTR(-ENOMEM);
 
+	/*有初始化回调，则触发*/
 	if (family->sock_priv_init)
 		family->sock_priv_init(priv);
 
@@ -691,10 +714,11 @@ static void genl_sk_priv_free(const struct genl_family *family, void *priv)
 	kfree(priv);
 }
 
+/*申请私有数据所需要的per socket指针*/
 static int genl_sk_privs_alloc(struct genl_family *family)
 {
 	if (!family->sock_priv_size)
-		return 0;
+		return 0;/*无私有数据，直接返回*/
 
 	family->sock_privs = kzalloc(sizeof(*family->sock_privs), GFP_KERNEL);
 	if (!family->sock_privs)
@@ -814,9 +838,9 @@ void *genl_sk_priv_get(struct genl_family *family, struct sock *sk)
  *
  * Return 0 on success or a negative error code.
  */
-int genl_register_family(struct genl_family *family)
+int genl_register_family(struct genl_family *family/*要注册的genl family*/)
 {
-    //注册一个netlink generic family
+	//注册一个netlink generic family
 	int err, i;
 	int start = GENL_START_ALLOC, end = GENL_MAX_ID;
 
@@ -833,6 +857,7 @@ int genl_register_family(struct genl_family *family)
 		goto errout_locked;
 	}
 
+	/*申请私有数据*/
 	err = genl_sk_privs_alloc(family);
 	if (err)
 		goto errout_locked;
@@ -846,7 +871,7 @@ int genl_register_family(struct genl_family *family)
 	 */
 	if (family == &genl_ctrl) {
 		/* and this needs to be special for initial family lookups */
-		start = end = GENL_ID_CTRL;
+		start = end = GENL_ID_CTRL;/*genl ctrl的family是指定的*/
 	} else if (strcmp(family->name, "pmcraid") == 0) {
 		start = end = GENL_ID_PMCRAID;
 	} else if (strcmp(family->name, "VFS_DQUOT") == 0) {
@@ -869,10 +894,10 @@ int genl_register_family(struct genl_family *family)
 	genl_unlock_all();
 
 	/* send all events */
-	genl_ctrl_event(CTRL_CMD_NEWFAMILY, family, NULL, 0);
+	genl_ctrl_event(CTRL_CMD_NEWFAMILY, family, NULL, 0);/*产生newfamily消息*/
 	for (i = 0; i < family->n_mcgrps; i++)
 		genl_ctrl_event(CTRL_CMD_NEWMCAST_GRP, family,
-				&family->mcgrps[i], family->mcgrp_offset + i);
+				&family->mcgrps[i], family->mcgrp_offset + i);/*产生新组播组通知消息*/
 
 	return 0;
 
@@ -915,7 +940,7 @@ int genl_unregister_family(const struct genl_family *family)
 
 	genl_unlock();
 
-	genl_ctrl_event(CTRL_CMD_DELFAMILY, family, NULL, 0);
+	genl_ctrl_event(CTRL_CMD_DELFAMILY, family, NULL, 0);/*产生family删除事件*/
 
 	return 0;
 }
@@ -1044,7 +1069,7 @@ static int genl_start(struct netlink_callback *cb)
 
 	cb->data = info;
 	if (ops->start) {
-		/*不支持并行ops,加锁*/
+		/*不支持并行ops,加锁，执行ops->start*/
 		genl_op_lock(ctx->family);
 		rc = ops->start(cb);
 		genl_op_unlock(ctx->family);
@@ -1067,6 +1092,7 @@ static int genl_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 
 	info->extack = cb->extack;
 
+	/*加锁，执行ops->dumpit*/
 	genl_op_lock(info->family);
 	rc = ops->dumpit(skb, cb);
 	genl_op_unlock(info->family);
@@ -1083,6 +1109,7 @@ static int genl_done(struct netlink_callback *cb)
 	info->extack = cb->extack;
 
 	if (ops->done) {
+		/*加锁执行done*/
 		genl_op_lock(info->family);
 		rc = ops->done(cb);
 		genl_op_unlock(info->family);
@@ -1092,6 +1119,7 @@ static int genl_done(struct netlink_callback *cb)
 	return rc;
 }
 
+/*genl dump处理*/
 static int genl_family_rcv_msg_dumpit(const struct genl_family *family,
 				      struct sk_buff *skb,
 				      struct nlmsghdr *nlh,
@@ -1116,7 +1144,7 @@ static int genl_family_rcv_msg_dumpit(const struct genl_family *family,
 	ctx.ops = ops;
 	ctx.hdrlen = hdrlen;
 
-	//不支持并行操作，针对genl进行加锁
+	//加锁,执行dump
 	genl_op_unlock(family);
 	err = __netlink_dump_start(net->genl_sock, skb, nlh, &c);
 	genl_op_lock(family);
@@ -1124,6 +1152,7 @@ static int genl_family_rcv_msg_dumpit(const struct genl_family *family,
 	return err;
 }
 
+/*genl doit处理*/
 static int genl_family_rcv_msg_doit(const struct genl_family *family,
 				    struct sk_buff *skb,
 				    struct nlmsghdr *nlh,
@@ -1142,7 +1171,7 @@ static int genl_family_rcv_msg_doit(const struct genl_family *family,
 		return PTR_ERR(attrbuf);
 
 	info.snd_seq = nlh->nlmsg_seq;
-	info.snd_portid = NETLINK_CB(skb).portid;
+	info.snd_portid = NETLINK_CB(skb).portid;/*报文对应的portid*/
 	info.family = family;
 	info.nlhdr = nlh;
 	info.genlhdr = nlmsg_data(nlh);
@@ -1229,7 +1258,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 
 	//根据头部的cmd查找family中对应的ops
 	flags = (nlh->nlmsg_flags & NLM_F_DUMP) == NLM_F_DUMP ?
-		GENL_CMD_CAP_DUMP : GENL_CMD_CAP_DO;
+		GENL_CMD_CAP_DUMP/*需要执行dump*/ : GENL_CMD_CAP_DO;
 	if (genl_get_cmd(hdr->cmd, flags, family, &op/*出参，cmd对应的ops*/))
 		return -EOPNOTSUPP;
 
@@ -1259,12 +1288,13 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	const struct genl_family *family;
 	int err;
 
-	//通过id找到family
+	//genl 通过nlmsg_type来指出下一层的family,通过id找到family
 	family = genl_family_find_byid(nlh->nlmsg_type);
 	if (family == NULL)
 		return -ENOENT;
 
 	genl_op_lock(family);
+	/*family收到报文，调用各family ops自行处理*/
 	err = genl_family_rcv_msg(family, skb, nlh, extack);
 	genl_op_unlock(family);
 
@@ -1275,7 +1305,8 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 static void genl_rcv(struct sk_buff *skb)
 {
 	down_read(&cb_lock);
-	netlink_rcv_skb(skb, &genl_rcv_msg);
+	/*支持多个消息组合发送*/
+	netlink_rcv_skb(skb, &genl_rcv_msg/*用于接收处理单个消息*/);
 	up_read(&cb_lock);
 }
 
@@ -1285,6 +1316,7 @@ static void genl_rcv(struct sk_buff *skb)
 
 static struct genl_family genl_ctrl;
 
+/*填写此family中基本，cmd,group等信息*/
 static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 			  u32 flags, struct sk_buff *skb, u8 cmd)
 {
@@ -1295,6 +1327,7 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 	if (hdr == NULL)
 		return -EMSGSIZE;
 
+	/*存放此family基本信息*/
 	if (nla_put_string(skb, CTRL_ATTR_FAMILY_NAME, family->name) ||
 	    nla_put_u16(skb, CTRL_ATTR_FAMILY_ID, family->id) ||
 	    nla_put_u32(skb, CTRL_ATTR_VERSION, family->version) ||
@@ -1305,6 +1338,7 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 	if (genl_op_iter_init(family, &i)) {
 		struct nlattr *nla_ops;
 
+		/*存CTRL_ATTR_OPS*/
 		nla_ops = nla_nest_start_noflag(skb, CTRL_ATTR_OPS);
 		if (nla_ops == NULL)
 			goto nla_put_failure;
@@ -1321,6 +1355,7 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 			if (nest == NULL)
 				goto nla_put_failure;
 
+			/*添加cmd,flags*/
 			if (nla_put_u32(skb, CTRL_ATTR_OP_ID, i.cmd) ||
 			    nla_put_u32(skb, CTRL_ATTR_OP_FLAGS, op_flags))
 				goto nla_put_failure;
@@ -1349,6 +1384,7 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 			if (nest == NULL)
 				goto nla_put_failure;
 
+			/*存放组播组id及组播组名称*/
 			if (nla_put_u32(skb, CTRL_ATTR_MCAST_GRP_ID,
 					family->mcgrp_offset + i) ||
 			    nla_put_string(skb, CTRL_ATTR_MCAST_GRP_NAME,
@@ -1371,7 +1407,7 @@ nla_put_failure:
 static int ctrl_fill_mcgrp_info(const struct genl_family *family,
 				const struct genl_multicast_group *grp,
 				int grp_id, u32 portid, u32 seq, u32 flags,
-				struct sk_buff *skb, u8 cmd)
+				struct sk_buff *skb, u8 cmd/*消息类型*/)
 {
 	void *hdr;
 	struct nlattr *nla_grps;
@@ -1381,6 +1417,7 @@ static int ctrl_fill_mcgrp_info(const struct genl_family *family,
 	if (hdr == NULL)
 		return -1;
 
+	/*存放family name及family id*/
 	if (nla_put_string(skb, CTRL_ATTR_FAMILY_NAME, family->name) ||
 	    nla_put_u16(skb, CTRL_ATTR_FAMILY_ID, family->id))
 		goto nla_put_failure;
@@ -1393,6 +1430,7 @@ static int ctrl_fill_mcgrp_info(const struct genl_family *family,
 	if (nest == NULL)
 		goto nla_put_failure;
 
+	/*存放组播组id及组播组名称*/
 	if (nla_put_u32(skb, CTRL_ATTR_MCAST_GRP_ID, grp_id) ||
 	    nla_put_string(skb, CTRL_ATTR_MCAST_GRP_NAME,
 			   grp->name))
@@ -1440,6 +1478,7 @@ static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
 	return err;
 }
 
+/*构造family对应的message*/
 static struct sk_buff *ctrl_build_family_msg(const struct genl_family *family,
 					     u32 portid, int seq, u8 cmd)
 {
@@ -1527,20 +1566,22 @@ static int ctrl_getfamily(struct sk_buff *skb, struct genl_info *info)
 
 	if (!res->netnsok && !net_eq(genl_info_net(info), &init_net)) {
 		/* family doesn't exist here */
-		return -ENOENT;
+		return -ENOENT;/*不支持netsk,当前非init_net，跳过*/
 	}
 
+	/*构造message*/
 	msg = ctrl_build_family_msg(res, info->snd_portid, info->snd_seq,
 				    CTRL_CMD_NEWFAMILY);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 
+	/*响应此message*/
 	return genlmsg_reply(msg, info);
 }
 
 static int genl_ctrl_event(int event, const struct genl_family *family,
 			   const struct genl_multicast_group *grp,
-			   int grp_id)
+			   int grp_id/*组播组id*/)
 {
 	struct sk_buff *msg;
 
@@ -1552,12 +1593,14 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 	switch (event) {
 	case CTRL_CMD_NEWFAMILY:
 	case CTRL_CMD_DELFAMILY:
-		WARN_ON(grp);
+		WARN_ON(grp);/*此时grp为空*/
+		/*增删family*/
 		msg = ctrl_build_family_msg(family, 0, 0, event);
 		break;
 	case CTRL_CMD_NEWMCAST_GRP:
 	case CTRL_CMD_DELMCAST_GRP:
 		BUG_ON(!grp);
+		/*增删组播组*/
 		msg = ctrl_build_mcgrp_msg(family, grp, grp_id, 0, 0, event);
 		break;
 	default:
@@ -1568,8 +1611,9 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 		return PTR_ERR(msg);
 
 	if (!family->netnsok)
+		/*此family不支持netns,故只组播通知init_net*/
 		genlmsg_multicast_netns(&genl_ctrl, &init_net, msg, 0,
-					0, GFP_KERNEL);
+					0/*此family0号组播group*/, GFP_KERNEL);
 	else
 		genlmsg_multicast_allns(&genl_ctrl, msg, 0, 0);
 
@@ -1832,7 +1876,7 @@ static int ctrl_dumppolicy_done(struct netlink_callback *cb)
 
 static const struct genl_split_ops genl_ctrl_ops[] = {
 	{
-	    /*给定名称，获取名称对应的family_id*/
+	    /*给定名称，获取名称对应的family_id等信息*/
 		.cmd		= CTRL_CMD_GETFAMILY,
 		.validate	= GENL_DONT_VALIDATE_STRICT,
 		.policy		= ctrl_policy_family,
@@ -1877,6 +1921,7 @@ static struct genl_family genl_ctrl __ro_after_init = {
 	.netnsok = true,
 };
 
+/*genl绑定组播组*/
 static int genl_bind(struct net *net, int group)
 {
 	const struct genl_family *family;
@@ -1890,12 +1935,13 @@ static int genl_bind(struct net *net, int group)
 		int i;
 
 		if (family->n_mcgrps == 0)
-			continue;
+			continue;/*此family无组播组，跳过*/
 
 		i = group - family->mcgrp_offset;
 		if (i < 0 || i >= family->n_mcgrps)
-			continue;
+			continue;/*提供的组播组id有误，跳过*/
 
+		/*取得此组播组*/
 		grp = &family->mcgrps[i];
 		if ((grp->flags & GENL_MCAST_CAP_NET_ADMIN) &&
 		    !ns_capable(net->user_ns, CAP_NET_ADMIN))
@@ -1904,6 +1950,7 @@ static int genl_bind(struct net *net, int group)
 		    !ns_capable(net->user_ns, CAP_SYS_ADMIN))
 			ret = -EPERM;
 
+		/*通过回调绑定组播组*/
 		if (family->bind)
 			family->bind(i);
 
@@ -1944,11 +1991,11 @@ static void genl_unbind(struct net *net, int group)
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
-		//Generic 类netlink消息按收函数
+		//Generic类netlink消息按收函数
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
-		.bind		= genl_bind,
-		.unbind		= genl_unbind,
+		.bind		= genl_bind,/*组播组绑定*/
+		.unbind		= genl_unbind,/*组播组解绑定*/
 		.release	= genl_release,
 	};
 
@@ -1957,6 +2004,7 @@ static int __net_init genl_pernet_init(struct net *net)
 	net->genl_sock = netlink_kernel_create(net, NETLINK_GENERIC/*协议为generic*/, &cfg);
 
 	if (!net->genl_sock && net_eq(net, &init_net))
+		/*init_net已初始化*/
 		panic("GENL: Cannot initialize generic netlink\n");
 
 	if (!net->genl_sock)
@@ -1980,6 +2028,7 @@ static int __init genl_init(void)
 {
 	int err;
 
+	/*注册genl ctrl*/
 	err = genl_register_family(&genl_ctrl);
 	if (err < 0)
 		goto problem;
@@ -2004,6 +2053,7 @@ static int genlmsg_mcast(struct sk_buff *skb, u32 portid, unsigned long group)
 	int err;
 
 	rcu_read_lock();
+	/*遍历所有netns*/
 	for_each_net_rcu(net) {
 		if (prev) {
 			tmp = skb_clone(skb, GFP_ATOMIC);
@@ -2059,7 +2109,7 @@ void genl_notify(const struct genl_family *family, struct sk_buff *skb,
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return;
 
-	group = family->mcgrp_offset + group;
+	group = family->mcgrp_offset + group;/*取此组播编号*/
 	nlmsg_notify(sk, skb, info->snd_portid, group,
 		     nlmsg_report(info->nlhdr), flags);
 }

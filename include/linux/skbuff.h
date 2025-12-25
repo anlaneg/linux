@@ -2700,6 +2700,7 @@ void skb_coalesce_rx_frag(struct sk_buff *skb, int i, int size,
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 static inline unsigned char *skb_tail_pointer(const struct sk_buff *skb)
 {
+	/*取结尾指针*/
 	return skb->head + skb->tail;
 }
 

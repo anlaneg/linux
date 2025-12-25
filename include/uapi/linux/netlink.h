@@ -40,8 +40,10 @@
 struct sockaddr_nl {
 	__kernel_sa_family_t	nl_family;	/* AF_NETLINK	*/
 	unsigned short	nl_pad;		/* zero		*/
+	/*要绑定的port,port id(进程id)*/
 	__u32		nl_pid;		/* port ID	*/
-       	__u32		nl_groups;	/* multicast groups mask */
+	/*要绑定的一组group id（mask形式）*/
+	__u32		nl_groups;	/* multicast groups mask */
 };
 
 /**
@@ -178,6 +180,7 @@ enum nlmsgerr_attrs {
 #define NETLINK_RX_RING			6
 #define NETLINK_TX_RING			7
 #endif
+/*有此标记，则容许跨所有netns*/
 #define NETLINK_LISTEN_ALL_NSID		8
 #define NETLINK_LIST_MEMBERSHIPS	9
 #define NETLINK_CAP_ACK			10

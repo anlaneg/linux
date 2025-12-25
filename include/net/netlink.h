@@ -1277,6 +1277,7 @@ static inline int nla_total_size(int payload)
  */
 static inline int nla_padlen(int payload)
 {
+	/*取此payload长度对应的pad长度*/
 	return nla_total_size(payload) - nla_attr_size(payload);
 }
 
@@ -1295,6 +1296,7 @@ static inline int nla_type(const struct nlattr *nla)
  */
 static inline void *nla_data(const struct nlattr *nla)
 {
+	/*数据自header后紧跟着放*/
 	return (char *) nla + NLA_HDRLEN;
 }
 

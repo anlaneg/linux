@@ -45,6 +45,7 @@
 #define _BIT128(x)	((unsigned __int128)(1) << (x))
 #endif
 
+/*对齐值a必须是2的N次方的值*/
 #define __ALIGN_KERNEL(x, a)		__ALIGN_KERNEL_MASK(x, (__typeof__(x))(a) - 1)
 /*x按照mask进行对齐*/
 #define __ALIGN_KERNEL_MASK(x, mask)	(((x) + (mask)) & ~(mask))

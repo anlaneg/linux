@@ -702,7 +702,7 @@ struct amd_iommu {
 	struct list_head list;
 
 	/* Index within the IOMMU array */
-	int index;
+	int index;/*设备编号*/
 
 	/* locks the accesses to the hardware */
 	raw_spinlock_t lock;/*访问硬件时需加此锁*/

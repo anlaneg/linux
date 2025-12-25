@@ -103,13 +103,14 @@ struct ivhd_header {
 	u8 flags;
 	u16 length;
 	u16 devid;
-	u16 cap_ptr;
-	u64 mmio_phys;
+	u16 cap_ptr;/*Capability Offset*/
+	u64 mmio_phys;/*IOMMU base address*/
 	u16 pci_seg;/*16位的pci segment(即格式'0000:bb:dd.ff'中的'0000')*/
-	u16 info;
-	u32 efr_attr;
+	u16 info;/*IOMMU info*/
+	u32 efr_attr;/*IOMMU feature information或者IOMMU Feature Reporting*/
 
 	/* Following only valid on IVHD type 11h and 40h */
+	/*到此处偏移量为24字节：IOMMU EFR Image*/
 	u64 efr_reg; /* Exact copy of MMIO_EXT_FEATURES */
 	u64 efr_reg2;
 } __attribute__((packed));
@@ -161,7 +162,9 @@ int amd_iommu_guest_ir = AMD_IOMMU_GUEST_IR_VAPIC;
 static int amd_iommu_xt_mode = IRQ_REMAP_XAPIC_MODE;
 
 static bool amd_iommu_detected;
+/*禁止amd iommu*/
 static bool amd_iommu_disabled __initdata;
+/*是否强制开启amd iommu*/
 static bool amd_iommu_force_enable __initdata;
 static bool amd_iommu_irtcachedis;
 static int amd_iommu_target_ivhd_type;
@@ -184,13 +187,14 @@ LIST_HEAD(amd_iommu_list);		/* list of all AMD IOMMUs in the system */
 LIST_HEAD(amd_ivhd_dev_flags_list);	/* list of all IVHD device entry settings */
 
 /* Number of IOMMUs present in the system */
-static int amd_iommus_present;
+static int amd_iommus_present;/*负责分配amd iommu编号；记录系统iommu设备总数*/
 
 /* IOMMUs have a non-present cache? */
 bool amd_iommu_np_cache __read_mostly;
 bool amd_iommu_iotlb_sup __read_mostly = true;
 
 static bool amd_iommu_pc_present __read_mostly;
+/*是否支持dma remap*/
 bool amdr_ivrs_remap_support __read_mostly;
 
 bool amd_iommu_force_isolation __read_mostly;
@@ -198,7 +202,7 @@ bool amd_iommu_force_isolation __read_mostly;
 unsigned long amd_iommu_pgsize_bitmap __ro_after_init = AMD_IOMMU_PGSIZES;
 
 enum iommu_init_state {
-	IOMMU_START_STATE,
+	IOMMU_START_STATE,/*起始状态*/
 	IOMMU_IVRS_DETECTED,
 	IOMMU_ACPI_FINISHED,
 	IOMMU_ENABLED,
@@ -207,7 +211,7 @@ enum iommu_init_state {
 	IOMMU_INITIALIZED,
 	IOMMU_NOT_FOUND,
 	IOMMU_INIT_ERROR,
-	IOMMU_CMDLINE_DISABLED,
+	IOMMU_CMDLINE_DISABLED,/*命令行禁用iommu*/
 };
 
 /* Early ioapic and hpet maps from kernel command line */
@@ -309,10 +313,12 @@ static __init void get_global_efr(void)
 static void __init early_iommu_features_init(struct amd_iommu *iommu,
 					     struct ivhd_header *h)
 {
+	/*EFRSup指是否支持扩展功能报告*/
 	if (amd_iommu_ivinfo & IOMMU_IVINFO_EFRSUP) {
 		iommu->features = h->efr_reg;
 		iommu->features2 = h->efr_reg2;
 	}
+	/*指出是否支持dma remap*/
 	if (amd_iommu_ivinfo & IOMMU_IVINFO_DMA_REMAP)
 		amdr_ivrs_remap_support = true;
 }
@@ -583,13 +589,16 @@ static int __init find_last_devid_from_ivhd(struct ivhd_header *h)
 	return last_devid;
 }
 
+/*检查acpi table checksum是否正确*/
 static int __init check_ivrs_checksum(struct acpi_table_header *table)
 {
 	int i;
 	u8 checksum = 0, *p = (u8 *)table;
 
+	/*对table内容计算checksum*/
 	for (i = 0; i < table->length; ++i)
 		checksum += p[i];
+	/*checksum计算不为0*/
 	if (checksum != 0) {
 		/* ACPI table corrupt */
 		pr_err(FW_BUG "IVRS invalid checksum\n");
@@ -1754,7 +1763,7 @@ static void amd_iommu_ats_write_check_workaround(struct amd_iommu *iommu)
  * together and also allocates the command buffer and programs the
  * hardware. It does NOT enable the IOMMU. This is done afterwards.
  */
-static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h,
+static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h/*当前对应的ivhd头部*/,
 				 struct acpi_table_header *ivrs_base)
 {
 	struct amd_iommu_pci_seg *pci_seg;
@@ -1772,6 +1781,7 @@ static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h,
 	iommu->index = amd_iommus_present++;/*iommu设备数目增加（给当前iommu设备赋值）*/
 
 	if (unlikely(iommu->index >= MAX_IOMMUS)) {
+		/*数量过多*/
 		WARN(1, "System has more IOMMUs than supported by this driver\n");
 		return -ENOSYS;
 	}
@@ -1785,10 +1795,14 @@ static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h,
 
 	switch (h->type) {
 	case 0x10:
+		/*type=0x10的IVHD格式*/
 		/* Check if IVHD EFR contains proper max banks/counters */
 		if ((h->efr_attr != 0) &&
-		    ((h->efr_attr & (0xF << 13)) != 0) &&
-		    ((h->efr_attr & (0x3F << 17)) != 0))
+		    ((h->efr_attr & (0xF << 13))/*取PNCounters*/ != 0) &&
+		    ((h->efr_attr & (0x3F << 17))/*取PNBanks*/ != 0))
+			/*Number of performance counter banks
+			 * 与Number of performance counters per counter bank
+			 * 这两个计数均不为零*/
 			iommu->mmio_phys_end = MMIO_REG_END_OFFSET;
 		else
 			iommu->mmio_phys_end = MMIO_CNTR_CONF_OFFSET;
@@ -1883,6 +1897,11 @@ static int __init init_iommu_one_late(struct amd_iommu *iommu)
 static u8 get_highest_supported_ivhd_type(struct acpi_table_header *ivrs)
 {
 	u8 *base = (u8 *)ivrs;
+	/*IVRS 表中从第 48 字节（byte 48，偏移 0x30）起始的成员是
+	 * IVDB（I/O Virtualization Definition Block，I/O 虚拟化定义块），
+	 * 用于存放 IOMMU 硬件与内存相关的核心配置块，有两种分别是：
+	 * IVHD（I/O Virtualization Hardware Definition，IOMMU 硬件定义块）
+	 * IVMD（I/O Virtualization Memory Definition，I/O 虚拟化内存定义块，可选）。*/
 	struct ivhd_header *ivhd = (struct ivhd_header *)
 					(base + IVRS_HEADER_LENGTH);
 	u8 last_type = ivhd->type;
@@ -1893,11 +1912,12 @@ static u8 get_highest_supported_ivhd_type(struct acpi_table_header *ivrs)
 		u8 *p = (u8 *) ivhd;
 
 		if (ivhd->devid == devid)
-			last_type = ivhd->type;
+			last_type = ivhd->type;/*记录最后一个类型*/
+		/*跳到下一个结构体*/
 		ivhd = (struct ivhd_header *)(p + ivhd->length);
 	}
 
-	return last_type;
+	return last_type;/*取最后一个IVHD的type*/
 }
 
 /*
@@ -1912,13 +1932,14 @@ static int __init init_iommu_all(struct acpi_table_header *table)
 	int ret;
 
 	end += table->length;/*指向结束位置*/
+	/*跳过前48字节，指向I/O Virtualization Definition Blocks (IVDBs)*/
 	p += IVRS_HEADER_LENGTH;
 
 	/* Phase 1: Process all IVHD blocks */
 	while (p < end) {
-		/*自p到end进行遍历，先有一个ivhd_header*/
+		/*自p到end有1或多个IVDB,这里进行遍历*/
 		h = (struct ivhd_header *)p;
-		if (*p == amd_iommu_target_ivhd_type) {
+		if (*p == amd_iommu_target_ivhd_type/*匹配到最后一个type*/) {
 			/*显示设备pci地址*/
 			DUMP_printk("device: %04x:%02x:%02x.%01x cap: %04x "
 				    "flags: %01x info %04x\n",
@@ -1938,7 +1959,7 @@ static int __init init_iommu_all(struct acpi_table_header *table)
 			if (ret)
 				return ret;
 		}
-		p += h->length;
+		p += h->length;/*跳过此IVDB结构体大小*/
 
 	}
 	WARN_ON(p != end);
@@ -3043,6 +3064,8 @@ static void __init free_dma_resources(void)
 
 static void __init ivinfo_init(void *ivrs)
 {
+	/*36 号字节（偏移 0x24）起始的成员是 IVINFO（I/O Virtualization Information）
+	 * 32 位字段，用于描述 IOMMU 的核心虚拟化能力*/
 	amd_iommu_ivinfo = *((u32 *)(ivrs + IOMMU_IVINFO_OFFSET));
 }
 
@@ -3103,6 +3126,7 @@ static int __init early_amd_iommu_init(void)
 	 */
 	ret = check_ivrs_checksum(ivrs_base);
 	if (ret)
+		/*检查table checksum失败*/
 		goto out;
 
 	ivinfo_init(ivrs_base);
@@ -3213,6 +3237,10 @@ static bool __init detect_ivrs(void)
 	acpi_status status;
 	int i;
 
+	/*IVRS 是 ACPI 中 AMD 平台的I/O Virtualization Reporting Structure（I/O 虚拟化报告结构）
+	 * 表的 4 字符签名，用于向操作系统传递 IOMMU（AMD-Vi）的配置、能力及设备虚拟化映射信息，
+	 * 是内核 IOMMU 子系统初始化与设备 DMA 隔离的核心固件数据来源。
+	 * */
 	status = acpi_get_table("IVRS", 0, &ivrs_base);
 	if (status == AE_NOT_FOUND)
 		return false;
@@ -3225,7 +3253,7 @@ static bool __init detect_ivrs(void)
 	acpi_put_table(ivrs_base);
 
 	if (amd_iommu_force_enable)
-		goto out;
+		goto out;/*如强制开启，则不检测*/
 
 	/* Don't use IOMMU if there is Stoney Ridge graphics */
 	for (i = 0; i < 32; i++) {
@@ -3299,9 +3327,11 @@ static int __init state_next(void)
 	switch (init_state) {
 	case IOMMU_START_STATE:
 		if (!detect_ivrs()) {
+			/*iommu没有开启，或者未发现*/
 			init_state	= IOMMU_NOT_FOUND;
 			ret		= -ENODEV;
 		} else {
+			/*更新状态到 IVRS已检测*/
 			init_state	= IOMMU_IVRS_DETECTED;
 		}
 		break;
@@ -3310,6 +3340,7 @@ static int __init state_next(void)
 			init_state = IOMMU_CMDLINE_DISABLED;
 			ret = -EINVAL;
 		} else {
+			/*执行初始化*/
 			ret = early_amd_iommu_init();
 			init_state = ret ? IOMMU_INIT_ERROR : IOMMU_ACPI_FINISHED;
 		}
@@ -3373,8 +3404,8 @@ static int __init iommu_go_to_state(enum iommu_init_state state)
 		if (init_state == IOMMU_NOT_FOUND         ||
 		    init_state == IOMMU_INIT_ERROR        ||
 		    init_state == IOMMU_CMDLINE_DISABLED)
-			break;
-		ret = state_next();
+			break;/*以上状态跳出*/
+		ret = state_next();/*转下一个状态*/
 	}
 
 	/*

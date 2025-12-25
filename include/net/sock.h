@@ -945,11 +945,13 @@ static inline void sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_hea
 	__sk_nulls_add_node_rcu(sk, list);
 }
 
+/*将sk自列表移除*/
 static inline void __sk_del_bind_node(struct sock *sk)
 {
 	__hlist_del(&sk->sk_bind_node);
 }
 
+/*sk加入列表*/
 static inline void sk_add_bind_node(struct sock *sk,
 					struct hlist_head *list)
 {
@@ -971,6 +973,7 @@ static inline void sk_add_bind_node(struct sock *sk,
 		hlist_nulls_for_each_entry_from(__sk, node, sk_nulls_node)
 #define sk_for_each_safe(__sk, tmp, list) \
 	hlist_for_each_entry_safe(__sk, tmp, list, sk_node)
+/*沿sk_bind_node进行socket遍历*/
 #define sk_for_each_bound(__sk, list) \
 	hlist_for_each_entry(__sk, list, sk_bind_node)
 #define sk_for_each_bound_safe(__sk, tmp, list) \

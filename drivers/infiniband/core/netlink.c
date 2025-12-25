@@ -50,6 +50,7 @@ static struct {
 	struct rw_semaphore sem;
 } rdma_nl_types[RDMA_NL_NUM_CLIENTS];/*每类消息一个cb_table*/
 
+/*检查此组播组是否有监听socket*/
 bool rdma_nl_chk_listeners(unsigned int group)
 {
 	struct rdma_dev_net *rnet = rdma_net_to_dev_net(&init_net);

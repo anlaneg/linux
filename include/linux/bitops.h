@@ -300,7 +300,7 @@ static inline unsigned int fns(unsigned long word, unsigned int n)
  * @value: the value to assign
  */
 #define assign_bit(nr, addr, value)					\
-	((value) ? set_bit((nr), (addr)) : clear_bit((nr), (addr)))
+	((value) ? set_bit((nr), (addr))/*此nr置为真*/ : clear_bit((nr), (addr)))
 
 #define __assign_bit(nr, addr, value)					\
 	((value) ? __set_bit((nr), (addr)) : __clear_bit((nr), (addr)))

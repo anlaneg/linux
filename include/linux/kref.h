@@ -28,6 +28,7 @@ struct kref {
  */
 static inline void kref_init(struct kref *kref)
 {
+	/*初始化引用计数*/
 	refcount_set(&kref->refcount, 1);
 }
 
@@ -42,6 +43,7 @@ static inline unsigned int kref_read(const struct kref *kref)
  */
 static inline void kref_get(struct kref *kref)
 {
+	/*引用计数增加*/
 	refcount_inc(&kref->refcount);
 }
 

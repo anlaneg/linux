@@ -1173,7 +1173,7 @@ static inline void hlist_splice_init(struct hlist_head *from,
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
  */
-#define hlist_for_each_entry(pos, head, member)				\
+#define hlist_for_each_entry(pos, head/*链表header*/, member/*list-node的成员名称*/)				\
 	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member);\
 	     pos;							\
 	     pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))

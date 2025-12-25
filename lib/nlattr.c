@@ -1121,7 +1121,7 @@ EXPORT_SYMBOL(__nla_put_nohdr);
 int nla_put(struct sk_buff *skb, int attrtype, int attrlen, const void *data)
 {
 	if (unlikely(skb_tailroom(skb) < nla_total_size(attrlen)))
-		return -EMSGSIZE;
+		return -EMSGSIZE;/*空间不足*/
 
 	__nla_put(skb, attrtype, attrlen, data);
 	return 0;

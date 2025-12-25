@@ -91,7 +91,7 @@ struct net {
 #endif
 	struct user_namespace   *user_ns;	/* Owning user namespace */
 	struct ucounts		*ucounts;
-	struct idr		netns_ids;
+	struct idr		netns_ids;/*记录与哪些netns相连*/
 
 	struct ns_common	ns;
 	struct ref_tracker_dir  refcnt_tracker;
@@ -435,6 +435,7 @@ static inline struct net *read_pnet_rcu(const possible_net_t *pnet)
 	list_for_each_entry(VAR, &net_namespace_list, list)
 #define for_each_net_continue_reverse(VAR)		\
 	list_for_each_entry_continue_reverse(VAR, &net_namespace_list, list)
+//遍历系统中所有的net namespace
 #define for_each_net_rcu(VAR)				\
 	list_for_each_entry_rcu(VAR, &net_namespace_list, list)
 

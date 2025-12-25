@@ -753,7 +753,7 @@ static int nfnetlink_bind(struct net *net, int group)
 	int type;
 
 	if (group <= NFNLGRP_NONE || group > NFNLGRP_MAX)
-		return 0;
+		return 0;/*要绑定的group校验*/
 
 	type = nfnl_group2type[group];
 

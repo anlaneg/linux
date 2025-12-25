@@ -942,17 +942,18 @@ static int hci_rfkill_set_block(void *data, bool blocked)
 	BT_DBG("%p name %s blocked %d", hdev, hdev->name, blocked);
 
 	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
-		return -EBUSY;
+		return -EBUSY;/*有user channel标记，报错*/
 
 	if (blocked == hci_dev_test_flag(hdev, HCI_RFKILLED))
-		return 0;
+		return 0;/*无需变更*/
 
 	if (blocked) {
+		/*置rfkilled标记*/
 		hci_dev_set_flag(hdev, HCI_RFKILLED);
 
 		if (!hci_dev_test_flag(hdev, HCI_SETUP) &&
 		    !hci_dev_test_flag(hdev, HCI_CONFIG)) {
-			err = hci_dev_do_poweroff(hdev);
+			err = hci_dev_do_poweroff(hdev);/*关闭power*/
 			if (err) {
 				bt_dev_err(hdev, "Error when powering off device on rfkill (%d)",
 					   err);
@@ -965,6 +966,7 @@ static int hci_rfkill_set_block(void *data, bool blocked)
 			}
 		}
 	} else {
+		/*清除rfkilled标记*/
 		hci_dev_clear_flag(hdev, HCI_RFKILLED);
 	}
 
@@ -1008,6 +1010,7 @@ static void hci_power_on(struct work_struct *work)
 	    hci_dev_test_flag(hdev, HCI_UNCONFIGURED) ||
 	    (!bacmp(&hdev->bdaddr, BDADDR_ANY) &&
 	     !bacmp(&hdev->static_addr, BDADDR_ANY))) {
+		/*指定了HCI_RFKILLED,不开启*/
 		hci_dev_clear_flag(hdev, HCI_AUTO_OFF);
 		hci_dev_do_close(hdev);
 	} else if (hci_dev_test_flag(hdev, HCI_AUTO_OFF)) {
@@ -2711,6 +2714,7 @@ int hci_register_dev(struct hci_dev *hdev)
 				    RFKILL_TYPE_BLUETOOTH, &hci_rfkill_ops,
 				    hdev);
 	if (hdev->rfkill) {
+		/*注册此rfkill设备*/
 		if (rfkill_register(hdev->rfkill) < 0) {
 			rfkill_destroy(hdev->rfkill);
 			hdev->rfkill = NULL;

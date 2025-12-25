@@ -24,8 +24,8 @@ enum netlink_skb_flags {
 
 struct netlink_skb_parms {
 	struct scm_creds	creds;		/* Skb credentials	*/
-	__u32			portid;
-	__u32			dst_group;
+	__u32			portid;/*本端portid*/
+	__u32			dst_group;/*目标组播组*/
 	__u32			flags;
 	struct sock		*sk;
 	bool			nsid_is_set;
@@ -47,6 +47,7 @@ void netlink_table_ungrab(void);
 struct netlink_kernel_cfg {
 	unsigned int	groups;
 	unsigned int	flags;
+	/*收包函数*/
 	void		(*input)(struct sk_buff *skb);
 	int		(*bind)(struct net *net, int group);
 	void		(*unbind)(struct net *net, int group);

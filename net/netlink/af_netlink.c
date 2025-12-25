@@ -76,6 +76,7 @@
 
 struct listeners {
 	struct rcu_head		rcu;
+	/*所有socket的组播group关注掩码*/
 	unsigned long		masks[];
 };
 
@@ -471,13 +472,13 @@ netlink_unlock_table(void)
 
 struct netlink_compare_arg
 {
-	possible_net_t pnet;
-	u32 portid;
+	possible_net_t pnet;/*对应的netns*/
+	u32 portid;/*比对用的portid`*/
 };
 
 /* Doing sizeof directly may yield 4 extra bytes on 64-bit. */
 #define netlink_compare_arg_len \
-	(offsetof(struct netlink_compare_arg, portid) + sizeof(u32))
+	(offsetof(struct netlink_compare_arg, portid) + sizeof(u32))/*防止结构体对齐，才写成这样*/
 
 static inline int netlink_compare(struct rhashtable_compare_arg *arg,
 				  const void *ptr)
@@ -489,6 +490,7 @@ static inline int netlink_compare(struct rhashtable_compare_arg *arg,
 	       !net_eq(sock_net(&nlk->sk), read_pnet(&x->pnet));
 }
 
+/*初始化netlink_compare_arg*/
 static void netlink_compare_arg_init(struct netlink_compare_arg *arg,
 				     struct net *net, u32 portid)
 {
@@ -508,6 +510,7 @@ static struct sock *__netlink_lookup(struct netlink_table *table, u32 portid,
 				      netlink_rhashtable_params);
 }
 
+/*将sk添加进netlink table*/
 static int __netlink_insert(struct netlink_table *table, struct sock *sk)
 {
 	struct netlink_compare_arg arg;
@@ -518,9 +521,10 @@ static int __netlink_insert(struct netlink_table *table, struct sock *sk)
 					    netlink_rhashtable_params);
 }
 
+/*在net ns下查询指定protocol及portid的netlink socket*/
 static struct sock *netlink_lookup(struct net *net, int protocol, u32 portid)
 {
-	//取出对应protocol对应的table信息
+	//取出protocol对应的table信息
 	struct netlink_table *table = &nl_table[protocol];
 	struct sock *sk;
 
@@ -536,6 +540,7 @@ static struct sock *netlink_lookup(struct net *net, int protocol, u32 portid)
 
 static const struct proto_ops netlink_ops;
 
+/*更新此协议上所有关注组播组的socket关注的组播组掩码情况*/
 static void
 netlink_update_listeners(struct sock *sk)
 {
@@ -546,7 +551,7 @@ netlink_update_listeners(struct sock *sk)
 
 	listeners = nl_deref_protected(tbl->listeners);
 	if (!listeners)
-		return;
+		return;/*无listen的socket*/
 
 	for (i = 0; i < NLGRPLONGS(tbl->groups); i++) {
 		mask = 0;
@@ -554,7 +559,7 @@ netlink_update_listeners(struct sock *sk)
 			if (i < NLGRPLONGS(nlk_sk(sk)->ngroups))
 				mask |= nlk_sk(sk)->groups[i];
 		}
-		listeners->masks[i] = mask;
+		listeners->masks[i] = mask;/*综合所有socket的group关注掩码*/
 	}
 	/* this function is only called with the netlink table "grabbed", which
 	 * makes sure updates are visible before bind or setsockopt return. */
@@ -562,6 +567,7 @@ netlink_update_listeners(struct sock *sk)
 
 static int netlink_insert(struct sock *sk, u32 portid)
 {
+	/*按协议查找到其所属的netlink table*/
 	struct netlink_table *table = &nl_table[sk->sk_protocol];
 	int err;
 
@@ -569,14 +575,14 @@ static int netlink_insert(struct sock *sk, u32 portid)
 
 	err = nlk_sk(sk)->portid == portid ? 0 : -EBUSY;
 	if (nlk_sk(sk)->bound)
-		goto err;
+		goto err;/*先前已设置bound,视是否变更，返回err*/
 
 	/* portid can be read locklessly from netlink_getname(). */
-	WRITE_ONCE(nlk_sk(sk)->portid, portid);
+	WRITE_ONCE(nlk_sk(sk)->portid, portid);/*设置portid*/
 
 	sock_hold(sk);
 
-	err = __netlink_insert(table, sk);
+	err = __netlink_insert(table, sk);/*此socket串连进table->hash*/
 	if (err) {
 		/* In case the hashtable backend returns with -EBUSY
 		 * from here, it must not escape to the caller.
@@ -594,7 +600,7 @@ static int netlink_insert(struct sock *sk, u32 portid)
 	/* Paired with lockless reads from netlink_bind(),
 	 * netlink_connect() and netlink_sendmsg().
 	 */
-	WRITE_ONCE(nlk_sk(sk)->bound, portid);
+	WRITE_ONCE(nlk_sk(sk)->bound, portid);/*指明是否已bound*/
 
 err:
 	release_sock(sk);
@@ -629,7 +635,7 @@ static struct proto netlink_proto = {
 };
 
 static int __netlink_create(struct net *net, struct socket *sock,
-			    int protocol, int kern)
+			    int protocol, int kern/*是否kernel socket*/)
 {
 	struct sock *sk;
 	struct netlink_sock *nlk;
@@ -696,6 +702,8 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	else
 		//要求的协议未注册，返回不支持
 		err = -EPROTONOSUPPORT;
+
+	/*使用协议注册的bind/unbind/release回调*/
 	bind = nl_table[protocol].bind;
 	unbind = nl_table[protocol].unbind;
 	release = nl_table[protocol].release;
@@ -704,6 +712,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	if (err < 0)
 		goto out;
 
+	/*创建socket*/
 	err = __netlink_create(net, sock, protocol, kern);
 	if (err < 0)
 		goto out_module;
@@ -836,6 +845,7 @@ retry:
 	ok = !__netlink_lookup(table, portid, net);
 	rcu_read_unlock();
 	if (!ok) {
+		/*没有找到，再尝试*/
 		/* Bind collision, search negative portid values. */
 		if (rover == -4096)
 			/* rover will be in range [S32_MIN, -4097] */
@@ -846,7 +856,7 @@ retry:
 		goto retry;
 	}
 
-	err = netlink_insert(sk, portid);
+	err = netlink_insert(sk, portid);/*分配成功，串连进hash*/
 	if (err == -EADDRINUSE)
 		goto retry;
 
@@ -930,18 +940,22 @@ static inline int netlink_allowed(const struct socket *sock, unsigned int flag)
 		ns_capable(sock_net(sock->sk)->user_ns, CAP_NET_ADMIN);
 }
 
+/*更新此sk的订阅情况*/
 static void
-netlink_update_subscriptions(struct sock *sk, unsigned int subscriptions)
+netlink_update_subscriptions(struct sock *sk, unsigned int subscriptions/*订阅数目*/)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
 
 	if (nlk->subscriptions && !subscriptions)
+		/*之前有订阅，当前无订阅，自组播列表中删除此sk*/
 		__sk_del_bind_node(sk);
 	else if (!nlk->subscriptions && subscriptions)
+		/*之前未订阅，当前有订阅，添加此sk到组播列表*/
 		sk_add_bind_node(sk, &nl_table[sk->sk_protocol].mc_list);
-	nlk->subscriptions = subscriptions;
+	nlk->subscriptions = subscriptions;/*记录订阅总数目*/
 }
 
+/*检查是否需要realloc nlk->groups*/
 static int netlink_realloc_groups(struct sock *sk)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
@@ -953,13 +967,15 @@ static int netlink_realloc_groups(struct sock *sk)
 
 	groups = nl_table[sk->sk_protocol].groups;
 	if (!nl_table[sk->sk_protocol].registered) {
+		/*此协议仍未注册，报错*/
 		err = -ENOENT;
 		goto out_unlock;
 	}
 
 	if (nlk->ngroups >= groups)
-		goto out_unlock;
+		goto out_unlock;/*netlink对应的groups空间足够*/
 
+	/*扩大空间并将新扩大的空间清零*/
 	new_groups = krealloc(nlk->groups, NLGRPSZ(groups), GFP_ATOMIC);
 	if (new_groups == NULL) {
 		err = -ENOMEM;
@@ -982,19 +998,22 @@ static void netlink_undo_bind(int group, long unsigned int groups,
 	int undo;
 
 	if (!nlk->netlink_unbind)
-		return;
+		return;/*无unbind回调，直接返回*/
 
+	/*实现unbind*/
 	for (undo = 0; undo < group; undo++)
 		if (test_bit(undo, &groups))
 			nlk->netlink_unbind(sock_net(sk), undo + 1);
 }
 
+/*执行netlink bind指定地址*/
 static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 			int addr_len)
 {
 	struct sock *sk = sock->sk;
 	struct net *net = sock_net(sk);
 	struct netlink_sock *nlk = nlk_sk(sk);
+	/*绑定的参数类型为sockaddr_nl*/
 	struct sockaddr_nl *nladdr = (struct sockaddr_nl *)addr;
 	int err = 0;
 	unsigned long groups;
@@ -1003,9 +1022,10 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 	if (addr_len < sizeof(struct sockaddr_nl))
 		return -EINVAL;
 
+	/*绑定的地址必须为netlink类型*/
 	if (nladdr->nl_family != AF_NETLINK)
 		return -EINVAL;
-	groups = nladdr->nl_groups;
+	groups = nladdr->nl_groups;/*取要绑定的组播group*/
 
 	/* Only superuser is allowed to listen multicasts */
 	if (groups) {
@@ -1016,12 +1036,14 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 			return err;
 	}
 
+	/*规范groups取值*/
 	if (nlk->ngroups < BITS_PER_LONG)
 		groups &= (1UL << nlk->ngroups) - 1;
 
 	/* Paired with WRITE_ONCE() in netlink_insert() */
 	bound = READ_ONCE(nlk->bound);
 	if (bound) {
+		/*之前已bound,检查portid是否一致，不一致，则参数无效*/
 		/* Ensure nlk->portid is up-to-date. */
 		smp_rmb();
 
@@ -1036,10 +1058,12 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 		/* nl_groups is a u32, so cap the maximum groups we can bind */
 		for (group = 0; group < BITS_PER_TYPE(u32); group++) {
 			if (!test_bit(group, &groups))
-				continue;
+				continue;/*绑定未要求此group，跳过*/
+			/*调用回调，实现绑定*/
 			err = nlk->netlink_bind(net, group + 1);
 			if (!err)
 				continue;
+			/*绑定失败，回退，并报错*/
 			netlink_undo_bind(group, groups, sk);
 			return err;
 		}
@@ -1051,9 +1075,10 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 	netlink_lock_table();
 	if (!bound) {
 		err = nladdr->nl_pid ?
-			netlink_insert(sk, nladdr->nl_pid) :
-			netlink_autobind(sock);
+			netlink_insert(sk, nladdr->nl_pid)/*指定了portid,串连进hash*/ :
+			netlink_autobind(sock)/*未指定portid,分配未占用的，并串连进hash*/;
 		if (err) {
+			/*socket添加失败，解绑回退*/
 			netlink_undo_bind(BITS_PER_TYPE(u32), groups, sk);
 			goto unlock;
 		}
@@ -1065,8 +1090,9 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 
 	netlink_table_grab();
 	netlink_update_subscriptions(sk, nlk->subscriptions +
-					 hweight32(groups) -
-					 hweight32(nlk->groups[0]));
+					 hweight32(groups)/*新的groups数目*/ -
+					 hweight32(nlk->groups[0])/*旧的groups数目*/);
+	/*更新为新的groups订阅情况*/
 	nlk->groups[0] = (nlk->groups[0] & ~0xffffffffUL) | groups;
 	netlink_update_listeners(sk);
 	netlink_table_ungrab();
@@ -1084,12 +1110,14 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 	int err = 0;
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
+	/*要连接的地址*/
 	struct sockaddr_nl *nladdr = (struct sockaddr_nl *)addr;
 
 	if (alen < sizeof(addr->sa_family))
-		return -EINVAL;
+		return -EINVAL;/*连接地址长度有误*/
 
 	if (addr->sa_family == AF_UNSPEC) {
+		/*这种情况，直接返回成功*/
 		/* paired with READ_ONCE() in netlink_getsockbyportid() */
 		WRITE_ONCE(sk->sk_state, NETLINK_UNCONNECTED);
 		/* dst_portid and dst_group can be read locklessly */
@@ -1097,6 +1125,8 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 		WRITE_ONCE(nlk->dst_group, 0);
 		return 0;
 	}
+
+	/*必须为netlink socket*/
 	if (addr->sa_family != AF_NETLINK)
 		return -EINVAL;
 
@@ -1112,21 +1142,23 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 	 * Paired with WRITE_ONCE() in netlink_insert().
 	 */
 	if (!READ_ONCE(nlk->bound))
+		/*未绑定（未调用bind)，申请portid并绑定,将socket加入列表*/
 		err = netlink_autobind(sock);
 
 	if (err == 0) {
-		//状态变更为已连接
+		//状态变更为已连接,设置connect地址，并返回
 		/* paired with READ_ONCE() in netlink_getsockbyportid() */
-		WRITE_ONCE(sk->sk_state, NETLINK_CONNECTED);
+		WRITE_ONCE(sk->sk_state, NETLINK_CONNECTED);/*指明已连接*/
 		/* dst_portid and dst_group can be read locklessly */
 		WRITE_ONCE(nlk->dst_portid, nladdr->nl_pid);
-		WRITE_ONCE(nlk->dst_group, ffs(nladdr->nl_groups));
+		WRITE_ONCE(nlk->dst_group, ffs(nladdr->nl_groups));/*设置目的group*/
 	}
 
 	return err;
 }
 
-static int netlink_getname(struct socket *sock, struct sockaddr *addr,
+/*取本端或对端信息*/
+static int netlink_getname(struct socket *sock, struct sockaddr *addr/*出参，地址信息*/,
 			   int peer)
 {
 	struct sock *sk = sock->sk;
@@ -1137,19 +1169,23 @@ static int netlink_getname(struct socket *sock, struct sockaddr *addr,
 	nladdr->nl_pad = 0;
 
 	if (peer) {
+		/*取对端信息*/
 		/* Paired with WRITE_ONCE() in netlink_connect() */
 		nladdr->nl_pid = READ_ONCE(nlk->dst_portid);
 		nladdr->nl_groups = netlink_group_mask(READ_ONCE(nlk->dst_group));
 	} else {
+		/*取本端信息*/
 		/* Paired with WRITE_ONCE() in netlink_insert() */
 		nladdr->nl_pid = READ_ONCE(nlk->portid);
 		netlink_lock_table();
+		/*取首个uint32*/
 		nladdr->nl_groups = nlk->groups ? nlk->groups[0] : 0;
 		netlink_unlock_table();
 	}
 	return sizeof(*nladdr);
 }
 
+/*不支持ioctl*/
 static int netlink_ioctl(struct socket *sock, unsigned int cmd,
 			 unsigned long arg)
 {
@@ -1166,13 +1202,14 @@ static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 
 	sock = netlink_lookup(sock_net(ssk), ssk->sk_protocol, portid);
 	if (!sock)
-		return ERR_PTR(-ECONNREFUSED);/*没有找到对应的socket(返回链接拒绝）*/
+		return ERR_PTR(-ECONNREFUSED);/*没有找到目标对应的socket(返回链接拒绝）*/
 
 	/* Don't bother queuing skb if kernel socket has no input function */
 	nlk = nlk_sk(sock);
 	/* dst_portid and sk_state can be changed in netlink_connect() */
 	if (READ_ONCE(sock->sk_state) == NETLINK_CONNECTED &&
 	    READ_ONCE(nlk->dst_portid) != nlk_sk(ssk)->portid) {
+		/*对于已建连的，目标netlink的portid需要是自身*/
 		sock_put(sock);
 		return ERR_PTR(-ECONNREFUSED);
 	}
@@ -1200,7 +1237,7 @@ struct sock *netlink_getsockbyfd(int fd)
 	return sock;
 }
 
-struct sk_buff *netlink_alloc_large_skb(unsigned int size, int broadcast)
+struct sk_buff *netlink_alloc_large_skb(unsigned int size, int broadcast/*是否要广播*/)
 {
 	size_t head_size = SKB_HEAD_ALIGN(size);
 	struct sk_buff *skb;
@@ -1378,7 +1415,6 @@ retry:
 		return netlink_unicast_kernel(sk, skb, ssk);
 
 	//目标是用户态socket
-
 	if (sk_filter(sk, skb)) {
 		/*执行bpf等钩子点失败*/
 		err = skb->len;
@@ -1397,7 +1433,7 @@ retry:
 }
 EXPORT_SYMBOL(netlink_unicast);
 
-//group参数用于表示组播号，校验此group是否有监听者
+//group参数用于表示组播组统一号，校验此group是否有监听者
 int netlink_has_listeners(struct sock *sk, unsigned int group)
 {
 	int res = 0;
@@ -1408,8 +1444,8 @@ int netlink_has_listeners(struct sock *sk, unsigned int group)
 	rcu_read_lock();
 	listeners = rcu_dereference(nl_table[sk->sk_protocol].listeners);
 
-	if (listeners && group - 1 < nl_table[sk->sk_protocol].groups)
-		res = test_bit(group - 1, listeners->masks);
+	if (listeners/*此协议有listener*/ && group - 1 < nl_table[sk->sk_protocol].groups/*group数组合法*/)
+		res = test_bit(group - 1, listeners->masks);/*检查此组播是否有socket监听*/
 
 	rcu_read_unlock();
 
@@ -1423,6 +1459,7 @@ bool netlink_strict_get_check(struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(netlink_strict_get_check);
 
+/*将skb投递给sk*/
 static int netlink_broadcast_deliver(struct sock *sk, struct sk_buff *skb)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
@@ -1434,7 +1471,7 @@ static int netlink_broadcast_deliver(struct sock *sk, struct sk_buff *skb)
 	if ((rmem == skb->truesize || rmem <= rcvbuf) &&
 	    !test_bit(NETLINK_S_CONGESTED, &nlk->state)) {
 		netlink_skb_set_owner_r(skb, sk);
-		__netlink_sendskb(sk, skb);
+		__netlink_sendskb(sk, skb);/*报文送此sk*/
 		return rmem > (rcvbuf >> 1);
 	}
 
@@ -1443,20 +1480,22 @@ static int netlink_broadcast_deliver(struct sock *sk, struct sk_buff *skb)
 }
 
 struct netlink_broadcast_data {
-	struct sock *exclude_sk;
+	struct sock *exclude_sk;/*要排除的socket,即不向此socket广播*/
 	struct net *net;
 	u32 portid;
-	u32 group;
+	u32 group;/*组播组编号*/
 	int failure;
 	int delivery_failure;
 	int congested;
 	int delivered;
 	gfp_t allocation;
 	struct sk_buff *skb, *skb2;
+	/*tx方向filter，用于检查是否可发送*/
 	int (*tx_filter)(struct sock *dsk, struct sk_buff *skb, void *data);
 	void *tx_data;
 };
 
+/*检查sk是否需要广播，如需要向其发送报文*/
 static void do_one_broadcast(struct sock *sk,
 				    struct netlink_broadcast_data *p)
 {
@@ -1464,18 +1503,19 @@ static void do_one_broadcast(struct sock *sk,
 	int val;
 
 	if (p->exclude_sk == sk)
-		return;
+		return;/*此socket要排除，返回不发送*/
 
-	if (nlk->portid == p->portid || p->group - 1 >= nlk->ngroups ||
-	    !test_bit(p->group - 1, nlk->groups))
+	if (nlk->portid == p->portid/*一会单播会发*/ || p->group - 1 >= nlk->ngroups/*无效的group编号*/ ||
+	    !test_bit(p->group - 1, nlk->groups)/*socket未关注此group*/)
 		return;
 
 	if (!net_eq(sock_net(sk), p->net)) {
+		/*两者netns不同*/
 		if (!nlk_test_bit(LISTEN_ALL_NSID, sk))
-			return;
+			return;/*此socket未设置listen所有nsid，不匹配*/
 
 		if (!peernet_has_id(sock_net(sk), p->net))
-			return;
+			return;/*不是对端的netns,不匹配*/
 
 		if (!file_ns_capable(sk->sk_socket->file, p->net->user_ns,
 				     CAP_NET_BROADCAST))
@@ -1483,6 +1523,7 @@ static void do_one_broadcast(struct sock *sk,
 	}
 
 	if (p->failure) {
+		/*指明了故意失败*/
 		netlink_overrun(sk);
 		return;
 	}
@@ -1501,6 +1542,7 @@ static void do_one_broadcast(struct sock *sk,
 		}
 	}
 	if (p->skb2 == NULL) {
+		/*clone申请此skb失败了，置标记*/
 		netlink_overrun(sk);
 		/* Clone failed. Notify ALL listeners. */
 		p->failure = 1;
@@ -1510,6 +1552,7 @@ static void do_one_broadcast(struct sock *sk,
 	}
 
 	if (p->tx_filter && p->tx_filter(sk, p->skb2, p->tx_data)) {
+		/*不得发送，丢包退出*/
 		kfree_skb(p->skb2);
 		p->skb2 = NULL;
 		goto out;
@@ -1527,10 +1570,10 @@ static void do_one_broadcast(struct sock *sk,
 	if (val < 0) {
 		netlink_overrun(sk);
 		if (nlk_test_bit(BROADCAST_SEND_ERROR, sk))
-			p->delivery_failure = 1;
+			p->delivery_failure = 1;/*指明投递失败*/
 	} else {
 		p->congested |= val;
-		p->delivered = 1;
+		p->delivered = 1;/*指明已投递*/
 		p->skb2 = NULL;
 	}
 out:
@@ -1540,7 +1583,7 @@ out:
 int netlink_broadcast_filtered(struct sock *ssk, struct sk_buff *skb,
 			       u32 portid,
 			       u32 group, gfp_t allocation,
-			       netlink_filter_fn filter,
+			       netlink_filter_fn filter/*用于检查是否需发送*/,
 			       void *filter_data)
 {
 	struct net *net = sock_net(ssk);
@@ -1549,17 +1592,17 @@ int netlink_broadcast_filtered(struct sock *ssk, struct sk_buff *skb,
 
 	skb = netlink_trim(skb, allocation);
 
-	info.exclude_sk = ssk;
-	info.net = net;
+	info.exclude_sk = ssk;/*指明要排除的socket(不发给自身）*/
+	info.net = net;/*所属的netns*/
 	info.portid = portid;
-	info.group = group;
-	info.failure = 0;
+	info.group = group;/*组播组mask*/
+	info.failure = 0;/*指明非故障注入*/
 	info.delivery_failure = 0;
 	info.congested = 0;
 	info.delivered = 0;
 	info.allocation = allocation;
 	info.skb = skb;
-	info.skb2 = NULL;
+	info.skb2 = NULL;/*初始化为NULL*/
 	info.tx_filter = filter;
 	info.tx_data = filter_data;
 
@@ -1567,7 +1610,7 @@ int netlink_broadcast_filtered(struct sock *ssk, struct sk_buff *skb,
 
 	netlink_lock_table();
 
-	/*向每个组播组关心者，进行知会*/
+	/*遍历此协议上每个组播组关心者，匹配并知会*/
 	sk_for_each_bound(sk, &nl_table[ssk->sk_protocol].mc_list)
 		do_one_broadcast(sk, &info);
 
@@ -1590,11 +1633,12 @@ int netlink_broadcast_filtered(struct sock *ssk, struct sk_buff *skb,
 }
 EXPORT_SYMBOL(netlink_broadcast_filtered);
 
+/*检查关注的socket广播发送到group*/
 int netlink_broadcast(struct sock *ssk, struct sk_buff *skb, u32 portid,
 		      u32 group, gfp_t allocation)
 {
 	return netlink_broadcast_filtered(ssk, skb, portid, group, allocation,
-					  NULL, NULL);
+					  NULL/*无filter*/, NULL);
 }
 EXPORT_SYMBOL(netlink_broadcast);
 
@@ -1666,14 +1710,14 @@ EXPORT_SYMBOL(netlink_set_err);
 
 /* must be called with netlink table grabbed */
 static void netlink_update_socket_mc(struct netlink_sock *nlk,
-				     unsigned int group,
-				     int is_new)
+				     unsigned int group/*订阅或退订的组播组*/,
+				     int is_new/*添加为true/删除为false*/)
 {
 	int old, new = !!is_new, subscriptions;
 
-	old = test_bit(group - 1, nlk->groups);
-	subscriptions = nlk->subscriptions - old + new;
-	__assign_bit(group - 1, nlk->groups, new);
+	old = test_bit(group - 1, nlk->groups);/*取此group之前开启/关闭标记*/
+	subscriptions = nlk->subscriptions - old + new;/*计算是否有订阅*/
+	__assign_bit(group - 1, nlk->groups, new);/*按1/0设置此组播订阅/退订情况*/
 	netlink_update_subscriptions(&nlk->sk, subscriptions);
 	netlink_update_listeners(&nlk->sk);
 }
@@ -1687,9 +1731,9 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 	int nr = -1;
 
 	if (level != SOL_NETLINK)
-		return -ENOPROTOOPT;
+		return -ENOPROTOOPT;/*仅支持此level*/
 
-	if (optlen >= sizeof(int) &&
+	if (optlen >= sizeof(int)/*选项长度小于int,按value=0处理*/ &&
 	    copy_from_sockptr(&val, optval, sizeof(val)))
 		return -EFAULT;
 
@@ -1697,8 +1741,8 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 	case NETLINK_PKTINFO:
 		nr = NETLINK_F_RECV_PKTINFO;
 		break;
-	case NETLINK_ADD_MEMBERSHIP:
-	case NETLINK_DROP_MEMBERSHIP: {
+	case NETLINK_ADD_MEMBERSHIP:/*订阅组播组*/
+	case NETLINK_DROP_MEMBERSHIP:/*退订组播组*/ {
 		int err;
 
 		if (!netlink_allowed(sock, NL_CFG_F_NONROOT_RECV))
@@ -1707,8 +1751,9 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 		if (err)
 			return err;
 		if (!val || val - 1 >= nlk->ngroups)
-			return -EINVAL;
+			return -EINVAL;/*操作的group不得为0，也不得大于socket group总数*/
 		if (optname == NETLINK_ADD_MEMBERSHIP && nlk->netlink_bind) {
+			/*订阅组播组*/
 			err = nlk->netlink_bind(sock_net(sk), val);
 			if (err)
 				return err;
@@ -1718,6 +1763,7 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 					 optname == NETLINK_ADD_MEMBERSHIP);
 		netlink_table_ungrab();
 		if (optname == NETLINK_DROP_MEMBERSHIP && nlk->netlink_unbind)
+			/*退订组播组*/
 			nlk->netlink_unbind(sock_net(sk), val);
 
 		break;
@@ -1735,7 +1781,7 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 	case NETLINK_LISTEN_ALL_NSID:
 		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_BROADCAST))
 			return -EPERM;
-		nr = NETLINK_F_LISTEN_ALL_NSID;
+		nr = NETLINK_F_LISTEN_ALL_NSID;/*指明监听所有netns*/
 		break;
 	case NETLINK_CAP_ACK:
 		nr = NETLINK_F_CAP_ACK;
@@ -1749,8 +1795,10 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 	default:
 		return -ENOPROTOOPT;
 	}
+
+	/*置标记*/
 	if (nr >= 0)
-		assign_bit(nr, &nlk->flags, val);
+		assign_bit(nr, &nlk->flags, val/*标记值（按0，非0分类）*/);
 	return 0;
 }
 
@@ -1855,7 +1903,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
 
-	//取netlink目的地址
+	//取netlink的目的地址
 	DECLARE_SOCKADDR(struct sockaddr_nl *, addr, msg->msg_name);
 	u32 dst_portid;
 	u32 dst_group;
@@ -1865,9 +1913,10 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	u32 netlink_skb_flags = 0;
 
 	if (msg->msg_flags & MSG_OOB)
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*不支持oob标记*/
 
 	if (len == 0) {
+		/*不支持0长度处理*/
 		pr_warn_once("Zero length message leads to an empty skb\n");
 		return -ENODATA;
 	}
@@ -1894,6 +1943,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 			goto out;
 		netlink_skb_flags |= NETLINK_SKB_DST;
 	} else {
+		/*未指定目的地址，自netlink socket中取目标信息*/
 		/* Paired with WRITE_ONCE() in netlink_connect() */
 		dst_portid = READ_ONCE(nlk->dst_portid);
 		dst_group = READ_ONCE(nlk->dst_group);
@@ -1901,6 +1951,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 	/* Paired with WRITE_ONCE() in netlink_insert() */
 	if (!READ_ONCE(nlk->bound)) {
+		/*此socket还未绑定，执行绑定*/
 		err = netlink_autobind(sock);
 		if (err)
 			goto out;
@@ -1911,7 +1962,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 	err = -EMSGSIZE;
 	if (len > sk->sk_sndbuf - 32)
-		goto out;
+		goto out;/*长度过大*/
 	/*申请可存放len长度的netlink消息buffer*/
 	err = -ENOBUFS;
 	skb = netlink_alloc_large_skb(len, dst_group);
@@ -1937,11 +1988,11 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	if (dst_group) {
-		//采用组播转发
+		//报文需要发到一些组播组，调组播转发
 		refcount_inc(&skb->users);
-		netlink_broadcast(sk, skb, dst_portid, dst_group, GFP_KERNEL);
+		netlink_broadcast(sk, skb, dst_portid/*目的port*/, dst_group/*目标组播组*/, GFP_KERNEL);
 	}
-	//采用单播转发
+	//再采用单播转发给dst_portid
 	err = netlink_unicast(sk, skb, dst_portid, msg->msg_flags & MSG_DONTWAIT);
 
 out:
@@ -2099,7 +2150,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	//提供默认的data_ready通知回调，此回调会告警
 	sk->sk_data_ready = netlink_data_ready;
 	if (cfg && cfg->input)
-		//如果cfg拥有input回调，则将其命名为netlink_rcv的回调函数
+		//如果cfg拥有input回调，则将其设置为netlink_rcv的回调函数
 		nlk_sk(sk)->netlink_rcv = cfg->input;
 
 	if (netlink_insert(sk, 0))
@@ -2110,7 +2161,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	netlink_table_grab();
 	if (!nl_table[unit].registered) {
-		//此协议未注册，在此注册此议
+		//此协议还未注册，在此处注册此协议
 		nl_table[unit].groups = groups;
 		rcu_assign_pointer(nl_table[unit].listeners, listeners);
 		nl_table[unit].module = module;
@@ -2150,6 +2201,7 @@ netlink_kernel_release(struct sock *sk)
 }
 EXPORT_SYMBOL(netlink_kernel_release);
 
+/*groups变更，导致tbl->listeners中的mask需要更新*/
 int __netlink_change_ngroups(struct sock *sk, unsigned int groups)
 {
 	struct listeners *new, *old;
@@ -2680,7 +2732,7 @@ EXPORT_SYMBOL(netlink_rcv_skb);
  * @flags: allocation flags
  */
 int nlmsg_notify(struct sock *sk, struct sk_buff *skb, u32 portid,
-		 unsigned int group, int report, gfp_t flags)
+		 unsigned int group/*组播唯一编号*/, int report, gfp_t flags)
 {
 	int err = 0;
 
@@ -2910,11 +2962,11 @@ static const struct proto_ops netlink_ops = {
 	.owner =	THIS_MODULE,
 	.release =	netlink_release,
 	.bind =		netlink_bind,//对应系统调用bind
-	.connect =	netlink_connect,
+	.connect =	netlink_connect,/*连接对端*/
 	.socketpair =	sock_no_socketpair,
 	.accept =	sock_no_accept,
-	.getname =	netlink_getname,
-	.poll =		datagram_poll,
+	.getname =	netlink_getname,/*取本端/对端信息*/
+	.poll =		datagram_poll,/*检查读写状态*/
 	.ioctl =	netlink_ioctl,
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
@@ -2987,7 +3039,7 @@ static inline u32 netlink_hash(const void *data, u32 len, u32 seed)
 
 static const struct rhashtable_params netlink_rhashtable_params = {
 	.head_offset = offsetof(struct netlink_sock, node),
-	.key_len = netlink_compare_arg_len,
+	.key_len = netlink_compare_arg_len/*key长度*/,
 	.obj_hashfn = netlink_hash,
 	.obj_cmpfn = netlink_compare,
 	.automatic_shrinking = true,

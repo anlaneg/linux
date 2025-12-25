@@ -222,7 +222,7 @@ static void __netdev_nl_sock_priv_destroy(void *priv)
 }
 
 struct genl_family netdev_nl_family __ro_after_init = {
-	.name		= NETDEV_FAMILY_NAME,
+	.name		= NETDEV_FAMILY_NAME,/*指定family名称*/
 	.version	= NETDEV_FAMILY_VERSION,
 	.netnsok	= true,
 	.parallel_ops	= true,

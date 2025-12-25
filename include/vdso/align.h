@@ -5,7 +5,7 @@
 #include <vdso/const.h>
 
 /* @a is a power of 2 value */
-/*向上对齐*/
+/*向上对齐，且A需要是一个2的N次方的值*/
 #define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
 /*向下对齐，故将x先减去(a-1)*/
 #define ALIGN_DOWN(x, a)	__ALIGN_KERNEL((x) - ((a) - 1), (a))

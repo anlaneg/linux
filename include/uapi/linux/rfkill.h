@@ -116,7 +116,7 @@ struct rfkill_event {
 struct rfkill_event_ext {
 	__u32 idx;
 	__u8  type;
-	__u8  op;
+	__u8  op;/*事件名称*/
 	__u8  soft;
 	__u8  hard;
 

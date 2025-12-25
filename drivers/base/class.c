@@ -175,13 +175,14 @@ static void klist_class_dev_put(struct klist_node *n)
 	put_device(dev);
 }
 
+/*注册新的设备class*/
 int class_register(const struct class *cls)
 {
 	struct subsys_private *cp;
 	struct lock_class_key *key;
 	int error;
 
-	pr_debug("device class '%s': registering\n", cls->name);/*注册新的设备class*/
+	pr_debug("device class '%s': registering\n", cls->name);
 
 	if (cls->ns_type && !cls->namespace) {
 		pr_err("%s: class '%s' does not have namespace\n",

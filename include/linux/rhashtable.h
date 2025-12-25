@@ -987,7 +987,7 @@ static inline void *rhashtable_lookup_get_insert_fast(
  * Returns zero on success.
  */
 static inline int rhashtable_lookup_insert_key(
-	struct rhashtable *ht, const void *key, struct rhash_head *obj,
+	struct rhashtable *ht/*hash表*/, const void *key, struct rhash_head *obj,
 	const struct rhashtable_params params)
 {
 	void *ret;

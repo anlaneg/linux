@@ -37,20 +37,20 @@
 struct rfkill {
 	spinlock_t		lock;
 
-	enum rfkill_type	type;
+	enum rfkill_type	type;/*无线电发射设备类型*/
 
 	unsigned long		state;
 	unsigned long		hard_block_reasons;
 
-	u32			idx;
+	u32			idx;/*编号*/
 
-	bool			registered;
+	bool			registered;/*是否已注册*/
 	bool			persistent;
 	bool			polling_paused;
 	bool			suspended;
 	bool			need_sync;
 
-	const struct rfkill_ops	*ops;
+	const struct rfkill_ops	*ops;/*操作集，例如hci_rfkill_ops*/
 	void			*data;
 
 #ifdef CONFIG_RFKILL_LEDS
@@ -58,13 +58,13 @@ struct rfkill {
 	const char		*ledtrigname;
 #endif
 
-	struct device		dev;
+	struct device		dev;/*对应的设备结构*/
 	struct list_head	node;
 
 	struct delayed_work	poll_work;
 	struct work_struct	uevent_work;
 	struct work_struct	sync_work;
-	char			name[];
+	char			name[];/*无线电发射设备名称，例如hci0*/
 };
 #define to_rfkill(d)	container_of(d, struct rfkill, dev)
 
@@ -79,7 +79,7 @@ struct rfkill_data {
 	struct mutex		mtx;
 	wait_queue_head_t	read_wait;
 	bool			input_handler;
-	u8			max_size;
+	u8			max_size;/*event大小不得超过此值*/
 };
 
 
@@ -100,8 +100,10 @@ MODULE_LICENSE("GPL");
  * various other global variables. Then we can avoid holding the mutex
  * around driver operations, and all is happy.
  */
+/*串连所有struct rfkill结构体*/
 static LIST_HEAD(rfkill_list);	/* list of registered rf switches */
 static DEFINE_MUTEX(rfkill_global_mutex);
+/*串连所有打开的fd,结构体为struct rfkill_data*/
 static LIST_HEAD(rfkill_fds);	/* list of open fds of /dev/rfkill */
 
 static unsigned int rfkill_default_state = 1;
@@ -263,7 +265,7 @@ static void rfkill_fill_event(struct rfkill_event_ext *ev,
 
 	ev->idx = rfkill->idx;
 	ev->type = rfkill->type;
-	ev->op = op;
+	ev->op = op;/*事件类型*/
 
 	spin_lock_irqsave(&rfkill->lock, flags);
 	ev->hard = !!(rfkill->state & RFKILL_BLOCK_HW);
@@ -273,23 +275,28 @@ static void rfkill_fill_event(struct rfkill_event_ext *ev,
 	spin_unlock_irqrestore(&rfkill->lock, flags);
 }
 
+/*针对所有rfkill fd,按op产生event*/
 static void rfkill_send_events(struct rfkill *rfkill, enum rfkill_operation op)
 {
 	struct rfkill_data *data;
 	struct rfkill_int_event *ev;
 
+	/*遍历所有rfkill fd,产生event*/
 	list_for_each_entry(data, &rfkill_fds, list) {
 		ev = kzalloc(sizeof(*ev), GFP_KERNEL);
 		if (!ev)
 			continue;
 		rfkill_fill_event(&ev->ev, rfkill, op);
 		mutex_lock(&data->mtx);
+		/*添加event*/
 		list_add_tail(&ev->list, &data->events);
 		mutex_unlock(&data->mtx);
+		/*知会read_wait,唤醒进程*/
 		wake_up_interruptible(&data->read_wait);
 	}
 }
 
+/*产生change事件给/dev/rfkill*/
 static void rfkill_event(struct rfkill *rfkill)
 {
 	if (!rfkill->registered)
@@ -328,7 +335,7 @@ static void rfkill_set_block(struct rfkill *rfkill, bool blocked)
 		rfkill->ops->query(rfkill, rfkill->data);
 
 	spin_lock_irqsave(&rfkill->lock, flags);
-	prev = rfkill->state & RFKILL_BLOCK_SW;
+	prev = rfkill->state & RFKILL_BLOCK_SW;/*取之前的值*/
 
 	if (prev)
 		rfkill->state |= RFKILL_BLOCK_SW_PREV;
@@ -336,14 +343,14 @@ static void rfkill_set_block(struct rfkill *rfkill, bool blocked)
 		rfkill->state &= ~RFKILL_BLOCK_SW_PREV;
 
 	if (blocked)
-		rfkill->state |= RFKILL_BLOCK_SW;
+		rfkill->state |= RFKILL_BLOCK_SW;/*置sw block*/
 	else
-		rfkill->state &= ~RFKILL_BLOCK_SW;
+		rfkill->state &= ~RFKILL_BLOCK_SW;/*移除sw block*/
 
 	rfkill->state |= RFKILL_BLOCK_SW_SETCALL;
 	spin_unlock_irqrestore(&rfkill->lock, flags);
 
-	err = rfkill->ops->set_block(rfkill->data, blocked);
+	err = rfkill->ops->set_block(rfkill->data, blocked);/*通过回调，设置block*/
 
 	spin_lock_irqsave(&rfkill->lock, flags);
 	if (err) {
@@ -374,21 +381,23 @@ static void rfkill_sync(struct rfkill *rfkill)
 	lockdep_assert_held(&rfkill_global_mutex);
 
 	if (!rfkill->need_sync)
-		return;
+		return;/*不需要同步，则不更新*/
 
 	rfkill_set_block(rfkill, rfkill_global_states[rfkill->type].cur);
-	rfkill->need_sync = false;
+	rfkill->need_sync = false;/*已更新，指定不同步*/
 }
 
-static void rfkill_update_global_state(enum rfkill_type type, bool blocked)
+static void rfkill_update_global_state(enum rfkill_type type/*类型*/, bool blocked)
 {
 	int i;
 
 	if (type != RFKILL_TYPE_ALL) {
+		/*针设置具体一个type的状态*/
 		rfkill_global_states[type].cur = blocked;
 		return;
 	}
 
+	/*设置所有type的状态*/
 	for (i = 0; i < NUM_RFKILL_TYPES; i++)
 		rfkill_global_states[i].cur = blocked;
 }
@@ -672,6 +681,7 @@ static const char * const rfkill_types[] = {
 	"nfc",
 };
 
+/*依据名称转换rfkill_type*/
 enum rfkill_type rfkill_find_type(const char *name)
 {
 	int i;
@@ -688,6 +698,7 @@ enum rfkill_type rfkill_find_type(const char *name)
 }
 EXPORT_SYMBOL(rfkill_find_type);
 
+/*显示设备名称*/
 static ssize_t name_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
@@ -697,6 +708,7 @@ static ssize_t name_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(name);
 
+/*显示无线电发射设备类型*/
 static ssize_t type_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
@@ -706,6 +718,7 @@ static ssize_t type_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(type);
 
+/*无线电发射设备编号*/
 static ssize_t index_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
@@ -830,6 +843,7 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(state);
 
+/*显示无线电发射设备属性*/
 static struct attribute *rfkill_dev_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_type.attr,
@@ -978,9 +992,9 @@ bool rfkill_soft_blocked(struct rfkill *rfkill)
 }
 EXPORT_SYMBOL(rfkill_soft_blocked);
 
-struct rfkill * __must_check rfkill_alloc(const char *name,
+struct rfkill * __must_check rfkill_alloc(const char *name/*无线电发射设备名称，例如hci0*/,
 					  struct device *parent,
-					  const enum rfkill_type type,
+					  const enum rfkill_type type/*设备类型*/,
 					  const struct rfkill_ops *ops,
 					  void *ops_data)
 {
@@ -991,13 +1005,13 @@ struct rfkill * __must_check rfkill_alloc(const char *name,
 		return NULL;
 
 	if (WARN_ON(!ops->set_block))
-		return NULL;
+		return NULL;/*ops必须提供set_block参数*/
 
 	if (WARN_ON(!name))
-		return NULL;
+		return NULL;/*必须提供设备名称*/
 
 	if (WARN_ON(type == RFKILL_TYPE_ALL || type >= NUM_RFKILL_TYPES))
-		return NULL;
+		return NULL;/*无线设备类型有误*/
 
 	rfkill = kzalloc(sizeof(*rfkill) + strlen(name) + 1, GFP_KERNEL);
 	if (!rfkill)
@@ -1006,12 +1020,12 @@ struct rfkill * __must_check rfkill_alloc(const char *name,
 	spin_lock_init(&rfkill->lock);
 	INIT_LIST_HEAD(&rfkill->node);
 	rfkill->type = type;
-	strcpy(rfkill->name, name);
+	strcpy(rfkill->name, name);/*设置设备名称*/
 	rfkill->ops = ops;
 	rfkill->data = ops_data;
 
 	dev = &rfkill->dev;
-	dev->class = &rfkill_class;
+	dev->class = &rfkill_class;/*指明其class*/
 	dev->parent = parent;
 	device_initialize(dev);
 
@@ -1059,7 +1073,7 @@ static void rfkill_sync_work(struct work_struct *work)
 
 int __must_check rfkill_register(struct rfkill *rfkill)
 {
-	static unsigned long rfkill_no;
+	static unsigned long rfkill_no;/*负责分配rfkill设备名称编号*/
 	struct device *dev;
 	int error;
 
@@ -1068,20 +1082,21 @@ int __must_check rfkill_register(struct rfkill *rfkill)
 
 	dev = &rfkill->dev;
 
-	mutex_lock(&rfkill_global_mutex);
+	mutex_lock(&rfkill_global_mutex);/*加锁*/
 
 	if (rfkill->registered) {
+		/*已注册*/
 		error = -EALREADY;
 		goto unlock;
 	}
 
-	rfkill->idx = rfkill_no;
-	dev_set_name(dev, "rfkill%lu", rfkill_no);
-	rfkill_no++;
+	rfkill->idx = rfkill_no;/*设置编号*/
+	dev_set_name(dev, "rfkill%lu", rfkill_no);/*生成设备名称*/
+	rfkill_no++;/*编号增加*/
 
-	list_add_tail(&rfkill->node, &rfkill_list);
+	list_add_tail(&rfkill->node, &rfkill_list);/*加入链表*/
 
-	error = device_add(dev);
+	error = device_add(dev);/*设备加入系统*/
 	if (error)
 		goto remove;
 
@@ -1089,13 +1104,14 @@ int __must_check rfkill_register(struct rfkill *rfkill)
 	if (error)
 		goto devdel;
 
-	rfkill->registered = true;
+	rfkill->registered = true;/*标记已注册*/
 
 	INIT_DELAYED_WORK(&rfkill->poll_work, rfkill_poll);
 	INIT_WORK(&rfkill->uevent_work, rfkill_uevent_work);
 	INIT_WORK(&rfkill->sync_work, rfkill_sync_work);
 
 	if (rfkill->ops->poll)
+		/*有poll回调，poll work入队*/
 		queue_delayed_work(system_power_efficient_wq,
 			&rfkill->poll_work,
 			round_jiffies_relative(POLL_INTERVAL));
@@ -1113,6 +1129,7 @@ int __must_check rfkill_register(struct rfkill *rfkill)
 	}
 
 	rfkill_global_led_trigger_event();
+	/*触发add事件给rfkill*/
 	rfkill_send_events(rfkill, RFKILL_OP_ADD);
 
 	mutex_unlock(&rfkill_global_mutex);
@@ -1143,6 +1160,7 @@ void rfkill_unregister(struct rfkill *rfkill)
 	device_del(&rfkill->dev);
 
 	mutex_lock(&rfkill_global_mutex);
+	/*触发del事件*/
 	rfkill_send_events(rfkill, RFKILL_OP_DEL);
 	list_del_init(&rfkill->node);
 	rfkill_global_led_trigger_event();
@@ -1165,6 +1183,7 @@ static int rfkill_fop_open(struct inode *inode, struct file *file)
 	struct rfkill *rfkill;
 	struct rfkill_int_event *ev, *tmp;
 
+	/*申请rfkill_data结构体并初始化*/
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
@@ -1182,19 +1201,19 @@ static int rfkill_fop_open(struct inode *inode, struct file *file)
 	 */
 
 	list_for_each_entry(rfkill, &rfkill_list, node) {
-		ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+		ev = kzalloc(sizeof(*ev), GFP_KERNEL);/*申请event*/
 		if (!ev)
 			goto free;
 		rfkill_sync(rfkill);
-		rfkill_fill_event(&ev->ev, rfkill, RFKILL_OP_ADD);
+		rfkill_fill_event(&ev->ev, rfkill, RFKILL_OP_ADD);/*构造add事件*/
 		mutex_lock(&data->mtx);
-		list_add_tail(&ev->list, &data->events);
+		list_add_tail(&ev->list, &data->events);/*添加此event*/
 		mutex_unlock(&data->mtx);
 	}
 	list_add(&data->list, &rfkill_fds);
 	mutex_unlock(&rfkill_global_mutex);
 
-	file->private_data = data;
+	file->private_data = data;/*设置为文件的私有数据*/
 
 	return stream_open(inode, file);
 
@@ -1216,12 +1235,13 @@ static __poll_t rfkill_fop_poll(struct file *file, poll_table *wait)
 
 	mutex_lock(&data->mtx);
 	if (!list_empty(&data->events))
-		res = EPOLLIN | EPOLLRDNORM;
+		res = EPOLLIN | EPOLLRDNORM;/*events链表不为空，触发IN事件*/
 	mutex_unlock(&data->mtx);
 
 	return res;
 }
 
+/*读取data->events中下一个struct rfkill_int_event*/
 static ssize_t rfkill_fop_read(struct file *file, char __user *buf,
 			       size_t count, loff_t *pos)
 {
@@ -1233,6 +1253,7 @@ static ssize_t rfkill_fop_read(struct file *file, char __user *buf,
 	mutex_lock(&data->mtx);
 
 	while (list_empty(&data->events)) {
+		/*events为空，且指明非阻塞，则返回EAGAIN*/
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
 			goto out;
@@ -1242,23 +1263,24 @@ static ssize_t rfkill_fop_read(struct file *file, char __user *buf,
 		 * using !list_empty() without locking isn't a problem
 		 */
 		ret = wait_event_interruptible(data->read_wait,
-					       !list_empty(&data->events));
+					       !list_empty(&data->events));/*等待data->events链表不为空*/
 		mutex_lock(&data->mtx);
 
 		if (ret)
 			goto out;
 	}
 
+	/*取出event*/
 	ev = list_first_entry(&data->events, struct rfkill_int_event,
 				list);
 
 	sz = min_t(unsigned long, sizeof(ev->ev), count);
 	sz = min_t(unsigned long, sz, data->max_size);
-	ret = sz;
-	if (copy_to_user(buf, &ev->ev, sz))
+	ret = sz;/*选择合适的大小*/
+	if (copy_to_user(buf, &ev->ev, sz))/*复制到用户态*/
 		ret = -EFAULT;
 
-	list_del(&ev->list);
+	list_del(&ev->list);/*将此event自链表上移除*/
 	kfree(ev);
  out:
 	mutex_unlock(&data->mtx);
@@ -1275,7 +1297,7 @@ static ssize_t rfkill_fop_write(struct file *file, const char __user *buf,
 
 	/* we don't need the 'hard' variable but accept it */
 	if (count < RFKILL_EVENT_SIZE_V1 - 1)
-		return -EINVAL;
+		return -EINVAL;/*写和长度无效*/
 
 	/*
 	 * Copy as much data as we can accept into our 'ev' buffer,
@@ -1285,16 +1307,18 @@ static ssize_t rfkill_fop_write(struct file *file, const char __user *buf,
 	count = min(count, sizeof(ev));
 	count = min_t(size_t, count, data->max_size);
 	if (copy_from_user(&ev, buf, count))
-		return -EFAULT;
+		return -EFAULT;/*复制用户态内容出错*/
 
 	if (ev.type >= NUM_RFKILL_TYPES)
-		return -EINVAL;
+		return -EINVAL;/*用户态给定的event type有误*/
 
 	mutex_lock(&rfkill_global_mutex);
 
 	switch (ev.op) {
 	case RFKILL_OP_CHANGE_ALL:
+		/*变更全局状态*/
 		rfkill_update_global_state(ev.type, ev.soft);
+		/*遍历所有rfkill,设置block*/
 		list_for_each_entry(rfkill, &rfkill_list, node)
 			if (rfkill->type == ev.type ||
 			    ev.type == RFKILL_TYPE_ALL)
@@ -1302,6 +1326,7 @@ static ssize_t rfkill_fop_write(struct file *file, const char __user *buf,
 		ret = 0;
 		break;
 	case RFKILL_OP_CHANGE:
+		/*遍历所有rfkill,针对index一致的，设置block*/
 		list_for_each_entry(rfkill, &rfkill_list, node)
 			if (rfkill->idx == ev.idx &&
 			    (rfkill->type == ev.type ||
@@ -1310,6 +1335,7 @@ static ssize_t rfkill_fop_write(struct file *file, const char __user *buf,
 		ret = 0;
 		break;
 	default:
+		/*不支持其它op*/
 		ret = -EINVAL;
 		break;
 	}
@@ -1325,10 +1351,11 @@ static int rfkill_fop_release(struct inode *inode, struct file *file)
 	struct rfkill_int_event *ev, *tmp;
 
 	mutex_lock(&rfkill_global_mutex);
-	list_del(&data->list);
+	list_del(&data->list);/*自链表中移除*/
 	mutex_unlock(&rfkill_global_mutex);
 
 	mutex_destroy(&data->mtx);
+	/*释放未读取的所有events*/
 	list_for_each_entry_safe(ev, tmp, &data->events, list)
 		kfree(ev);
 
@@ -1343,6 +1370,7 @@ static int rfkill_fop_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/*rfkill ioctl实现*/
 static long rfkill_fop_ioctl(struct file *file, unsigned int cmd,
 			     unsigned long arg)
 {
@@ -1374,7 +1402,7 @@ static long rfkill_fop_ioctl(struct file *file, unsigned int cmd,
 			ret = -EINVAL;
 			break;
 		}
-		data->max_size = size;
+		data->max_size = size;/*设置max size*/
 		ret = 0;
 		break;
 	default:
@@ -1390,7 +1418,7 @@ static const struct file_operations rfkill_fops = {
 	.open		= rfkill_fop_open,
 	.read		= rfkill_fop_read,
 	.write		= rfkill_fop_write,
-	.poll		= rfkill_fop_poll,
+	.poll		= rfkill_fop_poll,/*等待事件发生*/
 	.release	= rfkill_fop_release,
 	.unlocked_ioctl	= rfkill_fop_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
@@ -1400,7 +1428,7 @@ static const struct file_operations rfkill_fops = {
 
 static struct miscdevice rfkill_miscdev = {
 	.fops	= &rfkill_fops,
-	.name	= RFKILL_NAME,
+	.name	= RFKILL_NAME,/*指定名称*/
 	.minor	= RFKILL_MINOR,
 };
 
@@ -1410,10 +1438,12 @@ static int __init rfkill_init(void)
 
 	rfkill_update_global_state(RFKILL_TYPE_ALL, !rfkill_default_state);
 
+	/*注册rfkill class*/
 	error = class_register(&rfkill_class);
 	if (error)
 		goto error_class;
 
+	/*注册misc设备*/
 	error = misc_register(&rfkill_miscdev);
 	if (error)
 		goto error_misc;
