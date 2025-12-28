@@ -1093,7 +1093,7 @@ static int hci_set_random_addr_sync(struct hci_dev *hdev, bdaddr_t *rpa)
 }
 
 int hci_update_random_address_sync(struct hci_dev *hdev, bool require_privacy,
-				   bool rpa, u8 *own_addr_type)
+				   bool rpa/*是否开启rpa*/, u8 *own_addr_type)
 {
 	int err;
 
@@ -2224,8 +2224,9 @@ static int hci_le_set_ext_scan_enable_sync(struct hci_dev *hdev, u8 val,
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }
 
-static int hci_le_set_scan_enable_sync(struct hci_dev *hdev, u8 val,
-				       u8 filter_dup)
+/*开启/关闭le扫描,并返回设置结果*/
+static int hci_le_set_scan_enable_sync(struct hci_dev *hdev, u8 val/*开启/关闭*/,
+				       u8 filter_dup/*是否开启重复报文过滤*/)
 {
 	struct hci_cp_le_set_scan_enable cp;
 
@@ -2236,10 +2237,12 @@ static int hci_le_set_scan_enable_sync(struct hci_dev *hdev, u8 val,
 	cp.enable = val;
 
 	if (val && hci_dev_test_flag(hdev, HCI_MESH))
+		/*开启mesh情况下,不进行重复过滤*/
 		cp.filter_dup = LE_SCAN_FILTER_DUP_DISABLE;
 	else
 		cp.filter_dup = filter_dup;
 
+	/*设置开启le扫描*/
 	return __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_SCAN_ENABLE,
 				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
 }
@@ -2257,22 +2260,25 @@ static int hci_le_set_addr_resolution_enable_sync(struct hci_dev *hdev, u8 val)
 				     sizeof(val), &val, HCI_CMD_TIMEOUT);
 }
 
-/*关闭scan*/
+/*关闭LE scan*/
 static int hci_scan_disable_sync(struct hci_dev *hdev)
 {
 	int err;
 
 	/* If controller is not scanning we are done. */
 	if (!hci_dev_test_flag(hdev, HCI_LE_SCAN))
-		return 0;
+		return 0;/*扫描本来就是关闭的*/
 
 	if (hdev->scanning_paused) {
+		/*扫描被暂停,不操作*/
 		bt_dev_dbg(hdev, "Scanning is paused for suspend");
 		return 0;
 	}
 
+	/*关闭扫描*/
 	err = hci_le_set_scan_enable_sync(hdev, LE_SCAN_DISABLE/*指明关闭scan*/, 0x00);
 	if (err) {
+		/*关闭扫描失败*/
 		bt_dev_err(hdev, "Unable to disable scanning: %d", err);
 		return err;
 	}
@@ -3026,7 +3032,7 @@ done:
 				     data, HCI_CMD_TIMEOUT);
 }
 
-static int hci_le_set_scan_param_sync(struct hci_dev *hdev, u8 type,
+static int hci_le_set_scan_param_sync(struct hci_dev *hdev, u8 type/*扫描类型*/,
 				      u16 interval, u16 window,
 				      u8 own_addr_type, u8 filter_policy)
 {
@@ -3037,6 +3043,7 @@ static int hci_le_set_scan_param_sync(struct hci_dev *hdev, u8 type,
 						      window, own_addr_type,
 						      filter_policy);
 
+	/*设置扫描参数*/
 	memset(&cp, 0, sizeof(cp));
 	cp.type = type;
 	cp.interval = cpu_to_le16(interval);
@@ -3045,11 +3052,12 @@ static int hci_le_set_scan_param_sync(struct hci_dev *hdev, u8 type,
 	cp.filter_policy = filter_policy;
 
 	return __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_SCAN_PARAM,
-				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);
+				     sizeof(cp), &cp, HCI_CMD_TIMEOUT);/*设置扫描参数,并返回设置结果*/
 }
 
-static int hci_start_scan_sync(struct hci_dev *hdev, u8 type, u16 interval,
-			       u16 window, u8 own_addr_type, u8 filter_policy,
+/*设置le扫描参数,并开启le扫描,返回开启结果*/
+static int hci_start_scan_sync(struct hci_dev *hdev, u8 type/*扫描类型*/, u16 interval/*扫描间隔*/,
+			       u16 window/*持续时间*/, u8 own_addr_type/*扫描地址类型*/, u8 filter_policy,
 			       u8 filter_dup)
 {
 	int err;
@@ -3062,24 +3070,29 @@ static int hci_start_scan_sync(struct hci_dev *hdev, u8 type, u16 interval,
 	err = hci_le_set_scan_param_sync(hdev, type, interval, window,
 					 own_addr_type, filter_policy);
 	if (err)
+		/*设置扫描参数失败*/
 		return err;
 
+	/*设置开启LE扫描*/
 	return hci_le_set_scan_enable_sync(hdev, LE_SCAN_ENABLE/*指明开启scan*/, filter_dup);
 }
 
+/*开启被动LE扫描*/
 static int hci_passive_scan_sync(struct hci_dev *hdev)
 {
 	u8 own_addr_type;
 	u8 filter_policy;
 	u16 window, interval;
-	u8 filter_dups = LE_SCAN_FILTER_DUP_ENABLE;
+	u8 filter_dups = LE_SCAN_FILTER_DUP_ENABLE;/*默认开启重复报文过滤*/
 	int err;
 
 	if (hdev->scanning_paused) {
+		/*设备指明要暂停扫描*/
 		bt_dev_dbg(hdev, "Scanning is paused for suspend");
 		return 0;
 	}
 
+	/*关闭扫描*/
 	err = hci_scan_disable_sync(hdev);
 	if (err) {
 		bt_dev_err(hdev, "disable scanning failed: %d", err);
@@ -3117,7 +3130,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 		 * while suspended.
 		 */
 		if (list_empty(&hdev->le_accept_list))
-			return 0;
+			return 0;/*枃不接收*/
 
 		/* If there are devices is the accept_list that means some
 		 * devices could not be programmed which in non-suspended case
@@ -3126,7 +3139,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 		 * can ignore device needing host to filter to allow devices in
 		 * the acceptlist to be able to wakeup the system.
 		 */
-		filter_policy = 0x01;
+		filter_policy = 0x01;/*有acceptlist,置为基础过滤型扫描过滤策略*/
 	}
 
 	/* When the controller is using random resolvable addresses and
@@ -3140,7 +3153,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 	 */
 	if (hci_dev_test_flag(hdev, HCI_PRIVACY) &&
 	    (hdev->le_features[0] & HCI_LE_EXT_SCAN_POLICY))
-		filter_policy |= 0x02;
+		filter_policy |= 0x02;/*置为扩展型非过滤扫描过滤策略*/
 
 	if (hdev->suspended) {
 		window = hdev->le_scan_window_suspend;
@@ -3172,13 +3185,14 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 
 	/* Disable all filtering for Mesh */
 	if (hci_dev_test_flag(hdev, HCI_MESH)) {
+		/*指明采用基础性非过滤策略即(指控制器接收所有广播数据包，不进行地址或类型筛选)*/
 		filter_policy = 0;
 		filter_dups = LE_SCAN_FILTER_DUP_DISABLE;
 	}
 
 	bt_dev_dbg(hdev, "LE passive scan with acceptlist = %d", filter_policy);
 
-	return hci_start_scan_sync(hdev, LE_SCAN_PASSIVE/*被动扫描*/, interval, window,
+	return hci_start_scan_sync(hdev, LE_SCAN_PASSIVE/*指明被动扫描,不对外发送pdu*/, interval, window,
 				   own_addr_type, filter_policy, filter_dups);
 }
 
@@ -3211,7 +3225,7 @@ int hci_update_passive_scan_sync(struct hci_dev *hdev)
 
 	/* No point in doing scanning if LE support hasn't been enabled */
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED))
-		return 0;
+		return 0;/*LE未开启,不处理*/
 
 	/* If discovery is active don't interfere with it */
 	if (hdev->discovery.state != DISCOVERY_STOPPED)
@@ -3259,6 +3273,7 @@ int hci_update_passive_scan_sync(struct hci_dev *hdev)
 
 		bt_dev_dbg(hdev, "start background scanning");
 
+		/*开启被动扫描*/
 		err = hci_passive_scan_sync(hdev);
 		if (err)
 			bt_dev_err(hdev, "start background scanning failed: %d",
@@ -4096,6 +4111,7 @@ static int hci_init2_sync(struct hci_dev *hdev)
 	return 0;
 }
 
+/*event mask共有8个字节,每一个bit代表一个event,当某个bit被置为1,则对应的event可以由hci产生,否则不产生,*/
 static int hci_set_event_mask_sync(struct hci_dev *hdev)
 {
 	/* The second byte is 0xff instead of 0x9f (two reserved bits
@@ -4201,6 +4217,7 @@ static int hci_set_event_mask_sync(struct hci_dev *hdev)
 	if (lmp_le_capable(hdev))
 		events[7] |= 0x20;	/* LE Meta-Event */
 
+	/*开启以上事件*/
 	return __hci_cmd_sync_status(hdev, HCI_OP_SET_EVENT_MASK,
 				     sizeof(events), events, HCI_CMD_TIMEOUT);
 }
@@ -6214,7 +6231,7 @@ static int hci_pause_scan_sync(struct hci_dev *hdev)
 
 	hci_scan_disable_sync(hdev);
 
-	hdev->scanning_paused = true;
+	hdev->scanning_paused = true;/*标记暂停扫描*/
 
 	return 0;
 }

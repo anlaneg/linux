@@ -372,7 +372,7 @@ struct hci_dev {
 	bdaddr_t	bdaddr;/*设备蓝牙地址*/
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;
-	bdaddr_t	random_addr;
+	bdaddr_t	random_addr;/*为此设备配置的LE随机地址*/
 	bdaddr_t	static_addr;
 	__u8		adv_addr_type;
 	__u8		dev_name[HCI_MAX_NAME_LENGTH];/*设备名称*/
@@ -388,7 +388,7 @@ struct hci_dev {
 	__u8		major_class;
 	__u8		minor_class;
 	__u8		max_page;
-	/*设备支持的features列表*/
+	/*记录设备支持的features列表,见3.3 Feature mask definition,例如看lmp_ping_capable*/
 	__u8		features[HCI_MAX_PAGES][8];
 	__u8		le_features[8];
 	__u8		le_accept_list_size;
@@ -397,6 +397,7 @@ struct hci_dev {
 	__u8		le_states[8];
 	__u8		mesh_ad_types[16];
 	__u8		mesh_send_ref;
+	/*此设备支持的hci命令,具体见6.27 Supported commands描述的各bits位*/
 	__u8		commands[64];
 	__u8		hci_ver;/*controller支持的hci版本号*/
 	__u16		hci_rev;/*controller实现的子版本号*/
@@ -416,8 +417,8 @@ struct hci_dev {
 	__u8		le_adv_channel_map;
 	__u16		le_adv_min_interval;
 	__u16		le_adv_max_interval;/*广播最大间隔*/
-	__u8		le_scan_type;
-	__u16		le_scan_interval;
+	__u8		le_scan_type;/*LE扫描类型(例如被动扫描)*/
+	__u16		le_scan_interval;/*扫描间隔*/
 	__u16		le_scan_window;
 	__u16		le_scan_int_suspend;
 	__u16		le_scan_window_suspend;
@@ -471,8 +472,8 @@ struct hci_dev {
 	__s8		min_le_tx_power;
 	__s8		max_le_tx_power;
 
-	__u16		pkt_type;
-	__u16		esco_type;
+	__u16		pkt_type;/*指明设备支持的数据包类型,例如HCI_DM3*/
+	__u16		esco_type;/*指明设备在ESCO上支持的数据包类型,例如esco_ev4*/
 	__u16		link_policy;
 	__u16		link_mode;
 
@@ -560,7 +561,7 @@ struct hci_dev {
 	struct notifier_block	suspend_notifier;
 	enum suspended_state	suspend_state_next;
 	enum suspended_state	suspend_state;
-	bool			scanning_paused;
+	bool			scanning_paused;/*当此值被设置为true,设备将不启动扫描*/
 	bool			suspended;
 	u8			wake_reason;
 	bdaddr_t		wake_addr;
@@ -1917,6 +1918,10 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_park_capable(dev)      ((dev)->features[0][1] & LMP_PARK)
 #define lmp_sco_capable(dev)       ((dev)->features[0][1] & LMP_SCO)
 #define lmp_inq_rssi_capable(dev)  ((dev)->features[0][3] & LMP_RSSI_INQ)
+/*该功能指示设备是否能够支持《蓝牙核心规范》[第 2 卷]
+ * B 部分 5.5 节中定义的增强型同步面向连接（eSCO）逻辑传输，
+ * 以及通过 4.6.2 节定义的链路管理协议（LMP）序列，
+ * 支持 [第 2 卷] B 部分 6.5.3.1 节中定义的 EV3 数据包。*/
 #define lmp_esco_capable(dev)      ((dev)->features[0][3] & LMP_ESCO)
 /*是否支持br,edr能力*/
 #define lmp_bredr_capable(dev)     (!((dev)->features[0][4] & LMP_NO_BREDR))
@@ -1947,6 +1952,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_sync_train_capable(dev) ((dev)->features[2][0] & LMP_SYNC_TRAIN)
 #define lmp_sync_scan_capable(dev)  ((dev)->features[2][0] & LMP_SYNC_SCAN)
 #define lmp_sc_capable(dev)         ((dev)->features[2][1] & LMP_SC)
+/*例如:按规定page=2,byte=1的第1个bit为设备是否支持ping能力*/
 #define lmp_ping_capable(dev)       ((dev)->features[2][1] & LMP_PING)
 
 /* ----- Host capabilities ----- */
@@ -2001,6 +2007,9 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 	 !hci_test_quirk((dev), HCI_QUIRK_BROKEN_ENHANCED_SETUP_SYNC_CONN))
 
 /* Use ext scanning if set ext scan param and ext scan enable is supported */
+/*37号0X20(即5bits,即HCI_LE_Set_Extended_Scan_Parameters)
+ * 37号0X40(即6bits,即HCI_LE_Set_Extended_Scan_Enable)
+ * */
 #define use_ext_scan(dev) (((dev)->commands[37] & 0x20) && \
 			   ((dev)->commands[37] & 0x40) && \
 			   !hci_test_quirk((dev), HCI_QUIRK_BROKEN_EXT_SCAN))

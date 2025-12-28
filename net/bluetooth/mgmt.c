@@ -478,7 +478,7 @@ static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (hci_dev_test_flag(d, HCI_SETUP) ||
 		    hci_dev_test_flag(d, HCI_CONFIG) ||
 		    hci_dev_test_flag(d, HCI_USER_CHANNEL))
-			continue;
+			continue;/*跳过以上设备*/
 
 		/* Devices marked as raw-only are neither configured
 		 * nor unconfigured controllers.
@@ -520,6 +520,7 @@ static int read_unconf_index_list(struct sock *sk, struct hci_dev *hdev,
 
 	read_lock(&hci_dev_list_lock);
 
+	/*取未配置的设备数目*/
 	count = 0;
 	list_for_each_entry(d, &hci_dev_list, list) {
 		if (hci_dev_test_flag(d, HCI_UNCONFIGURED))
@@ -547,7 +548,7 @@ static int read_unconf_index_list(struct sock *sk, struct hci_dev *hdev,
 			continue;
 
 		if (hci_dev_test_flag(d, HCI_UNCONFIGURED)) {
-			rp->index[count++] = cpu_to_le16(d->id);
+			rp->index[count++] = cpu_to_le16(d->id);/*设置未配置 的设备id*/
 			bt_dev_dbg(hdev, "Added hci%u", d->id);
 		}
 	}
@@ -2207,12 +2208,15 @@ static void set_mesh_complete(struct hci_dev *hdev, void *data, int err)
 	struct sock *sk = cmd->sk;
 
 	if (status) {
+		/*执行出错,响应失败*/
 		mgmt_pending_foreach(MGMT_OP_SET_MESH_RECEIVER, hdev, true,
 				     cmd_status_rsp, &status);
 		return;
 	}
 
+	/*移除pending cmd,指明执行成功*/
 	mgmt_pending_remove(cmd);
+	/*给用户响应*/
 	mgmt_cmd_complete(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER, 0, NULL, 0);
 }
 
@@ -2225,6 +2229,7 @@ static int set_mesh_sync(struct hci_dev *hdev, void *data)
 	memset(hdev->mesh_ad_types, 0, sizeof(hdev->mesh_ad_types));
 
 	if (cp->enable)
+		/*添加MESH标记,记录开启mesh*/
 		hci_dev_set_flag(hdev, HCI_MESH);
 	else
 		hci_dev_clear_flag(hdev, HCI_MESH);
@@ -2238,6 +2243,7 @@ static int set_mesh_sync(struct hci_dev *hdev, void *data)
 	if (len <= sizeof(hdev->mesh_ad_types))
 		memcpy(hdev->mesh_ad_types, cp->ad_types, len);
 
+	/*开启被动扫描*/
 	hci_update_passive_scan_sync(hdev);
 	return 0;
 }
@@ -2266,25 +2272,29 @@ static int set_mesh(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	period = __le16_to_cpu(cp->period);
 
 	if (period < 0x0004 || period > 0x4000)
+		/*period只能在以上范围内,参数无效,报错*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	window = __le16_to_cpu(cp->window);
 
 	if (window < 0x0004 || window > 0x4000)
+		/*window只能在以上范围 内,参数无效,报错*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	if (window > period)
+		/*window大小不得大于period*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_MESH_RECEIVER,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
 
-	cmd = mgmt_pending_add(sk, MGMT_OP_SET_MESH_RECEIVER, hdev, data, len);
+	cmd = mgmt_pending_add(sk, MGMT_OP_SET_MESH_RECEIVER, hdev, data/*指定参数*/, len);
 	if (!cmd)
 		err = -ENOMEM;
 	else
+		/*构造pending cmd成功,执行set_mesh_sync函数*/
 		err = hci_cmd_sync_queue(hdev, set_mesh_sync, cmd,
 					 set_mesh_complete);
 
@@ -9544,6 +9554,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ add_adv_patterns_monitor_rssi,
 				   MGMT_ADD_ADV_PATTERNS_MONITOR_RSSI_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*收到MGMT_OP_SET_MESH_RECEIVER命令后调用*/
 	{ set_mesh,                MGMT_SET_MESH_RECEIVER_SIZE,
 						HCI_MGMT_VAR_LEN },
 	/*读取mesh功能*/
@@ -10489,21 +10500,21 @@ static void mesh_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 accepted:
 	skb = mgmt_alloc_skb(hdev, MGMT_EV_MESH_DEVICE_FOUND,
-			     sizeof(*ev) + eir_len + scan_rsp_len);
+			     sizeof(*ev) + eir_len + scan_rsp_len);/*申请mesh设备发现事件*/
 	if (!skb)
 		return;
 
 	ev = skb_put(skb, sizeof(*ev));
 
-	bacpy(&ev->addr.bdaddr, bdaddr);
-	ev->addr.type = link_to_bdaddr(LE_LINK, addr_type);
+	bacpy(&ev->addr.bdaddr, bdaddr);/*设置地址*/
+	ev->addr.type = link_to_bdaddr(LE_LINK, addr_type);/*设置地址类型,例如:BDADDR_LE_RANDOM*/
 	ev->rssi = rssi;
 	ev->flags = cpu_to_le32(flags);
 	ev->instant = cpu_to_le64(instant);
 
 	if (eir_len > 0)
 		/* Copy EIR or advertising data into event */
-		skb_put_data(skb, eir, eir_len);
+		skb_put_data(skb, eir, eir_len);/*存放EIR*/
 
 	if (scan_rsp_len > 0)
 		/* Append scan response data to event */
@@ -10511,11 +10522,11 @@ accepted:
 
 	ev->eir_len = cpu_to_le16(eir_len + scan_rsp_len);
 
-	mgmt_event_skb(skb, NULL);
+	mgmt_event_skb(skb, NULL);/*触发事件*/
 }
 
 /*发现设备*/
-void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备地址*/, u8 link_type,
+void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备地址*/, u8 link_type/*LINK类型*/,
 		       u8 addr_type, u8 *dev_class, s8 rssi, u32 flags,
 		       u8 *eir, u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len,
 		       u64 instant)
@@ -10525,6 +10536,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备�
 	bool report_device = hci_discovery_active(hdev);
 
 	if (hci_dev_test_flag(hdev, HCI_MESH) && link_type == LE_LINK)
+		/*设备开启了MESH,且LINK类型为LE_LINK,触发mesh设备发现事件*/
 		mesh_device_found(hdev, bdaddr, addr_type, rssi, flags,
 				  eir, eir_len, scan_rsp, scan_rsp_len,
 				  instant);

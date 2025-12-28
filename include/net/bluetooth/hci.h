@@ -395,7 +395,7 @@ enum {
 
 	HCI_RAW,
 
-	HCI_RESET,
+	HCI_RESET,/*标记设备正在进行reset*/
 };
 
 /* HCI socket flags */
@@ -1710,7 +1710,7 @@ struct hci_cp_le_set_scan_rsp_data {
 struct hci_cp_le_set_scan_param {
 	__u8    type;/*扫描类型,当前有两种:主动扫描(0X01),被动扫描(0X00,被动扫描不向外发送pdu)*/
 	__le16  interval;/*扫描间隔*/
-	__le16  window;/*扫描持续时长,如果interval与window相等,则应不间断扫描*/
+	__le16  window;/*扫描持续时长,如果interval与window相等,则应不间断扫描,windows应小于等于interval*/
 	__u8    own_address_type;/*扫描PDU报文中自身地址类型*/
 	__u8    filter_policy;
 } __packed;

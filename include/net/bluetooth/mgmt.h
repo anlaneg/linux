@@ -844,10 +844,10 @@ struct mgmt_cp_add_adv_patterns_monitor_rssi {
 #define MGMT_ADD_ADV_PATTERNS_MONITOR_RSSI_SIZE	8
 #define MGMT_OP_SET_MESH_RECEIVER		0x0057
 struct mgmt_cp_set_mesh {
-	__u8   enable;
+	__u8   enable;/*开启/关闭*/
 	__le16 window;
 	__le16 period;
-	__u8   num_ad_types;
+	__u8   num_ad_types;/*ad_types数组长度*/
 	__u8   ad_types[];
 } __packed;
 #define MGMT_SET_MESH_RECEIVER_SIZE	6

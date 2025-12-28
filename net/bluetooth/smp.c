@@ -516,7 +516,8 @@ bool smp_irk_matches(struct hci_dev *hdev, const u8 irk[16],
 	return !crypto_memneq(bdaddr->b, hash, 3);
 }
 
-int smp_generate_rpa(struct hci_dev *hdev, const u8 irk[16], bdaddr_t *rpa)
+/*生成rpa地址*/
+int smp_generate_rpa(struct hci_dev *hdev, const u8 irk[16], bdaddr_t *rpa/*生成的地址*/)
 {
 	struct l2cap_chan *chan = hdev->smp_data;
 	int err;

@@ -276,9 +276,9 @@ void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev, bool remove,
 }
 
 /*利用opcode及参数构造mgmt_pending_cmd*/
-struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
+struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode/*命令对应的Opcode*/,
 					  struct hci_dev *hdev,
-					  void *data/*参数*/, u16 len/*参数长度*/)
+					  void *data/*命令参数*/, u16 len/*参数长度*/)
 {
 	struct mgmt_pending_cmd *cmd;
 

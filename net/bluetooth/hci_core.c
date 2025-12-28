@@ -2625,10 +2625,12 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv/*私有结构体大小*/)
 	INIT_LIST_HEAD(&hdev->monitored_devices);
 
 	INIT_LIST_HEAD(&hdev->local_codecs);
-	/*初始化对rx_q队列进行处理的rx_work*/
+	/*初始化rx_work,处理收包*/
 	INIT_WORK(&hdev->rx_work, hci_rx_work);
-	INIT_WORK(&hdev->cmd_work, hci_cmd_work);/*初始化cmd work,处理cmd_q上的command*/
-	INIT_WORK(&hdev->tx_work, hci_tx_work);/*初始化tx work,处理raw_q*/
+	/*初始化cmd work,处理cmd_q上的command,用于向LINK MANAGER发送请求命令*/
+	INIT_WORK(&hdev->cmd_work, hci_cmd_work);
+	/*初始化tx work,用于向LINK MANAGER发送数据*/
+	INIT_WORK(&hdev->tx_work, hci_tx_work);
 	/*初始化power_on work*/
 	INIT_WORK(&hdev->power_on, hci_power_on);
 	INIT_WORK(&hdev->error_reset, hci_error_reset);
@@ -3289,6 +3291,7 @@ void *hci_recv_event_data(struct hci_dev *hdev, __u8 event)
 	offset = sizeof(*hdr);
 
 	if (hdr->evt != event) {
+		/*收到的事件与预期的不一样,考虑是否LE_META事件*/
 		/* In case of LE metaevent check the subevent match */
 		if (hdr->evt == HCI_EV_LE_META) {
 			struct hci_ev_le_meta *ev;
@@ -3296,7 +3299,7 @@ void *hci_recv_event_data(struct hci_dev *hdev, __u8 event)
 			ev = (void *)hdev->recv_event->data + offset;
 			offset += sizeof(*ev);
 			if (ev->subevent == event)
-				goto found;
+				goto found;/*检查与subevent事件一致,匹配*/
 		}
 		return NULL;
 	}
@@ -4140,7 +4143,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 }
 
-/*负责处理hdev->rx_q队列上所有skb(收取controller报文)*/
+/*负责处理hdev->rx_q队列上所有skb(收取HIC设备送来的报文)*/
 static void hci_rx_work(struct work_struct *work)
 {
 	/*取得work服务的hci dev*/
@@ -4193,13 +4196,13 @@ static void hci_rx_work(struct work_struct *work)
 		/* Process frame */
 		switch (hci_skb_pkt_type(skb)) {
 		case HCI_EVENT_PKT:
-			/*事件类报文（event报文是由hci controller来的报文）*/
+			/*事件类报文（event报文是由hci LINK MANAGER发来的报文）*/
 			BT_DBG("%s Event packet", hdev->name);
 			hci_event_packet(hdev, skb);/*处理event pkt*/
 			break;
 
 		case HCI_ACLDATA_PKT:
-			/*ACLDATA用于host与hci controller之间互传的报文，
+			/*ACLDATA用于host与hci 之间互传的数据报文，
 			 * 报文会按连接投递，当前收到acl header报文，处理它*/
 			BT_DBG("%s ACL data packet", hdev->name);
 			hci_acldata_packet(hdev, skb);
@@ -4233,7 +4236,7 @@ static void hci_send_cmd_sync(struct hci_dev *hdev, struct sk_buff *skb)
 
 	kfree_skb(hdev->sent_cmd);/*释放掉上一个cmd*/
 
-	hdev->sent_cmd = skb_clone(skb, GFP_KERNEL);
+	hdev->sent_cmd = skb_clone(skb, GFP_KERNEL);/*记录本次cmd*/
 	if (!hdev->sent_cmd) {
 		/*clone cmd skb失败，归还skb到cmd_q中，重新对cmd_work入队*/
 		skb_queue_head(&hdev->cmd_q, skb);
@@ -4271,11 +4274,12 @@ static void hci_cmd_work(struct work_struct *work)
 
 	/* Send queued commands */
 	if (atomic_read(&hdev->cmd_cnt)) {
+		/*HCI LM可以接收CMD,这里出队并发送*/
 		skb = skb_dequeue(&hdev->cmd_q);/*只出队一个cmd*/
 		if (!skb)
 			return;
 
-		hci_send_cmd_sync(hdev, skb);/*同步发送此cmd*/
+		hci_send_cmd_sync(hdev, skb);/*同步发送此cmd给HCI硬件*/
 
 		rcu_read_lock();
 		if (test_bit(HCI_RESET, &hdev->flags) ||

@@ -270,15 +270,15 @@ static u8 hci_cc_reset(struct hci_dev *hdev, void *data, struct sk_buff *skb)
 
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
-	clear_bit(HCI_RESET, &hdev->flags);
+	clear_bit(HCI_RESET, &hdev->flags);/*reset完成*/
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*重启出错*/
 
 	/* Reset all non-persistent flags */
 	hci_dev_clear_volatile_flags(hdev);
 
-	hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
+	hci_discovery_set_state(hdev, DISCOVERY_STOPPED);/*置为STOP状态*/
 
 	hdev->inq_tx_power = HCI_TX_POWER_INVALID;
 	hdev->adv_tx_power = HCI_TX_POWER_INVALID;
@@ -777,6 +777,7 @@ done:
 	return status;
 }
 
+/*读取本端命令完成后,事件触发此回调*/
 static u8 hci_cc_read_local_commands(struct hci_dev *hdev, void *data,
 				     struct sk_buff *skb)
 {
@@ -785,13 +786,14 @@ static u8 hci_cc_read_local_commands(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*执行出错*/
 
 	if (hci_dev_test_flag(hdev, HCI_SETUP) ||
 	    hci_dev_test_flag(hdev, HCI_CONFIG))
+		/*记录本hci设备支持的命令(以掩码形式显示)*/
 		memcpy(hdev->commands, rp->commands, sizeof(hdev->commands));
 
-	return rp->status;
+	return rp->status;/*返回状态成功*/
 }
 
 static u8 hci_cc_read_auth_payload_timeout(struct hci_dev *hdev, void *data,
@@ -846,6 +848,7 @@ unlock:
 	return rp->status;
 }
 
+/*读取本端支持的功能完成后触发*/
 static u8 hci_cc_read_local_features(struct hci_dev *hdev, void *data,
 				     struct sk_buff *skb)
 {
@@ -854,25 +857,33 @@ static u8 hci_cc_read_local_features(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*响应出错*/
 
-	memcpy(hdev->features, rp->features, 8);
+	memcpy(hdev->features, rp->features, 8);/*写设备响应的features*/
 
 	/* Adjust default settings according to features
 	 * supported by device. */
 
 	if (hdev->features[0][0] & LMP_3SLOT)
+		//该功能用于指示设备是否支持传输和接收 DM3 数据包与 DH3 数据包，
+		// 以在 ACL-U 逻辑链路上承载业务流量。
 		hdev->pkt_type |= (HCI_DM3 | HCI_DH3);
 
 	if (hdev->features[0][0] & LMP_5SLOT)
+		//该功能指示设备是否支持传输和接收 DM5 数据包与 DH5 数据包，
+		// 以在 ACL-U 逻辑链路上承载业务流量。
 		hdev->pkt_type |= (HCI_DM5 | HCI_DH5);
 
 	if (hdev->features[0][1] & LMP_HV2) {
+		//该功能指示设备是否能够在 SCO 逻辑传输上支持
+		// [第 2 卷] B 部分 6.5.2.2 节中定义的 HV2 数据包类型。
 		hdev->pkt_type  |= (HCI_HV2);
 		hdev->esco_type |= (ESCO_HV2);
 	}
 
 	if (hdev->features[0][1] & LMP_HV3) {
+		//该功能指示设备是否能够在 SCO 逻辑传输上支持《蓝牙核心规范》
+		// [第 2 卷] B 部分 6.5.2.3 节中定义的 HV3 数据包类型。
 		hdev->pkt_type  |= (HCI_HV3);
 		hdev->esco_type |= (ESCO_HV3);
 	}
@@ -881,18 +892,28 @@ static u8 hci_cc_read_local_features(struct hci_dev *hdev, void *data,
 		hdev->esco_type |= (ESCO_EV3);
 
 	if (hdev->features[0][4] & LMP_EV4)
+		//该功能指示设备是否能够在增强型同步面向连接（eSCO）逻辑传输上支持《蓝牙核心规范》
+		// [第 2 卷] B 部分 6.5.3.2 节中定义的 EV4 数据包类型。
 		hdev->esco_type |= (ESCO_EV4);
 
 	if (hdev->features[0][4] & LMP_EV5)
+		//该功能指示设备是否能够在增强型同步面向连接（eSCO）逻辑传输上支持《蓝牙核心规范》
+		// [第 2 卷] B 部分 6.5.3.3 节中定义的 EV5 数据包类型。
 		hdev->esco_type |= (ESCO_EV5);
 
 	if (hdev->features[0][5] & LMP_EDR_ESCO_2M)
+		//该功能指示设备是否支持在增强型同步面向连接（eSCO）
+		// 逻辑传输上传输和接收 2-EV3 数据包，以承载业务流量。
 		hdev->esco_type |= (ESCO_2EV3);
 
 	if (hdev->features[0][5] & LMP_EDR_ESCO_3M)
+		//该功能指示设备是否支持在增强型同步面向连接（eSCO）
+		// 逻辑传输上传输和接收 3-EV3 数据包，以承载业务流量。
 		hdev->esco_type |= (ESCO_3EV3);
 
 	if (hdev->features[0][5] & LMP_EDR_3S_ESCO)
+		//该功能指示设备是否支持在增强型同步面向连接（eSCO）逻辑传输上，
+		//传输和接收3 时隙增强速率数据包，以承载业务流量。
 		hdev->esco_type |= (ESCO_2EV5 | ESCO_3EV5);
 
 	return rp->status;
@@ -1354,15 +1375,16 @@ static u8 hci_cc_le_set_random_addr(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*执行失败*/
 
+	/*取得先前配置的随机地址*/
 	sent = hci_sent_cmd_data(hdev, HCI_OP_LE_SET_RANDOM_ADDR);
 	if (!sent)
 		return rp->status;
 
 	hci_dev_lock(hdev);
 
-	bacpy(&hdev->random_addr, sent);
+	bacpy(&hdev->random_addr, sent);/*设置配置的随机地址*/
 
 	if (!bacmp(&hdev->rpa, sent)) {
 		hci_dev_clear_flag(hdev, HCI_RPA_EXPIRED);
@@ -1653,15 +1675,15 @@ static u8 hci_cc_le_set_scan_param(struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
-		return rp->status;
+		return rp->status;/*设置失败*/
 
 	cp = hci_sent_cmd_data(hdev, HCI_OP_LE_SET_SCAN_PARAM);
 	if (!cp)
-		return rp->status;
+		return rp->status;/*没有查找到命令*/
 
 	hci_dev_lock(hdev);
 
-	hdev->le_scan_type = cp->type;
+	hdev->le_scan_type = cp->type;/*设置LE扫描类型*/
 
 	hci_dev_unlock(hdev);
 
@@ -4042,7 +4064,7 @@ static const struct hci_cc {
 	       sizeof(struct hci_rp_read_def_link_policy)),
 	HCI_CC_STATUS(HCI_OP_WRITE_DEF_LINK_POLICY,
 		      hci_cc_write_def_link_policy),
-	HCI_CC_STATUS(HCI_OP_RESET, hci_cc_reset),
+	HCI_CC_STATUS(HCI_OP_RESET, hci_cc_reset),/*重启hci设备对应的回调*/
 	HCI_CC(HCI_OP_READ_STORED_LINK_KEY, hci_cc_read_stored_link_key,
 	       sizeof(struct hci_rp_read_stored_link_key)),
 	HCI_CC(HCI_OP_DELETE_STORED_LINK_KEY, hci_cc_delete_stored_link_key,
@@ -4071,9 +4093,9 @@ static const struct hci_cc {
 	HCI_CC(HCI_OP_READ_LOCAL_VERSION, hci_cc_read_local_version,
 	       sizeof(struct hci_rp_read_local_version)),/*读取local controller版本信息完成*/
 	HCI_CC(HCI_OP_READ_LOCAL_COMMANDS, hci_cc_read_local_commands,
-	       sizeof(struct hci_rp_read_local_commands)),
+	       sizeof(struct hci_rp_read_local_commands)),/*读取local COMMAND信息完成*/
 	HCI_CC(HCI_OP_READ_LOCAL_FEATURES, hci_cc_read_local_features,
-	       sizeof(struct hci_rp_read_local_features)),
+	       sizeof(struct hci_rp_read_local_features)),/*读取本端支持的功能完成*/
 	HCI_CC(HCI_OP_READ_LOCAL_EXT_FEATURES, hci_cc_read_local_ext_features,
 	       sizeof(struct hci_rp_read_local_ext_features)),
 	HCI_CC(HCI_OP_READ_BUFFER_SIZE, hci_cc_read_buffer_size,
@@ -4122,9 +4144,9 @@ static const struct hci_cc {
 	       sizeof(struct hci_rp_user_confirm_reply)),
 	HCI_CC(HCI_OP_USER_PASSKEY_NEG_REPLY, hci_cc_user_passkey_neg_reply,
 	       sizeof(struct hci_rp_user_confirm_reply)),
-	HCI_CC_STATUS(HCI_OP_LE_SET_RANDOM_ADDR, hci_cc_le_set_random_addr),
+	HCI_CC_STATUS(HCI_OP_LE_SET_RANDOM_ADDR, hci_cc_le_set_random_addr),/*设置LE随机地址完成*/
 	HCI_CC_STATUS(HCI_OP_LE_SET_ADV_ENABLE, hci_cc_le_set_adv_enable),
-	HCI_CC_STATUS(HCI_OP_LE_SET_SCAN_PARAM, hci_cc_le_set_scan_param),
+	HCI_CC_STATUS(HCI_OP_LE_SET_SCAN_PARAM, hci_cc_le_set_scan_param),/*设置LE扫描参数*/
 	HCI_CC_STATUS(HCI_OP_LE_SET_SCAN_ENABLE, hci_cc_le_set_scan_enable),
 	HCI_CC(HCI_OP_LE_READ_ACCEPT_LIST_SIZE,
 	       hci_cc_le_read_accept_list_size,
@@ -4232,7 +4254,7 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, void *data,
 
 	for (i = 0; i < ARRAY_SIZE(hci_cc_table); i++) {
 		if (hci_cc_table[i].op == *opcode) {
-			/*如果此opcode与command complete表中元素命中,则检查并触发相应回调*/
+			/*收到cmd complete事件,如果此opcode与command complete表中元素命中,则检查并触发相应回调*/
 			*status = hci_cc_func(hdev, &hci_cc_table[i], skb);
 			break;
 		}
@@ -6162,6 +6184,7 @@ static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型*/, bd
 
 	/* All scan results should be sent up for Mesh systems */
 	if (hci_dev_test_flag(hdev, HCI_MESH)) {
+		/*设备开启了MESH功能,指明发现设备事件*/
 		mgmt_device_found(hdev, bdaddr, LE_LINK, bdaddr_type, NULL,
 				  rssi, flags, data, len, NULL, 0, instant);
 		return;
@@ -7236,6 +7259,7 @@ static const struct hci_le_ev {
 		     HCI_MAX_EVENT_SIZE),
 };
 
+/*LE META事件比较特殊,其内容包含subevent才是用户关心的事件*/
 static void hci_le_meta_evt(struct hci_dev *hdev, void *data,
 			    struct sk_buff *skb, u16 *opcode, u8 *status,
 			    hci_req_complete_t *req_complete,
@@ -7244,13 +7268,14 @@ static void hci_le_meta_evt(struct hci_dev *hdev, void *data,
 	struct hci_ev_le_meta *ev = data;
 	const struct hci_le_ev *subev;
 
-	bt_dev_dbg(hdev, "subevent 0x%2.2x", ev->subevent);
+	bt_dev_dbg(hdev, "subevent 0x%2.2x", ev->subevent);/*显示收到的subevent*/
 
 	/* Only match event if command OGF is for LE */
 	if (hdev->req_skb &&
-	   (hci_opcode_ogf(hci_skb_opcode(hdev->req_skb)) == 0x08 ||
+	   (hci_opcode_ogf(hci_skb_opcode(hdev->req_skb)) == 0x08/*le类型*/ ||
 	    hci_skb_opcode(hdev->req_skb) == HCI_OP_NOP) &&
 	    hci_skb_event(hdev->req_skb) == ev->subevent) {
+		/*收到的这个报文与请求的匹配,交给cmd处理complete*/
 		*opcode = hci_skb_opcode(hdev->req_skb);
 		hci_req_cmd_complete(hdev, *opcode, 0x00, req_complete,
 				     req_complete_skb);
@@ -7358,8 +7383,9 @@ static void hci_store_wake_reason(struct hci_dev *hdev, u8 event,
 		bacpy(&hdev->wake_addr, &conn_complete->bdaddr);
 		hdev->wake_addr_type = BDADDR_BREDR;
 	} else if (event == HCI_EV_LE_META) {
+		/*事件为le_meta事件*/
 		struct hci_ev_le_meta *le_ev = (void *)skb->data;
-		u8 subevent = le_ev->subevent;
+		u8 subevent = le_ev->subevent;/*取其指明的subevent*/
 		u8 *ptr = &skb->data[sizeof(*le_ev)];
 		u8 num_reports = *ptr;
 
@@ -7471,7 +7497,7 @@ static const struct hci_ev {
 	HCI_EV(HCI_EV_REMOTE_FEATURES, hci_remote_features_evt,
 	       sizeof(struct hci_ev_remote_features)),
 	/* [0x0e = HCI_EV_CMD_COMPLETE] */
-	HCI_EV_REQ_VL(HCI_EV_CMD_COMPLETE, hci_cmd_complete_evt/*收到cmd complete时调用*/,
+	HCI_EV_REQ_VL(HCI_EV_CMD_COMPLETE, hci_cmd_complete_evt/*收到cmd complete事件时调用*/,
 		      sizeof(struct hci_ev_cmd_complete), HCI_MAX_EVENT_SIZE),
 	/* [0x0f = HCI_EV_CMD_STATUS] */
 	HCI_EV_REQ(HCI_EV_CMD_STATUS, hci_cmd_status_evt,
@@ -7553,7 +7579,7 @@ static const struct hci_ev {
 	       sizeof(struct hci_ev_remote_host_features)),
 	/* [0x3e = HCI_EV_LE_META] */
 	HCI_EV_REQ_VL(HCI_EV_LE_META, hci_le_meta_evt,
-		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),/*LE meta消息处理完成*/
+		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),/*收到LE meta消息时调用*/
 	/* [0xff = HCI_EV_VENDOR] */
 	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
 };
@@ -7601,7 +7627,7 @@ static void hci_event_func(struct hci_dev *hdev, u8 event/*事件编号*/, struc
 		ev->func(hdev, data, skb);
 }
 
-/*hci event报文处理(event是由hci controller来的报文）*/
+/*hci event报文处理(event是由hci LINK MANAGER发来的报文）*/
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct hci_event_hdr *hdr = (void *) skb->data;
