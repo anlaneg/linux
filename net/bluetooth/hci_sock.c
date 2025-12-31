@@ -1743,6 +1743,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	}
 
 	if (chan->channel == HCI_CHANNEL_CONTROL) {
+		/*如当前control channel,送一份报文给monitor*/
 		struct sk_buff *cmd;
 
 		/* Send event to monitor */
@@ -1769,7 +1770,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 
 	if (!hci_sock_test_flag(sk, HCI_SOCK_TRUSTED) &&
 	    !(handler->flags & HCI_MGMT_UNTRUSTED)) {
-		/*权限问题，不能执行响应*/
+		/*SOCKET没有trusted标记,且handler未注册容许untrusted,则权限问题，不能执行响应*/
 		err = mgmt_cmd_status(sk, index, opcode,
 				      MGMT_STATUS_PERMISSION_DENIED);
 		goto done;
@@ -1788,7 +1789,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		if (hci_dev_test_flag(hdev, HCI_SETUP) ||
 		    hci_dev_test_flag(hdev, HCI_CONFIG) ||
 		    hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
-			/*此hci dev设备状态未达预期*/
+			/*此hci dev设备状态未达预期,不处理*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1804,10 +1805,10 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	}
 
 	if (!(handler->flags & HCI_MGMT_HDEV_OPTIONAL)) {
-		/*handle是否指定no_hdev*/
+		/*没有明确指明dev是可选的,检查是否指定了hdev*/
 		no_hdev = (handler->flags & HCI_MGMT_NO_HDEV);
 		if (no_hdev != !hdev) {
-			/*此handle不要求设备,但cmd指明了设备,报异常*/
+			/*此handle不要求设备但cmd指明了设备或者相反,报异常*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1951,7 +1952,7 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	case HCI_CHANNEL_USER:
 		break;
 	case HCI_CHANNEL_MONITOR:
-		/*不支持通过此接口送monitor*/
+		/*不支持用户态通过此接口送monitor消息*/
 		err = -EOPNOTSUPP;
 		goto drop;
 	case HCI_CHANNEL_LOGGING:

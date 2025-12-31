@@ -471,8 +471,8 @@ enum {
 	HCI_LE_SIMULTANEOUS_ROLES,
 	HCI_CMD_DRAIN_WORKQUEUE,
 
-	HCI_MESH_EXPERIMENTAL,/*标记mesh功能开启*/
-	HCI_MESH,
+	HCI_MESH_EXPERIMENTAL,/*标记开启mesh实验能力(不开启此功能,mesh不能开启)*/
+	HCI_MESH,/*指明设备开启mesh功能*/
 	HCI_MESH_SENDING,
 
 	__HCI_NUM_FLAGS,
@@ -2688,7 +2688,7 @@ struct hci_ev_le_advertising_info {
 } __packed;
 
 struct hci_ev_le_advertising_report {
-	__u8    num;
+	__u8    num;/*INFO数组长度*/
 	struct hci_ev_le_advertising_info info[];
 } __packed;
 

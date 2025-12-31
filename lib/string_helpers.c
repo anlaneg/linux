@@ -985,6 +985,7 @@ char *strreplace(char *str, char old, char new)
 {
 	char *s = str;
 
+	/*遍历字符串str,将old字符替换为new字符*/
 	for (; *s; ++s)
 		if (*s == old)
 			*s = new;

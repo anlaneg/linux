@@ -1076,8 +1076,8 @@ static void discov_off(struct work_struct *work)
 	 * of a timeout triggered from general discoverable, it is
 	 * safe to unconditionally clear the flag.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);
-	hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);
+	hci_dev_clear_flag(hdev, HCI_LIMITED_DISCOVERABLE);/*清除掉有限可发现标记*/
+	hci_dev_clear_flag(hdev, HCI_DISCOVERABLE);/*清除掉可发现标记*/
 	hdev->discov_timeout = 0;
 
 	hci_cmd_sync_queue(hdev, set_discoverable_sync, NULL, NULL);
@@ -1090,7 +1090,7 @@ static void discov_off(struct work_struct *work)
 static int send_settings_rsp(struct sock *sk, u16 opcode, struct hci_dev *hdev);
 
 static void mesh_send_complete(struct hci_dev *hdev,
-			       struct mgmt_mesh_tx *mesh_tx, bool silent)
+			       struct mgmt_mesh_tx *mesh_tx, bool silent/*是否不发送事件*/)
 {
 	u8 handle = mesh_tx->handle;
 
@@ -1155,6 +1155,7 @@ static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 
 	BT_INFO("MGMT ver %d.%d", MGMT_VERSION, MGMT_REVISION);
 
+	/*初始化以下work*/
 	INIT_DELAYED_WORK(&hdev->discov_off, discov_off);
 	INIT_DELAYED_WORK(&hdev->service_cache, service_cache_off);
 	INIT_DELAYED_WORK(&hdev->rpa_expired, rpa_expired);
@@ -2223,15 +2224,17 @@ static void set_mesh_complete(struct hci_dev *hdev, void *data, int err)
 static int set_mesh_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_cp_set_mesh *cp = cmd->param;
+	struct mgmt_cp_set_mesh *cp = cmd->param;/*取MGMT_OP_SET_MESH_RECEIVER参数*/
 	size_t len = cmd->param_len;
 
+	/*清空mesh广播类型*/
 	memset(hdev->mesh_ad_types, 0, sizeof(hdev->mesh_ad_types));
 
 	if (cp->enable)
-		/*添加MESH标记,记录开启mesh*/
+		/*添加MESH标记,开启mesh*/
 		hci_dev_set_flag(hdev, HCI_MESH);
 	else
+		/*关闭mesh功能*/
 		hci_dev_clear_flag(hdev, HCI_MESH);
 
 	hdev->le_scan_interval = __le16_to_cpu(cp->period);
@@ -2241,13 +2244,14 @@ static int set_mesh_sync(struct hci_dev *hdev, void *data)
 
 	/* If filters don't fit, forward all adv pkts */
 	if (len <= sizeof(hdev->mesh_ad_types))
-		memcpy(hdev->mesh_ad_types, cp->ad_types, len);
+		memcpy(hdev->mesh_ad_types, cp->ad_types, len);/*设置MESH广播类型*/
 
 	/*开启被动扫描*/
 	hci_update_passive_scan_sync(hdev);
 	return 0;
 }
 
+/*设置MESH RECVIVE*/
 static int set_mesh(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 {
 	struct mgmt_cp_set_mesh *cp = data;
@@ -2290,6 +2294,7 @@ static int set_mesh(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 	hci_dev_lock(hdev);
 
+	/*产生pending mgmt cmd*/
 	cmd = mgmt_pending_add(sk, MGMT_OP_SET_MESH_RECEIVER, hdev, data/*指定参数*/, len);
 	if (!cmd)
 		err = -ENOMEM;
@@ -4830,6 +4835,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 				MGMT_OP_SET_EXP_FEATURE, 0,
 				&rp, sizeof(rp));
 
+	/*向用户态产生事件*/
 	if (changed)
 		exp_feature_changed(hdev, mgmt_mesh_uuid, val/*开启/关闭*/, sk);
 
@@ -5080,8 +5086,8 @@ static int set_iso_socket_func(struct sock *sk, struct hci_dev *hdev,
 
 /*当前支持的功能set列表*/
 static const struct mgmt_exp_feature {
-	const u8 *uuid;/*功能UUID名称*/
-	/*用于开启/关闭指定功能*/
+	const u8 *uuid;/*功能的UUID名称*/
+	/*用于开启/关闭指定功能的回调*/
 	int (*set_func)(struct sock *sk, struct hci_dev *hdev,
 			struct mgmt_cp_set_exp_feature *cp, u16 data_len);
 } exp_features[] = {
@@ -9410,158 +9416,227 @@ static int get_adv_size_info(struct sock *sk, struct hci_dev *hdev,
 /*control channel 支持的opcode处理(用于管理配置设备)*/
 static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ NULL }, /* 0x0000 (no command) */
-	/*mgmt版本号读取*/
+	/*MGMT_OP_READ_VERSION: mgmt版本号读取*/
 	{ read_version,            MGMT_READ_VERSION_SIZE,
 						HCI_MGMT_NO_HDEV/*不需指明设备*/ |
 						HCI_MGMT_UNTRUSTED },
-	/*返回支持的commands/events总数及对应的opcode读取*/
+	/*MGMT_OP_READ_COMMANDS: 返回支持的commands/events总数及对应的opcode读取*/
 	{ read_commands,           MGMT_READ_COMMANDS_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
-	/*读取未配置的HCI_PRIMARY类设备数目及其对应index*/
+	/*MGMT_OP_READ_INDEX_LIST: 读取未配置的HCI_PRIMARY类设备数目及其对应index*/
 	{ read_index_list,         MGMT_READ_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
-	/*请求读取指定设备的info信息*/
+	/*MGMT_OP_READ_INFO: 请求读取指定设备的info信息*/
 	{ read_controller_info,    MGMT_READ_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED },
-	/*处理powered设置(即常见的bluetooth开关)*/
+	/*MGMT_OP_SET_POWERED: 处理powered设置(即常见的bluetooth开关)*/
 	{ set_powered,             MGMT_SETTING_SIZE },
-	/*设置可发现*/
+	/*MGMT_OP_SET_DISCOVERABLE: 设置可发现*/
 	{ set_discoverable,        MGMT_SET_DISCOVERABLE_SIZE },
-	/*设置可连接*/
+	/*MGMT_OP_SET_CONNECTABLE: 设置可连接*/
 	{ set_connectable,         MGMT_SETTING_SIZE },
-	/*设置可快速连接*/
+	/*MGMT_OP_SET_FAST_CONNECTABLE: 设置可快速连接*/
 	{ set_fast_connectable,    MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_BONDABLE: */
 	{ set_bondable,            MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_LINK_SECURITY: */
 	{ set_link_security,       MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_SSP: */
 	{ set_ssp,                 MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_HS: */
 	{ set_hs,                  MGMT_SETTING_SIZE },
-	/*设置低功耗*/
+	/*MGMT_OP_SET_LE: 设置低功耗*/
 	{ set_le,                  MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_DEV_CLASS: */
 	{ set_dev_class,           MGMT_SET_DEV_CLASS_SIZE },
-	/*设置hci设备的local name*/
+	/*MGMT_OP_SET_LOCAL_NAME: 设置hci设备的local name*/
 	{ set_local_name,          MGMT_SET_LOCAL_NAME_SIZE },
+	/*MGMT_OP_ADD_UUID: */
 	{ add_uuid,                MGMT_ADD_UUID_SIZE },
-	/*响应用户态REMOVE_UUID,用于移除HCI设备上关联的一个或所有UUID*/
+	/*MGMT_OP_REMOVE_UUID: 响应用户态REMOVE_UUID,用于移除HCI设备上关联的一个或所有UUID*/
 	{ remove_uuid,             MGMT_REMOVE_UUID_SIZE },
-	/*为设备添加link keys*/
+	/*MGMT_OP_LOAD_LINK_KEYS: 为设备添加link keys*/
 	{ load_link_keys,          MGMT_LOAD_LINK_KEYS_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_LOAD_LONG_TERM_KEYS: */
 	{ load_long_term_keys,     MGMT_LOAD_LONG_TERM_KEYS_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_DISCONNECT: */
 	{ disconnect,              MGMT_DISCONNECT_SIZE },
+	/*MGMT_OP_GET_CONNECTIONS: */
 	{ get_connections,         MGMT_GET_CONNECTIONS_SIZE },
+	/*MGMT_OP_PIN_CODE_REPLY: */
 	{ pin_code_reply,          MGMT_PIN_CODE_REPLY_SIZE },
+	/*MGMT_OP_PIN_CODE_NEG_REPLY: */
 	{ pin_code_neg_reply,      MGMT_PIN_CODE_NEG_REPLY_SIZE },
+	/*MGMT_OP_SET_IO_CAPABILITY: */
 	{ set_io_capability,       MGMT_SET_IO_CAPABILITY_SIZE },
-	{ pair_device,             MGMT_PAIR_DEVICE_SIZE },/*pair指定设备*/
+	/*MGMT_OP_PAIR_DEVICE: pair指定设备*/
+	{ pair_device,             MGMT_PAIR_DEVICE_SIZE },
+	/*MGMT_OP_CANCEL_PAIR_DEVICE: */
 	{ cancel_pair_device,      MGMT_CANCEL_PAIR_DEVICE_SIZE },
+	/*MGMT_OP_UNPAIR_DEVICE: */
 	{ unpair_device,           MGMT_UNPAIR_DEVICE_SIZE },
+	/*MGMT_OP_USER_CONFIRM_REPLY: */
 	{ user_confirm_reply,      MGMT_USER_CONFIRM_REPLY_SIZE },
+	/*MGMT_OP_USER_CONFIRM_NEG_REPLY: */
 	{ user_confirm_neg_reply,  MGMT_USER_CONFIRM_NEG_REPLY_SIZE },
+	/*MGMT_OP_USER_PASSKEY_REPLY: */
 	{ user_passkey_reply,      MGMT_USER_PASSKEY_REPLY_SIZE },
+	/*MGMT_OP_USER_PASSKEY_NEG_REPLY: */
 	{ user_passkey_neg_reply,  MGMT_USER_PASSKEY_NEG_REPLY_SIZE },
+	/*MGMT_OP_READ_LOCAL_OOB_DATA: */
 	{ read_local_oob_data,     MGMT_READ_LOCAL_OOB_DATA_SIZE },
+	/*MGMT_OP_ADD_REMOTE_OOB_DATA: */
 	{ add_remote_oob_data,     MGMT_ADD_REMOTE_OOB_DATA_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_REMOVE_REMOTE_OOB_DATA: */
 	{ remove_remote_oob_data,  MGMT_REMOVE_REMOTE_OOB_DATA_SIZE },
+	/*MGMT_OP_START_DISCOVERY: */
 	{ start_discovery,         MGMT_START_DISCOVERY_SIZE },
+	/*MGMT_OP_STOP_DISCOVERY: */
 	{ stop_discovery,          MGMT_STOP_DISCOVERY_SIZE },
+	/*MGMT_OP_CONFIRM_NAME: */
 	{ confirm_name,            MGMT_CONFIRM_NAME_SIZE },
+	/*MGMT_OP_BLOCK_DEVICE: */
 	{ block_device,            MGMT_BLOCK_DEVICE_SIZE },
+	/*MGMT_OP_UNBLOCK_DEVICE: */
 	{ unblock_device,          MGMT_UNBLOCK_DEVICE_SIZE },
+	/*MGMT_OP_SET_DEVICE_ID: */
 	{ set_device_id,           MGMT_SET_DEVICE_ID_SIZE },
+	/*MGMT_OP_SET_ADVERTISING: */
 	{ set_advertising,         MGMT_SETTING_SIZE },
-	/*用于开启br/edr*/
+	/*MGMT_OP_SET_BREDR: 用于开启br/edr*/
 	{ set_bredr,               MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_STATIC_ADDRESS: */
 	{ set_static_address,      MGMT_SET_STATIC_ADDRESS_SIZE },
+	/*MGMT_OP_SET_SCAN_PARAMS: */
 	{ set_scan_params,         MGMT_SET_SCAN_PARAMS_SIZE },
+	/*MGMT_OP_SET_SECURE_CONN: */
 	{ set_secure_conn,         MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_DEBUG_KEYS: */
 	{ set_debug_keys,          MGMT_SETTING_SIZE },
+	/*MGMT_OP_SET_PRIVACY: */
 	{ set_privacy,             MGMT_SET_PRIVACY_SIZE },
-	/*用于为le设备添加irks*/
+	/*MGMT_OP_LOAD_IRKS: 用于为le设备添加irks*/
 	{ load_irks,               MGMT_LOAD_IRKS_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_GET_CONN_INFO: */
 	{ get_conn_info,           MGMT_GET_CONN_INFO_SIZE },
+	/*MGMT_OP_GET_CLOCK_INFO: */
 	{ get_clock_info,          MGMT_GET_CLOCK_INFO_SIZE },
-	/*添加设备*/
+	/*MGMT_OP_ADD_DEVICE: 添加设备*/
 	{ add_device,              MGMT_ADD_DEVICE_SIZE },
-	/*用于移除hci设备上关联的所有devices或具体一个device*/
+	/*MGMT_OP_REMOVE_DEVICE: 用于移除hci设备上关联的所有devices或具体一个device*/
 	{ remove_device,           MGMT_REMOVE_DEVICE_SIZE },
+	/*MGMT_OP_LOAD_CONN_PARAM: */
 	{ load_conn_param,         MGMT_LOAD_CONN_PARAM_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_READ_UNCONF_INDEX_LIST: */
 	{ read_unconf_index_list,  MGMT_READ_UNCONF_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	/*MGMT_OP_READ_CONFIG_INFO: */
 	{ read_config_info,        MGMT_READ_CONFIG_INFO_SIZE,
 						HCI_MGMT_UNCONFIGURED |
 						HCI_MGMT_UNTRUSTED },
+	/*MGMT_OP_SET_EXTERNAL_CONFIG: */
 	{ set_external_config,     MGMT_SET_EXTERNAL_CONFIG_SIZE,
 						HCI_MGMT_UNCONFIGURED },
+	/*MGMT_OP_SET_PUBLIC_ADDRESS: */
 	{ set_public_address,      MGMT_SET_PUBLIC_ADDRESS_SIZE,
 						HCI_MGMT_UNCONFIGURED },
+	/*MGMT_OP_START_SERVICE_DISCOVERY: */
 	{ start_service_discovery, MGMT_START_SERVICE_DISCOVERY_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_READ_LOCAL_OOB_EXT_DATA: */
 	{ read_local_oob_ext_data, MGMT_READ_LOCAL_OOB_EXT_DATA_SIZE },
+	/*MGMT_OP_READ_EXT_INDEX_LIST: */
 	{ read_ext_index_list,     MGMT_READ_EXT_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
-	/*响应用户态MGMT_OP_READ_ADV_FEATURES*/
+	/*MGMT_OP_READ_ADV_FEATURES: 响应用户态读取adv features*/
 	{ read_adv_features,       MGMT_READ_ADV_FEATURES_SIZE },
+	/*MGMT_OP_ADD_ADVERTISING: */
 	{ add_advertising,	   MGMT_ADD_ADVERTISING_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_REMOVE_ADVERTISING: */
 	{ remove_advertising,	   MGMT_REMOVE_ADVERTISING_SIZE },
+	/*MGMT_OP_GET_ADV_SIZE_INFO: */
 	{ get_adv_size_info,       MGMT_GET_ADV_SIZE_INFO_SIZE },
+	/*MGMT_OP_START_LIMITED_DISCOVERY: */
 	{ start_limited_discovery, MGMT_START_DISCOVERY_SIZE },
+	/*MGMT_OP_READ_EXT_INFO: */
 	{ read_ext_controller_info,MGMT_READ_EXT_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED },
+	/*MGMT_OP_SET_APPEARANCE: */
 	{ set_appearance,	   MGMT_SET_APPEARANCE_SIZE },
+	/*MGMT_OP_GET_PHY_CONFIGURATION: */
 	{ get_phy_configuration,   MGMT_GET_PHY_CONFIGURATION_SIZE },
+	/*MGMT_OP_SET_PHY_CONFIGURATION: */
 	{ set_phy_configuration,   MGMT_SET_PHY_CONFIGURATION_SIZE },
+	/*MGMT_OP_SET_BLOCKED_KEYS: */
 	{ set_blocked_keys,	   MGMT_OP_SET_BLOCKED_KEYS_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_SET_WIDEBAND_SPEECH: */
 	{ set_wideband_speech,	   MGMT_SETTING_SIZE },
+	/*MGMT_OP_READ_CONTROLLER_CAP: */
 	{ read_controller_cap,     MGMT_READ_CONTROLLER_CAP_SIZE,
 						HCI_MGMT_UNTRUSTED },
-	/*读取扩展功能*/
+	/*MGMT_OP_READ_EXP_FEATURES_INFO: 读取扩展功能*/
 	{ read_exp_features_info,  MGMT_READ_EXP_FEATURES_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED |
 						HCI_MGMT_HDEV_OPTIONAL },
-	/*用户态配置开启/关闭扩展功能*/
+	/*MGMT_OP_SET_EXP_FEATURE: 用户态配置开启/关闭扩展功能*/
 	{ set_exp_feature,         MGMT_SET_EXP_FEATURE_SIZE,
 						HCI_MGMT_VAR_LEN |
 						HCI_MGMT_HDEV_OPTIONAL },
+	/*MGMT_OP_READ_DEF_SYSTEM_CONFIG: */
 	{ read_def_system_config,  MGMT_READ_DEF_SYSTEM_CONFIG_SIZE,
 						HCI_MGMT_UNTRUSTED },
+	/*MGMT_OP_SET_DEF_SYSTEM_CONFIG: */
 	{ set_def_system_config,   MGMT_SET_DEF_SYSTEM_CONFIG_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_READ_DEF_RUNTIME_CONFIG: */
 	{ read_def_runtime_config, MGMT_READ_DEF_RUNTIME_CONFIG_SIZE,
 						HCI_MGMT_UNTRUSTED },
+	/*MGMT_OP_SET_DEF_RUNTIME_CONFIG: */
 	{ set_def_runtime_config,  MGMT_SET_DEF_RUNTIME_CONFIG_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_GET_DEVICE_FLAGS: */
 	{ get_device_flags,        MGMT_GET_DEVICE_FLAGS_SIZE },
+	/*MGMT_OP_SET_DEVICE_FLAGS: */
 	{ set_device_flags,        MGMT_SET_DEVICE_FLAGS_SIZE },
+	/*MGMT_OP_READ_ADV_MONITOR_FEATURES: */
 	{ read_adv_mon_features,   MGMT_READ_ADV_MONITOR_FEATURES_SIZE },
+	/*MGMT_OP_ADD_ADV_PATTERNS_MONITOR: */
 	{ add_adv_patterns_monitor,MGMT_ADD_ADV_PATTERNS_MONITOR_SIZE,
 						HCI_MGMT_VAR_LEN },
-	/*移除hci设备的adv_monitor*/
+	/*MGMT_OP_REMOVE_ADV_MONITOR: 移除hci设备的adv_monitor*/
 	{ remove_adv_monitor,      MGMT_REMOVE_ADV_MONITOR_SIZE },
+	/*MGMT_OP_ADD_EXT_ADV_PARAMS: */
 	{ add_ext_adv_params,      MGMT_ADD_EXT_ADV_PARAMS_MIN_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_ADD_EXT_ADV_DATA: */
 	{ add_ext_adv_data,        MGMT_ADD_EXT_ADV_DATA_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI: */
 	{ add_adv_patterns_monitor_rssi,
 				   MGMT_ADD_ADV_PATTERNS_MONITOR_RSSI_SIZE,
 						HCI_MGMT_VAR_LEN },
-	/*收到MGMT_OP_SET_MESH_RECEIVER命令后调用*/
+	/*MGMT_OP_SET_MESH_RECEIVER: 设置MESH RECVIVE*/
 	{ set_mesh,                MGMT_SET_MESH_RECEIVER_SIZE,
 						HCI_MGMT_VAR_LEN },
-	/*读取mesh功能*/
+	/*MGMT_OP_MESH_READ_FEATURES: 读取mesh功能*/
 	{ mesh_features,           MGMT_MESH_READ_FEATURES_SIZE },
+	/*MGMT_OP_MESH_SEND: */
 	{ mesh_send,               MGMT_MESH_SEND_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*MGMT_OP_MESH_SEND_CANCEL: */
 	{ mesh_send_cancel,        MGMT_MESH_SEND_CANCEL_SIZE },
+	/*MGMT_OP_HCI_CMD_SYNC: */
 	{ mgmt_hci_cmd_sync,       MGMT_HCI_CMD_SYNC_SIZE, HCI_MGMT_VAR_LEN },
 };
 
@@ -10461,7 +10536,7 @@ static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
 
 static void mesh_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr,
 			      u8 addr_type, s8 rssi, u32 flags, u8 *eir,
-			      u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len,
+			      u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len/*扫描响应长度*/,
 			      u64 instant)
 {
 	struct sk_buff *skb;
@@ -10469,17 +10544,17 @@ static void mesh_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	int i, j;
 
 	if (!hdev->mesh_ad_types[0])
-		goto accepted;
+		goto accepted;/*未配置mesh广播类型,直接接收*/
 
 	/* Scan for requested AD types */
 	if (eir_len > 0) {
 		for (i = 0; i + 1 < eir_len; i += eir[i] + 1) {
 			for (j = 0; j < sizeof(hdev->mesh_ad_types); j++) {
 				if (!hdev->mesh_ad_types[j])
-					break;
+					break;/*此项之后均未设置,跳出*/
 
 				if (hdev->mesh_ad_types[j] == eir[i + 1])
-					goto accepted;
+					goto accepted;/*两者相等,接收此报文*/
 			}
 		}
 	}
@@ -10491,14 +10566,15 @@ static void mesh_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr,
 					break;
 
 				if (hdev->mesh_ad_types[j] == scan_rsp[i + 1])
-					goto accepted;
+					goto accepted;/*两者相等,接收此报文*/
 			}
 		}
 	}
 
-	return;
+	return;/*不接收的自此返回*/
 
 accepted:
+	/*接收的,向上送MESH_DEVICE_FOUND事件*/
 	skb = mgmt_alloc_skb(hdev, MGMT_EV_MESH_DEVICE_FOUND,
 			     sizeof(*ev) + eir_len + scan_rsp_len);/*申请mesh设备发现事件*/
 	if (!skb)
@@ -10522,13 +10598,13 @@ accepted:
 
 	ev->eir_len = cpu_to_le16(eir_len + scan_rsp_len);
 
-	mgmt_event_skb(skb, NULL);/*触发事件*/
+	mgmt_event_skb(skb, NULL);/*触发事件给用户态*/
 }
 
 /*发现设备*/
 void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备地址*/, u8 link_type/*LINK类型*/,
-		       u8 addr_type, u8 *dev_class, s8 rssi, u32 flags,
-		       u8 *eir, u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len,
+		       u8 addr_type/*地址类型*/, u8 *dev_class, s8 rssi/*信号强度*/, u32 flags,
+		       u8 *eir/*广播或者响应结果*/, u16 eir_len/*data长度*/, u8 *scan_rsp, u8 scan_rsp_len/*扫描响应长度*/,
 		       u64 instant)
 {
 	struct sk_buff *skb;
@@ -10536,7 +10612,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr/*发现的设备�
 	bool report_device = hci_discovery_active(hdev);
 
 	if (hci_dev_test_flag(hdev, HCI_MESH) && link_type == LE_LINK)
-		/*设备开启了MESH,且LINK类型为LE_LINK,触发mesh设备发现事件*/
+		/*设备开启了MESH,且LINK类型为LE_LINK,检查是否关注此AD类型,触发mesh设备发现事件*/
 		mesh_device_found(hdev, bdaddr, addr_type, rssi, flags,
 				  eir, eir_len, scan_rsp, scan_rsp_len,
 				  instant);
@@ -10696,7 +10772,7 @@ static struct hci_mgmt_chan chan = {
 	.channel	= HCI_CHANNEL_CONTROL,
 	.handler_count	= ARRAY_SIZE(mgmt_handlers),
 	.handlers	= mgmt_handlers,/*control channel各opcode对应的handler数组,用于管理设备*/
-	.hdev_init	= mgmt_init_hdev,
+	.hdev_init	= mgmt_init_hdev,/*用于初始化*/
 };
 
 int mgmt_init(void)

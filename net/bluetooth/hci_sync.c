@@ -3229,7 +3229,7 @@ int hci_update_passive_scan_sync(struct hci_dev *hdev)
 
 	/* If discovery is active don't interfere with it */
 	if (hdev->discovery.state != DISCOVERY_STOPPED)
-		return 0;
+		return 0;/*发现非停止状态*/
 
 	/* Reset RSSI and UUID filters when starting background scanning
 	 * since these filters are meant for service discovery only.
@@ -3255,7 +3255,7 @@ int hci_update_passive_scan_sync(struct hci_dev *hdev)
 
 		bt_dev_dbg(hdev, "stopping background scanning");
 
-		err = hci_scan_disable_sync(hdev);
+		err = hci_scan_disable_sync(hdev);/*关闭扫描*/
 		if (err)
 			bt_dev_err(hdev, "stop background scanning failed: %d",
 				   err);

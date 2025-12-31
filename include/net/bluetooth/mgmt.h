@@ -845,10 +845,10 @@ struct mgmt_cp_add_adv_patterns_monitor_rssi {
 #define MGMT_OP_SET_MESH_RECEIVER		0x0057
 struct mgmt_cp_set_mesh {
 	__u8   enable;/*开启/关闭*/
-	__le16 window;
-	__le16 period;
+	__le16 window;/*指定le扫描时长(当window与PERIOD相等时,将持续扫描)*/
+	__le16 period;/*指定le扫描间隔*/
 	__u8   num_ad_types;/*ad_types数组长度*/
-	__u8   ad_types[];
+	__u8   ad_types[];/*设置广播类型,例如:{0X2A,0X2b,0X29}*/
 } __packed;
 #define MGMT_SET_MESH_RECEIVER_SIZE	6
 

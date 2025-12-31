@@ -395,7 +395,7 @@ struct hci_dev {
 	__u8		le_resolv_list_size;
 	__u8		le_num_of_adv_sets;
 	__u8		le_states[8];
-	__u8		mesh_ad_types[16];
+	__u8		mesh_ad_types[16];/*记录mesh广播类型,例如{0X2a,0X2b,0X29}*/
 	__u8		mesh_send_ref;
 	/*此设备支持的hci命令,具体见6.27 Supported commands描述的各bits位*/
 	__u8		commands[64];
@@ -418,8 +418,8 @@ struct hci_dev {
 	__u16		le_adv_min_interval;
 	__u16		le_adv_max_interval;/*广播最大间隔*/
 	__u8		le_scan_type;/*LE扫描类型(例如被动扫描)*/
-	__u16		le_scan_interval;/*扫描间隔*/
-	__u16		le_scan_window;
+	__u16		le_scan_interval;/*LE扫描间隔*/
+	__u16		le_scan_window;/*LE扫描窗口*/
 	__u16		le_scan_int_suspend;
 	__u16		le_scan_window_suspend;
 	__u16		le_scan_int_discovery;
@@ -572,7 +572,7 @@ struct hci_dev {
 
 	struct list_head	mesh_pending;
 	struct mutex		mgmt_pending_lock;
-	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
+	struct list_head	mgmt_pending;/*用于挂接pending mgmt cmd，（这个队列仅用于支持pending查询）*/
 	struct list_head	reject_list;/*用于挂接拒绝连接的设备列表*/
 	struct list_head	accept_list;/*用于挂接容许连接的BR设备列表,如果设备不在此连接，连接将被拒绝*/
 	struct list_head	uuids;/*用于串连一组设置的uuid*/
@@ -1522,7 +1522,7 @@ static inline struct hci_conn *hci_lookup_le_connect(struct hci_dev *hdev)
 		if (c->type == LE_LINK && c->state == BT_CONNECT &&
 		    !test_bit(HCI_CONN_SCANNING, &c->flags)) {
 			rcu_read_unlock();
-			return c;
+			return c;/*有处于连接状态的le_link*/
 		}
 	}
 
@@ -2024,7 +2024,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 /* Maximum advertising length */
 /*最大广播报文长度*/
 #define max_adv_len(dev) \
-	(ext_adv_capable(dev) ? HCI_MAX_EXT_AD_LENGTH/*扩展广播长度*/ : HCI_MAX_AD_LENGTH)
+	(ext_adv_capable(dev) ? HCI_MAX_EXT_AD_LENGTH/*扩展广播长度*/ : HCI_MAX_AD_LENGTH/*最大广播长度*/)
 
 /* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 4, Part E page 1789:
  *
@@ -2337,16 +2337,22 @@ void hci_send_monitor_ctrl_event(struct hci_dev *hdev, u16 event,
 
 void hci_sock_dev_event(struct hci_dev *hdev, int event);
 
+/*参数长度是否可变的*/
 #define HCI_MGMT_VAR_LEN	BIT(0)
+/*明确指明此handle不需要指明HCI DEV*/
 #define HCI_MGMT_NO_HDEV	BIT(1)
+/*是否容许untrusted socket执行此命令*/
 #define HCI_MGMT_UNTRUSTED	BIT(2)
+/*当设备有unconfigued标记时,是否容许此handler执行*/
 #define HCI_MGMT_UNCONFIGURED	BIT(3)
+/*指明此handle处理时HCI DEV是否指明是可选的*/
 #define HCI_MGMT_HDEV_OPTIONAL	BIT(4)
 
 struct hci_mgmt_handler {
+	/*命令回调,命令格式MGMT_OP_XX*/
 	int (*func) (struct sock *sk, struct hci_dev *hdev, void *data,
 		     u16 data_len);
-	/*数据长度*/
+	/*数据长度(如果是可变长度时,为最小数据长度)*/
 	size_t data_len;
 	unsigned long flags;
 };
@@ -2355,7 +2361,8 @@ struct hci_mgmt_chan {
 	struct list_head list;
 	unsigned short channel;/*channel编号*/
 	size_t handler_count;/*handlers数组长度*/
-	const struct hci_mgmt_handler *handlers;/*管理命令处理*/
+	const struct hci_mgmt_handler *handlers;/*此channel管理命令处理*/
+	/*在执行mgmt CMD时,如果指明了hdev,且此回调也存在,则会被执行*/
 	void (*hdev_init) (struct sock *sk, struct hci_dev *hdev);/*用于初始化*/
 };
 

@@ -68,6 +68,7 @@ static void *hci_cc_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
 	return data;
 }
 
+/*data向后移动len字长,返回移动前的数据*/
 static void *hci_le_ev_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
 				u8 ev/*事件编号*/, size_t len)
 {
@@ -6070,10 +6071,10 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
 	return NULL;
 }
 
-static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型*/, bdaddr_t *bdaddr,
-			       u8 bdaddr_type, bdaddr_t *direct_addr,
-			       u8 direct_addr_type, u8 phy, u8 sec_phy, s8 rssi,
-			       u8 *data, u8 len, bool ext_adv, bool ctl_time,
+static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型,例如SCAN_RSP(0X4)*/, bdaddr_t *bdaddr,
+			       u8 bdaddr_type/*地址类型*/, bdaddr_t *direct_addr,
+			       u8 direct_addr_type, u8 phy, u8 sec_phy, s8 rssi/*接收信号强度指示*/,
+			       u8 *data/*广播或者响应结果*/, u8 len/*data长度*/, bool ext_adv/*是否扩展adv*/, bool ctl_time,
 			       u64 instant)
 {
 	struct discovery_state *d = &hdev->discovery;
@@ -6092,6 +6093,7 @@ static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型*/, bd
 	case LE_ADV_SCAN_RSP:
 		break;
 	default:
+		/*遇到不认识的事件,报错*/
 		bt_dev_err_ratelimited(hdev, "unknown advertising packet "
 				       "type: 0x%02x", type);
 		return;
@@ -6155,8 +6157,9 @@ static void process_adv_report(struct hci_dev *hdev, u8 type/*事件类型*/, bd
 	/* Check if we need to convert to identity address */
 	irk = hci_get_irk(hdev, bdaddr, bdaddr_type);
 	if (irk) {
+		/*利用irk换算成public地址*/
 		bdaddr = &irk->bdaddr;
-		bdaddr_type = irk->addr_type;
+		bdaddr_type = irk->addr_type;/*更新地址类型*/
 	}
 
 	bdaddr_type = ev_bdaddr_type(hdev, bdaddr_type, &bdaddr_resolved);
@@ -6304,6 +6307,7 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 		struct hci_ev_le_advertising_info *info;
 		s8 rssi;
 
+		/*取一个info,并将data向后移动到结尾*/
 		info = hci_le_ev_skb_pull(hdev, skb,
 					  HCI_EV_LE_ADVERTISING_REPORT,
 					  sizeof(*info));
@@ -6312,16 +6316,16 @@ static void hci_le_adv_report_evt(struct hci_dev *hdev, void *data,
 
 		if (!hci_le_ev_skb_pull(hdev, skb, HCI_EV_LE_ADVERTISING_REPORT,
 					info->length + 1))
-			break;/*内容长度不足*/
+			break;/*内容长度不足,跳出*/
 
 		if (info->length <= max_adv_len(hdev)) {
 			/*长度合规*/
-			rssi = info->data[info->length];
+			rssi = info->data[info->length];/*取rssi数组*/
 			/*处理advertising报告*/
-			process_adv_report(hdev, info->type, &info->bdaddr,
-					   info->bdaddr_type, NULL, 0,
+			process_adv_report(hdev, info->type/*事件类型*/, &info->bdaddr,
+					   info->bdaddr_type/*地址类型*/, NULL, 0,
 					   HCI_ADV_PHY_1M, 0, rssi,
-					   info->data/*data参数*/, info->length/*data参数长度*/, false,
+					   info->data/*广播或扫描结果*/, info->length/*data参数长度*/, false,
 					   false, instant);
 		} else {
 			bt_dev_err(hdev, "Dropping invalid advertising data");

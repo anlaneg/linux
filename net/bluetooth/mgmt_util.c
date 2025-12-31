@@ -306,7 +306,7 @@ struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode/*命令对
 /*构造pending_cmd,并挂接到mgmt_pending队列*/
 struct mgmt_pending_cmd *mgmt_pending_add(struct sock *sk, u16 opcode,
 					  struct hci_dev *hdev,
-					  void *data, u16 len)
+					  void *data/*参数*/, u16 len/*参数长度*/)
 {
 	struct mgmt_pending_cmd *cmd;
 

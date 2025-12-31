@@ -3292,11 +3292,13 @@ static int ext4_check_descriptors(struct super_block *sb,
 
 		block_bitmap = ext4_block_bitmap(sb, gdp);
 		if (block_bitmap == sb_block) {
+			/*现实中遇到
+			 * [ 1192.616918] EXT4-fs (sda): ext4_check_descriptors: Block bitmap for group 320 overlaps superblock*/
 			ext4_msg(sb, KERN_ERR, "ext4_check_descriptors: "
 				 "Block bitmap for group %u overlaps "
 				 "superblock", i);
 			if (!sb_rdonly(sb))
-				return 0;
+				return 0;/*非只读挂载,返回0*/
 		}
 		if (block_bitmap >= sb_block + 1 &&
 		    block_bitmap <= last_bg_block) {
@@ -4889,6 +4891,7 @@ static int ext4_group_desc_init(struct super_block *sb,
 	}
 	sbi->s_gdb_count = db_count;
 	if (!ext4_check_descriptors(sb, logical_sb_block, first_not_zeroed)) {
+		/*返回0,输出错误日志*/
 		ext4_msg(sb, KERN_ERR, "group descriptors corrupted!");
 		return -EFSCORRUPTED;
 	}
@@ -5725,7 +5728,7 @@ static int ext4_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (ctx->spec & EXT4_SPEC_s_sb_block)
 		sbi->s_sb_block = ctx->s_sb_block;
 
-	ret = __ext4_fill_super(fc, sb);
+	ret = __ext4_fill_super(fc, sb);/*填充super block*/
 	if (ret < 0)
 		goto free_sbi;
 
@@ -6628,6 +6631,7 @@ static int __ext4_remount(struct fs_context *fc, struct super_block *sb)
 					ext4_get_group_desc(sb, g, NULL);
 
 				if (!ext4_group_desc_csum_verify(sb, g, gdp)) {
+					/*遇到[Tue Dec 30 21:46:59 2025] EXT4-fs (sda): ext4_check_descriptors: Checksum for group 435 failed (46097!=0)*/
 					ext4_msg(sb, KERN_ERR,
 	       "ext4_remount: Checksum for group %u failed (%u!=%u)",
 		g, le16_to_cpu(ext4_group_desc_csum(sb, g, gdp)),
