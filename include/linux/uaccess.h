@@ -23,6 +23,7 @@
  * It's defined as noop for architectures that don't support memory tagging.
  */
 #ifndef untagged_addr
+/*原样返回*/
 #define untagged_addr(addr) (addr)
 #endif
 

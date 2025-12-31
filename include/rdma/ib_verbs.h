@@ -2619,7 +2619,7 @@ struct ib_device_ops {
 	void (*post_destroy_cq)(struct ib_cq *cq);
 	struct ib_mr *(*get_dma_mr)(struct ib_pd *pd, int mr_access_flags);
 	/*注册用户态memory region*/
-	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd/*pd参数*/, u64 start, u64 length,
+	struct ib_mr *(*reg_user_mr)(struct ib_pd *pd/*pd参数*/, u64 start/*起始地址*/, u64 length,
 				     u64 virt_addr, int mr_access_flags,
 				     struct ib_dmah *dmah,
 				     struct ib_udata *udata);

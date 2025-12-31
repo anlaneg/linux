@@ -111,6 +111,7 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 	int ret;
 	int fd;
 
+	/*取参数指定的fd*/
 	if (get_user(fd, arg))
 		return -EFAULT;
 

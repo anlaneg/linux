@@ -2678,6 +2678,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 	int err;
 
 	while (skb->len >= nlmsg_total_size(0)) {
+		/*报文长度足够容纳一个payload为0的nlmsghdr，则继续循环*/
 		int msglen;
 
 		memset(&extack, 0, sizeof(extack));
@@ -2691,7 +2692,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 			return 0;
 
 		/* Only requests are handled by the kernel */
-		//kernel仅处理request类型消息
+		//kernel仅处理request类型消息,必须有request记录
 		if (!(nlh->nlmsg_flags & NLM_F_REQUEST))
 			goto ack;
 

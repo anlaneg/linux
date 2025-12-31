@@ -340,27 +340,40 @@
 #define GUEST_PGTABLE_4_LEVEL	0x00
 #define GUEST_PGTABLE_5_LEVEL	0x01
 
+/* level=0, 为1<<12, 即最大可表示地址为4K;
+ * level=1，为1<<21, 即最大可表示地址为2M;
+ * level=2, 为1<<30, 即最大可表示地址为1G;
+ * level=3, 为1<<39, 即最大可表示地址为512G
+ * level=4, 为1<<48, 即最大可表示地址为256T
+ * level=5, 为1<<57, 即最大可表示地址为128P*/
 #define PM_LEVEL_SHIFT(x)	(12 + ((x) * 9))
+
 /*此level可表示的地址最大值*/
 #define PM_LEVEL_SIZE(x)	(((x) < 6) ? \
 				  ((1ULL << PM_LEVEL_SHIFT((x))) - 1): \
 				   (0xffffffffffffffffULL))
-/*地址移到level x区间，与511与操作，获得index（最多512个index，所以当前只申请了一个页)*/
+/*
+ * 获取地址在指定level下对应的pte索引。
+ * 每一层占用一个物理页，共4096字节，每个pte占用8字节，则有512个pte项，对应的是9bits.
+ * 故每个地址实际上是按9bit划分成一个一个连续的level,如下示
+ * |预留位|level5(48-56)|level4(39-47）|level3(30-38)|level2(21-29)｜level1(12-20）|page(12bits)|
+ * 因此，本宏只需要按level将地址向右移对应位数（level*9+12),然后取9bits即可。
+ * */
 #define PM_LEVEL_INDEX(x, a)	(((a) >> PM_LEVEL_SHIFT((x))) & 0x1ffULL)
-/*取x的0，1，2bit位(x最多支持到7级故取0，1，2位），
- * 并将结果向左移动9位（由于pte地址中低12位不必保存，即有12位可用，这里占用9，10，11位存放level)
+/*与0xe,即取x的0，1，2bit位(由于仅占3位，故x最多支持到7级，实际上只需要支持到<6），并将结果向左移动9位
+ * （由于pte地址中低12位不保存数据，即有12位可用，这里占用9，10，11位来存放level)
  * 其它9位做标记位，例如IOMMU_PTE_PR等
  * 同时由于最多支持4-7级（均需要占用3bit)，每一级占用9位（一页有4096字节，一个pte占用8字节，可以存放512个，故占用9位）
- * 如果支持7级:7*9+12=75>64 故7级实际不会使用。
- * 如时支持6级：6*9+12=66>64 故6级已经是最高级别。（会使用但不会全用，5级无法表示所有地址）
- * 5*9+12=57 可以使用
- * 4*9+12=48 可以使用
+ * 假设支持7级:7*9+12=75>64 故7级实际不会使用到。（实现中7被做了特殊处理，见iommu_v1_map_pages）
+ * 假设支持6级：6*9+12=66>64 故6级已经是理论最高级别。（但不会使用，高位已有标记位占用）
+ * 5*9+12=57 可以使用 (可表示128P内存，且高位有6个bit位可用)
+ * 4*9+12=48 可以使用 （可表示256T内存，且高位有15个bit位可用）
  * 由以上可知pte高位也有一些bit是可以存数据的，例如58-63位，所以IOMMU_PTE_HD定义在这些位上。
- * 3*9+12=33
  * */
 #define PM_LEVEL_ENC(x)		(((x) << 9) & 0xe00ULL)
-#define PM_LEVEL_PDE(x, a)	((a) | PM_LEVEL_ENC((x)/*在pte中保存level*/) | \
-				 IOMMU_PTE_PR/*此pte有效*/ | IOMMU_PTE_IR/*读权限*/ | IOMMU_PTE_IW/*写权限*/)
+#define PM_LEVEL_PDE(x/*level*/, a/*地址*/)	((a) | PM_LEVEL_ENC((x)/*在pte中保存level*/) | \
+				 IOMMU_PTE_PR/*此pte有效，占0号位*/ | IOMMU_PTE_IR/*读权限，占61号位*/ | IOMMU_PTE_IW/*写权限，占62号位*/)
+/*我们通过PM_LEVEL_ENC在pte中存入了level值，通过此宏提供存入的level值*/
 #define PM_PTE_LEVEL(pte)	(((pte) >> 9) & 0x7ULL)
 
 #define PM_MAP_4k		0
@@ -373,12 +386,17 @@
  * Returns the page table level to use for a given page size
  * Pagesize is expected to be a power-of-two
  */
+/*假设pagesize=4K,则level=0
+ * 假设pagesize=2M,则level=1
+ * 假设pagesize=1G,则level=2*/
 #define PAGE_SIZE_LEVEL(pagesize) \
 		((__ffs(pagesize) - 12) / 9)
 /*
  * Returns the number of ptes to use for a given page size
  * Pagesize is expected to be a power-of-two
  */
+/*假设pagesize=4K,即pte=1
+ * 假设pagesize=2M,即((21-12）%9）,即pte=1*/
 #define PAGE_SIZE_PTE_COUNT(pagesize) \
 		(1ULL << ((__ffs(pagesize) - 12) % 9))
 
@@ -418,15 +436,15 @@
 /*
  * Bit value definition for I/O PTE fields
  */
-/*标记此pte有效*/
+/*标记此pte有效，占0号位*/
 #define IOMMU_PTE_PR	BIT_ULL(0)
-/*标记此pte已被修改（dirty)*/
+/*标记此pte已被修改（dirty)，占第6位*/
 #define IOMMU_PTE_HD	BIT_ULL(IOMMU_PTE_HD_BIT)
 #define IOMMU_PTE_U	BIT_ULL(59)
 #define IOMMU_PTE_FC	BIT_ULL(60)
-/*标记此pte有读权限*/
+/*标记此pte有读权限，占61号位*/
 #define IOMMU_PTE_IR	BIT_ULL(61)
-/*标记此pte有写权限*/
+/*标记此pte有写权限，占62号位*/
 #define IOMMU_PTE_IW	BIT_ULL(62)
 
 /*
@@ -457,16 +475,21 @@
 /* DTE[128:179] | DTE[184:191] */
 #define DTE_DATA2_INTR_MASK	~GENMASK_ULL(55, 52)
 
-/*丢弃掉低12bit(4095)恰好是忽略页内的数值*/
+/*丢弃掉低12bit(4095)恰好是忽略页内的数值；丢弃到52-63之前的数值
+ * 现代64位处理器（包括AMD64架构）通常支持40到52位的物理地址线，*/
 #define IOMMU_PAGE_MASK (((1ULL << 52) - 1) & ~0xfffULL)
+/*检查此pte是否有效*/
 #define IOMMU_PTE_PRESENT(pte) ((pte) & IOMMU_PTE_PR)
 #define IOMMU_PTE_DIRTY(pte) ((pte) & IOMMU_PTE_HD)
+/*取pte中保存的page地址（虚拟地址）*/
 #define IOMMU_PTE_PAGE(pte) (iommu_phys_to_virt((pte) & IOMMU_PAGE_MASK))
+/*取pte中存放的level数据，当前占用3bit,看宏PM_LEVEL_ENC*/
 #define IOMMU_PTE_MODE(pte) (((pte) >> 9) & 0x07)
 
+/*权限掩码*/
 #define IOMMU_PROT_MASK 0x03
-#define IOMMU_PROT_IR 0x01
-#define IOMMU_PROT_IW 0x02
+#define IOMMU_PROT_IR 0x01 /*读权限*/
+#define IOMMU_PROT_IW 0x02 /*写权限*/
 
 #define IOMMU_UNITY_MAP_FLAG_EXCL_RANGE	(1 << 2)
 
@@ -583,7 +606,7 @@ struct gcr3_tbl_info {
 
 struct amd_io_pgtable {
 	struct io_pgtable	pgtbl;
-	int			mode;/*指定模式(level），例如DEFAULT_PGTABLE_LEVEL*/
+	int			mode;/*顶层level(root的level为mode-1)，例如DEFAULT_PGTABLE_LEVEL，也可根据存放内容自动调整*/
 	u64			*root;/*初始化为一个全零页,用于存放pte（u64大小，故可以存入4096/8=512个),见fetch_pte函数用法*/
 	u64			*pgd;		/* v2 pgtable pgd pointer */
 };

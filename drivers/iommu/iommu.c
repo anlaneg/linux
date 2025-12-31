@@ -2447,6 +2447,7 @@ void iommu_detach_group(struct iommu_domain *domain, struct iommu_group *group)
 }
 EXPORT_SYMBOL_GPL(iommu_detach_group);
 
+/*取iova地址对应的物理地址*/
 phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
 {
 	if (domain->type == IOMMU_DOMAIN_IDENTITY)
@@ -2477,11 +2478,11 @@ static size_t iommu_pgsize(struct iommu_domain *domain, unsigned long iova,
 		pgsizes &= GENMASK(__ffs(addr_merge), 0);
 
 	/* Make sure we have at least one suitable page size */
-	BUG_ON(!pgsizes);
+	BUG_ON(!pgsizes);/*如果为0，则没有1个页大小适合此地址*/
 
 	/* Pick the biggest page size remaining */
-	pgsize_idx = __fls(pgsizes);
-	pgsize = BIT(pgsize_idx);
+	pgsize_idx = __fls(pgsizes);/*排第一的，即为最大的页面大小*/
+	pgsize = BIT(pgsize_idx);/*页面大小*/
 	if (!count)
 		return pgsize;
 
@@ -2517,8 +2518,8 @@ out_set_count:
 }
 
 /*实现iova到paddr的映射（映射长度为size)*/
-int iommu_map_nosync(struct iommu_domain *domain/*pgd所在的domain*/, unsigned long iova,
-		phys_addr_t paddr, size_t size/*区域大小*/, int prot, gfp_t gfp)
+int iommu_map_nosync(struct iommu_domain *domain/*pgd所在的domain*/, unsigned long iova/*起始iova地址*/,
+		phys_addr_t paddr/*对应的起始物理地址*/, size_t size/*区域大小*/, int prot/*权限*/, gfp_t gfp)
 {
 	const struct iommu_domain_ops *ops = domain->ops;
 	unsigned long orig_iova = iova;
@@ -2565,18 +2566,19 @@ int iommu_map_nosync(struct iommu_domain *domain/*pgd所在的domain*/, unsigned
 
 		pr_debug("mapping: iova 0x%lx pa %pa pgsize 0x%zx count %zu\n",
 			 iova, &paddr, pgsize, count);
-		/*填充iommu映射表项*/
-		ret = ops->map_pages(domain, iova/*起始iova地址*/, paddr/*起始paddr地址*/, pgsize/*映射的页大小*/, count/*映射的页数*/, prot,
-				     gfp, &mapped/*出参，映射的长度*/);
+		/*调用ops,使不同iommu,填充iommu映射表项*/
+		ret = ops->map_pages(domain, iova/*起始iova地址*/, paddr/*起始paddr地址*/, pgsize/*映射的页大小*/, count/*映射的页数*/, prot/*权限位*/,
+				     gfp, &mapped/*出参，成功映射的长度*/);
 		/*
 		 * Some pages may have been mapped, even if an error occurred,
 		 * so we should account for those so they can be unmapped.
 		 */
-		size -= mapped;
+		size -= mapped;/*减去成功映射的长度，继续循环*/
 
 		if (ret)
-			break;
+			break;/*映射出错*/
 
+		/*更新起始地址*/
 		iova += mapped;
 		paddr += mapped;
 	}
@@ -2606,12 +2608,12 @@ int iommu_map(struct iommu_domain *domain/*pgd所在domain*/, unsigned long iova
 {
 	int ret;
 
-	/*仅填充pgd*/
+	/*实现iova地址与paddr地址映射*/
 	ret = iommu_map_nosync(domain, iova, paddr, size, prot, gfp);
 	if (ret)
 		return ret;
 
-	/*同步给硬件*/
+	/*将iova开始的size字节映射同步给硬件*/
 	ret = iommu_sync_map(domain, iova, size);
 	if (ret)
 		iommu_unmap(domain, iova, size);
@@ -2630,13 +2632,13 @@ static size_t __iommu_unmap(struct iommu_domain *domain,
 	unsigned int min_pagesz;
 
 	if (unlikely(!(domain->type & __IOMMU_DOMAIN_PAGING)))
-		return 0;
+		return 0;/*此domain不支持mapping,直接返回*/
 
 	if (WARN_ON(!ops->unmap_pages || domain->pgsize_bitmap == 0UL))
-		return 0;
+		return 0;/*无unmap回调；不支持任何页面大小，不处理*/
 
 	/* find out the minimum page size supported */
-	min_pagesz = 1 << __ffs(domain->pgsize_bitmap);
+	min_pagesz = 1 << __ffs(domain->pgsize_bitmap);/*取支持的最小页面大小*/
 
 	/*
 	 * The virtual address, as well as the size of the mapping, must be
@@ -2644,6 +2646,7 @@ static size_t __iommu_unmap(struct iommu_domain *domain,
 	 * by the hardware
 	 */
 	if (!IS_ALIGNED(iova | size, min_pagesz)) {
+		/*长度及iova地址与min_pagesz不对齐，报错*/
 		pr_err("unaligned: iova 0x%lx size 0x%zx min_pagesz 0x%x\n",
 		       iova, size, min_pagesz);
 		return 0;
@@ -2659,7 +2662,7 @@ static size_t __iommu_unmap(struct iommu_domain *domain,
 		size_t pgsize, count;
 
 		pgsize = iommu_pgsize(domain, iova, iova, size - unmapped, &count);
-		unmapped_page = ops->unmap_pages(domain, iova, pgsize, count, iotlb_gather);
+		unmapped_page = ops->unmap_pages(domain, iova, pgsize/*页面大小*/, count, iotlb_gather);
 		if (!unmapped_page)
 			break;
 
@@ -2730,7 +2733,7 @@ size_t iommu_unmap_fast(struct iommu_domain *domain,
 EXPORT_SYMBOL_GPL(iommu_unmap_fast);
 
 ssize_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
-		     struct scatterlist *sg, unsigned int nents, int prot,
+		     struct scatterlist *sg/*要映射的一组物理地址*/, unsigned int nents, int prot,
 		     gfp_t gfp)
 {
 	size_t len = 0, mapped = 0;

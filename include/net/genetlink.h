@@ -289,7 +289,7 @@ struct genl_split_ops {
 		};
 	};
 	const struct nla_policy *policy;
-	unsigned int		maxattr;
+	unsigned int		maxattr;/*最大属性数*/
 	u8			cmd;
 	u8			internal_flags;
 	u8			flags;

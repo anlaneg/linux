@@ -131,7 +131,7 @@ static bool increase_address_space(struct amd_io_pgtable *pgtable,
 		/*6级地址范围最大值已达到2^66次，超过64位可表示范围，已无意义，返回false*/
 		goto out;
 
-	/*利用当前最大level填充pte，并使其指向当前的root*/
+	/*利用当前最大level填充此pte，并使其指向当前的root（当前root是从0开始的，故首个pte指向它即可）*/
 	*pte = PM_LEVEL_PDE(pgtable->mode/*当前level*/, iommu_virt_to_phys(pgtable->root));
 
 	/*利用当前pte设置为root,并向上提升一个level*/
@@ -150,20 +150,22 @@ out:
 	return ret;
 }
 
+/*返回end_levl对应的pte page地址*/
 static u64 *alloc_pte(struct amd_io_pgtable *pgtable,
-		      unsigned long address,
+		      unsigned long address/*页首地址*/,
 		      unsigned long page_size/*页大小*/,
-		      u64 **pte_page,
-		      gfp_t gfp,
-		      bool *updated)
+		      u64 **pte_page/*出参，end_lvl对应的pte page地址*/,
+		      gfp_t gfp/*物理内存申请flag*/,
+		      bool *updated/*出叁，是否有物理页申请（是否需要更新tlb)*/)
 {
-	unsigned long last_addr = address + (page_size - 1);
+	unsigned long last_addr = address + (page_size - 1)/*页尾地址*/;
 	struct io_pgtable_cfg *cfg = &pgtable->pgtbl.cfg;
 	int level, end_lvl;
 	u64 *pte, *page;
 
 	BUG_ON(!is_power_of_2(page_size));/*页大小只能是2的N次方*/
 
+	/*如当前level不足以表示last_addr地址，则提升level*/
 	while (last_addr > PM_LEVEL_SIZE(pgtable->mode) ||
 	       pgtable->mode - 1 < PAGE_SIZE_LEVEL(page_size)) {
 		/*
@@ -180,14 +182,15 @@ static u64 *alloc_pte(struct amd_io_pgtable *pgtable,
 	level   = pgtable->mode - 1;/*级别减1，准备配合PM_LEVEL_INDEX取pte*/
 	pte     = &pgtable->root[PM_LEVEL_INDEX(level, address)];/*结合当前address取pte*/
 	address = PAGE_SIZE_ALIGN(address, page_size);/*移除掉页中的偏移量*/
-	end_lvl = PAGE_SIZE_LEVEL(page_size);
+	end_lvl = PAGE_SIZE_LEVEL(page_size);/*按pagesize取结束时level,例如：0表示4K页，1表示2M页*/
 
-	while (level > end_lvl) {
+	/*通过大于号对比当前处理level和结束时level（只处理中间level)*/
+	while (level/*当前处理level*/ > end_lvl/*结束时level*/) {
 		u64 __pte, __npte;
 		int pte_level;
 
-		__pte     = *pte;
-		pte_level = PM_PTE_LEVEL(__pte);
+		__pte     = *pte;/*取得当前level对应的pte值*/
+		pte_level = PM_PTE_LEVEL(__pte);/*取当前pte中填写过的level值*/
 
 		/*
 		 * If we replace a series of large PTEs, we need
@@ -222,34 +225,34 @@ static u64 *alloc_pte(struct amd_io_pgtable *pgtable,
 				/*申请物理页失败*/
 				return NULL;
 
-			/*构造此level要保存的下一级pte信息*/
+			/*之前此pte未填写，这里构造地址对应的pte*/
 			__npte = PM_LEVEL_PDE(level/*此pte页对应的level*/, iommu_virt_to_phys(page)/*转为物理地址*/);
 
 			/* pte could have been changed somewhere. */
 			if (!try_cmpxchg64(pte, &__pte, __npte))
-				/*其它流程更新了此pte信息，释放掉我们准备的页*/
+				/*没有替换成功，考虑其它流程更新了此pte信息，释放掉我们准备的页*/
 				iommu_free_pages(page);
 			else if (IOMMU_PTE_PRESENT(__pte))
 				*updated = true;
 
-			continue;
+			continue;/*已更新,重试level*/
 		}
 
 		/* No level skipping support yet */
 		if (pte_level != level)
-			return NULL;
+			return NULL;/*内容有误？*/
 
-		level -= 1;
+		level -= 1;/*再下一层*/
 
-		pte = IOMMU_PTE_PAGE(__pte);
+		pte = IOMMU_PTE_PAGE(__pte);/*转换为page地址*/
 
 		if (pte_page && level == end_lvl)
 			*pte_page = pte;
 
-		pte = &pte[PM_LEVEL_INDEX(level, address)];
+		pte = &pte[PM_LEVEL_INDEX(level, address)];/*取下一层pte*/
 	}
 
-	return pte;
+	return pte;/*返回end_lvl对应的pte*/
 }
 
 /*
@@ -309,6 +312,7 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 	return pte;/*返回iova对应的pte*/
 }
 
+/*归还pte关联的物理页*/
 static void free_clear_pte(u64 *pte, u64 pteval,
 			   struct iommu_pages_list *freelist)
 {
@@ -321,9 +325,11 @@ static void free_clear_pte(u64 *pte, u64 pteval,
 	if (!IOMMU_PTE_PRESENT(pteval))
 		return;
 
+	/*取page地址*/
 	pt   = IOMMU_PTE_PAGE(pteval);
 	mode = IOMMU_PTE_MODE(pteval);
 
+	/*归还pte占用的物理页（传入mode是因为要考虑当一个顶层level被释放其它多层的page均需要归还）*/
 	free_sub_pt(pt, mode, freelist);
 }
 
@@ -334,9 +340,9 @@ static void free_clear_pte(u64 *pte, u64 pteval,
  * supporting all features of AMD IOMMU page tables like level skipping
  * and full 64 bit address spaces.
  */
-static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
-			      phys_addr_t paddr, size_t pgsize, size_t pgcount/*总页数*/,
-			      int prot, gfp_t gfp, size_t *mapped)
+static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova/*通过此地址查询pte*/,
+			      phys_addr_t paddr/*pte映身到此地址*/, size_t pgsize/*页面大小*/, size_t pgcount/*总页数*/,
+			      int prot/*权限*/, gfp_t gfp, size_t *mapped/*出参，map成功的大小*/)
 {
 	struct amd_io_pgtable *pgtable = io_pgtable_ops_to_data(ops);
 	struct iommu_pages_list freelist = IOMMU_PAGES_LIST_INIT(freelist);
@@ -346,6 +352,7 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 	size_t size = pgcount << __ffs(pgsize);/*总大小*/
 	unsigned long o_iova = iova;
 
+	/*iova，paddr地址必须按页大小对齐*/
 	BUG_ON(!IS_ALIGNED(iova, pgsize));
 	BUG_ON(!IS_ALIGNED(paddr, pgsize));
 
@@ -354,21 +361,25 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		goto out;/*权限设置有误*/
 
 	while (pgcount > 0) {
-		count = PAGE_SIZE_PTE_COUNT(pgsize);/*此宏当前版本对9取余，故只能产生0-255*/
-		/*申请pte*/
+		count = PAGE_SIZE_PTE_COUNT(pgsize);/*取此页面大小需占用的pte数目*/
+		/*通过iova地址申请pte*/
 		pte   = alloc_pte(pgtable, iova, pgsize, NULL, gfp, &updated);
 
 		ret = -ENOMEM;
 		if (!pte)
 			goto out;
 
+		/*归还自pte[i]开始到pte[i+count]结束这些节点其下对应的物理页到freelist上*/
 		for (i = 0; i < count; ++i)
 			free_clear_pte(&pte[i], pte[i], &freelist);
 
+		/*队列不为空，则需更新tlb*/
 		if (!iommu_pages_list_empty(&freelist))
 			updated = true;
 
+		/*利用paddr地址填充pte*/
 		if (count > 1) {
+			/*旧的已删除，将level7做特殊的单片pte,直接填写此地址*/
 			__pte = PAGE_SIZE_PTE(__sme_set(paddr), pgsize);
 			__pte |= PM_LEVEL_ENC(7) | IOMMU_PTE_PR | IOMMU_PTE_FC;
 		} else
@@ -403,12 +414,12 @@ out:
 		 * Updates and flushing already happened in
 		 * increase_address_space().
 		 */
-		amd_iommu_domain_flush_pages(dom, o_iova, size);
+		amd_iommu_domain_flush_pages(dom, o_iova, size);/*刷新tlb*/
 		spin_unlock_irqrestore(&dom->lock, flags);
 	}
 
 	/* Everything flushed out, free pages now */
-	iommu_put_pages_list(&freelist);
+	iommu_put_pages_list(&freelist);/*释放回收的page*/
 
 	return ret;
 }
@@ -569,9 +580,9 @@ static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *coo
 	cfg->ias            = IOMMU_IN_ADDR_BIT_SIZE;
 	cfg->oas            = IOMMU_OUT_ADDR_BIT_SIZE;
 
-	pgtable->pgtbl.ops.map_pages    = iommu_v1_map_pages;
+	pgtable->pgtbl.ops.map_pages    = iommu_v1_map_pages;/*实现iova到物理地址映射*/
 	pgtable->pgtbl.ops.unmap_pages  = iommu_v1_unmap_pages;
-	pgtable->pgtbl.ops.iova_to_phys = iommu_v1_iova_to_phys;
+	pgtable->pgtbl.ops.iova_to_phys = iommu_v1_iova_to_phys;/*iova地址转换为物理地址*/
 	pgtable->pgtbl.ops.read_and_clear_dirty = iommu_v1_read_and_clear_dirty;
 
 	return &pgtable->pgtbl;

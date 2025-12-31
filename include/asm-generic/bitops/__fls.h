@@ -43,6 +43,7 @@ static __always_inline unsigned int generic___fls(unsigned long word)
 }
 
 #ifndef __HAVE_ARCH___FLS
+/*返回word中'1'的最高位编号*/
 #define __fls(word) generic___fls(word)
 #endif
 

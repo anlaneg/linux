@@ -209,9 +209,10 @@ struct arm_lpae_io_pgtable_walk_data {
  * the same names.
  */
 struct io_pgtable_ops {
+	/*映射iova地址到paddr地址（具体通过iova申请pte并填充paddr)*/
 	int (*map_pages)(struct io_pgtable_ops *ops, unsigned long iova,
-			 phys_addr_t paddr, size_t pgsize, size_t pgcount,
-			 int prot, gfp_t gfp, size_t *mapped);
+			 phys_addr_t paddr, size_t pgsize/*页面大小*/, size_t pgcount/*需映射的页面总数*/,
+			 int prot/*权限*/, gfp_t gfp/*申请pte页时使用的标记*/, size_t *mapped/*出参，成功map的页面数*/);
 	size_t (*unmap_pages)(struct io_pgtable_ops *ops, unsigned long iova,
 			      size_t pgsize, size_t pgcount,
 			      struct iommu_iotlb_gather *gather);

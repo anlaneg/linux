@@ -872,6 +872,9 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 		}
 
 		if (__ratelimit(&dev_data->rs)) {
+			/*显示日志，比如我们遇到的
+			 * [Thu Dec 25 14:34:59 2025] vfio-pci 0000:ca:00.0: AMD-Vi: Event logged [IO_PAGE_FAULT domain=0x007e address=0x7ff606200000 flags=0x0000]
+			 * */
 			pci_err(pdev, "Event logged [IO_PAGE_FAULT domain=0x%04x address=0x%llx flags=0x%04x]\n",
 				domain_id, address, flags);
 		}
@@ -915,6 +918,8 @@ retry:
 	}
 
 	if (type == EVENT_TYPE_IO_FAULT) {
+		/*该事件代表设备发起的 DMA/IOVA 访问触发了 IOMMU 页错误（IO page fault），
+		 * 涵盖地址无效、权限不足、页表缺失、地址转换失败等情况*/
 		amd_iommu_report_page_fault(iommu, devid, pasid, address, flags);
 		return;
 	}
@@ -2771,9 +2776,10 @@ static int amd_iommu_iotlb_sync_map(struct iommu_domain *dom,
 	return 0;
 }
 
-static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova,
-			       phys_addr_t paddr/*物理起始地址*/, size_t pgsize/*页大小*/, size_t pgcount,
-			       int iommu_prot, gfp_t gfp, size_t *mapped)
+/*完成iova地址到paddr的映射,填充iommu映射*/
+static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova/*iova起始地址*/,
+			       phys_addr_t paddr/*物理起始地址*/, size_t pgsize/*页大小*/, size_t pgcount/*页数目*/,
+			       int iommu_prot/*权限*/, gfp_t gfp/*申请pte内存时使用的标记*/, size_t *mapped/*出参，成功映射的大小*/)
 {
 	struct protection_domain *domain = to_pdomain(dom);
 	struct io_pgtable_ops *ops = &domain->iop.pgtbl.ops;/*取domain对应的ops*/
@@ -2782,15 +2788,16 @@ static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova,
 
 	if ((domain->pd_mode == PD_MODE_V1) &&
 	    (domain->iop.mode == PAGE_MODE_NONE))
-		return -EINVAL;
+		return -EINVAL;/*不支持采用v1*/
 
+	/*转换权限位*/
 	if (iommu_prot & IOMMU_READ)
 		prot |= IOMMU_PROT_IR;
 	if (iommu_prot & IOMMU_WRITE)
 		prot |= IOMMU_PROT_IW;
 
 	if (ops->map_pages) {
-		/*填充iommu映射表，无效其对应的iotlb*/
+		/*映射iova地址到paddr,填充iommu映射表，无效其对应的iotlb*/
 		ret = ops->map_pages(ops, iova, paddr, pgsize,
 				     pgcount, prot, gfp, mapped);
 	}
@@ -2839,6 +2846,7 @@ static size_t amd_iommu_unmap_pages(struct iommu_domain *dom, unsigned long iova
 	return r;
 }
 
+/*取Iova地址对应的物理地址*/
 static phys_addr_t amd_iommu_iova_to_phys(struct iommu_domain *dom,
 					  dma_addr_t iova)
 {
@@ -3083,8 +3091,10 @@ const struct iommu_ops amd_iommu_ops = {
 	.page_response = amd_iommu_page_response,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= amd_iommu_attach_device,
+		/*映射地址用*/
 		.map_pages	= amd_iommu_map_pages,
 		.unmap_pages	= amd_iommu_unmap_pages,
+		/*iotlb同步用*/
 		.iotlb_sync_map	= amd_iommu_iotlb_sync_map,
 		.iova_to_phys	= amd_iommu_iova_to_phys,
 		.flush_iotlb_all = amd_iommu_flush_iotlb_all,

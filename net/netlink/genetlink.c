@@ -1005,11 +1005,13 @@ genl_family_rcv_msg_attrs_parse(const struct genl_family *family,
 	if (!ops->maxattr)
 		return NULL;
 
+	/*申请各属性值占用的数组*/
 	attrbuf = kmalloc_array(ops->maxattr + 1,
 				sizeof(struct nlattr *), GFP_KERNEL);
 	if (!attrbuf)
 		return ERR_PTR(-ENOMEM);
 
+	/*解析消息*/
 	err = __nlmsg_parse(nlh, hdrlen, attrbuf, ops->maxattr, ops->policy,
 			    validate, extack);
 	if (err) {
@@ -1231,7 +1233,7 @@ static int genl_header_check(const struct genl_family *family,
 	return 0;
 }
 
-//采用指定的family来解析处理general netlink消息
+//指定的family收到了消息nlh,通过此函数来解析处理general netlink消息
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
 			       struct nlmsghdr *nlh,//netlink消息头
@@ -1282,7 +1284,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 }
 
 //Generic netlink消息接收
-static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
+static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息头*/,
 			struct netlink_ext_ack *extack)
 {
 	const struct genl_family *family;

@@ -2112,7 +2112,7 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 	if (iommu->cap & (1UL << IOMMU_CAP_NPCACHE)) {
 		pr_info("Using strict mode due to virtualization\n");
 		iommu_set_dma_strict();
-		amd_iommu_np_cache = true;
+		amd_iommu_np_cache = true;/*开启not present cache*/
 	}
 
 	init_iommu_perf_ctr(iommu);

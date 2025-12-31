@@ -3621,10 +3621,11 @@ static int intel_iommu_map(struct iommu_domain *domain,
 				hpa >> VTD_PAGE_SHIFT/*页号（起始）*/, size/*页总数*/, prot, gfp);
 }
 
+/*intel iommu映射表项填充，实现iova到paddr的映射，映射长度为pgcount * pgsize*/
 static int intel_iommu_map_pages(struct iommu_domain *domain,
-				 unsigned long iova, phys_addr_t paddr,
+				 unsigned long iova/*iova起始地址*/, phys_addr_t paddr/*对应物理起始地址*/,
 				 size_t pgsize/*页大小*/, size_t pgcount/*页数*/,
-				 int prot, gfp_t gfp, size_t *mapped/*出参，映射长度*/)
+				 int prot/*权限位*/, gfp_t gfp, size_t *mapped/*出参，成功映射的长度*/)
 {
 	unsigned long pgshift = __ffs(pgsize);
 	size_t size = pgcount << pgshift;/*总大小*/

@@ -17,6 +17,7 @@ static __always_inline unsigned int generic___ffs(unsigned long word)
 
 #if BITS_PER_LONG == 64
 	if ((word & 0xffffffff) == 0) {
+		/*低32位中没有'1',word右移，num增加32*/
 		num += 32;
 		word >>= 32;
 	}

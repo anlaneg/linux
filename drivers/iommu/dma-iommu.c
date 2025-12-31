@@ -1833,8 +1833,8 @@ void dma_iova_free(struct device *dev, struct dma_iova_state *state)
 }
 EXPORT_SYMBOL_GPL(dma_iova_free);
 
-static int __dma_iova_link(struct device *dev, dma_addr_t addr,
-		phys_addr_t phys, size_t size, enum dma_data_direction dir,
+static int __dma_iova_link(struct device *dev, dma_addr_t addr/*dma起始地址*/,
+		phys_addr_t phys/*对应的物理地址*/, size_t size, enum dma_data_direction dir,
 		unsigned long attrs)
 {
 	bool coherent = dev_is_dma_coherent(dev);
@@ -1842,6 +1842,7 @@ static int __dma_iova_link(struct device *dev, dma_addr_t addr,
 	if (!coherent && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
 		arch_sync_dma_for_device(phys, size, dir);
 
+	/*实现addr地址与phys地址映射*/
 	return iommu_map_nosync(iommu_get_dma_domain(dev), addr, phys, size,
 			dma_info_to_prot(dir, coherent, attrs), GFP_ATOMIC);
 }

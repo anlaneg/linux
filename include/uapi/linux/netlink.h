@@ -60,6 +60,7 @@ struct nlmsghdr {
 	__u32		nlmsg_len;
 	//消息的type
 	__u16		nlmsg_type;
+	/*消息标记，例如NLM_F_REQUEST*/
 	__u16		nlmsg_flags;
 	__u32		nlmsg_seq;
 	__u32		nlmsg_pid;
@@ -255,6 +256,7 @@ struct nlattr {
  */
 #define NLA_F_NESTED		(1 << 15)
 #define NLA_F_NET_BYTEORDER	(1 << 14)
+/*nla类型提取掩码*/
 #define NLA_TYPE_MASK		~(NLA_F_NESTED | NLA_F_NET_BYTEORDER)
 
 #define NLA_ALIGNTO		4

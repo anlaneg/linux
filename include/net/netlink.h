@@ -519,7 +519,7 @@ struct nl_info {
 enum netlink_validation {
 	NL_VALIDATE_LIBERAL = 0,
 	NL_VALIDATE_TRAILING = BIT(0),
-	NL_VALIDATE_MAXTYPE = BIT(1),
+	NL_VALIDATE_MAXTYPE = BIT(1),/*拒绝大于max type的属性*/
 	NL_VALIDATE_UNSPEC = BIT(2),
 	NL_VALIDATE_STRICT_ATTRS = BIT(3),
 	NL_VALIDATE_NESTED = BIT(4),
@@ -591,7 +591,7 @@ static inline int nlmsg_msg_size(int payload)
  */
 static inline int nlmsg_total_size(int payload)
 {
-    /*netlink头 + payload 获取总的长度*/
+    /*netlink头 + payload 获取总的长度(包含padding)*/
 	return NLMSG_ALIGN(nlmsg_msg_size(payload));
 }
 
