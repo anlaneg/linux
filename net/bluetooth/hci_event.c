@@ -7585,7 +7585,7 @@ static const struct hci_ev {
 	HCI_EV_REQ_VL(HCI_EV_LE_META, hci_le_meta_evt,
 		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),/*收到LE meta消息时调用*/
 	/* [0xff = HCI_EV_VENDOR] */
-	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
+	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),/*收到vendor-specific debugging events*/
 };
 
 static void hci_event_func(struct hci_dev *hdev, u8 event/*事件编号*/, struct sk_buff *skb/*事件参数*/,

@@ -2862,6 +2862,7 @@ void iommu_get_resv_regions(struct device *dev, struct list_head *list)
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	if (ops->get_resv_regions)
+		/*获取预留的region*/
 		ops->get_resv_regions(dev, list);
 }
 EXPORT_SYMBOL_GPL(iommu_get_resv_regions);
@@ -2886,6 +2887,7 @@ void iommu_put_resv_regions(struct device *dev, struct list_head *list)
 }
 EXPORT_SYMBOL(iommu_put_resv_regions);
 
+/*申请内存区域结构体*/
 struct iommu_resv_region *iommu_alloc_resv_region(phys_addr_t start,
 						  size_t length, int prot,
 						  enum iommu_resv_type type,

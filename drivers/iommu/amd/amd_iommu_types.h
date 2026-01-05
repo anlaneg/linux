@@ -984,7 +984,7 @@ struct unity_map_entry {
 	u64 address_end;
 
 	/* required protection */
-	int prot;
+	int prot;/*权限，例如IOMMU_PROT_IR等*/
 };
 
 /*

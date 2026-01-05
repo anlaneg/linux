@@ -1722,11 +1722,13 @@ static inline struct hci_dev *hci_dev_hold(struct hci_dev *d)
 #define to_hci_dev(d) container_of(d, struct hci_dev, dev)
 #define to_hci_conn(c) container_of(c, struct hci_conn, dev)
 
+/*取hci设备对应的driver data*/
 static inline void *hci_get_drvdata(struct hci_dev *hdev)
 {
 	return dev_get_drvdata(&hdev->dev);
 }
 
+/*设置hci设备的driver data*/
 static inline void hci_set_drvdata(struct hci_dev *hdev, void *data)
 {
 	dev_set_drvdata(&hdev->dev, data);

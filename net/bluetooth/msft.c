@@ -89,7 +89,7 @@ struct msft_ev_le_monitor_device {
 
 struct msft_monitor_advertisement_handle_data {
 	__u8  msft_handle;
-	__u16 mgmt_handle;
+	__u16 mgmt_handle;/*mgmt handle*/
 	__s8 rssi_high;
 	__s8 rssi_low;
 	__u8 rssi_low_interval;
@@ -122,8 +122,8 @@ struct msft_monitor_addr_filter_data {
 
 struct msft_data {
 	__u64 features;
-	__u8  evt_prefix_len;
-	__u8  *evt_prefix;
+	__u8  evt_prefix_len;/*需匹配的前缀长度，即evt_prefix内容长度*/
+	__u8  *evt_prefix;/*与0xFF event前缀匹配时的内容*/
 	struct list_head handle_map;
 	struct list_head address_filters;
 	__u8 resuming;
@@ -196,6 +196,7 @@ static struct msft_monitor_advertisement_handle_data *msft_find_handle_data
 	struct msft_monitor_advertisement_handle_data *entry;
 	struct msft_data *msft = hdev->msft_data;
 
+	/*遍历handle map,查找给定的handle*/
 	list_for_each_entry(entry, &msft->handle_map, list) {
 		if (is_mgmt && entry->mgmt_handle == handle)
 			return entry;
@@ -823,11 +824,13 @@ static void *msft_skb_pull(struct hci_dev *hdev, struct sk_buff *skb,
 {
 	void *data;
 
+	/*检查是否至少有len长度的内容*/
 	data = skb_pull_data(skb, len);
 	if (!data)
+		/*报文长度有误*/
 		bt_dev_err(hdev, "Malformed MSFT vendor event: 0x%02x", ev);
 
-	return data;
+	return data;/*返回报文内容*/
 }
 
 static int msft_add_address_filter_sync(struct hci_dev *hdev, void *data)
@@ -978,6 +981,7 @@ static void msft_monitor_device_evt(struct hci_dev *hdev, struct sk_buff *skb)
 	u16 mgmt_handle = 0xffff;
 	u8 addr_type;
 
+	/*取此event对应的参数*/
 	ev = msft_skb_pull(hdev, skb, MSFT_EV_LE_MONITOR_DEVICE, sizeof(*ev));
 	if (!ev)
 		return;
@@ -1065,6 +1069,7 @@ report_state:
 	}
 }
 
+/*收到vendor-specific debugging events时此函数被调用*/
 void msft_vendor_evt(struct hci_dev *hdev, void *data, struct sk_buff *skb)
 {
 	struct msft_data *msft = hdev->msft_data;
@@ -1072,7 +1077,7 @@ void msft_vendor_evt(struct hci_dev *hdev, void *data, struct sk_buff *skb)
 	u8 *evt;
 
 	if (!msft)
-		return;
+		return;/*无msft_data，则不处理*/
 
 	/* When the extension has defined an event prefix, check that it
 	 * matches, and otherwise just return.
@@ -1080,21 +1085,22 @@ void msft_vendor_evt(struct hci_dev *hdev, void *data, struct sk_buff *skb)
 	if (msft->evt_prefix_len > 0) {
 		evt_prefix = msft_skb_pull(hdev, skb, 0, msft->evt_prefix_len);
 		if (!evt_prefix)
-			return;
+			return;/*event前缀长度不符，不处理*/
 
 		if (memcmp(evt_prefix, msft->evt_prefix, msft->evt_prefix_len))
-			return;
+			return;/*匹配不一致，不处理*/
 	}
 
 	/* Every event starts at least with an event code and the rest of
 	 * the data is variable and depends on the event code.
 	 */
 	if (skb->len < 1)
-		return;
+		return;/*长度过小*/
 
+	/*取event code*/
 	evt = msft_skb_pull(hdev, skb, 0, sizeof(*evt));
 	if (!evt)
-		return;
+		return;/*event code为零，不处理*/
 
 	hci_dev_lock(hdev);
 

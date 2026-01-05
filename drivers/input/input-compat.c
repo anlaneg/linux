@@ -11,16 +11,19 @@
 
 #ifdef CONFIG_COMPAT
 
+/*自用户态获取用户指定的event*/
 int input_event_from_user(const char __user *buffer,
 			  struct input_event *event)
 {
 	if (in_compat_syscall() && !COMPAT_USE_64BIT_TIME) {
 		struct input_event_compat compat_event;
 
+		/*先复制到临时变量*/
 		if (copy_from_user(&compat_event, buffer,
 				   sizeof(struct input_event_compat)))
 			return -EFAULT;
 
+		/*再由临时变量写到event*/
 		event->input_event_sec = compat_event.sec;
 		event->input_event_usec = compat_event.usec;
 		event->type = compat_event.type;
@@ -47,11 +50,13 @@ int input_event_to_user(char __user *buffer,
 		compat_event.code = event->code;
 		compat_event.value = event->value;
 
+		/*再将临时变量写入buffer*/
 		if (copy_to_user(buffer, &compat_event,
 				 sizeof(struct input_event_compat)))
 			return -EFAULT;
 
 	} else {
+		/*这种直接复制*/
 		if (copy_to_user(buffer, event, sizeof(struct input_event)))
 			return -EFAULT;
 	}

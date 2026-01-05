@@ -66,6 +66,7 @@ struct uinput_ff_erase {
 
 struct uinput_setup {
 	struct input_id id;
+	/*设备名称*/
 	char name[UINPUT_MAX_NAME_SIZE];
 	__u32 ff_effects_max;
 };

@@ -146,7 +146,7 @@ struct ivmd_header {
 	u16 pci_seg;
 	u8  resv[6];
 	u64 range_start;
-	u64 range_length;
+	u64 range_length;/*总范围长度*/
 } __attribute__((packed));
 
 bool amd_iommu_dump;
@@ -2583,8 +2583,8 @@ static int __init init_unity_map_range(struct ivmd_header *m,
 		e->devid_end = m->aux;
 		break;
 	}
-	e->address_start = PAGE_ALIGN(m->range_start);
-	e->address_end = e->address_start + PAGE_ALIGN(m->range_length);
+	e->address_start = PAGE_ALIGN(m->range_start);/*设置起始地址*/
+	e->address_end = e->address_start + PAGE_ALIGN(m->range_length);/*设置终止地址*/
 	e->prot = m->flags >> 1;
 
 	/*

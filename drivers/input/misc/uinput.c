@@ -54,13 +54,13 @@ struct uinput_request {
 };
 
 struct uinput_device {
-	struct input_dev	*dev;
+	struct input_dev	*dev;/*对应的input dev*/
 	struct mutex		mutex;
-	enum uinput_state	state;
+	enum uinput_state	state;/*设备状态*/
 	wait_queue_head_t	waitq;
 	unsigned char		ready;
-	unsigned char		head;
-	unsigned char		tail;
+	unsigned char		head;/*指向队头*/
+	unsigned char		tail;/*指向队尾（读取操作增加此变量）*/
 	struct input_event	buff[UINPUT_BUFFER_SIZE];
 	unsigned int		ff_effects_max;
 
@@ -287,9 +287,9 @@ static void uinput_destroy_device(struct uinput_device *udev)
 {
 	const char *name, *phys;
 	struct input_dev *dev = udev->dev;
-	enum uinput_state old_state = udev->state;
+	enum uinput_state old_state = udev->state;/*保存旧状态*/
 
-	udev->state = UIST_NEW_DEVICE;
+	udev->state = UIST_NEW_DEVICE;/*更新为new device状态*/
 
 	if (dev) {
 		name = dev->name;
@@ -312,6 +312,7 @@ static int uinput_create_device(struct uinput_device *udev)
 	int error, nslot;
 
 	if (udev->state != UIST_SETUP_COMPLETE) {
+		/*必须先达到此状态，才能执行此ioctl*/
 		printk(KERN_DEBUG "%s: write device info first\n", UINPUT_NAME);
 		return -EINVAL;
 	}
@@ -366,7 +367,7 @@ static int uinput_create_device(struct uinput_device *udev)
 	if (error)
 		goto fail2;
 
-	udev->state = UIST_CREATED;
+	udev->state = UIST_CREATED;/*变更为created状态*/
 
 	return 0;
 
@@ -387,9 +388,9 @@ static int uinput_open(struct inode *inode, struct file *file)
 	spin_lock_init(&newdev->requests_lock);
 	init_waitqueue_head(&newdev->requests_waitq);
 	init_waitqueue_head(&newdev->waitq);
-	newdev->state = UIST_NEW_DEVICE;
+	newdev->state = UIST_NEW_DEVICE;/*初始化为new device状态*/
 
-	file->private_data = newdev;
+	file->private_data = newdev;/*指给file做为私有数据*/
 	stream_open(inode, file);
 
 	return 0;
@@ -465,7 +466,7 @@ static int uinput_dev_setup(struct uinput_device *udev,
 	struct input_dev *dev;
 
 	if (udev->state == UIST_CREATED)
-		return -EINVAL;
+		return -EINVAL;/*已达到created事件，报错*/
 
 	if (copy_from_user(&setup, arg, sizeof(setup)))
 		return -EFAULT;
@@ -530,9 +531,10 @@ static int uinput_setup_device_legacy(struct uinput_device *udev,
 	int			retval;
 
 	if (count != sizeof(struct uinput_user_dev))
-		return -EINVAL;
+		return -EINVAL;/*大小必须符合约定*/
 
 	if (!udev->dev) {
+		/*申请input设备*/
 		udev->dev = input_allocate_device();
 		if (!udev->dev)
 			return -ENOMEM;
@@ -548,10 +550,12 @@ static int uinput_setup_device_legacy(struct uinput_device *udev,
 
 	/* Ensure name is filled in */
 	if (!user_dev->name[0]) {
+		/*必须提供设备名称*/
 		retval = -EINVAL;
 		goto exit;
 	}
 
+	/*设置设备名称*/
 	kfree(dev->name);
 	dev->name = kstrndup(user_dev->name, UINPUT_MAX_NAME_SIZE,
 			     GFP_KERNEL);
@@ -576,7 +580,7 @@ static int uinput_setup_device_legacy(struct uinput_device *udev,
 	if (retval < 0)
 		goto exit;
 
-	udev->state = UIST_SETUP_COMPLETE;
+	udev->state = UIST_SETUP_COMPLETE;/*变更设备状态*/
 	retval = count;
 
  exit:
@@ -636,8 +640,8 @@ static ssize_t uinput_inject_events(struct uinput_device *udev,
 		if (is_valid_timestamp(timestamp))
 			input_set_timestamp(udev->dev, timestamp);
 
-		input_event(udev->dev, ev.type, ev.code, ev.value);
-		bytes += input_event_size();
+		input_event(udev->dev, ev.type, ev.code, ev.value);/*注入事件*/
+		bytes += input_event_size();/*更新读取的长度*/
 		cond_resched();
 	}
 
@@ -658,14 +662,15 @@ static ssize_t uinput_write(struct file *file, const char __user *buffer,
 		return retval;
 
 	retval = udev->state == UIST_CREATED ?
-			uinput_inject_events(udev, buffer, count) :
-			uinput_setup_device_legacy(udev, buffer, count);
+			uinput_inject_events(udev, buffer, count) /*注入事件*/:
+			uinput_setup_device_legacy(udev, buffer, count)/*申请input设备，变更状态为UIST_SETUP_COMPLETE*/;
 
 	mutex_unlock(&udev->mutex);
 
 	return retval;
 }
 
+/*取udev->tail指向的事件*/
 static bool uinput_fetch_next_event(struct uinput_device *udev,
 				    struct input_event *event)
 {
@@ -673,15 +678,17 @@ static bool uinput_fetch_next_event(struct uinput_device *udev,
 
 	spin_lock_irq(&udev->dev->event_lock);
 
-	have_event = udev->head != udev->tail;
+	have_event = udev->head != udev->tail;/*两者如不相等，则有事件*/
 	if (have_event) {
+		/*取事件*/
 		*event = udev->buff[udev->tail];
+		/*更新tail*/
 		udev->tail = (udev->tail + 1) % UINPUT_BUFFER_SIZE;
 	}
 
 	spin_unlock_irq(&udev->dev->event_lock);
 
-	return have_event;
+	return have_event;/*返回是否有事件已读取*/
 }
 
 static ssize_t uinput_events_to_user(struct uinput_device *udev,
@@ -693,15 +700,19 @@ static ssize_t uinput_events_to_user(struct uinput_device *udev,
 	while (read + input_event_size() <= count &&
 	       uinput_fetch_next_event(udev, &event)) {
 
+		/*写入到用户态*/
 		if (input_event_to_user(buffer + read, &event))
 			return -EFAULT;
 
+		/*写入的字节数*/
 		read += input_event_size();
 	}
 
+	/*返回写入的字节数*/
 	return read;
 }
 
+/*读取存放在udev->buff的event*/
 static ssize_t uinput_read(struct file *file, char __user *buffer,
 			   size_t count, loff_t *ppos)
 {
@@ -720,16 +731,19 @@ static ssize_t uinput_read(struct file *file, char __user *buffer,
 			retval = -ENODEV;
 		else if (udev->head == udev->tail &&
 			 (file->f_flags & O_NONBLOCK))
+			/*队列为空，且指明了非阻塞*/
 			retval = -EAGAIN;
 		else
+			/*队列可能非空，写到用户态*/
 			retval = uinput_events_to_user(udev, buffer, count);
 
 		mutex_unlock(&udev->mutex);
 
 		if (retval || count == 0)
-			break;
+			break;/*读取到了，退出*/
 
 		if (!(file->f_flags & O_NONBLOCK))
+			/*没有指定非阻塞，等待条件*/
 			retval = wait_event_interruptible(udev->waitq,
 						  udev->head != udev->tail ||
 						  udev->state != UIST_CREATED);
@@ -746,6 +760,7 @@ static __poll_t uinput_poll(struct file *file, poll_table *wait)
 	poll_wait(file, &udev->waitq, wait);
 
 	if (udev->head != udev->tail)
+		/*队列不为空，返回pollin事件*/
 		mask |= EPOLLIN | EPOLLRDNORM;
 
 	return mask;
@@ -854,8 +869,8 @@ static int uinput_ff_upload_from_user(const char __user *buffer,
 	if (udev->state == UIST_CREATED)		\
 		__ret =  -EINVAL;			\
 	else if ((_arg) > (_max))			\
-		__ret = -EINVAL;			\
-	else set_bit((_arg), udev->dev->_bit);		\
+		__ret = -EINVAL;/*不得超过max*/			\
+	else set_bit((_arg), udev->dev->_bit);/*将参数对应的位，置为1*/		\
 	__ret;						\
 })
 
@@ -901,6 +916,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 		return retval;
 
 	if (!udev->dev) {
+		/*如果dev还未设置，则申请input dev*/
 		udev->dev = input_allocate_device();
 		if (!udev->dev) {
 			retval = -ENOMEM;
@@ -910,6 +926,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case UI_GET_VERSION:
+		/*取uinput版本号*/
 		if (put_user(UINPUT_VERSION, (unsigned int __user *)p))
 			retval = -EFAULT;
 		goto out;
@@ -929,6 +946,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 	/* UI_ABS_SETUP is handled in the variable size ioctls */
 
 	case UI_SET_EVBIT:
+		/*指明udev->dev->evbit的arg位为'1'*/
 		retval = uinput_set_bit(arg, evbit, EV_MAX);
 		goto out;
 
@@ -970,7 +988,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 
 	case UI_SET_PHYS:
 		if (udev->state == UIST_CREATED) {
-			retval = -EINVAL;
+			retval = -EINVAL;/*已达created,报错*/
 			goto out;
 		}
 
@@ -1125,8 +1143,8 @@ static const struct file_operations uinput_fops = {
 	.owner		= THIS_MODULE,
 	.open		= uinput_open,
 	.release	= uinput_release,
-	.read		= uinput_read,
-	.write		= uinput_write,
+	.read		= uinput_read,/*读取event*/
+	.write		= uinput_write,/*注入事件及用于初始化设备*/
 	.poll		= uinput_poll,
 	.unlocked_ioctl	= uinput_ioctl,
 #ifdef CONFIG_COMPAT
@@ -1139,7 +1157,7 @@ static struct miscdevice uinput_misc = {
 	.minor		= UINPUT_MINOR,
 	.name		= UINPUT_NAME,
 };
-module_misc_device(uinput_misc);
+module_misc_device(uinput_misc);/*注册uinput字符设备*/
 
 MODULE_ALIAS_MISCDEV(UINPUT_MINOR);
 MODULE_ALIAS("devname:" UINPUT_NAME);

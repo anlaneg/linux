@@ -16,7 +16,9 @@
 #include <linux/iova_bitmap.h>
 #include <uapi/linux/iommufd.h>
 
+/*读权限*/
 #define IOMMU_READ	(1 << 0)
+/*写权限*/
 #define IOMMU_WRITE	(1 << 1)
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */
 #define IOMMU_NOEXEC	(1 << 3)
@@ -307,9 +309,9 @@ enum iommu_resv_type {
  */
 struct iommu_resv_region {
 	struct list_head	list;
-	phys_addr_t		start;
-	size_t			length;
-	int			prot;
+	phys_addr_t		start;/*起始物理地址*/
+	size_t			length;/*内存区域长度*/
+	int			prot;/*权限*/
 	enum iommu_resv_type	type;
 	void (*free)(struct device *dev, struct iommu_resv_region *region);
 };
@@ -892,10 +894,11 @@ static inline struct iommu_device *dev_to_iommu_device(struct device *dev)
  */
 static inline struct iommu_device *__iommu_get_iommu_dev(struct device *dev)
 {
+	/*取此设备对应的iommu设备*/
 	return dev->iommu->iommu_dev;
 }
 
-#define iommu_get_iommu_dev(dev, type, member) \
+#define iommu_get_iommu_dev(dev, type/*结构体*/, member/*成员名称*/) \
 	container_of(__iommu_get_iommu_dev(dev), type, member)
 
 static inline void iommu_iotlb_gather_init(struct iommu_iotlb_gather *gather)

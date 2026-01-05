@@ -2961,6 +2961,7 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 	iommu = get_amd_iommu_from_dev(dev);/*取dev对应的amd iommu设备*/
 	pci_seg = iommu->pci_seg;
 
+	/*串连unity_map上的entry*/
 	list_for_each_entry(entry, &pci_seg->unity_map, list) {
 		int type, prot = 0;
 		size_t length;
@@ -2985,9 +2986,11 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 			dev_err(dev, "Out of memory allocating dm-regions\n");
 			return;
 		}
+		/*将新申请的结构体串到head链表*/
 		list_add_tail(&region->list, head);
 	}
 
+	/*这个区域是固定的（目的？）*/
 	region = iommu_alloc_resv_region(MSI_RANGE_START,
 					 MSI_RANGE_END - MSI_RANGE_START + 1,
 					 0, IOMMU_RESV_MSI, GFP_KERNEL);
@@ -2998,6 +3001,7 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 	if (amd_iommu_ht_range_ignore())
 		return;
 
+	/*这个区域是固定的（目的？）*/
 	region = iommu_alloc_resv_region(HT_RANGE_START,
 					 HT_RANGE_END - HT_RANGE_START + 1,
 					 0, IOMMU_RESV_RESERVED, GFP_KERNEL);

@@ -640,7 +640,7 @@ done:
  */
 static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr/*起始虚拟地址*/,
 				  unsigned long npage/*4K页总页数*/, unsigned long *pfn_base/*出参，物理地址起始页号*/,
-				  unsigned long limit, struct vfio_batch *batch/*出参，*/)
+				  unsigned long limit, struct vfio_batch *batch/*出参*/)
 {
 	unsigned long pfn;
 	struct mm_struct *mm = current->mm;/*使用当前进程的mm*/
@@ -1521,7 +1521,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		/*当前位置我们pin住了一段物理连续内存，共有npage页，接下来我们映射这一段*/
 		/* Map it! */
 		/*填充iommu映射表项，使iova地址映射到pfn对应的npage页上*/
-		ret = vfio_iommu_map(iommu, iova + dma->size/*这里为什么要加size??原因：此函数参数传入时dma->size=0,其后dma->size渐增*/, pfn, npage,
+		ret = vfio_iommu_map(iommu, iova + dma->size/*这里为什么要加size?原因：此函数参数传入时dma->size=0,其后dma->size渐增*/, pfn, npage,
 				     dma->prot);
 		if (ret) {
 			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,

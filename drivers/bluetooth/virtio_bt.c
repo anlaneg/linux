@@ -23,7 +23,7 @@ struct virtio_bluetooth {
 	struct virtio_device *vdev;
 	struct virtqueue *vqs[VIRTBT_NUM_VQS];
 	struct work_struct rx;/*收方向work函数，例如：virtbt_rx_work*/
-	struct hci_dev *hdev;/*取应的hci设备*/
+	struct hci_dev *hdev;/*对应的hci设备*/
 };
 
 static int virtbt_add_inbuf(struct virtio_bluetooth *vbt)
@@ -55,6 +55,7 @@ static int virtbt_open(struct hci_dev *hdev)
 
 static int virtbt_open_vdev(struct virtio_bluetooth *vbt)
 {
+	/*填加一份收包buffer*/
 	if (virtbt_add_inbuf(vbt) < 0)
 		return -EIO;
 
@@ -71,8 +72,9 @@ static int virtbt_close_vdev(struct virtio_bluetooth *vbt)
 {
 	int i;
 
-	cancel_work_sync(&vbt->rx);
+	cancel_work_sync(&vbt->rx);/*停止收包worker*/
 
+	/*排空vq*/
 	for (i = 0; i < ARRAY_SIZE(vbt->vqs); i++) {
 		struct virtqueue *vq = vbt->vqs[i];
 		struct sk_buff *skb;
@@ -100,6 +102,7 @@ static int virtbt_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	/*增加1个字节，用于填充packet type*/
 	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
 
+	/*填写报文内容到sg*/
 	sg_init_one(sg, skb->data, skb->len);
 	/*将内容添加进tx队列*/
 	err = virtqueue_add_outbuf(vbt->vqs[VIRTBT_VQ_TX], sg, 1, skb,
@@ -150,7 +153,7 @@ static int virtbt_setup_intel(struct hci_dev *hdev)
 	struct sk_buff *skb;
 
 	/* Intel Read Version */
-	skb = __hci_cmd_sync(hdev, 0xfc05, 0, NULL/*无参数*/, HCI_CMD_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, 0xfc05/*OGF=0x3f为预留的调试目的命令*/, 0, NULL/*无参数*/, HCI_CMD_TIMEOUT);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -163,7 +166,7 @@ static int virtbt_set_bdaddr_intel(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 	struct sk_buff *skb;
 
 	/* Intel Write BD Address */
-	skb = __hci_cmd_sync(hdev, 0xfc31, 6, bdaddr, HCI_INIT_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, 0xfc31/*OGF=0x3f为预留的调试目的命令*/, 6, bdaddr, HCI_INIT_TIMEOUT);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -176,7 +179,7 @@ static int virtbt_setup_realtek(struct hci_dev *hdev)
 	struct sk_buff *skb;
 
 	/* Read ROM Version */
-	skb = __hci_cmd_sync(hdev, 0xfc6d, 0, NULL, HCI_INIT_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, 0xfc6d/*OGF=0x3f为预留的调试目的命令*/, 0, NULL, HCI_INIT_TIMEOUT);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -191,7 +194,7 @@ static int virtbt_shutdown_generic(struct hci_dev *hdev)
 	struct sk_buff *skb;
 
 	/* Reset */
-	skb = __hci_cmd_sync(hdev, HCI_OP_RESET, 0, NULL, HCI_INIT_TIMEOUT);
+	skb = __hci_cmd_sync(hdev, HCI_OP_RESET/*重启LINK MANAGER*/, 0, NULL, HCI_INIT_TIMEOUT);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
@@ -220,6 +223,7 @@ static void virtbt_rx_handle(struct virtio_bluetooth *vbt, struct sk_buff *skb)
 	}
 }
 
+/*设备收包worker*/
 static void virtbt_rx_work(struct work_struct *work)
 {
 	struct virtio_bluetooth *vbt = container_of(work,
@@ -233,8 +237,9 @@ static void virtbt_rx_work(struct work_struct *work)
 		return;
 
 	skb_put(skb, len);
-	virtbt_rx_handle(vbt, skb);
+	virtbt_rx_handle(vbt, skb);/*走收包流程到蓝牙协议栈*/
 
+	/*给队列中补一个rx buffer*/
 	if (virtbt_add_inbuf(vbt) < 0)
 		return;
 
@@ -255,7 +260,7 @@ static void virtbt_rx_done(struct virtqueue *vq)
 {
 	struct virtio_bluetooth *vbt = vq->vdev->priv;
 
-	schedule_work(&vbt->rx);/*触发处rx队列收包并处理*/
+	schedule_work(&vbt->rx);/*触发rx队列收包并处理*/
 }
 
 static int virtbt_probe(struct virtio_device *vdev)
@@ -288,7 +293,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 	vdev->priv = vbt;
 	vbt->vdev = vdev;
 
-	INIT_WORK(&vbt->rx, virtbt_rx_work);
+	INIT_WORK(&vbt->rx, virtbt_rx_work);/*初始化收包worker*/
 
 	err = virtio_find_vqs(vdev, VIRTBT_NUM_VQS, vbt->vqs, vqs_info, NULL);
 	if (err)
@@ -296,6 +301,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 
 	hdev = hci_alloc_dev();
 	if (!hdev) {
+		/*申请hci设备失败*/
 		err = -ENOMEM;
 		goto failed;
 	}
@@ -308,11 +314,12 @@ static int virtbt_probe(struct virtio_device *vdev)
 	hdev->open  = virtbt_open;
 	hdev->close = virtbt_close;
 	hdev->flush = virtbt_flush;
-	hdev->send  = virtbt_send_frame;
+	hdev->send  = virtbt_send_frame;/*指明hdev向外发送报文的函数*/
 
 	if (virtio_has_feature(vdev, VIRTIO_BT_F_VND_HCI)) {
 		__u16 vendor;
 
+		/*读取设备vendor信息*/
 		if (virtio_has_feature(vdev, VIRTIO_BT_F_CONFIG_V2))
 			virtio_cread(vdev, struct virtio_bt_config_v2,
 				     vendor, &vendor);
@@ -329,6 +336,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 			break;
 
 		case VIRTIO_BT_CONFIG_VENDOR_INTEL:
+			/*intel设备*/
 			hdev->manufacturer = 2;
 			hdev->setup = virtbt_setup_intel;
 			hdev->shutdown = virtbt_shutdown_generic;
@@ -339,6 +347,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 			break;
 
 		case VIRTIO_BT_CONFIG_VENDOR_REALTEK:
+			/*realtek设备*/
 			hdev->manufacturer = 93;
 			hdev->setup = virtbt_setup_realtek;
 			hdev->shutdown = virtbt_shutdown_generic;

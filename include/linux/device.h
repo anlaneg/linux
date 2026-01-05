@@ -674,7 +674,7 @@ struct device {
 	//定义设备释放时的回调函数
 	void	(*release)(struct device *dev);
 	struct iommu_group	*iommu_group;/*此设备关联的iommu group*/
-	struct dev_iommu	*iommu;
+	struct dev_iommu	*iommu;/*此设备对应的iommu设备*/
 
 	struct device_physical_location *physical_location;
 

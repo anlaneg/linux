@@ -32,7 +32,7 @@
 static bool amp;
 
 struct vhci_data {
-	struct hci_dev *hdev;
+	struct hci_dev *hdev;/*其对应的hci设备*/
 
 	wait_queue_head_t read_wait;
 	struct sk_buff_head readq;
@@ -57,6 +57,7 @@ static int vhci_close_dev(struct hci_dev *hdev)
 {
 	struct vhci_data *data = hci_get_drvdata(hdev);
 
+	/*排空readq*/
 	skb_queue_purge(&data->readq);
 
 	return 0;
@@ -66,21 +67,23 @@ static int vhci_flush(struct hci_dev *hdev)
 {
 	struct vhci_data *data = hci_get_drvdata(hdev);
 
+	/*排空readq*/
 	skb_queue_purge(&data->readq);
 
 	return 0;
 }
 
+/*hci发包函数*/
 static int vhci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct vhci_data *data = hci_get_drvdata(hdev);
 
-	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);/*增加pkt_type*/
+	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);/*在skb前增加pkt_type*/
 
-	skb_queue_tail(&data->readq, skb);
+	skb_queue_tail(&data->readq, skb);/*skb入队readq*/
 
 	if (atomic_read(&data->initialized))
-		wake_up_interruptible(&data->read_wait);
+		wake_up_interruptible(&data->read_wait);/*唤醒读者*/
 	return 0;
 }
 
@@ -380,6 +383,7 @@ static const struct file_operations force_devcoredump_fops = {
 	.write		= force_devcd_write,
 };
 
+/*创建hci设备*/
 static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 {
 	struct hci_dev *hdev;
@@ -405,7 +409,7 @@ static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 	data->hdev = hdev;
 
 	hdev->bus = HCI_VIRTUAL;
-	hci_set_drvdata(hdev, data);
+	hci_set_drvdata(hdev, data);/*设置hci设备的driver data*/
 
 	hdev->open  = vhci_open_dev;
 	hdev->close = vhci_close_dev;
@@ -426,6 +430,7 @@ static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 	if (opcode & 0x80)
 		hci_set_quirk(hdev, HCI_QUIRK_RAW_DEVICE);
 
+	/*注册hci设备*/
 	if (hci_register_dev(hdev) < 0) {
 		BT_ERR("Can't register HCI device");
 		hci_free_dev(hdev);
@@ -453,16 +458,17 @@ static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 
 	hci_skb_pkt_type(skb) = HCI_VENDOR_PKT;
 
-	skb_put_u8(skb, 0xff);
+	skb_put_u8(skb, 0xff);/*存放pkt type*/
 	skb_put_u8(skb, opcode);
 	put_unaligned_le16(hdev->id, skb_put(skb, 2));
-	skb_queue_head(&data->readq, skb);
+	skb_queue_head(&data->readq, skb);/*报文入队*/
 	atomic_inc(&data->initialized);
 
 	wake_up_interruptible(&data->read_wait);
 	return 0;
 }
 
+/*依据opcode创建hci设备  */
 static int vhci_create_device(struct vhci_data *data, __u8 opcode)
 {
 	int err;
@@ -490,7 +496,7 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 	if (!skb)
 		return -ENOMEM;
 
-	/*填写用户态传入的数据*/
+	/*读取用户态传入的数据*/
 	if (!copy_from_iter_full(skb_put(skb, len), len, from)) {
 		kfree_skb(skb);
 		return -EFAULT;
@@ -512,10 +518,11 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 
 		hci_skb_pkt_type(skb) = pkt_type;
 
-		ret = hci_recv_frame(data->hdev, skb);/*收到帧*/
+		ret = hci_recv_frame(data->hdev, skb);/*收到帧，走蓝牙协议栈*/
 		break;
 
 	case HCI_VENDOR_PKT:
+		/*按指定的opcode创建hci设备*/
 		cancel_delayed_work_sync(&data->open_timeout);
 
 		opcode = *((__u8 *) skb->data);
@@ -528,7 +535,7 @@ static inline ssize_t vhci_get_user(struct vhci_data *data,
 
 		kfree_skb(skb);
 
-		ret = vhci_create_device(data, opcode);
+		ret = vhci_create_device(data, opcode);/*创建hci设备*/
 		break;
 
 	default:
@@ -548,14 +555,16 @@ static inline ssize_t vhci_put_user(struct vhci_data *data,
 
 	len = min_t(unsigned int, skb->len, count);
 
+	/*写skb内容到buf*/
 	if (copy_to_user(ptr, skb->data, len))
 		return -EFAULT;
 
 	if (!data->hdev)
 		return len;
 
-	data->hdev->stat.byte_tx += len;
+	data->hdev->stat.byte_tx += len;/*统计tx报文数*/
 
+	/*按不同的报文类型进行统计*/
 	switch (hci_skb_pkt_type(skb)) {
 	case HCI_COMMAND_PKT:
 		data->hdev->stat.cmd_tx++;
@@ -571,6 +580,7 @@ static inline ssize_t vhci_put_user(struct vhci_data *data,
 	return len;
 }
 
+/*读取readq中的内容，将其写入到buf中*/
 static ssize_t vhci_read(struct file *file,
 			 char __user *buf, size_t count, loff_t *pos)
 {
@@ -582,7 +592,7 @@ static ssize_t vhci_read(struct file *file,
 		/*自readq取skb*/
 		skb = skb_dequeue(&data->readq);
 		if (skb) {
-			/*将此skb内容写入到userspace*/
+			/*将此skb内容写入到userspace的buf中*/
 			ret = vhci_put_user(data, skb, buf, count);
 			if (ret < 0)
 				/*处理失败，此包仍放在首部*/
@@ -608,6 +618,7 @@ static ssize_t vhci_read(struct file *file,
 	return ret;
 }
 
+/*将针对文件写入的内容，按pkt_type传递给蓝牙协议栈或者创建hci设备（仅HCI_VENDOR_PKT）*/
 static ssize_t vhci_write(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
@@ -623,19 +634,22 @@ static __poll_t vhci_poll(struct file *file, poll_table *wait)
 	poll_wait(file, &data->read_wait, wait);
 
 	if (!skb_queue_empty(&data->readq))
-		return EPOLLIN | EPOLLRDNORM;
+		return EPOLLIN | EPOLLRDNORM;/*队列不为空有数据可读取*/
 
-	return EPOLLOUT | EPOLLWRNORM;
+	return EPOLLOUT | EPOLLWRNORM;/*队列为空，可写入*/
 }
 
 static void vhci_open_timeout(struct work_struct *work)
 {
+	/*利用work获得vhci_data结构体*/
 	struct vhci_data *data = container_of(work, struct vhci_data,
 					      open_timeout.work);
 
+	/*创建虚拟的hci设备*/
 	vhci_create_device(data, 0x00);
 }
 
+/*vhci设备打开函数*/
 static int vhci_open(struct inode *inode, struct file *file)
 {
 	struct vhci_data *data;
@@ -651,9 +665,10 @@ static int vhci_open(struct inode *inode, struct file *file)
 	INIT_DELAYED_WORK(&data->open_timeout, vhci_open_timeout);
 	INIT_WORK(&data->suspend_work, vhci_suspend_work);
 
-	file->private_data = data;
+	file->private_data = data;/*保存此vhci_data*/
 	nonseekable_open(inode, file);
 
+	/*此函数返回1S后，调用vhci_open_timeout函数*/
 	schedule_delayed_work(&data->open_timeout, secs_to_jiffies(1));
 
 	return 0;
