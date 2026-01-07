@@ -162,6 +162,7 @@ static int hidp_input_event(struct input_dev *dev, unsigned int type,
 	if (type != EV_LED)
 		return -1;/*只支持type为EV_LED*/
 
+	/*取led灯标记*/
 	newleds = (!!test_bit(LED_KANA,    dev->led) << 3) |
 		  (!!test_bit(LED_COMPOSE, dev->led) << 3) |
 		  (!!test_bit(LED_SCROLLL, dev->led) << 2) |
@@ -175,7 +176,7 @@ static int hidp_input_event(struct input_dev *dev, unsigned int type,
 
 	hdr = HIDP_TRANS_DATA | HIDP_DATA_RTYPE_OUPUT;
 	data[0] = 0x01;/*指明为keyboard report*/
-	data[1] = newleds;
+	data[1] = newleds;/*指明LED灯mask*/
 
 	return hidp_send_intr_message(session, hdr, data, 2);
 }
@@ -673,6 +674,7 @@ static int hidp_setup_input(struct hidp_session *session,
 	struct input_dev *input;
 	int i;
 
+	/*申请input设备*/
 	input = input_allocate_device();
 	if (!input)
 		return -ENOMEM;
@@ -689,9 +691,9 @@ static int hidp_setup_input(struct hidp_session *session,
 	input->id.version = req->version;
 
 	if (req->subclass & 0x40) {
-		set_bit(EV_KEY, input->evbit);
-		set_bit(EV_LED, input->evbit);
-		set_bit(EV_REP, input->evbit);
+		set_bit(EV_KEY, input->evbit);/*支持key事件*/
+		set_bit(EV_LED, input->evbit);/*支持led事件*/
+		set_bit(EV_REP, input->evbit);/*支持repeat事件*/
 
 		set_bit(LED_NUML,    input->ledbit);
 		set_bit(LED_CAPSL,   input->ledbit);
@@ -699,6 +701,7 @@ static int hidp_setup_input(struct hidp_session *session,
 		set_bit(LED_COMPOSE, input->ledbit);
 		set_bit(LED_KANA,    input->ledbit);
 
+		/*设置支持的key*/
 		for (i = 0; i < sizeof(hidp_keycode); i++)
 			set_bit(hidp_keycode[i], input->keybit);
 		clear_bit(0, input->keybit);
@@ -716,7 +719,7 @@ static int hidp_setup_input(struct hidp_session *session,
 
 	input->dev.parent = &session->conn->hcon->dev;
 
-	input->event = hidp_input_event;
+	input->event = hidp_input_event;/*仅处理led灯事件*/
 
 	return 0;
 }
@@ -880,7 +883,7 @@ static int hidp_session_dev_add(struct hidp_session *session)
 			return ret;
 		get_device(&session->hid->dev);
 	} else if (session->input) {
-		/*此session关联的是input设备，注册input设备*/
+		/*此session关联的是input设备，注册此input设备*/
 		ret = input_register_device(session->input);
 		if (ret)
 			return ret;

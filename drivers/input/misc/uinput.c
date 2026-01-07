@@ -69,6 +69,7 @@ struct uinput_device {
 	spinlock_t		requests_lock;
 };
 
+/*将事件写入到udev->buff中*/
 static int uinput_dev_event(struct input_dev *dev,
 			    unsigned int type, unsigned int code, int value)
 {
@@ -77,6 +78,7 @@ static int uinput_dev_event(struct input_dev *dev,
 
 	ktime_get_ts64(&ts);
 
+	/*存入event到udev->buff*/
 	udev->buff[udev->head] = (struct input_event) {
 		.input_event_sec = ts.tv_sec,
 		.input_event_usec = ts.tv_nsec / NSEC_PER_USEC,
@@ -85,9 +87,10 @@ static int uinput_dev_event(struct input_dev *dev,
 		.value = value,
 	};
 
+	/*head指针前移*/
 	udev->head = (udev->head + 1) % UINPUT_BUFFER_SIZE;
 
-	wake_up_interruptible(&udev->waitq);
+	wake_up_interruptible(&udev->waitq);/*唤醒等待者*/
 
 	return 0;
 }
@@ -946,7 +949,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 	/* UI_ABS_SETUP is handled in the variable size ioctls */
 
 	case UI_SET_EVBIT:
-		/*指明udev->dev->evbit的arg位为'1'*/
+		/*指明udev->dev->evbit的arg位为'1'（用于指明设备支持的event)*/
 		retval = uinput_set_bit(arg, evbit, EV_MAX);
 		goto out;
 

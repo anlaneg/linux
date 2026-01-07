@@ -313,12 +313,12 @@ bool __bitmap_subset(const unsigned long *bitmap1,
 	unsigned int k, lim = bits/BITS_PER_LONG;
 	for (k = 0; k < lim; ++k)
 		if (bitmap1[k] & ~bitmap2[k])
-			return false;
+			return false;/*bit2中不支持的bit,在bitmap1中有包含，两者有不匹配的，返回false*/
 
 	if (bits % BITS_PER_LONG)
 		if ((bitmap1[k] & ~bitmap2[k]) & BITMAP_LAST_WORD_MASK(bits))
 			return false;
-	return true;
+	return true;/*bitmap1是bitmap2的子集*/
 }
 EXPORT_SYMBOL(__bitmap_subset);
 

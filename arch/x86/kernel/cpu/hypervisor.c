@@ -58,6 +58,7 @@ static __init int parse_nopv(char *arg)
 }
 early_param("nopv", parse_nopv);
 
+/*检测hypervisor vendor*/
 static inline const struct hypervisor_x86 * __init
 detect_hypervisor_vendor(void)
 {
@@ -104,6 +105,6 @@ void __init init_hypervisor_platform(void)
 	copy_array(&h->init, &x86_init.hyper, sizeof(h->init));
 	copy_array(&h->runtime, &x86_platform.hyper, sizeof(h->runtime));
 
-	x86_hyper_type = h->type;
+	x86_hyper_type = h->type;/*设置hypervisor vendor*/
 	x86_init.hyper.init_platform();
 }

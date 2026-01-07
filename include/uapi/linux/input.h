@@ -57,7 +57,7 @@ struct input_event {
  */
 
 struct input_id {
-	__u16 bustype;
+	__u16 bustype;/*所属bus*/
 	__u16 vendor;
 	__u16 product;
 	__u16 version;
@@ -92,8 +92,8 @@ struct input_id {
  */
 struct input_absinfo {
 	__s32 value;
-	__s32 minimum;
-	__s32 maximum;
+	__s32 minimum;/*轴的最小值*/
+	__s32 maximum;/*轴的最大值*/
 	__s32 fuzz;
 	__s32 flat;
 	__s32 resolution;

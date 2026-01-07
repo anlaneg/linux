@@ -49,22 +49,22 @@ module_param(tap_time, uint, 0644);
 MODULE_PARM_DESC(tap_time, "Tap time for touchpads in absolute mode (msecs)");
 
 struct mousedev_hw_data {
-	int dx, dy, dz;
-	int x, y;
-	int abs_event;
-	unsigned long buttons;
+	int dx, dy, dz;/*相对值*/
+	int x, y;/*绝对值*/
+	int abs_event;/*是否绝对值*/
+	unsigned long buttons;/*按键索引*/
 };
 
 struct mousedev {
 	int open;
 	struct input_handle handle;
 	wait_queue_head_t wait;
-	struct list_head client_list;
+	struct list_head client_list;/*使用此设备的所有client(struct mousedev_client)*/
 	spinlock_t client_lock; /* protects client_list */
 	struct mutex mutex;
 	struct device dev;
 	struct cdev cdev;
-	bool exist;
+	bool exist;/*为false时，表明设备被标为dead*/
 
 	struct list_head mixdev_node;
 	bool opened_by_mixdev;
@@ -93,13 +93,13 @@ struct mousedev_motion {
 #define PACKET_QUEUE_LEN	16
 struct mousedev_client {
 	struct fasync_struct *fasync;
-	struct mousedev *mousedev;
+	struct mousedev *mousedev;/*关注的mouse设备*/
 	struct list_head node;
 
 	struct mousedev_motion packets[PACKET_QUEUE_LEN];
-	unsigned int head, tail;
+	unsigned int head, tail/*读更新此指针*/;
 	spinlock_t packet_lock;
-	int pos_x, pos_y;
+	int pos_x, pos_y;/*记录当前位置*/
 
 	u8 ps2[6];
 	unsigned char ready, buffer, bufsiz;
@@ -113,8 +113,9 @@ struct mousedev_client {
 static unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
 static unsigned char mousedev_imex_seq[] = { 0xf3, 200, 0xf3, 200, 0xf3, 80 };
 
+/*记录系统中mixdev(将系统中所有物理鼠标的输入数据合并成一个单一的数据流)*/
 static struct mousedev *mousedev_mix;
-static LIST_HEAD(mousedev_mix_list);
+static LIST_HEAD(mousedev_mix_list);/*记录系统中所有mousedev设备（除mousedev_mix)*/
 
 #define fx(i)  (mousedev->old_x[(mousedev->pkt_count - (i)) & 03])
 #define fy(i)  (mousedev->old_y[(mousedev->pkt_count - (i)) & 03])
@@ -164,6 +165,7 @@ static void mousedev_touchpad_event(struct input_dev *dev,
 	}
 }
 
+/*处理x,y轴绝对值事件*/
 static void mousedev_abs_event(struct input_dev *dev, struct mousedev *mousedev,
 				unsigned int code, int value)
 {
@@ -181,8 +183,8 @@ static void mousedev_abs_event(struct input_dev *dev, struct mousedev *mousedev,
 
 		value = clamp(value, min, max);
 
-		mousedev->packet.x = ((value - min) * xres) / size;
-		mousedev->packet.abs_event = 1;
+		mousedev->packet.x = ((value - min) * xres) / size;/*设置x*/
+		mousedev->packet.abs_event = 1;/*标记为绝对数值*/
 		break;
 
 	case ABS_Y:
@@ -201,6 +203,7 @@ static void mousedev_abs_event(struct input_dev *dev, struct mousedev *mousedev,
 	}
 }
 
+/*处理x,y,z轴相对值事件*/
 static void mousedev_rel_event(struct mousedev *mousedev,
 				unsigned int code, int value)
 {
@@ -219,6 +222,7 @@ static void mousedev_rel_event(struct mousedev *mousedev,
 	}
 }
 
+/*处理button事件*/
 static void mousedev_key_event(struct mousedev *mousedev,
 				unsigned int code, int value)
 {
@@ -228,20 +232,20 @@ static void mousedev_key_event(struct mousedev *mousedev,
 
 	case BTN_TOUCH:
 	case BTN_0:
-	case BTN_LEFT:		index = 0; break;
+	case BTN_LEFT:		index = 0; break;/*左键*/
 
 	case BTN_STYLUS:
 	case BTN_1:
-	case BTN_RIGHT:		index = 1; break;
+	case BTN_RIGHT:		index = 1; break;/*右键*/
 
 	case BTN_2:
 	case BTN_FORWARD:
 	case BTN_STYLUS2:
-	case BTN_MIDDLE:	index = 2; break;
+	case BTN_MIDDLE:	index = 2; break;/*前*/
 
 	case BTN_3:
 	case BTN_BACK:
-	case BTN_SIDE:		index = 3; break;
+	case BTN_SIDE:		index = 3; break;/*后*/
 
 	case BTN_4:
 	case BTN_EXTRA:		index = 4; break;
@@ -267,6 +271,7 @@ static void mousedev_notify_readers(struct mousedev *mousedev,
 	int wake_readers = 0;
 
 	rcu_read_lock();
+	/*遍历所有client*/
 	list_for_each_entry_rcu(client, &mousedev->client_list, node) {
 
 		/* Just acquire the lock, interrupts already disabled */
@@ -276,24 +281,28 @@ static void mousedev_notify_readers(struct mousedev *mousedev,
 		if (client->ready && p->buttons != mousedev->packet.buttons) {
 			new_head = (client->head + 1) % PACKET_QUEUE_LEN;
 			if (new_head != client->tail) {
+				/*更新到新的位置，并清空各用*/
 				p = &client->packets[client->head = new_head];
 				memset(p, 0, sizeof(struct mousedev_motion));
 			}
 		}
 
 		if (packet->abs_event) {
+			/*将绝对值转换为相对值*/
 			p->dx += packet->x - client->pos_x;
 			p->dy += packet->y - client->pos_y;
 			client->pos_x = packet->x;
 			client->pos_y = packet->y;
 		}
 
+		/*更新client当前位置*/
 		client->pos_x += packet->dx;
 		client->pos_x = clamp_val(client->pos_x, 0, xres);
 
 		client->pos_y += packet->dy;
 		client->pos_y = clamp_val(client->pos_y, 0, yres);
 
+		/*填充event给用户态*/
 		p->dx += packet->dx;
 		p->dy += packet->dy;
 		p->dz += packet->dz;
@@ -353,17 +362,19 @@ static void mousedev_event(struct input_handle *handle,
 	case EV_ABS:
 		/* Ignore joysticks */
 		if (test_bit(BTN_TRIGGER, handle->dev->keybit))
-			return;
+			return;/*有trigger key，则忽略*/
 
 		if (test_bit(BTN_TOOL_FINGER, handle->dev->keybit))
 			mousedev_touchpad_event(handle->dev,
 						mousedev, code, value);
 		else
+			/*绝对值事件处理*/
 			mousedev_abs_event(handle->dev, mousedev, code, value);
 
 		break;
 
 	case EV_REL:
+		/*相对值事件处理*/
 		mousedev_rel_event(mousedev, code, value);
 		break;
 
@@ -425,7 +436,7 @@ static int mousedev_open_device(struct mousedev *mousedev)
 		return retval;
 
 	if (!mousedev->exist)
-		retval = -ENODEV;
+		retval = -ENODEV;/*设备dead*/
 	else if (!mousedev->open++) {
 		retval = input_open_device(&mousedev->handle);
 		if (retval)
@@ -500,6 +511,7 @@ static void mixdev_close_devices(struct mousedev *mixdev)
 }
 
 
+/*添加client*/
 static void mousedev_attach_client(struct mousedev *mousedev,
 				   struct mousedev_client *client)
 {
@@ -543,6 +555,7 @@ static int mousedev_open(struct inode *inode, struct file *file)
 #endif
 		mousedev = container_of(inode->i_cdev, struct mousedev, cdev);
 
+	/*创建mousedev_client*/
 	client = kzalloc(sizeof(struct mousedev_client), GFP_KERNEL);
 	if (!client)
 		return -ENOMEM;
@@ -551,13 +564,13 @@ static int mousedev_open(struct inode *inode, struct file *file)
 	client->pos_x = xres / 2;
 	client->pos_y = yres / 2;
 	client->mousedev = mousedev;
-	mousedev_attach_client(mousedev, client);
+	mousedev_attach_client(mousedev, client);/*mousedev关联client*/
 
 	error = mousedev->open_device(mousedev);
 	if (error)
 		goto err_free_client;
 
-	file->private_data = client;
+	file->private_data = client;/*记录此文件对应的client*/
 	stream_open(inode, file);
 
 	return 0;
@@ -731,7 +744,7 @@ static ssize_t mousedev_read(struct file *file, char __user *buffer,
 		return retval;
 
 	if (!mousedev->exist)
-		return -ENODEV;
+		return -ENODEV;/*设备dead*/
 
 	spin_lock_irq(&client->packet_lock);
 
@@ -776,7 +789,7 @@ static const struct file_operations mousedev_fops = {
 	.read		= mousedev_read,
 	.write		= mousedev_write,
 	.poll		= mousedev_poll,
-	.open		= mousedev_open,
+	.open		= mousedev_open,/*创建client*/
 	.release	= mousedev_release,
 	.fasync		= mousedev_fasync,
 	.llseek		= noop_llseek,
@@ -790,7 +803,7 @@ static const struct file_operations mousedev_fops = {
 static void mousedev_mark_dead(struct mousedev *mousedev)
 {
 	mutex_lock(&mousedev->mutex);
-	mousedev->exist = false;
+	mousedev->exist = false;/*标记设备dead*/
 	mutex_unlock(&mousedev->mutex);
 }
 
@@ -827,10 +840,12 @@ static int mousedev_reserve_minor(bool mixdev)
 	int minor;
 
 	if (mixdev) {
+		/*mixdev占用MOUSEDEV_MIX*/
 		minor = input_get_new_minor(MOUSEDEV_MIX, 1, false);
 		if (minor < 0)
 			pr_err("failed to reserve mixdev minor: %d\n", minor);
 	} else {
+		/*非mixdev情况下，获取minor*/
 		minor = input_get_new_minor(MOUSEDEV_MINOR_BASE,
 					    MOUSEDEV_MINORS, true);
 		if (minor < 0)
@@ -842,7 +857,7 @@ static int mousedev_reserve_minor(bool mixdev)
 
 static struct mousedev *mousedev_create(struct input_dev *dev,
 					struct input_handler *handler,
-					bool mixdev)
+					bool mixdev/*是否创建mixdev*/)
 {
 	struct mousedev *mousedev;
 	int minor;
@@ -850,6 +865,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 
 	minor = mousedev_reserve_minor(mixdev);
 	if (minor < 0) {
+		/*预留失败*/
 		error = minor;
 		goto err_out;
 	}
@@ -869,6 +885,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 	init_waitqueue_head(&mousedev->wait);
 
 	if (mixdev) {
+		/*设置mixdev设备名称*/
 		dev_set_name(&mousedev->dev, "mice");
 
 		mousedev->open_device = mixdev_open_devices;
@@ -878,7 +895,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 		/* Normalize device number if it falls into legacy range */
 		if (dev_no < MOUSEDEV_MINOR_BASE + MOUSEDEV_MINORS)
 			dev_no -= MOUSEDEV_MINOR_BASE;
-		dev_set_name(&mousedev->dev, "mouse%d", dev_no);
+		dev_set_name(&mousedev->dev, "mouse%d", dev_no);/*设置设备名称*/
 
 		mousedev->open_device = mousedev_open_device;
 		mousedev->close_device = mousedev_close_device;
@@ -893,7 +910,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 	mousedev->dev.class = &input_class;
 	if (dev)
 		mousedev->dev.parent = &dev->dev;
-	mousedev->dev.devt = MKDEV(INPUT_MAJOR, minor);
+	mousedev->dev.devt = MKDEV(INPUT_MAJOR, minor);/*指明设备devt*/
 	mousedev->dev.release = mousedev_free;
 	device_initialize(&mousedev->dev);
 
@@ -906,6 +923,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 	//初始化cdev及设置对应的fops
 	cdev_init(&mousedev->cdev, &mousedev_fops);
 
+	/*添加字符设备mouse*/
 	error = cdev_device_add(&mousedev->cdev, &mousedev->dev);
 	if (error)
 		goto err_cleanup_mousedev;
@@ -951,7 +969,7 @@ static int mixdev_add_device(struct mousedev *mousedev)
 	}
 
 	get_device(&mousedev->dev);
-	list_add_tail(&mousedev->mixdev_node, &mousedev_mix_list);
+	list_add_tail(&mousedev->mixdev_node, &mousedev_mix_list);/*串入链表*/
 
  out:
 	mutex_unlock(&mousedev_mix->mutex);
@@ -980,7 +998,7 @@ static int mousedev_connect(struct input_handler *handler,
 	struct mousedev *mousedev;
 	int error;
 
-	mousedev = mousedev_create(dev, handler, false);
+	mousedev = mousedev_create(dev, handler, false/*创建的非mixdev*/);
 	if (IS_ERR(mousedev))
 		return PTR_ERR(mousedev);
 
@@ -1053,7 +1071,7 @@ static const struct input_device_id mousedev_ids[] = {
 MODULE_DEVICE_TABLE(input, mousedev_ids);
 
 static struct input_handler mousedev_handler = {
-	.event		= mousedev_event,
+	.event		= mousedev_event,/*mouse设备event处理函数*/
 	.connect	= mousedev_connect,
 	.disconnect	= mousedev_disconnect,
 	.legacy_minors	= true,
@@ -1099,7 +1117,7 @@ static int __init mousedev_init(void)
 {
 	int error;
 
-	mousedev_mix = mousedev_create(NULL, &mousedev_handler, true);
+	mousedev_mix = mousedev_create(NULL, &mousedev_handler, true/*创建mixdev*/);
 	if (IS_ERR(mousedev_mix))
 		return PTR_ERR(mousedev_mix);
 

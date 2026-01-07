@@ -937,7 +937,7 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 	/* Normalize device number if it falls into legacy range */
 	if (dev_no < JOYDEV_MINOR_BASE + JOYDEV_MINORS)
 		dev_no -= JOYDEV_MINOR_BASE;
-	dev_set_name(&joydev->dev, "js%d", dev_no);
+	dev_set_name(&joydev->dev, "js%d", dev_no);/*设置joydev设备名称*/
 
 	joydev->handle.dev = input_get_device(dev);
 	joydev->handle.name = dev_name(&joydev->dev);
@@ -995,8 +995,9 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev,
 	if (error)
 		goto err_free_joydev;
 
-	cdev_init(&joydev->cdev, &joydev_fops);
+	cdev_init(&joydev->cdev, &joydev_fops);/*初始化joydev字符设备*/
 
+	/*添加字符设备，指定devt*/
 	error = cdev_device_add(&joydev->cdev, &joydev->dev);
 	if (error)
 		goto err_cleanup_joydev;

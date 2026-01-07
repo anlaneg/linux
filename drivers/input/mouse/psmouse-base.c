@@ -1527,8 +1527,9 @@ static int psmouse_switch_protocol(struct psmouse *psmouse,
 		psmouse_apply_defaults(psmouse);
 
 		if (proto->detect && proto->detect(psmouse, true) < 0)
-			return -1;
+			return -1;/*检测后，认为不支持*/
 
+		/*初始化此mouse*/
 		if (proto->init && proto->init(psmouse) < 0)
 			return -1;
 

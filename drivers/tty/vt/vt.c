@@ -188,7 +188,7 @@ static DECLARE_WORK(con_driver_unregister_work, con_driver_unregister_callback);
  * want_console is the console we want to switch to,
  * saved_* variants are for save/restore around kernel debugger enter/leave
  */
-int fg_console;
+int fg_console;/*存储了当前正在显示在屏幕上（即处于活动状态）的虚拟终端的编号。*/
 EXPORT_SYMBOL(fg_console);
 int last_console;
 int want_console = -1;

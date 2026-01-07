@@ -28,7 +28,7 @@
 struct evdev {
 	int open;
 	struct input_handle handle;
-	struct evdev_client __rcu *grab;
+	struct evdev_client __rcu *grab;/*指明独占此event dev的client*/
 	struct list_head client_list;
 	spinlock_t client_lock; /* protects client_list */
 	struct mutex mutex;
@@ -211,12 +211,15 @@ static int evdev_set_clk_type(struct evdev_client *client, unsigned int clkid)
 	return 0;
 }
 
+/*为client传递event*/
 static void __pass_event(struct evdev_client *client,
 			 const struct input_event *event)
 {
+	/*存放此事件*/
 	client->buffer[client->head++] = *event;
 	client->head &= client->bufsize - 1;
 
+	/*长时间不来读取，导致事件为满，产生dropped事件*/
 	if (unlikely(client->head == client->tail)) {
 		/*
 		 * This effectively "drops" all unconsumed events, leaving
@@ -237,7 +240,7 @@ static void __pass_event(struct evdev_client *client,
 
 	if (event->type == EV_SYN && event->code == SYN_REPORT) {
 		client->packet_head = client->head;
-		kill_fasync(&client->fasync, SIGIO, POLL_IN);
+		kill_fasync(&client->fasync, SIGIO, POLL_IN);/*触发SIGIO信号*/
 	}
 }
 
@@ -262,7 +265,7 @@ static void evdev_pass_values(struct evdev_client *client,
 
 	for (v = vals; v != vals + count; v++) {
 		if (__evdev_is_filtered(client, v->type, v->code))
-			continue;
+			continue;/*跳过被过滤的event*/
 
 		if (v->type == EV_SYN && v->code == SYN_REPORT) {
 			/* drop empty SYN_REPORT */
@@ -302,6 +305,7 @@ static unsigned int evdev_events(struct input_handle *handle,
 	if (client)
 		evdev_pass_values(client, vals, count, ev_time);
 	else
+		/*遍历每个client,分别传递events(这样就解决了多个读取不全面的问题）*/
 		list_for_each_entry_rcu(client, &evdev->client_list, node)
 			evdev_pass_values(client, vals, count, ev_time);
 
@@ -334,12 +338,14 @@ static int evdev_grab(struct evdev *evdev, struct evdev_client *client)
 	int error;
 
 	if (evdev->grab)
-		return -EBUSY;
+		return -EBUSY;/*已设置“抓取”*/
 
+	/*未设置，设置抓取(独占)*/
 	error = input_grab_device(&evdev->handle);
 	if (error)
 		return error;
 
+	/*指明独占的client*/
 	rcu_assign_pointer(evdev->grab, client);
 
 	return 0;
@@ -351,9 +357,9 @@ static int evdev_ungrab(struct evdev *evdev, struct evdev_client *client)
 					lockdep_is_held(&evdev->mutex));
 
 	if (grab != client)
-		return  -EINVAL;
+		return  -EINVAL;/*仅独占者自身可取消独占*/
 
-	rcu_assign_pointer(evdev->grab, NULL);
+	rcu_assign_pointer(evdev->grab, NULL);/*取消独占*/
 	synchronize_rcu();
 	input_release_device(&evdev->handle);
 
@@ -364,6 +370,7 @@ static void evdev_attach_client(struct evdev *evdev,
 				struct evdev_client *client)
 {
 	spin_lock(&evdev->client_lock);
+	/*为此evdev增加client*/
 	list_add_tail_rcu(&client->node, &evdev->client_list);
 	spin_unlock(&evdev->client_lock);
 }
@@ -525,6 +532,7 @@ static ssize_t evdev_write(struct file *file, const char __user *buffer,
 		}
 		retval += input_event_size();
 
+		/*注入事件*/
 		input_inject_event(&evdev->handle,
 				   event.type, event.code, event.value);
 		cond_resched();
@@ -536,16 +544,16 @@ static ssize_t evdev_write(struct file *file, const char __user *buffer,
 }
 
 static int evdev_fetch_next_event(struct evdev_client *client,
-				  struct input_event *event)
+				  struct input_event *event/*出参，取得的事件*/)
 {
 	int have_event;
 
 	spin_lock_irq(&client->buffer_lock);
 
-	have_event = client->packet_head != client->tail;
+	have_event = client->packet_head != client->tail;/*是否有事件*/
 	if (have_event) {
-		*event = client->buffer[client->tail++];
-		client->tail &= client->bufsize - 1;
+		*event = client->buffer[client->tail++];/*取tail指向的事件*/
+		client->tail &= client->bufsize - 1;/*变更tail，前一句已自增*/
 	}
 
 	spin_unlock_irq(&client->buffer_lock);
@@ -583,6 +591,7 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 		while (read + input_event_size() <= count &&
 		       evdev_fetch_next_event(client, &event)) {
 
+			/*将取得的event写入buffer*/
 			if (input_event_to_user(buffer + read, &event))
 				return -EFAULT;
 
@@ -593,6 +602,7 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 			break;
 
 		if (!(file->f_flags & O_NONBLOCK)) {
+			/*阻塞，等待触发*/
 			error = wait_event_interruptible(client->wait,
 					client->packet_head != client->tail ||
 					!evdev->exist || client->revoked);
@@ -619,6 +629,7 @@ static __poll_t evdev_poll(struct file *file, poll_table *wait)
 		mask = EPOLLHUP | EPOLLERR;
 
 	if (client->packet_head != client->tail)
+		/*有事件，返回pollin*/
 		mask |= EPOLLIN | EPOLLRDNORM;
 
 	return mask;
@@ -1042,7 +1053,7 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 
 	case EVIOCGVERSION:
-		return put_user(EV_VERSION, ip);
+		return put_user(EV_VERSION, ip);/*取版本号*/
 
 	case EVIOCGID:
 		if (copy_to_user(p, &dev->id, sizeof(struct input_id)))
@@ -1083,8 +1094,10 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 
 	case EVIOCGRAB:
 		if (p)
+			/*设置独占*/
 			return evdev_grab(evdev, client);
 		else
+			/*取消独占*/
 			return evdev_ungrab(evdev, client);
 
 	case EVIOCREVOKE:
@@ -1339,6 +1352,7 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	int dev_no;
 	int error;
 
+	/*申请minor*/
 	minor = input_get_new_minor(EVDEV_MINOR_BASE, EVDEV_MINORS, true);
 	if (minor < 0) {
 		error = minor;
@@ -1361,6 +1375,7 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	/* Normalize device number if it falls into legacy range */
 	if (dev_no < EVDEV_MINOR_BASE + EVDEV_MINORS)
 		dev_no -= EVDEV_MINOR_BASE;
+	/*合上number，构成handle名称，例如event6*/
 	dev_set_name(&evdev->dev, "event%d", dev_no);
 
 	evdev->handle.dev = input_get_device(dev);
@@ -1368,7 +1383,7 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	evdev->handle.handler = handler;
 	evdev->handle.private = evdev;
 
-	evdev->dev.devt = MKDEV(INPUT_MAJOR, minor);
+	evdev->dev.devt = MKDEV(INPUT_MAJOR, minor);/*构造设备对应的devt*/
 	evdev->dev.class = &input_class;
 	evdev->dev.parent = &dev->dev;
 	evdev->dev.release = evdev_free;
@@ -1378,8 +1393,10 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	if (error)
 		goto err_free_evdev;
 
+	/*初始化event字符设备*/
 	cdev_init(&evdev->cdev, &evdev_fops);
 
+	/*添加字符设备，指定devt,例如：/dev/input/event6*/
 	error = cdev_device_add(&evdev->cdev, &evdev->dev);
 	if (error)
 		goto err_cleanup_evdev;

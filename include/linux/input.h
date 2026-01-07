@@ -142,8 +142,8 @@ struct input_dev {
 
 	unsigned long propbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
 
-	unsigned long evbit[BITS_TO_LONGS(EV_CNT)];
-	unsigned long keybit[BITS_TO_LONGS(KEY_CNT)];
+	unsigned long evbit[BITS_TO_LONGS(EV_CNT)];/*标记这个设备支持哪些event*/
+	unsigned long keybit[BITS_TO_LONGS(KEY_CNT)];/*标记这个设备支持哪些key（当支持EVT_KEY事件时有效）*/
 	unsigned long relbit[BITS_TO_LONGS(REL_CNT)];
 	unsigned long absbit[BITS_TO_LONGS(ABS_CNT)];
 	unsigned long mscbit[BITS_TO_LONGS(MSC_CNT)];
@@ -168,26 +168,26 @@ struct input_dev {
 
 	struct input_dev_poller *poller;
 
-	unsigned int repeat_key;
-	struct timer_list timer;
+	unsigned int repeat_key;/*记录当前需要repeat处理的key*/
+	struct timer_list timer;/*负责产生key repeat事件*/
 
-	int rep[REP_CNT];
+	int rep[REP_CNT];/*key repeat相关的两个时间*/
 
 	struct input_mt *mt;
 
-	struct input_absinfo *absinfo;
+	struct input_absinfo *absinfo;/*长度为ABS_CNT的一组input_absinfo*/
 
-	unsigned long key[BITS_TO_LONGS(KEY_CNT)];
+	unsigned long key[BITS_TO_LONGS(KEY_CNT)];/*负责维护key的按下/释放情况*/
 	unsigned long led[BITS_TO_LONGS(LED_CNT)];
 	unsigned long snd[BITS_TO_LONGS(SND_CNT)];
-	unsigned long sw[BITS_TO_LONGS(SW_CNT)];
+	unsigned long sw[BITS_TO_LONGS(SW_CNT)];/*负责维护switch的开启/半闭情况*/
 
 	int (*open)(struct input_dev *dev);
 	void (*close)(struct input_dev *dev);
 	int (*flush)(struct input_dev *dev, struct file *file);
 	int (*event)(struct input_dev *dev, unsigned int type, unsigned int code, int value);
 
-	struct input_handle __rcu *grab;
+	struct input_handle __rcu *grab;/*独占情况对应的handle（不为空，则独占）*/
 
 	spinlock_t event_lock;
 	struct mutex mutex;
@@ -197,7 +197,7 @@ struct input_dev {
 
 	struct device dev;
 
-	struct list_head	h_list;
+	struct list_head	h_list;/*用于记录所有input handle*/
 	struct list_head	node;
 
 	unsigned int num_vals;
@@ -316,10 +316,12 @@ struct input_handler {
 
 	void *private;
 
+	/*event,events,filter三者只容许实现一种回调，见input_handler_check_methods*/
 	void (*event)(struct input_handle *handle, unsigned int type, unsigned int code, int value);
 	unsigned int (*events)(struct input_handle *handle,
 			       struct input_value *vals, unsigned int count);
 	bool (*filter)(struct input_handle *handle, unsigned int type, unsigned int code, int value);
+	/*如有此回调，则检查完id_table匹配后，仍需要进行此回调检查是否匹配*/
 	bool (*match)(struct input_handler *handler, struct input_dev *dev);
 	int (*connect)(struct input_handler *handler, struct input_dev *dev, const struct input_device_id *id);
 	void (*disconnect)(struct input_handle *handle);
@@ -328,12 +330,12 @@ struct input_handler {
 	bool passive_observer;
 	bool legacy_minors;
 	int minor;
-	const char *name;
+	const char *name;/*handler名称*/
 
 	const struct input_device_id *id_table;
 
 	struct list_head	h_list;
-	struct list_head	node;
+	struct list_head	node;/*用于串连给系统记录总handler的链表*/
 };
 
 /**
@@ -359,9 +361,10 @@ struct input_handle {
 	int open;
 	const char *name;
 
-	struct input_dev *dev;
+	struct input_dev *dev;/*对应的input设备*/
 	struct input_handler *handler;
 
+	/*返回0，表示已处理*/
 	unsigned int (*handle_events)(struct input_handle *handle,
 				      struct input_value *vals,
 				      unsigned int count);
@@ -494,7 +497,7 @@ void input_copy_abs(struct input_dev *dst, unsigned int dst_axis,
 
 #define INPUT_GENERATE_ABS_ACCESSORS(_suffix, _item)			\
 static inline int input_abs_get_##_suffix(struct input_dev *dev,	\
-					  unsigned int axis)		\
+					  unsigned int axis/*轴索引*/)		\
 {									\
 	return dev->absinfo ? dev->absinfo[axis]._item : 0;		\
 }									\
@@ -508,6 +511,7 @@ static inline void input_abs_set_##_suffix(struct input_dev *dev,	\
 }
 
 INPUT_GENERATE_ABS_ACCESSORS(val, value)
+/*获取具体某一轴的最小值*/
 INPUT_GENERATE_ABS_ACCESSORS(min, minimum)
 INPUT_GENERATE_ABS_ACCESSORS(max, maximum)
 INPUT_GENERATE_ABS_ACCESSORS(fuzz, fuzz)

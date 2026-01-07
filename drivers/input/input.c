@@ -37,8 +37,8 @@ MODULE_LICENSE("GPL");
 #define INPUT_FIRST_DYNAMIC_DEV		256
 static DEFINE_IDA(input_ida);
 
-static LIST_HEAD(input_dev_list);
-static LIST_HEAD(input_handler_list);
+static LIST_HEAD(input_dev_list);/*用来记录系统所有input设备*/
+static LIST_HEAD(input_handler_list);/*用来记录系统中所有input handler*/
 
 /*
  * input_mutex protects access to both input_dev_list and input_handler_list.
@@ -50,6 +50,7 @@ static DEFINE_MUTEX(input_mutex);
 
 static const struct input_value input_value_sync = { EV_SYN, SYN_REPORT, 1 };
 
+/*取不同event的最大值*/
 static const unsigned int input_max_code[EV_CNT] = {
 	[EV_KEY] = KEY_MAX,
 	[EV_REL] = REL_MAX,
@@ -61,9 +62,11 @@ static const unsigned int input_max_code[EV_CNT] = {
 	[EV_FF] = FF_MAX,
 };
 
+/*检查此event是否被支持*/
 static inline int is_event_supported(unsigned int code,
 				     unsigned long *bm, unsigned int max)
 {
+	/*code必须小于max,且code在bm中已标记*/
 	return code <= max && test_bit(code, bm);
 }
 
@@ -83,12 +86,14 @@ static int input_defuzz_abs_event(int value, int old_val, int fuzz)
 	return value;
 }
 
+/*启动自动repeat*/
 static void input_start_autorepeat(struct input_dev *dev, int code)
 {
 	if (test_bit(EV_REP, dev->evbit) &&
 	    dev->rep[REP_PERIOD] && dev->rep[REP_DELAY] &&
 	    dev->timer.function) {
-		dev->repeat_key = code;
+		dev->repeat_key = code;/*指明repeat的键*/
+		/*指明repeat触发时间*/
 		mod_timer(&dev->timer,
 			  jiffies + msecs_to_jiffies(dev->rep[REP_DELAY]));
 	}
@@ -108,7 +113,7 @@ static void input_stop_autorepeat(struct input_dev *dev)
  * This function is called with dev->event_lock held and interrupts disabled.
  */
 static void input_pass_values(struct input_dev *dev,
-			      struct input_value *vals, unsigned int count)
+			      struct input_value *vals, unsigned int count/*vals事件数组大小*/)
 {
 	struct input_handle *handle;
 	struct input_value *v;
@@ -118,27 +123,32 @@ static void input_pass_values(struct input_dev *dev,
 	scoped_guard(rcu) {
 		handle = rcu_dereference(dev->grab);
 		if (handle) {
+			/*有grab handle（独占的），直接由handle处理*/
 			count = handle->handle_events(handle, vals, count);
 			break;
 		}
 
+		/*遍历注册的input handle，尝试处理*/
 		list_for_each_entry_rcu(handle, &dev->h_list, d_node) {
 			if (handle->open) {
 				count = handle->handle_events(handle, vals,
 							      count);
 				if (!count)
-					break;
+					break;/*已处理，跳出*/
 			}
 		}
 	}
 
 	/* trigger auto repeat for key events */
 	if (test_bit(EV_REP, dev->evbit) && test_bit(EV_KEY, dev->evbit)) {
+		/*支持key repreat*/
 		for (v = vals; v != vals + count; v++) {
-			if (v->type == EV_KEY && v->value != 2) {
+			if (v->type == EV_KEY && v->value != 2/*非repeat key*/) {
 				if (v->value)
+					/*键被按下，触发自动repeat*/
 					input_start_autorepeat(dev, v->code);
 				else
+					/*键被释放，停止自动repeat*/
 					input_stop_autorepeat(dev);
 			}
 		}
@@ -146,10 +156,14 @@ static void input_pass_values(struct input_dev *dev,
 }
 
 #define INPUT_IGNORE_EVENT	0
+/*将事件交给已经注册的 Handler*/
 #define INPUT_PASS_TO_HANDLERS	1
+/*将事件传递给设备*/
 #define INPUT_PASS_TO_DEVICE	2
 #define INPUT_SLOT		4
+/*决定了事件何时发往上层（即：现在立刻发送之前攒下的所有数据）。*/
 #define INPUT_FLUSH		8
+/*两者同时进行*/
 #define INPUT_PASS_TO_ALL	(INPUT_PASS_TO_HANDLERS | INPUT_PASS_TO_DEVICE)
 
 static int input_handle_abs_event(struct input_dev *dev,
@@ -205,7 +219,7 @@ static int input_handle_abs_event(struct input_dev *dev,
 }
 
 static int input_get_disposition(struct input_dev *dev,
-			  unsigned int type, unsigned int code, int *pval)
+			  unsigned int type/*事件类型*/, unsigned int code, int *pval)
 {
 	int disposition = INPUT_IGNORE_EVENT;
 	int value = *pval;
@@ -223,6 +237,7 @@ static int input_get_disposition(struct input_dev *dev,
 			break;
 
 		case SYN_REPORT:
+			/*输入包结束，指明flush标记*/
 			disposition = INPUT_PASS_TO_HANDLERS | INPUT_FLUSH;
 			break;
 		case SYN_MT_REPORT:
@@ -232,6 +247,7 @@ static int input_get_disposition(struct input_dev *dev,
 		break;
 
 	case EV_KEY:
+		/*检查此key事件对应的code是否被设备支持*/
 		if (is_event_supported(code, dev->keybit, KEY_MAX)) {
 
 			/* auto-repeat bypasses state updates */
@@ -241,7 +257,7 @@ static int input_get_disposition(struct input_dev *dev,
 			}
 
 			if (!!test_bit(code, dev->key) != !!value) {
-
+				/*key被按下/释放的状态与之前不一致，变更*/
 				__change_bit(code, dev->key);
 				disposition = INPUT_PASS_TO_HANDLERS;
 			}
@@ -249,17 +265,19 @@ static int input_get_disposition(struct input_dev *dev,
 		break;
 
 	case EV_SW:
+		/*检查此开关事件对应的code是否被支持；且两者前后状态不一致，才处理*/
 		if (is_event_supported(code, dev->swbit, SW_MAX) &&
 		    !!test_bit(code, dev->sw) != !!value) {
 
-			__change_bit(code, dev->sw);
+			__change_bit(code, dev->sw);/*变更*/
 			disposition = INPUT_PASS_TO_HANDLERS;
 		}
 		break;
 
 	case EV_ABS:
+		/*检查绝对值code,是否被支持*/
 		if (is_event_supported(code, dev->absbit, ABS_MAX))
-			disposition = input_handle_abs_event(dev, code, &value);
+			disposition = input_handle_abs_event(dev, code, &value);/*变更value*/
 
 		break;
 
@@ -318,6 +336,7 @@ static void input_event_dispose(struct input_dev *dev, int disposition,
 				unsigned int type, unsigned int code, int value)
 {
 	if ((disposition & INPUT_PASS_TO_DEVICE) && dev->event)
+		/*分发给设备，且设备有event回调，触发*/
 		dev->event(dev, type, code, value);
 
 	if (disposition & INPUT_PASS_TO_HANDLERS) {
@@ -330,6 +349,7 @@ static void input_event_dispose(struct input_dev *dev, int disposition,
 			v->value = dev->mt->slot;
 		}
 
+		/*触发给handler,先缓存记录此事件到Dev->vals*/
 		v = &dev->vals[dev->num_vals++];
 		v->type = type;
 		v->code = code;
@@ -337,6 +357,7 @@ static void input_event_dispose(struct input_dev *dev, int disposition,
 	}
 
 	if (disposition & INPUT_FLUSH) {
+		/*有flush标记，提交缓存的所有数据*/
 		if (dev->num_vals >= 2)
 			input_pass_values(dev, dev->vals, dev->num_vals);
 		dev->num_vals = 0;
@@ -366,6 +387,7 @@ void input_handle_event(struct input_dev *dev,
 		if (type != EV_SYN)
 			add_input_randomness(type, code, value);
 
+		/*事件不可忽略，分发此事件*/
 		input_event_dispose(dev, disposition, type, code, value);
 	}
 }
@@ -391,6 +413,7 @@ void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
+		/*仅event被支持才调用*/
 		guard(spinlock_irqsave)(&dev->event_lock);
 		input_handle_event(dev, type, code, value);
 	}
@@ -415,11 +438,13 @@ void input_inject_event(struct input_handle *handle,
 	struct input_handle *grab;
 
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
+		/*仅设备支持此事件，才处理*/
 		guard(spinlock_irqsave)(&dev->event_lock);
 		guard(rcu)();
 
 		grab = rcu_dereference(dev->grab);
 		if (!grab || grab == handle)
+			/*仅未明确独占，或者独占的handle与参数一致，才处理*/
 			input_handle_event(dev, type, code, value);
 
 	}
@@ -436,7 +461,7 @@ EXPORT_SYMBOL(input_inject_event);
 void input_alloc_absinfo(struct input_dev *dev)
 {
 	if (dev->absinfo)
-		return;
+		return;/*已有absinfo,不再申请*/
 
 	dev->absinfo = kcalloc(ABS_CNT, sizeof(*dev->absinfo), GFP_KERNEL);
 	if (!dev->absinfo) {
@@ -451,12 +476,13 @@ void input_alloc_absinfo(struct input_dev *dev)
 }
 EXPORT_SYMBOL(input_alloc_absinfo);
 
+/*设置abs参数*/
 void input_set_abs_params(struct input_dev *dev, unsigned int axis,
 			  int min, int max, int fuzz, int flat)
 {
 	struct input_absinfo *absinfo;
 
-	__set_bit(EV_ABS, dev->evbit);
+	__set_bit(EV_ABS, dev->evbit);/*支持abs事件*/
 	__set_bit(axis, dev->absbit);
 
 	input_alloc_absinfo(dev);
@@ -524,7 +550,7 @@ int input_grab_device(struct input_handle *handle)
 		if (dev->grab)
 			return -EBUSY;
 
-		rcu_assign_pointer(dev->grab, handle);
+		rcu_assign_pointer(dev->grab, handle);/*注册grab handle*/
 	}
 
 	return 0;
@@ -959,13 +985,14 @@ bool input_match_device_id(const struct input_dev *dev,
 	    !bitmap_subset(id->ffbit, dev->ffbit, FF_MAX) ||
 	    !bitmap_subset(id->swbit, dev->swbit, SW_MAX) ||
 	    !bitmap_subset(id->propbit, dev->propbit, INPUT_PROP_MAX)) {
-		return false;
+		return false;/*非子集*/
 	}
 
 	return true;
 }
 EXPORT_SYMBOL(input_match_device_id);
 
+/*检查dev匹配哪个input_device_id*/
 static const struct input_device_id *input_match_device(struct input_handler *handler,
 							struct input_dev *dev)
 {
@@ -988,8 +1015,9 @@ static int input_attach_handler(struct input_dev *dev, struct input_handler *han
 
 	id = input_match_device(handler, dev);
 	if (!id)
-		return -ENODEV;
+		return -ENODEV;/*不匹配*/
 
+	/*匹配，尝试连接*/
 	error = handler->connect(handler, dev, id);
 	if (error && error != -ENODEV)
 		pr_err("failed to attach handler %s to device %s, error: %d\n",
@@ -1001,20 +1029,23 @@ static int input_attach_handler(struct input_dev *dev, struct input_handler *han
 #ifdef CONFIG_COMPAT
 
 static int input_bits_to_string(char *buf, int buf_size,
-				unsigned long bits, bool skip_empty)
+				unsigned long bits, bool skip_empty/*是否跳过空*/)
 {
 	int len = 0;
 
 	if (in_compat_syscall()) {
 		u32 dword = bits >> 32;
 		if (dword || !skip_empty)
+			/*显示高4字节*/
 			len += snprintf(buf, buf_size, "%x ", dword);
 
+		/*显示低4字节*/
 		dword = bits & 0xffffffffUL;
 		if (dword || !skip_empty || len)
 			len += snprintf(buf + len, max(buf_size - len, 0),
 					"%x", dword);
 	} else {
+		/*按8字节直接显示*/
 		if (bits || !skip_empty)
 			len += snprintf(buf, buf_size, "%lx", bits);
 	}
@@ -1078,7 +1109,7 @@ static void *input_devices_seq_start(struct seq_file *seq, loff_t *pos)
 
 	state->mutex_acquired = true;
 
-	return seq_list_start(&input_dev_list, *pos);
+	return seq_list_start(&input_dev_list, *pos);/*取得pos号input设备*/
 }
 
 static void *input_devices_seq_next(struct seq_file *seq, void *v, loff_t *pos)
@@ -1098,12 +1129,13 @@ static void input_seq_print_bitmap(struct seq_file *seq, const char *name,
 				   unsigned long *bitmap, int max)
 {
 	int i;
-	bool skip_empty = true;
+	bool skip_empty = true;/*默认跳过0*/
 	char buf[18];
 
 	seq_printf(seq, "B: %s=", name);
 
 	for (i = BITS_TO_LONGS(max) - 1; i >= 0; i--) {
+		/*按16进制显示bitmap[i]*/
 		if (input_bits_to_string(buf, sizeof(buf),
 					 bitmap[i], skip_empty)) {
 			skip_empty = false;
@@ -1129,20 +1161,23 @@ static int input_devices_seq_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "I: Bus=%04x Vendor=%04x Product=%04x Version=%04x\n",
 		   dev->id.bustype, dev->id.vendor, dev->id.product, dev->id.version);
 
-	seq_printf(seq, "N: Name=\"%s\"\n", dev->name ? dev->name : "");
+	seq_printf(seq, "N: Name=\"%s\"\n", dev->name ? dev->name : "");/*显示设备名称*/
 	seq_printf(seq, "P: Phys=%s\n", dev->phys ? dev->phys : "");
 	seq_printf(seq, "S: Sysfs=%s\n", path ? path : "");
 	seq_printf(seq, "U: Uniq=%s\n", dev->uniq ? dev->uniq : "");
 	seq_puts(seq, "H: Handlers=");
 
+	/*显示作用于此设备上的handler名称*/
 	list_for_each_entry(handle, &dev->h_list, d_node)
 		seq_printf(seq, "%s ", handle->name);
 	seq_putc(seq, '\n');
 
 	input_seq_print_bitmap(seq, "PROP", dev->propbit, INPUT_PROP_MAX);
 
+	/*显示支持的event类型(16进制)*/
 	input_seq_print_bitmap(seq, "EV", dev->evbit, EV_MAX);
 	if (test_bit(EV_KEY, dev->evbit))
+		/*如支持key,显示key标记*/
 		input_seq_print_bitmap(seq, "KEY", dev->keybit, KEY_MAX);
 	if (test_bit(EV_REL, dev->evbit))
 		input_seq_print_bitmap(seq, "REL", dev->relbit, REL_MAX);
@@ -1157,6 +1192,7 @@ static int input_devices_seq_show(struct seq_file *seq, void *v)
 	if (test_bit(EV_FF, dev->evbit))
 		input_seq_print_bitmap(seq, "FF", dev->ffbit, FF_MAX);
 	if (test_bit(EV_SW, dev->evbit))
+		/*支持EV_SW，显示swbit标记*/
 		input_seq_print_bitmap(seq, "SW", dev->swbit, SW_MAX);
 
 	seq_putc(seq, '\n');
@@ -1169,7 +1205,7 @@ static const struct seq_operations input_devices_seq_ops = {
 	.start	= input_devices_seq_start,
 	.next	= input_devices_seq_next,
 	.stop	= input_seq_stop,
-	.show	= input_devices_seq_show,
+	.show	= input_devices_seq_show,/*显示input设备信息*/
 };
 
 static int input_proc_devices_open(struct inode *inode, struct file *file)
@@ -1200,14 +1236,14 @@ static void *input_handlers_seq_start(struct seq_file *seq, loff_t *pos)
 	state->mutex_acquired = true;
 	state->pos = *pos;
 
-	return seq_list_start(&input_handler_list, *pos);
+	return seq_list_start(&input_handler_list, *pos);/*按pos要求，取起始位置*/
 }
 
 static void *input_handlers_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	struct input_seq_state *state = seq->private;
 
-	state->pos = *pos + 1;
+	state->pos = *pos + 1;/*取下一个*/
 	return seq_list_next(v, &input_handler_list, pos);
 }
 
@@ -1216,9 +1252,9 @@ static int input_handlers_seq_show(struct seq_file *seq, void *v)
 	struct input_handler *handler = container_of(v, struct input_handler, node);
 	struct input_seq_state *state = seq->private;
 
-	seq_printf(seq, "N: Number=%u Name=%s", state->pos, handler->name);
+	seq_printf(seq, "N: Number=%u Name=%s", state->pos, handler->name);/*显示handler编号及名称*/
 	if (handler->filter)
-		seq_puts(seq, " (filter)");
+		seq_puts(seq, " (filter)");/*有filter回调*/
 	if (handler->legacy_minors)
 		seq_printf(seq, " Minor=%d", handler->minor);
 	seq_putc(seq, '\n');
@@ -1230,7 +1266,7 @@ static const struct seq_operations input_handlers_seq_ops = {
 	.start	= input_handlers_seq_start,
 	.next	= input_handlers_seq_next,
 	.stop	= input_seq_stop,
-	.show	= input_handlers_seq_show,
+	.show	= input_handlers_seq_show,/*显示handlers*/
 };
 
 static int input_proc_handlers_open(struct inode *inode, struct file *file)
@@ -1254,11 +1290,13 @@ static int __init input_proc_init(void)
 	if (!proc_bus_input_dir)
 		return -ENOMEM;
 
+	/*创建devices文件，并指定ops,用于显示系统注册的所有devices*/
 	entry = proc_create("devices", 0, proc_bus_input_dir,
 			    &input_devices_proc_ops);
 	if (!entry)
 		goto fail1;
 
+	/*创建handlers文件，并指定ops，用于显示系统注册的所有handler*/
 	entry = proc_create("handlers", 0, proc_bus_input_dir,
 			    &input_handlers_proc_ops);
 	if (!entry)
@@ -1774,7 +1812,7 @@ static int input_inhibit_device(struct input_dev *dev)
 	guard(mutex)(&dev->mutex);
 
 	if (dev->inhibited)
-		return 0;
+		return 0;/*已设置，不处理*/
 
 	if (dev->users) {
 		if (dev->close)
@@ -1932,6 +1970,7 @@ struct input_dev *input_allocate_device(void)
 	 * when we register the device.
 	 */
 	dev->max_vals = 10;
+	/*创建max_vals个struct input_value*/
 	dev->vals = kcalloc(dev->max_vals, sizeof(*dev->vals), GFP_KERNEL);
 	if (!dev->vals) {
 		kfree(dev);
@@ -2107,6 +2146,7 @@ void input_set_capability(struct input_dev *dev, unsigned int type, unsigned int
 {
 	if (type < EV_CNT && input_max_code[type] &&
 	    code > input_max_code[type]) {
+		/*检查type及code*/
 		pr_err("%s: invalid code %u for type %u\n", __func__, code,
 		       type);
 		dump_stack();
@@ -2115,6 +2155,7 @@ void input_set_capability(struct input_dev *dev, unsigned int type, unsigned int
 
 	switch (type) {
 	case EV_KEY:
+		/*设置支持的key*/
 		__set_bit(code, dev->keybit);
 		break;
 
@@ -2197,12 +2238,14 @@ static unsigned int input_estimate_events_per_packet(struct input_dev *dev)
 #define INPUT_CLEANSE_BITMASK(dev, type, bits)				\
 	do {								\
 		if (!test_bit(EV_##type, dev->evbit))			\
+			/*不支持type指定的事件，则此type对应的bit就不必设置，清为零*/\
 			memset(dev->bits##bit, 0,			\
 				sizeof(dev->bits##bit));		\
 	} while (0)
 
 static void input_cleanse_bitmasks(struct input_dev *dev)
 {
+	/*例如不支持EV_KEY,则keybit对应的bit位就不必设置，清为零*/
 	INPUT_CLEANSE_BITMASK(dev, KEY, key);
 	INPUT_CLEANSE_BITMASK(dev, REL, rel);
 	INPUT_CLEANSE_BITMASK(dev, ABS, abs);
@@ -2255,16 +2298,16 @@ static void input_repeat_key(struct timer_list *t)
 	guard(spinlock_irqsave)(&dev->event_lock);
 
 	if (!dev->inhibited &&
-	    test_bit(dev->repeat_key, dev->key) &&
-	    is_event_supported(dev->repeat_key, dev->keybit, KEY_MAX)) {
+	    test_bit(dev->repeat_key, dev->key)/*此key仍被按下*/ &&
+	    is_event_supported(dev->repeat_key, dev->keybit, KEY_MAX)/*此key设备支持*/) {
 
 		input_set_timestamp(dev, ktime_get());
-		input_handle_event(dev, EV_KEY, dev->repeat_key, 2);
+		input_handle_event(dev, EV_KEY, dev->repeat_key, 2);/*产生key事件，且通过value指明为repeat产生*/
 		input_handle_event(dev, EV_SYN, SYN_REPORT, 1);
 
 		if (dev->rep[REP_PERIOD])
 			mod_timer(&dev->timer, jiffies +
-					msecs_to_jiffies(dev->rep[REP_PERIOD]));
+					msecs_to_jiffies(dev->rep[REP_PERIOD]));/*指明下次触发间隔*/
 	}
 }
 
@@ -2278,9 +2321,10 @@ static void input_repeat_key(struct timer_list *t)
  */
 void input_enable_softrepeat(struct input_dev *dev, int delay, int period)
 {
+	/*开启软件repeat*/
 	dev->timer.function = input_repeat_key;
-	dev->rep[REP_DELAY] = delay;
-	dev->rep[REP_PERIOD] = period;
+	dev->rep[REP_DELAY] = delay;/*首次key repeat事件判定时长*/
+	dev->rep[REP_PERIOD] = period;/*多次key repeat事件触发间隔*/
 }
 EXPORT_SYMBOL(input_enable_softrepeat);
 
@@ -2306,6 +2350,7 @@ static int input_device_tune_vals(struct input_dev *dev)
 	if (dev->max_vals >= max_vals)
 		return 0;
 
+	/*原申请的dev->vals空间过小，增大max_vals,变更dev->vals空间*/
 	vals = kcalloc(max_vals, sizeof(*vals), GFP_KERNEL);
 	if (!vals)
 		return -ENOMEM;
@@ -2344,7 +2389,7 @@ static int input_device_tune_vals(struct input_dev *dev)
  * happen later, when devres stack is unwound to the point where device
  * allocation was made.
  */
-int input_register_device(struct input_dev *dev)
+int input_register_device(struct input_dev *dev/*要注册的input设备*/)
 {
 	struct input_devres *devres = NULL;
 	struct input_handler *handler;
@@ -2352,6 +2397,7 @@ int input_register_device(struct input_dev *dev)
 	int error;
 
 	if (test_bit(EV_ABS, dev->evbit) && !dev->absinfo) {
+		/*支持abs event必须设置absinfo参数*/
 		dev_err(&dev->dev,
 			"Absolute device without dev->absinfo, refusing to register\n");
 		return -EINVAL;
@@ -2367,10 +2413,10 @@ int input_register_device(struct input_dev *dev)
 	}
 
 	/* Every input device generates EV_SYN/SYN_REPORT events. */
-	__set_bit(EV_SYN, dev->evbit);
+	__set_bit(EV_SYN, dev->evbit);/*强制指定支持syn事件*/
 
 	/* KEY_RESERVED is not supposed to be transmitted to userspace. */
-	__clear_bit(KEY_RESERVED, dev->keybit);
+	__clear_bit(KEY_RESERVED, dev->keybit);/*强制不支持KEY_RESERVED key*/
 
 	/* Make sure that bitmasks not mentioned in dev->evbit are clean. */
 	input_cleanse_bitmasks(dev);
@@ -2407,8 +2453,9 @@ int input_register_device(struct input_dev *dev)
 
 	error = -EINTR;
 	scoped_cond_guard(mutex_intr, goto err_device_del, &input_mutex) {
-		list_add_tail(&dev->node, &input_dev_list);
+		list_add_tail(&dev->node, &input_dev_list);/*将设备串连进系统链表*/
 
+		/*遍历所有注册的input handler，为此新增设备attach handler*/
 		list_for_each_entry(handler, &input_handler_list, node)
 			input_attach_handler(dev, handler);
 
@@ -2468,6 +2515,7 @@ static int input_handler_check_methods(const struct input_handler *handler)
 		count++;
 
 	if (count > 1) {
+		/*只容许注册一种回调*/
 		pr_err("%s: only one event processing method can be defined (%s)\n",
 		       __func__, handler->name);
 		return -EINVAL;
@@ -2489,6 +2537,7 @@ int input_register_handler(struct input_handler *handler)
 	struct input_dev *dev;
 	int error;
 
+	/*检查handler回调*/
 	error = input_handler_check_methods(handler);
 	if (error)
 		return error;
@@ -2496,8 +2545,9 @@ int input_register_handler(struct input_handler *handler)
 	scoped_cond_guard(mutex_intr, return -EINTR, &input_mutex) {
 		INIT_LIST_HEAD(&handler->h_list);
 
-		list_add_tail(&handler->node, &input_handler_list);
+		list_add_tail(&handler->node, &input_handler_list);/*注册新的handler到系统链表*/
 
+		/*handler有新增，尝试attach*/
 		list_for_each_entry(dev, &input_dev_list, node)
 			input_attach_handler(dev, handler);
 
@@ -2643,6 +2693,7 @@ static void input_handle_setup_event_handler(struct input_handle *handle)
  */
 int input_register_handle(struct input_handle *handle)
 {
+	/*注册input handle*/
 	struct input_handler *handler = handle->handler;
 	struct input_dev *dev = handle->dev;
 
@@ -2659,7 +2710,7 @@ int input_register_handle(struct input_handle *handle)
 		if (handler->filter)
 			list_add_rcu(&handle->d_node, &dev->h_list);
 		else
-			list_add_tail_rcu(&handle->d_node, &dev->h_list);
+			list_add_tail_rcu(&handle->d_node, &dev->h_list);/*串在h_list链表上*/
 	}
 
 	/*
@@ -2715,7 +2766,7 @@ EXPORT_SYMBOL(input_unregister_handle);
  * no free IDs in legacy range.
  */
 int input_get_new_minor(int legacy_base, unsigned int legacy_num,
-			bool allow_dynamic)
+			bool allow_dynamic/*是否容许动态minor*/)
 {
 	/*
 	 * This function should be called from input handler's ->connect()
@@ -2723,6 +2774,7 @@ int input_get_new_minor(int legacy_base, unsigned int legacy_num,
 	 * locking is needed here.
 	 */
 	if (legacy_base >= 0) {
+		/*申请minor*/
 		int minor = ida_alloc_range(&input_ida, legacy_base,
 					    legacy_base + legacy_num - 1,
 					    GFP_KERNEL);
@@ -2730,6 +2782,7 @@ int input_get_new_minor(int legacy_base, unsigned int legacy_num,
 			return minor;
 	}
 
+	/*申请动态minor*/
 	return ida_alloc_range(&input_ida, INPUT_FIRST_DYNAMIC_DEV,
 			       INPUT_MAX_CHAR_DEVICES - 1, GFP_KERNEL);
 }
@@ -2762,6 +2815,7 @@ static int __init input_init(void)
 	if (err)
 		goto fail1;
 
+	/*占用input字符设备minor*/
 	err = register_chrdev_region(MKDEV(INPUT_MAJOR, 0),
 				     INPUT_MAX_CHAR_DEVICES, "input");
 	if (err) {

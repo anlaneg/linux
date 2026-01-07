@@ -162,12 +162,14 @@ static ATOMIC_NOTIFIER_HEAD(keyboard_notifier_list);
 
 int register_keyboard_notifier(struct notifier_block *nb)
 {
+	/*注册keyboard通知链*/
 	return atomic_notifier_chain_register(&keyboard_notifier_list, nb);
 }
 EXPORT_SYMBOL_GPL(register_keyboard_notifier);
 
 int unregister_keyboard_notifier(struct notifier_block *nb)
 {
+	/*解注册keyboard通知链*/
 	return atomic_notifier_chain_unregister(&keyboard_notifier_list, nb);
 }
 EXPORT_SYMBOL_GPL(unregister_keyboard_notifier);
@@ -1106,6 +1108,7 @@ static int kbd_update_leds_helper(struct input_handle *handle, void *data)
 	unsigned int leds = *(unsigned int *)data;
 
 	if (test_bit(EV_LED, handle->dev->evbit)) {
+		/*设备支持led事件，注入led事件*/
 		input_inject_event(handle, EV_LED, LED_SCROLLL, !!(leds & BIT(0)));
 		input_inject_event(handle, EV_LED, LED_NUML,    !!(leds & BIT(1)));
 		input_inject_event(handle, EV_LED, LED_CAPSL,   !!(leds & BIT(2)));
@@ -1152,8 +1155,10 @@ void setledstate(struct kbd_struct *kb, unsigned int led)
 	spin_unlock_irqrestore(&led_lock, flags);
 }
 
+/*取当前控制台led状态*/
 static inline unsigned char getleds(void)
 {
+	/*取此控制台对应的kdb struct，每个控制台的keyborad led是独立的*/
 	struct kbd_struct *kb = kbd_table + fg_console;
 
 	if (kb->ledmode == LED_SHOW_IOCTL)
@@ -1385,7 +1390,7 @@ static void kbd_rawcode(unsigned char data)
 		put_queue(vc, data);
 }
 
-static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
+static void kbd_keycode(unsigned int keycode, int down/*1为按下，0为释放，2为repeat模拟*/, bool hw_raw)
 {
 	struct vc_data *vc = vc_cons[fg_console].d;
 	unsigned short keysym, *key_map;
@@ -1410,7 +1415,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 		sparc_l1_a_state = down;
 #endif
 
-	rep = (down == 2);
+	rep = (down == 2);/*是否自动产生的repeat按键事件*/
 
 	raw_mode = (kbd->kbdmode == VC_RAW);
 	if (raw_mode && !hw_raw)
@@ -1437,15 +1442,20 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 		 * which should be enough.
 		 */
 		if (keycode < 128) {
+			/*小于128时，仍在bit7上存放“释放“标记*/
 			put_queue(vc, keycode | (!down << 7));
 		} else {
+			/*大于128时，需3字节处理。字节1用来存放”释放“标记*/
 			put_queue(vc, !down << 7);
+			/*字节2用来存放 keycode的高位（比如高7位，有效位共14位，因此故有16384个keycodes），有标记位*/
 			put_queue(vc, (keycode >> 7) | BIT(7));
+			/*字节3用来存放keycode的低7位。有标记位*/
 			put_queue(vc, keycode | BIT(7));
 		}
 		raw_mode = true;
 	}
 
+	/*利用此keycode设置key_down全局变量*/
 	assign_bit(keycode, key_down, down);
 
 	if (rep &&
@@ -1463,6 +1473,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	param.ledstate = kbd->ledflagstate;
 	key_map = key_maps[shift_final];
 
+	/*触发keyboard通知链*/
 	rc = atomic_notifier_call_chain(&keyboard_notifier_list,
 					KBD_KEYCODE, &param);
 	if (rc == NOTIFY_STOP || !key_map) {
@@ -1658,7 +1669,7 @@ int __init kbd_init(void)
 
 	kbd_init_leds();
 
-	error = input_register_handler(&kbd_handler);
+	error = input_register_handler(&kbd_handler);/*注册kbd handler*/
 	if (error)
 		return error;
 

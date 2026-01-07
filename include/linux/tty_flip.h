@@ -71,6 +71,7 @@ static inline size_t tty_insert_flip_char(struct tty_port *port, u8 ch, u8 flag)
 	if (!change && tb->used < tb->size) {
 		if (tb->flags)
 			*flag_buf_ptr(tb, tb->used) = flag;
+		/*字符写入到used位置，used前移*/
 		*char_buf_ptr(tb, tb->used++) = ch;
 		return 1;
 	}

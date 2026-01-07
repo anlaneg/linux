@@ -48,6 +48,7 @@ void input_dev_poller_finalize(struct input_dev_poller *poller)
 	if (!poller->poll_interval)
 		poller->poll_interval = 500;
 	if (!poller->poll_interval_max)
+		/*如未设置，则与间隔等同*/
 		poller->poll_interval_max = poller->poll_interval;
 }
 

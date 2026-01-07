@@ -393,6 +393,7 @@ static const struct virtio_device_id id_table[] = {
 	{ 0 },
 };
 
+/*注册virtio input驱动*/
 static struct virtio_driver virtio_input_driver = {
 	.driver.name         = KBUILD_MODNAME,
 	.feature_table       = features,

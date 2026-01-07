@@ -34,16 +34,24 @@
 /*
  * Event types
  */
-
+/*Synchronization Events 用于标记事件包的边界*/
 #define EV_SYN			0x00
+/*描述键盘、按钮的状态变化。*/
 #define EV_KEY			0x01
+/*描述相对坐标变化。常用于鼠标*/
 #define EV_REL			0x02
+/*描述绝对坐标变化。常用于触摸屏、数位板*/
 #define EV_ABS			0x03
 #define EV_MSC			0x04
+/*开关事件，例如SW_HEADPHONE_INSERT：耳机插拔检测*/
 #define EV_SW			0x05
+/*控制设备上的 LED 指灯（如大写锁定灯、充电灯）。*/
 #define EV_LED			0x11
+/*向简单的发声设备发送声音指令*/
 #define EV_SND			0x12
+/*Repeat Events	定义设备的自动重复参数（如按键延迟和重复速度）。*/
 #define EV_REP			0x14
+/*发送力反馈命令（	Force Feedback 如手柄震动）。*/
 #define EV_FF			0x15
 #define EV_PWR			0x16
 #define EV_FF_STATUS		0x17
@@ -53,7 +61,7 @@
 /*
  * Synchronization events.
  */
-
+/*提交整个事件包，一个完整物理动作上报结束时*/
 #define SYN_REPORT		0
 #define SYN_CONFIG		1
 #define SYN_MT_REPORT		2
@@ -353,8 +361,11 @@
 #define BTN_9			0x109
 
 #define BTN_MOUSE		0x110
+/*左键*/
 #define BTN_LEFT		0x110
+/*右键*/
 #define BTN_RIGHT		0x111
+/*中键*/
 #define BTN_MIDDLE		0x112
 #define BTN_SIDE		0x113
 #define BTN_EXTRA		0x114
@@ -908,12 +919,15 @@
 
 #define SW_LID			0x00  /* set = lid shut */
 #define SW_TABLET_MODE		0x01  /* set = tablet mode */
+/*耳机插入状态*/
 #define SW_HEADPHONE_INSERT	0x02  /* set = inserted */
 #define SW_RFKILL_ALL		0x03  /* rfkill master switch, type "any"
 					 set = radio enabled */
 #define SW_RADIO		SW_RFKILL_ALL	/* deprecated */
+/*麦克风插入状态*/
 #define SW_MICROPHONE_INSERT	0x04  /* set = inserted */
 #define SW_DOCK			0x05  /* set = plugged into dock */
+/*线路输出（Line Out）插入状态。*/
 #define SW_LINEOUT_INSERT	0x06  /* set = inserted */
 #define SW_JACK_PHYSICAL_INSERT 0x07  /* set = mechanical switch set */
 #define SW_VIDEOOUT_INSERT	0x08  /* set = inserted */
@@ -921,6 +935,7 @@
 #define SW_KEYPAD_SLIDE		0x0a  /* set = keypad slide out */
 #define SW_FRONT_PROXIMITY	0x0b  /* set = front proximity sensor active */
 #define SW_ROTATE_LOCK		0x0c  /* set = rotate locked/disabled */
+/*线路输入（Line In）插孔插入状态。*/
 #define SW_LINEIN_INSERT	0x0d  /* set = inserted */
 #define SW_MUTE_DEVICE		0x0e  /* set = device disabled */
 #define SW_PEN_INSERTED		0x0f  /* set = pen inserted */
@@ -946,8 +961,11 @@
  * LEDs
  */
 
+/*数字锁定键指示灯*/
 #define LED_NUML		0x00
+/*大小写锁定键指示灯*/
 #define LED_CAPSL		0x01
+/*滚动锁定键指示灯*/
 #define LED_SCROLLL		0x02
 #define LED_COMPOSE		0x03
 #define LED_KANA		0x04
@@ -964,7 +982,9 @@
  * Autorepeat values
  */
 
+/*key被按下多久进入第一次repeat处理*/
 #define REP_DELAY		0x00
+/*key被首次repeat处理后，仍保持按下的情况下，每过多久产生一次repeat*/
 #define REP_PERIOD		0x01
 #define REP_MAX			0x01
 #define REP_CNT			(REP_MAX+1)

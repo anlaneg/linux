@@ -333,7 +333,7 @@ int __init rfkill_handler_init(void)
 	/* Avoid delay at first schedule */
 	rfkill_last_scheduled =
 			jiffies - msecs_to_jiffies(RFKILL_OPS_DELAY) - 1;
-	return input_register_handler(&rfkill_handler);
+	return input_register_handler(&rfkill_handler);/*注册rfkill handler*/
 }
 
 void __exit rfkill_handler_exit(void)

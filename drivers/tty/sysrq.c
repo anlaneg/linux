@@ -1045,7 +1045,7 @@ static inline void sysrq_register_handler(void)
 
 	sysrq_of_get_keyreset_config();
 
-	error = input_register_handler(&sysrq_handler);
+	error = input_register_handler(&sysrq_handler);/*注册sysrq handler*/
 	if (error)
 		pr_err("Failed to register input handler, error %d", error);
 }

@@ -420,6 +420,7 @@ bool bitmap_subset(const unsigned long *src1, const unsigned long *src2, unsigne
 	if (small_const_nbits(nbits))
 		return ! ((*src1 & ~(*src2)) & BITMAP_LAST_WORD_MASK(nbits));
 	else
+		/*检查src1是否为src2的子集*/
 		return __bitmap_subset(src1, src2, nbits);
 }
 

@@ -183,21 +183,24 @@
 	typeof(y) __y = (y);			\
 	__x == 0 ? __y : ((__y == 0) ? __x : min(__x, __y)); })
 
-/*参考val,返回一个值,使之处于[lo,hi]区间之间*/
+/*参考val,返回一个值,使之处于[lo,hi]区间之间
+ * val如果大于范围上界，则返回上界；
+ * val如果小于范围下界，则返回下界；
+ * */
 #define __clamp(val, lo, hi)	\
 	((val) >= (hi) ? (hi) : ((val) <= (lo) ? (lo) : (val)))
 
 #define __clamp_once(type, val, lo, hi, uval, ulo, uhi) ({			\
 	type uval = (val);							\
-	type ulo = (lo);							\
-	type uhi = (hi);							\
+	type ulo = (lo)/*范围下界*/;							\
+	type uhi = (hi)/*范围上界*/;							\
 	BUILD_BUG_ON_MSG(statically_true(ulo > uhi),				\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
 	BUILD_BUG_ON_MSG(!__types_ok3(uval, ulo, uhi),				\
 		"clamp("#val", "#lo", "#hi") signedness error");		\
 	__clamp(uval, ulo, uhi); })
 
-#define __careful_clamp(type, val, lo, hi) \
+#define __careful_clamp(type/*val类型*/, val, lo, hi) \
 	__clamp_once(type, val, lo, hi, __UNIQUE_ID(v_), __UNIQUE_ID(l_), __UNIQUE_ID(h_))
 
 /**

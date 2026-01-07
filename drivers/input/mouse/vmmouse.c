@@ -313,6 +313,7 @@ int vmmouse_detect(struct psmouse *psmouse, bool set_properties)
 	u32 response, version, type;
 
 	if (!vmmouse_check_hypervisor()) {
+		/*不支持运行在此hypervisor上*/
 		psmouse_dbg(psmouse,
 			    "VMMouse not running on supported hypervisor.\n");
 		return -ENXIO;
@@ -410,7 +411,7 @@ int vmmouse_init(struct psmouse *psmouse)
 		return error;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	abs_dev = input_allocate_device();
+	abs_dev = input_allocate_device();/*申请input设备*/
 	if (!priv || !abs_dev) {
 		error = -ENOMEM;
 		goto init_fail;
@@ -438,12 +439,12 @@ int vmmouse_init(struct psmouse *psmouse)
 	input_set_capability(abs_dev, EV_KEY, BTN_LEFT);
 	input_set_capability(abs_dev, EV_KEY, BTN_RIGHT);
 	input_set_capability(abs_dev, EV_KEY, BTN_MIDDLE);
-	input_set_capability(abs_dev, EV_ABS, ABS_X);
-	input_set_capability(abs_dev, EV_ABS, ABS_Y);
-	input_set_abs_params(abs_dev, ABS_X, 0, VMMOUSE_MAX_X, 0, 0);
+	input_set_capability(abs_dev, EV_ABS, ABS_X);/*支持X轴绝对位置*/
+	input_set_capability(abs_dev, EV_ABS, ABS_Y);/*支持Y轴绝对位置*/
+	input_set_abs_params(abs_dev, ABS_X, 0, VMMOUSE_MAX_X, 0, 0);/*设置X轴参数*/
 	input_set_abs_params(abs_dev, ABS_Y, 0, VMMOUSE_MAX_Y, 0, 0);
 
-	error = input_register_device(priv->abs_dev);
+	error = input_register_device(priv->abs_dev);/*注册设备*/
 	if (error)
 		goto init_fail;
 

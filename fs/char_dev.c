@@ -625,6 +625,7 @@ int cdev_device_add(struct cdev *cdev/*字符设备*/, struct device *dev)
 	int rc = 0;
 
 	if (dev->devt) {
+		/*指定有devt*/
 		cdev_set_parent(cdev, &dev->kobj);
 
 		rc = cdev_add(cdev, dev->devt, 1);/*字符设备与devt关联*/

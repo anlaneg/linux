@@ -347,9 +347,13 @@ struct pcmcia_device_id {
 #define INPUT_DEVICE_ID_SW_MAX		0x11
 #define INPUT_DEVICE_ID_PROP_MAX	0x1f
 
+/*指代需要匹配bus*/
 #define INPUT_DEVICE_ID_MATCH_BUS	1
+/*指代需要匹配vendor*/
 #define INPUT_DEVICE_ID_MATCH_VENDOR	2
-#define INPUT_DEVICE_ID_MATCH_PRODUCT	4
+/*指代需要匹配product*/
+#define INPUT_DEVICE_ID_MATCH_PRODUCT	4\
+/*指代需要匹配version*/
 #define INPUT_DEVICE_ID_MATCH_VERSION	8
 
 #define INPUT_DEVICE_ID_MATCH_EVBIT	0x0010
@@ -365,9 +369,9 @@ struct pcmcia_device_id {
 
 struct input_device_id {
 
-	kernel_ulong_t flags;
+	kernel_ulong_t flags;/*指明匹配标记*/
 
-	__u16 bustype;
+	__u16 bustype;/*bus值*/
 	__u16 vendor;
 	__u16 product;
 	__u16 version;
