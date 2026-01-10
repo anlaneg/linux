@@ -190,10 +190,10 @@ struct tty_struct {
 	int index;
 	struct device *dev;
 	struct tty_driver *driver;
-	struct tty_port *port;
+	struct tty_port *port;/*对应的tty_port*/
 	const struct tty_operations *ops;
 
-	struct tty_ldisc *ldisc;
+	struct tty_ldisc *ldisc;/*指定tty对应的line disc,看tty_ldisc_init*/
 	struct ld_semaphore ldisc_sem;
 
 	struct mutex atomic_write_lock;
@@ -226,27 +226,27 @@ struct tty_struct {
 	bool closing;
 	int flow_change;
 
-	struct tty_struct *link;
+	struct tty_struct *link;/*指向它的peer(master指向slave;slave指向master)*/
 	struct fasync_struct *fasync;
 	wait_queue_head_t write_wait;
 	wait_queue_head_t read_wait;
 	struct work_struct hangup_work;
 	void *disc_data;
-	void *driver_data;
+	void *driver_data;/*指向私有结构，例如pty时指向其对应的dentry*/
 	spinlock_t files_lock;
 	int write_cnt;
 	u8 *write_buf;
 
-	struct list_head tty_files;
+	struct list_head tty_files;/*用于罗列打开此tty的所有文件，采用tty_file_private类型*/
 
 	struct work_struct SAK_work;
 } __randomize_layout;
 
 /* Each of a tty's open files has private_data pointing to tty_file_private */
 struct tty_file_private {
-	struct tty_struct *tty;
-	struct file *file;
-	struct list_head list;
+	struct tty_struct *tty;/*此文件私有结构中记录了对应的tty*/
+	struct file *file;/*对应的file*/
+	struct list_head list;/*用于将多个private串起来，逻辑打开同一个tty的file*/
 };
 
 /**

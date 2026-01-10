@@ -139,6 +139,7 @@ EXPORT_SYMBOL(tty_std_termios);
  * into this file.
  */
 
+/*记录系统所有tty driver*/
 LIST_HEAD(tty_drivers);			/* linked list of tty drivers */
 
 /* Mutex to protect creating and releasing a tty */
@@ -179,7 +180,7 @@ static inline struct tty_struct *file_tty(struct file *file)
 	return ((struct tty_file_private *)file->private_data)->tty;
 }
 
-/*申请结构体tty_file_private，并设置file->private_data*/
+/*申请tty私有结构体tty_file_private，并设置file->private_data*/
 int tty_alloc_file(struct file *file)
 {
 	struct tty_file_private *priv;
@@ -198,11 +199,12 @@ void tty_add_file(struct tty_struct *tty, struct file *file)
 {
 	struct tty_file_private *priv = file->private_data;
 
+	/*设置tty私有数据*/
 	priv->tty = tty;
 	priv->file = file;
 
 	spin_lock(&tty->files_lock);
-	list_add(&priv->list, &tty->tty_files);
+	list_add(&priv->list, &tty->tty_files);/*用于罗列打开此tty的所有文件*/
 	spin_unlock(&tty->files_lock);
 }
 
@@ -455,7 +457,7 @@ static void tty_show_fdinfo(struct seq_file *m, struct file *file)
 	struct tty_struct *tty = file_tty(file);
 
 	if (tty && tty->ops && tty->ops->show_fdinfo)
-		tty->ops->show_fdinfo(tty, m);
+		tty->ops->show_fdinfo(tty, m);/*通过tty自身的show_fdinfo显示*/
 }
 
 static const struct file_operations tty_fops = {
@@ -466,7 +468,7 @@ static const struct file_operations tty_fops = {
 	.poll		= tty_poll,
 	.unlocked_ioctl	= tty_ioctl,
 	.compat_ioctl	= tty_compat_ioctl,
-	.open		= tty_open,
+	.open		= tty_open,/*打开tty,对于ptmx,其对应的是ptmx_open*/
 	.release	= tty_release,
 	.fasync		= tty_fasync,
 	.show_fdinfo	= tty_show_fdinfo,
@@ -804,6 +806,7 @@ static void tty_update_time(struct tty_struct *tty, bool mtime)
 
 	guard(spinlock)(&tty->files_lock);
 
+	/*遍历此tty对应的所有file*/
 	list_for_each_entry(priv, &tty->tty_files, list) {
 		struct inode *inode = file_inode(priv->file);
 		struct timespec64 time = mtime ? inode_get_mtime(inode) : inode_get_atime(inode);
@@ -846,6 +849,7 @@ static ssize_t iterate_tty_read(struct tty_ldisc *ld, struct tty_struct *tty,
 	do {
 		ssize_t size = min(count, sizeof(kernel_buf));
 
+		/*通过write实现tty对应的读*/
 		size = ld->ops->read(tty, file, kernel_buf, size, &cookie, offset);
 		if (!size)
 			break;
@@ -1005,6 +1009,7 @@ static ssize_t iterate_tty_write(struct tty_ldisc *ld, struct tty_struct *tty,
 		if (copy_from_iter(tty->write_buf, size, from) != size)
 			break;
 
+		/*通过write操作完成写*/
 		ret = ld->ops->write(tty, file, tty->write_buf, size);
 		if (ret <= 0)
 			break;
@@ -1070,7 +1075,7 @@ static ssize_t file_tty_write(struct file *file, struct kiocb *iocb, struct iov_
 	if (tty_paranoia_check(tty, file_inode(file), "tty_write"))
 		return -EIO;
 	if (!tty || !tty->ops->write ||	tty_io_error(tty))
-		return -EIO;
+		return -EIO;/*必须有write回调*/
 	/* Short term debug to catch buggy drivers */
 	if (tty->ops->write_room == NULL)
 		tty_err(tty, "missing write_room method\n");
@@ -1080,6 +1085,7 @@ static ssize_t file_tty_write(struct file *file, struct kiocb *iocb, struct iov_
 	if (!ld->ops->write)
 		ret = -EIO;
 	else
+		/*调用line disc完成写*/
 		ret = iterate_tty_write(ld, tty, file, from);
 	tty_ldisc_deref(ld);
 	return ret;
@@ -1177,9 +1183,10 @@ static void pty_line_name(struct tty_driver *driver, int index, char *p)
 	static const char ptychar[] = "pqrstuvwxyzabcde";
 	int i = index + driver->name_base;
 	/* ->name is initialized to "ttyp", but "tty" is expected */
+	/*设置driver名称*/
 	sprintf(p, "%s%c%x",
 		driver->subtype == PTY_TYPE_SLAVE ? "tty" : driver->name,
-		ptychar[i >> 4 & 0xf], i & 0xf);
+		ptychar[i >> 4 & 0xf], i & 0xf);/*高4位用字每表示，低4位采用数字表示（16进制）*/
 }
 
 /**
@@ -1196,10 +1203,10 @@ static void pty_line_name(struct tty_driver *driver, int index, char *p)
 static ssize_t tty_line_name(struct tty_driver *driver, int index, char *p)
 {
 	if (driver->flags & TTY_DRIVER_UNNUMBERED_NODE)
-		return sprintf(p, "%s", driver->name);
+		return sprintf(p, "%s", driver->name);/*无数字情况*/
 	else
 		return sprintf(p, "%s%d", driver->name,
-			       index + driver->name_base);
+			       index + driver->name_base);/*会和上数字情况*/
 }
 
 /**
@@ -1294,6 +1301,7 @@ EXPORT_SYMBOL_GPL(tty_standard_install);
 static int tty_driver_install_tty(struct tty_driver *driver,
 						struct tty_struct *tty)
 {
+	/*有install回调的，以install回调为准*/
 	return driver->ops->install ? driver->ops->install(driver, tty) :
 		tty_standard_install(driver, tty);
 }
@@ -1399,6 +1407,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 	if (!try_module_get(driver->owner))
 		return ERR_PTR(-ENODEV);
 
+	/*为idx号申请tty结构体*/
 	tty = alloc_tty_struct(driver, idx);
 	if (!tty) {
 		retval = -ENOMEM;
@@ -1406,6 +1415,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 	}
 
 	tty_lock(tty);
+	/*初始化tty*/
 	retval = tty_driver_install_tty(driver, tty);
 	if (retval < 0)
 		goto err_free_tty;
@@ -1430,7 +1440,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 	 * If we fail here just call release_tty to clean up.  No need
 	 * to decrement the use counts, as release_tty doesn't care.
 	 */
-	retval = tty_ldisc_setup(tty, tty->link);
+	retval = tty_ldisc_setup(tty, tty->link/*对端*/);/*初始化line disc*/
 	if (retval)
 		goto err_release_tty;
 	tty_ldisc_unlock(tty);
@@ -3104,11 +3114,13 @@ struct tty_struct *alloc_tty_struct(struct tty_driver *driver, int idx)
 {
 	struct tty_struct *tty;
 
+	/*申请tty_struct*/
 	tty = kzalloc(sizeof(*tty), GFP_KERNEL_ACCOUNT);
 	if (!tty)
 		return NULL;
 
 	kref_init(&tty->kref);
+	/*初始化为n_tty对应的line disc*/
 	if (tty_ldisc_init(tty)) {
 		kfree(tty);
 		return NULL;
@@ -3132,8 +3144,8 @@ struct tty_struct *alloc_tty_struct(struct tty_driver *driver, int idx)
 
 	tty->driver = driver;
 	tty->ops = driver->ops;
-	tty->index = idx;
-	tty_line_name(driver, idx, tty->name);
+	tty->index = idx;/*指定tty设备编号*/
+	tty_line_name(driver, idx, tty->name);/*设置名称*/
 	tty->dev = tty_get_device(tty);
 
 	return tty;
@@ -3160,6 +3172,7 @@ int tty_put_char(struct tty_struct *tty, u8 ch)
 }
 EXPORT_SYMBOL_GPL(tty_put_char);
 
+/*添加index号字符设备*/
 static int tty_cdev_add(struct tty_driver *driver, dev_t dev,
 		unsigned int index, unsigned int count)
 {
@@ -3195,9 +3208,10 @@ static int tty_cdev_add(struct tty_driver *driver, dev_t dev,
  * Return: A pointer to the struct device for this tty device (or
  * ERR_PTR(-EFOO) on error).
  */
-struct device *tty_register_device(struct tty_driver *driver, unsigned index,
+struct device *tty_register_device(struct tty_driver *driver, unsigned index/*tty设备编号*/,
 				   struct device *device)
 {
+	/*注册tty设备*/
 	return tty_register_device_attr(driver, index, device, NULL, NULL);
 }
 EXPORT_SYMBOL(tty_register_device);
@@ -3233,17 +3247,20 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 				   const struct attribute_group **attr_grp)
 {
 	char name[64];
+	/*取此tty设备对应的devt*/
 	dev_t devt = MKDEV(driver->major, driver->minor_start) + index;
 	struct ktermios *tp;
 	struct device *dev;
 	int retval;
 
 	if (index >= driver->num) {
+		/*索引越界*/
 		pr_err("%s: Attempt to register invalid tty line number (%d)\n",
 		       driver->name, index);
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*取index号设备对应的名称*/
 	if (driver->type == TTY_DRIVER_TYPE_PTY)
 		pty_line_name(driver, index, name);
 	else
@@ -3254,10 +3271,10 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 		return ERR_PTR(-ENOMEM);
 
 	dev->devt = devt;
-	dev->class = &tty_class;
+	dev->class = &tty_class;/*指明设备类型*/
 	dev->parent = device;
 	dev->release = tty_device_create_release;
-	dev_set_name(dev, "%s", name);
+	dev_set_name(dev, "%s", name);/*设置设备名称*/
 	dev->groups = attr_grp;
 	dev_set_drvdata(dev, drvdata);
 
@@ -3345,7 +3362,7 @@ struct tty_driver *__tty_alloc_driver(unsigned int lines, struct module *owner,
 	kref_init(&driver->kref);
 	driver->num = lines;
 	driver->owner = owner;
-	driver->flags = flags;
+	driver->flags = flags;/*记录driver flags*/
 
 	if (!(flags & TTY_DRIVER_DEVPTS_MEM)) {
 		driver->ttys = kcalloc(lines, sizeof(*driver->ttys),
@@ -3359,15 +3376,17 @@ struct tty_driver *__tty_alloc_driver(unsigned int lines, struct module *owner,
 	}
 
 	if (!(flags & TTY_DRIVER_DYNAMIC_ALLOC)) {
+		/*没有动态标记，一次性申请lines个tty_port*/
 		driver->ports = kcalloc(lines, sizeof(*driver->ports),
 				GFP_KERNEL);
 		if (!driver->ports) {
 			err = -ENOMEM;
 			goto err_free_all;
 		}
-		cdevs = lines;
+		cdevs = lines;/*指明需一次性申请lines个字符设备*/
 	}
 
+	/*申请一组字符设备*/
 	driver->cdevs = kcalloc(cdevs, sizeof(*driver->cdevs), GFP_KERNEL);
 	if (!driver->cdevs) {
 		err = -ENOMEM;
@@ -3448,6 +3467,7 @@ int tty_register_driver(struct tty_driver *driver)
 	} else {
 		/*占用major*/
 		dev = MKDEV(driver->major, driver->minor_start);
+		/*占用num个device编号*/
 		error = register_chrdev_region(dev, driver->num, driver->name);
 	}
 	if (error < 0)
@@ -3460,11 +3480,12 @@ int tty_register_driver(struct tty_driver *driver)
 	}
 
 	scoped_guard(mutex, &tty_mutex)
-		list_add(&driver->tty_drivers, &tty_drivers);
+		list_add(&driver->tty_drivers, &tty_drivers);/*记录所有tty driver*/
 
 	if (!(driver->flags & TTY_DRIVER_DYNAMIC_DEV)) {
+		/*无动态标记，申请driver->num个tty设备*/
 		for (i = 0; i < driver->num; i++) {
-			d = tty_register_device(driver, i, NULL);
+			d = tty_register_device(driver, i/*设备序号*/, NULL);
 			if (IS_ERR(d)) {
 				error = PTR_ERR(d);
 				goto err_unreg_devs;
@@ -3641,7 +3662,7 @@ int __init tty_init(void)
 	/*初始化tty_cdev结构体*/
 	cdev_init(&tty_cdev, &tty_fops);
 	if (cdev_add(&tty_cdev, MKDEV(TTYAUX_MAJOR, 0), 1) ||
-	        /*注册/dev/tty字符设备*/
+	    /*注册/dev/tty字符设备*/
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 0), 1, "/dev/tty") < 0)
 		panic("Couldn't register /dev/tty driver\n");
 	device_create(&tty_class, NULL, MKDEV(TTYAUX_MAJOR, 0), NULL, "tty");
@@ -3649,7 +3670,7 @@ int __init tty_init(void)
 	/*初始化console_cdev结构体*/
 	cdev_init(&console_cdev, &console_fops);
 	if (cdev_add(&console_cdev, MKDEV(TTYAUX_MAJOR, 1), 1) ||
-	        /*注册/dev/console字符设备*/
+	    /*注册/dev/console字符设备*/
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 1), 1, "/dev/console") < 0)
 		panic("Couldn't register /dev/console driver\n");
 	consdev = device_create_with_groups(&tty_class, NULL,

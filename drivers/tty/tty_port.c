@@ -89,7 +89,7 @@ EXPORT_SYMBOL_GPL(tty_port_default_client_ops);
  */
 void tty_port_init(struct tty_port *port)
 {
-	memset(port, 0, sizeof(*port));
+	memset(port, 0, sizeof(*port));/*清零*/
 	tty_buffer_init(port);
 	init_waitqueue_head(&port->open_wait);
 	init_waitqueue_head(&port->delta_msr_wait);

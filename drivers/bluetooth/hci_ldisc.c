@@ -846,7 +846,7 @@ static int __init hci_uart_init(void)
 	BT_INFO("HCI UART driver ver %s", VERSION);
 
 	/* Register the tty discipline */
-	err = tty_register_ldisc(&hci_uart_ldisc);
+	err = tty_register_ldisc(&hci_uart_ldisc);/*注册hci对应的line discipline*/
 	if (err) {
 		BT_ERR("HCI line discipline registration failed. (%d)", err);
 		return err;

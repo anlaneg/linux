@@ -3827,7 +3827,7 @@ int __init vty_init(const struct file_operations *console_fops)
 		panic("Couldn't allocate console driver\n");
 
 	console_driver->name = "tty";
-	console_driver->name_base = 1;
+	console_driver->name_base = 1;/*从1到1+MAX_NR_CONSOLES均为console设备*/
 	console_driver->major = TTY_MAJOR;
 	console_driver->minor_start = 1;
 	console_driver->type = TTY_DRIVER_TYPE_CONSOLE;

@@ -39,8 +39,8 @@
 #endif
 
 #ifdef CONFIG_UNIX98_PTYS
-static struct tty_driver *ptm_driver;
-static struct tty_driver *pts_driver;
+static struct tty_driver *ptm_driver;/*pty master设备驱动*/
+static struct tty_driver *pts_driver;/*pty slave设备驱动*/
 static DEFINE_MUTEX(devpts_mutex);
 #endif
 
@@ -220,7 +220,7 @@ static void pty_flush_buffer(struct tty_struct *tty)
 static int pty_open(struct tty_struct *tty, struct file *filp)
 {
 	if (!tty || !tty->link)
-		return -ENODEV;
+		return -ENODEV;/*自身及对端均需有值*/
 
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
 		goto out;
@@ -361,21 +361,23 @@ static int pty_common_install(struct tty_driver *driver, struct tty_struct *tty,
 {
 	struct tty_struct *o_tty;
 	struct tty_port *ports[2];
-	int idx = tty->index;
+	int idx = tty->index;/*tty编号*/
 	int retval = -ENOMEM;
 
 	/* Opening the slave first has always returned -EIO */
 	if (driver->subtype != PTY_TYPE_MASTER)
-		return -EIO;
+		return -EIO;/*这个驱动必须是master*/
 
 	ports[0] = kmalloc(sizeof **ports, GFP_KERNEL);
 	ports[1] = kmalloc(sizeof **ports, GFP_KERNEL);
 	if (!ports[0] || !ports[1])
 		goto err;
+	/*取得slave/master驱动*/
 	if (!try_module_get(driver->other->owner)) {
 		/* This cannot in fact currently happen */
 		goto err;
 	}
+	/*申请slave tty结构体*/
 	o_tty = alloc_tty_struct(driver->other, idx);
 	if (!o_tty)
 		goto err_put_module;
@@ -392,6 +394,7 @@ static int pty_common_install(struct tty_driver *driver, struct tty_struct *tty,
 		driver->other->ttys[idx] = o_tty;
 		driver->ttys[idx] = tty;
 	} else {
+		/*初始化master tty及slave tty的termios,分别各自拿各自的*/
 		memset(&tty->termios_locked, 0, sizeof(tty->termios_locked));
 		tty->termios = driver->init_termios;
 		memset(&o_tty->termios_locked, 0, sizeof(tty->termios_locked));
@@ -404,7 +407,7 @@ static int pty_common_install(struct tty_driver *driver, struct tty_struct *tty,
 	tty_driver_kref_get(driver->other);
 	/* Establish the links in both directions */
 	tty->link   = o_tty;
-	o_tty->link = tty;
+	o_tty->link = tty;/*指向peer*/
 	tty_port_init(ports[0]);
 	tty_port_init(ports[1]);
 	tty_buffer_set_limit(ports[0], 8192);
@@ -531,7 +534,7 @@ static void __init legacy_pty_init(void)
 	struct tty_driver *pty_driver, *pty_slave_driver;
 
 	if (legacy_count <= 0)
-		return;
+		return;/*默认legacy pty再配置,直接退出*/
 
 	pty_driver = tty_alloc_driver(legacy_count,
 			TTY_DRIVER_RESET_TERMIOS |
@@ -547,6 +550,7 @@ static void __init legacy_pty_init(void)
 	if (IS_ERR(pty_slave_driver))
 		panic("Couldn't allocate pty slave driver");
 
+	/*pty master驱动*/
 	pty_driver->driver_name = "pty_master";
 	pty_driver->name = "pty";
 	pty_driver->major = PTY_MASTER_MAJOR;
@@ -563,6 +567,7 @@ static void __init legacy_pty_init(void)
 	pty_driver->other = pty_slave_driver;
 	tty_set_operations(pty_driver, &master_pty_ops_bsd);
 
+	/*pty slave驱动*/
 	pty_slave_driver->driver_name = "pty_slave";
 	pty_slave_driver->name = "ttyp";
 	pty_slave_driver->major = PTY_SLAVE_MAJOR;
@@ -718,7 +723,7 @@ static struct tty_struct *pts_unix98_lookup(struct tty_driver *driver,
 
 static int pty_unix98_install(struct tty_driver *driver, struct tty_struct *tty)
 {
-	return pty_common_install(driver, tty, false);
+	return pty_common_install(driver, tty, false/*指明非legacy方式*/);
 }
 
 /* this is called once with whichever end is closed last */
@@ -739,12 +744,13 @@ static void pty_unix98_remove(struct tty_driver *driver, struct tty_struct *tty)
 
 static void pty_show_fdinfo(struct tty_struct *tty, struct seq_file *m)
 {
-	seq_printf(m, "tty-index:\t%d\n", tty->index);
+	seq_printf(m, "tty-index:\t%d\n", tty->index);/*显示pty master fdinfo*/
 }
 
+/*unix98 master pty对应的操作集*/
 static const struct tty_operations ptm_unix98_ops = {
 	.lookup = ptm_unix98_lookup,
-	.install = pty_unix98_install,
+	.install = pty_unix98_install,/*安装函数，初始化tty本端，对端*/
 	.remove = pty_unix98_remove,
 	.open = pty_open,
 	.close = pty_close,
@@ -759,6 +765,7 @@ static const struct tty_operations ptm_unix98_ops = {
 	.show_fdinfo = pty_show_fdinfo,
 };
 
+/*unix98 slave pty对应的安装函数*/
 static const struct tty_operations pty_unix98_ops = {
 	.lookup = pts_unix98_lookup,
 	.install = pty_unix98_install,
@@ -800,23 +807,26 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 	/* We refuse fsnotify events on ptmx, since it's a shared resource */
 	file_set_fsnotify_mode(filp, FMODE_NONOTIFY);
 
+	/*为此file申请私有结构体*/
 	retval = tty_alloc_file(filp);
 	if (retval)
 		return retval;
 
 	fsi = devpts_acquire(filp);
 	if (IS_ERR(fsi)) {
+		/*获取pts filesystem info失败*/
 		retval = PTR_ERR(fsi);
 		goto out_free_file;
 	}
 
 	/* find a device that is not in use. */
 	mutex_lock(&devpts_mutex);
-	index = devpts_new_index(fsi);
+	index = devpts_new_index(fsi);/*分配index*/
 	mutex_unlock(&devpts_mutex);
 
 	retval = index;
 	if (index < 0)
+		/*申请新index失败*/
 		goto out_put_fsi;
 
 
@@ -837,14 +847,15 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 	set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
 	tty->driver_data = fsi;
 
-	tty_add_file(tty, filp);
+	tty_add_file(tty, filp);/*设置文件私有结构，关联tty*/
 
+	/*创建slave对应的dentry(master未创建文件）*/
 	dentry = devpts_pty_new(fsi, index, tty->link);
 	if (IS_ERR(dentry)) {
 		retval = PTR_ERR(dentry);
 		goto err_release;
 	}
-	tty->link->driver_data = dentry;
+	tty->link->driver_data = dentry;/*对端pty指向其对应的dentry*/
 
 	retval = ptm_driver->ops->open(tty, filp);
 	if (retval)
@@ -889,6 +900,7 @@ static void __init unix98_pty_init(void)
 	if (IS_ERR(pts_driver))
 		panic("Couldn't allocate Unix98 pts driver");
 
+	/*master pty驱动*/
 	ptm_driver->driver_name = "pty_master";
 	ptm_driver->name = "ptm";
 	ptm_driver->major = UNIX98_PTY_MASTER_MAJOR;
@@ -903,8 +915,9 @@ static void __init unix98_pty_init(void)
 	ptm_driver->init_termios.c_ispeed = 38400;
 	ptm_driver->init_termios.c_ospeed = 38400;
 	ptm_driver->other = pts_driver;
-	tty_set_operations(ptm_driver, &ptm_unix98_ops);
+	tty_set_operations(ptm_driver, &ptm_unix98_ops);/*设置master pty对应的ops*/
 
+	/*slave pty驱动*/
 	pts_driver->driver_name = "pty_slave";
 	pts_driver->name = "pts";
 	pts_driver->major = UNIX98_PTY_SLAVE_MAJOR;
@@ -918,18 +931,20 @@ static void __init unix98_pty_init(void)
 	pts_driver->other = ptm_driver;
 	tty_set_operations(pts_driver, &pty_unix98_ops);
 
+	/*注册pty master driver*/
 	if (tty_register_driver(ptm_driver))
 		panic("Couldn't register Unix98 ptm driver");
+	/*注册pty slave driver*/
 	if (tty_register_driver(pts_driver))
 		panic("Couldn't register Unix98 pts driver");
 
 	/* Now create the /dev/ptmx special device */
-	tty_default_fops(&ptmx_fops);
-	ptmx_fops.open = ptmx_open;
+	tty_default_fops(&ptmx_fops);/*复用tty_fops*/
+	ptmx_fops.open = ptmx_open;/*替换open回调，以便创建ptmx设备*/
 
-	/*初始化ptmx_cdev*/
+	/*初始化ptmx字符设备*/
 	cdev_init(&ptmx_cdev, &ptmx_fops);
-	/*注册/dev/ptmx*/
+	/*添加ptmx字符设备*/
 	if (cdev_add(&ptmx_cdev, MKDEV(TTYAUX_MAJOR, 2), 1) ||
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 2), 1, "/dev/ptmx") < 0)
 		panic("Couldn't register /dev/ptmx driver");
@@ -942,8 +957,8 @@ static inline void unix98_pty_init(void) { }
 
 static int __init pty_init(void)
 {
-	legacy_pty_init();
-	unix98_pty_init();
+	legacy_pty_init();/*传统pty已不再开启*/
+	unix98_pty_init();/*Unix98 PTY 已经成为了绝对的标准*/
 	return 0;
 }
 device_initcall(pty_init);

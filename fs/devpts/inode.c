@@ -80,7 +80,7 @@ struct pts_mount_opts {
 	umode_t mode;
 	umode_t ptmxmode;
 	int reserve;
-	int max;
+	int max;/*支持的最大id*/
 };
 
 enum {
@@ -178,6 +178,7 @@ struct vfsmount *devpts_mntget(struct file *filp, struct pts_fs_info *fsi)
 	return ERR_PTR(err);
 }
 
+/*取文件对应的pts_fs_info*/
 struct pts_fs_info *devpts_acquire(struct file *filp)
 {
 	struct pts_fs_info *result;
@@ -193,6 +194,7 @@ struct pts_fs_info *devpts_acquire(struct file *filp)
 
 		err = devpts_ptmx_path(&path);
 		if (err) {
+			/*仍不是devpts magic*/
 			result = ERR_PTR(err);
 			goto out;
 		}
@@ -276,6 +278,7 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 		goto out;
 	}
 
+	/*创建ptmx对应的dentry*/
 	dentry = d_alloc_name(root, "ptmx");
 	if (!dentry) {
 		pr_err("Unable to alloc dentry for ptmx node\n");
@@ -292,7 +295,7 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 		goto out;
 	}
 
-	inode->i_ino = 2;
+	inode->i_ino = 2;/*ptmx对应的inode number为2*/
 	simple_inode_init_ts(inode);
 
 	mode = S_IFCHR|opts->ptmxmode;
@@ -300,7 +303,7 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	inode->i_uid = ptmx_uid;
 	inode->i_gid = ptmx_gid;
 
-	d_add(dentry, inode);
+	d_add(dentry, inode);/*ptmx与此inode相关联*/
 
 	fsi->ptmx_dentry = dentry;
 	rc = 0;
@@ -388,7 +391,7 @@ static int devpts_fill_super(struct super_block *s, struct fs_context *fc)
 	inode = new_inode(s);
 	if (!inode)
 		return -ENOMEM;
-	inode->i_ino = 1;
+	inode->i_ino = 1;/*root对应的inode定为‘1’*/
 	simple_inode_init_ts(inode);
 	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 	inode->i_op = &simple_dir_inode_operations;
@@ -401,6 +404,7 @@ static int devpts_fill_super(struct super_block *s, struct fs_context *fc)
 		return -ENOMEM;
 	}
 
+	/*创建ptmx对应的inode*/
 	return mknod_ptmx(s, fc);
 }
 
@@ -413,7 +417,7 @@ static int devpts_fill_super(struct super_block *s, struct fs_context *fc)
 static int devpts_get_tree(struct fs_context *fc)
 {
 	//执行devpts挂载
-	return get_tree_nodev(fc, devpts_fill_super);
+	return get_tree_nodev(fc, devpts_fill_super/*创建root/ptmx inode*/);
 }
 
 static void devpts_free_fc(struct fs_context *fc)
@@ -486,6 +490,7 @@ int devpts_new_index(struct pts_fs_info *fsi)
 			  (fsi->mount_opts.reserve ? 0 : pty_reserve)))
 		goto out;
 
+	/*申请一个新的index*/
 	index = ida_alloc_max(&fsi->allocated_ptys, fsi->mount_opts.max - 1,
 			GFP_KERNEL);
 
@@ -522,23 +527,26 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 	root = sb->s_root;
 	opts = &fsi->mount_opts;
 
+	/*申请inode*/
 	inode = new_inode(sb);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 
-	inode->i_ino = index + 3;
+	inode->i_ino = index + 3;/*分配inode number(为什么要跳过3）*/
 	inode->i_uid = opts->setuid ? opts->uid : current_fsuid();
 	inode->i_gid = opts->setgid ? opts->gid : current_fsgid();
 	simple_inode_init_ts(inode);
-	//创建字符形设备
+	//初始化inode类型为字符型设备，slave文件
 	init_special_inode(inode, S_IFCHR|opts->mode, MKDEV(UNIX98_PTY_SLAVE_MAJOR, index));
 
-	sprintf(s, "%d", index);
+	sprintf(s, "%d", index);/*指定使用index做为文件名*/
 
+	/*创建此文件对应的dentry*/
 	dentry = d_alloc_name(root, s);
 	if (dentry) {
-		dentry->d_fsdata = priv;
+		dentry->d_fsdata = priv;/*设置dentry私有数据*/
 		d_add(dentry, inode);
+		/*通知dentry创建*/
 		fsnotify_create(d_inode(root), dentry);
 	} else {
 		iput(inode);

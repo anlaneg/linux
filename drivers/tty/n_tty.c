@@ -2544,5 +2544,5 @@ EXPORT_SYMBOL_GPL(n_tty_inherit_ops);
 
 void __init n_tty_init(void)
 {
-	tty_register_ldisc(&n_tty_ops);
+	tty_register_ldisc(&n_tty_ops);/*注册ntty对应的line disc*/
 }

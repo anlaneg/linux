@@ -1859,6 +1859,7 @@ struct dentry *d_alloc_pseudo(struct super_block *sb, const struct qstr *name)
 	return dentry;
 }
 
+/*创建名称为name的dentry*/
 struct dentry *d_alloc_name(struct dentry *parent, const char *name)
 {
 	struct qstr q;

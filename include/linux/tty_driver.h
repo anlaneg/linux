@@ -78,6 +78,7 @@ enum tty_driver_flag {
 	TTY_DRIVER_DEVPTS_MEM		= BIT(4),
 	TTY_DRIVER_HARDWARE_BREAK	= BIT(5),
 	TTY_DRIVER_DYNAMIC_ALLOC	= BIT(6),
+	/*指明此驱动名称中无数字*/
 	TTY_DRIVER_UNNUMBERED_NODE	= BIT(7),
 };
 
@@ -535,10 +536,10 @@ struct tty_driver {
 	unsigned int	num;
 	enum tty_driver_type type;
 	enum tty_driver_subtype subtype;
-	struct ktermios init_termios;
+	struct ktermios init_termios;/*用于初始化其对应的tty_struct->termios*/
 	unsigned long	flags;
 	struct proc_dir_entry *proc_entry;
-	struct tty_driver *other;
+	struct tty_driver *other;/*互指（master pty指向salve，反之亦然*/
 
 	/*
 	 * Pointer to the tty data structures

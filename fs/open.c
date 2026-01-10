@@ -1663,7 +1663,7 @@ EXPORT_SYMBOL(generic_file_open);
 int nonseekable_open(struct inode *inode, struct file *filp)
 {
 	filp->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
-	return 0;
+	return 0;/*明确不支持以上操作*/
 }
 
 EXPORT_SYMBOL(nonseekable_open);

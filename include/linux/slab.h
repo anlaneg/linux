@@ -1003,7 +1003,7 @@ static inline __realloc_size(2, 3) void * __must_check krealloc_array_noprof(voi
  * @size: element size.
  * @flags: the type of memory to allocate (see kmalloc).
  */
-#define kcalloc(n, size, flags)		kmalloc_array(n, size, (flags) | __GFP_ZERO)
+#define kcalloc(n/*元素数目*/, size/*数组元素大小*/, flags)		kmalloc_array(n, size, (flags) | __GFP_ZERO)
 
 void *__kmalloc_node_track_caller_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flags, int node,
 					 unsigned long caller) __alloc_size(1);

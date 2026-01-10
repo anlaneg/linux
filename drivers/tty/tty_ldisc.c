@@ -63,6 +63,7 @@ int tty_register_ldisc(struct tty_ldisc_ops *new_ldisc)
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&tty_ldiscs_lock, flags);
+	/*注册line discipline*/
 	tty_ldiscs[new_ldisc->num] = new_ldisc;
 	raw_spin_unlock_irqrestore(&tty_ldiscs_lock, flags);
 
@@ -85,11 +86,13 @@ void tty_unregister_ldisc(struct tty_ldisc_ops *ldisc)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&tty_ldiscs_lock, flags);
+	/*解注册*/
 	tty_ldiscs[ldisc->num] = NULL;
 	raw_spin_unlock_irqrestore(&tty_ldiscs_lock, flags);
 }
 EXPORT_SYMBOL(tty_unregister_ldisc);
 
+/*通过type取其对应的line disc ops*/
 static struct tty_ldisc_ops *get_ldops(int disc)
 {
 	unsigned long flags;
@@ -101,6 +104,7 @@ static struct tty_ldisc_ops *get_ldops(int disc)
 	if (ldops) {
 		ret = ERR_PTR(-EAGAIN);
 		if (try_module_get(ldops->owner))
+			/*增加模块引用*/
 			ret = ldops;
 	}
 	raw_spin_unlock_irqrestore(&tty_ldiscs_lock, flags);
@@ -150,6 +154,7 @@ static struct tty_ldisc *tty_ldisc_get(struct tty_struct *tty, int disc)
 	 */
 	ldops = get_ldops(disc);
 	if (IS_ERR(ldops)) {
+		/*没找到，尝试加载模块*/
 		if (!capable(CAP_SYS_MODULE) && !tty_ldisc_autoload)
 			return ERR_PTR(-EPERM);
 		request_module("tty-ldisc-%d", disc);
@@ -199,6 +204,7 @@ static void tty_ldiscs_seq_stop(struct seq_file *m, void *v)
 {
 }
 
+/*显示此line disc对应的名称*/
 static int tty_ldiscs_seq_show(struct seq_file *m, void *v)
 {
 	int i = *(loff_t *)v;
@@ -244,7 +250,7 @@ struct tty_ldisc *tty_ldisc_ref_wait(struct tty_struct *tty)
 	ld = tty->ldisc;
 	if (!ld)
 		ldsem_up_read(&tty->ldisc_sem);
-	return ld;
+	return ld;/*返回line disc*/
 }
 EXPORT_SYMBOL_GPL(tty_ldisc_ref_wait);
 
@@ -427,6 +433,7 @@ static int tty_ldisc_open(struct tty_struct *tty, struct tty_ldisc *ld)
 {
 	WARN_ON(test_and_set_bit(TTY_LDISC_OPEN, &tty->flags));
 	if (ld->ops->open) {
+		/*调用line discipline对应的open回调，例如tty默认用n_tty_ops*/
 		int ret;
 		/* BTM here locks versus a hangup event */
 		ret = ld->ops->open(tty);
@@ -521,7 +528,7 @@ int tty_set_ldisc(struct tty_struct *tty, int disc)
 	int retval;
 	struct tty_ldisc *old_ldisc, *new_ldisc;
 
-	new_ldisc = tty_ldisc_get(tty, disc);
+	new_ldisc = tty_ldisc_get(tty, disc);/*取得新设置的line disc*/
 	if (IS_ERR(new_ldisc))
 		return PTR_ERR(new_ldisc);
 
@@ -537,7 +544,7 @@ int tty_set_ldisc(struct tty_struct *tty, int disc)
 
 	/* Check the no-op case */
 	if (tty->ldisc->ops->num == disc)
-		goto out;
+		goto out;/*无变化不更新*/
 
 	if (test_bit(TTY_HUPPED, &tty->flags)) {
 		/* We were raced by hangup */
@@ -740,7 +747,7 @@ void tty_ldisc_hangup(struct tty_struct *tty, bool reinit)
  * disciplines and bind them to the @tty. This has no locking issues as the
  * device isn't yet active.
  */
-int tty_ldisc_setup(struct tty_struct *tty, struct tty_struct *o_tty)
+int tty_ldisc_setup(struct tty_struct *tty/*本端*/, struct tty_struct *o_tty/*对端*/)
 {
 	int retval = tty_ldisc_open(tty, tty->ldisc);
 
@@ -800,6 +807,7 @@ void tty_ldisc_release(struct tty_struct *tty)
  */
 int tty_ldisc_init(struct tty_struct *tty)
 {
+	/*取得tty对应的line disc*/
 	struct tty_ldisc *ld = tty_ldisc_get(tty, N_TTY);
 
 	if (IS_ERR(ld))
