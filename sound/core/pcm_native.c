@@ -3535,6 +3535,7 @@ static ssize_t snd_pcm_read(struct file *file, char __user *buf, size_t count,
 	return result;
 }
 
+/*用于实现pcm播放*/
 static ssize_t snd_pcm_write(struct file *file, const char __user *buf,
 			     size_t count, loff_t * offset)
 {
@@ -4181,7 +4182,7 @@ static unsigned long snd_pcm_get_unmapped_area(struct file *file,
 const struct file_operations snd_pcm_f_ops[2] = {
 	{
 		.owner =		THIS_MODULE,
-		.write =		snd_pcm_write,
+		.write =		snd_pcm_write,/*支持播放，不支持capture*/
 		.write_iter =		snd_pcm_writev,
 		.open =			snd_pcm_playback_open,
 		.release =		snd_pcm_release,
@@ -4194,7 +4195,7 @@ const struct file_operations snd_pcm_f_ops[2] = {
 	},
 	{
 		.owner =		THIS_MODULE,
-		.read =			snd_pcm_read,
+		.read =			snd_pcm_read,/*支持capture,不支持播放*/
 		.read_iter =		snd_pcm_readv,
 		.open =			snd_pcm_capture_open,
 		.release =		snd_pcm_release,

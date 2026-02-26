@@ -142,7 +142,7 @@ static struct snd_minor *autoload_device(unsigned int minor)
 
 static int snd_open(struct inode *inode, struct file *file)
 {
-	unsigned int minor = iminor(inode);
+	unsigned int minor = iminor(inode);/*取要打开的文件对应的minor*/
 	struct snd_minor *mptr = NULL;
 	const struct file_operations *new_fops;
 	int err = 0;
@@ -150,18 +150,19 @@ static int snd_open(struct inode *inode, struct file *file)
 	if (minor >= ARRAY_SIZE(snd_minors))
 		return -ENODEV;
 	scoped_guard(mutex, &sound_mutex) {
-		mptr = snd_minors[minor];
+		mptr = snd_minors[minor];/*取minor对应的snd_minor*/
 		if (mptr == NULL) {
 			mptr = autoload_device(minor);
 			if (!mptr)
 				return -ENODEV;
 		}
-		new_fops = fops_get(mptr->f_ops);
+		new_fops = fops_get(mptr->f_ops);/*取文件对应的ops*/
 	}
 	if (!new_fops)
 		return -ENODEV;
-	replace_fops(file, new_fops);
+	replace_fops(file, new_fops);/*更新对应的fops*/
 
+	/*执行打开此文件*/
 	if (file->f_op->open)
 		err = file->f_op->open(inode, file);
 	return err;
@@ -193,7 +194,7 @@ static int snd_find_free_minor(int type, struct snd_card *card, int dev)
 		    minor == SNDRV_MINOR_TIMER)
 			continue;
 		if (!snd_minors[minor])
-			return minor;
+			return minor;/*此minor未使用，返回*/
 	}
 	return -EBUSY;
 }
@@ -247,7 +248,7 @@ static int snd_find_free_minor(int type, struct snd_card *card, int dev)
  * Return: Zero if successful, or a negative error code on failure.
  */
 int snd_register_device(int type, struct snd_card *card, int dev,
-			const struct file_operations *f_ops,
+			const struct file_operations *f_ops/*此设备对应的ops*/,
 			void *private_data, struct device *device)
 {
 	int minor;
@@ -263,23 +264,23 @@ int snd_register_device(int type, struct snd_card *card, int dev,
 	preg->type = type;
 	preg->card = card ? card->number : -1;
 	preg->device = dev;
-	preg->f_ops = f_ops;
+	preg->f_ops = f_ops;/*指定文件操作集*/
 	preg->private_data = private_data;
 	preg->card_ptr = card;
 	guard(mutex)(&sound_mutex);
-	minor = snd_find_free_minor(type, card, dev);
+	minor = snd_find_free_minor(type, card, dev);/*获得一个未占用的minor*/
 	if (minor < 0) {
 		err = minor;
 		goto error;
 	}
 
 	preg->dev = device;
-	device->devt = MKDEV(major, minor);
-	err = device_add(device);
+	device->devt = MKDEV(major, minor);/*指明设备devt*/
+	err = device_add(device);/*添加设备*/
 	if (err < 0)
 		goto error;
 
-	snd_minors[minor] = preg;
+	snd_minors[minor] = preg;/*注册此minor*/
  error:
 	if (err < 0)
 		kfree(preg);
@@ -323,6 +324,7 @@ EXPORT_SYMBOL(snd_unregister_device);
  */
 static const char *snd_device_type_name(int type)
 {
+	/*返回设备类型名称*/
 	switch (type) {
 	case SNDRV_DEVICE_TYPE_CONTROL:
 		return "control";
@@ -331,9 +333,9 @@ static const char *snd_device_type_name(int type)
 	case SNDRV_DEVICE_TYPE_RAWMIDI:
 		return "raw midi";
 	case SNDRV_DEVICE_TYPE_PCM_PLAYBACK:
-		return "digital audio playback";
+		return "digital audio playback";/*播放*/
 	case SNDRV_DEVICE_TYPE_PCM_CAPTURE:
-		return "digital audio capture";
+		return "digital audio capture";/*录制*/
 	case SNDRV_DEVICE_TYPE_SEQUENCER:
 		return "sequencer";
 	case SNDRV_DEVICE_TYPE_TIMER:
@@ -345,6 +347,7 @@ static const char *snd_device_type_name(int type)
 	}
 }
 
+/*显示所有设备信息*/
 static void snd_minor_info_read(struct snd_info_entry *entry, struct snd_info_buffer *buffer)
 {
 	int minor;
@@ -354,15 +357,15 @@ static void snd_minor_info_read(struct snd_info_entry *entry, struct snd_info_bu
 	for (minor = 0; minor < SNDRV_OS_MINORS; ++minor) {
 		mptr = snd_minors[minor];
 		if (!mptr)
-			continue;
+			continue;/*此minor未占用，跳过*/
 		if (mptr->card >= 0) {
 			if (mptr->device >= 0)
 				snd_iprintf(buffer, "%3i: [%2i-%2i]: %s\n",
-					    minor, mptr->card, mptr->device,
+					    minor/*显示minor*/, mptr->card, mptr->device,
 					    snd_device_type_name(mptr->type));
 			else
 				snd_iprintf(buffer, "%3i: [%2i]   : %s\n",
-					    minor, mptr->card,
+					    minor/*显示minor*/, mptr->card,
 					    snd_device_type_name(mptr->type));
 		} else
 			snd_iprintf(buffer, "%3i:        : %s\n", minor,
@@ -377,7 +380,7 @@ int __init snd_minor_info_init(void)
 	entry = snd_info_create_module_entry(THIS_MODULE, "devices", NULL);
 	if (!entry)
 		return -ENOMEM;
-	entry->c.text.read = snd_minor_info_read;
+	entry->c.text.read = snd_minor_info_read;/*显示设备信息*/
 	return snd_info_register(entry); /* freed in error path */
 }
 #endif /* CONFIG_SND_PROC_FS */
@@ -390,6 +393,7 @@ static int __init alsa_sound_init(void)
 {
 	snd_major = major;
 	snd_ecards_limit = cards_limit;
+	/*注册alsa字符设备*/
 	if (register_chrdev(major, "alsa", &snd_fops)) {
 		pr_err("ALSA core: unable to register native major device number %d\n", major);
 		return -EIO;

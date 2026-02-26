@@ -116,9 +116,9 @@ static int virtsnd_find_vqs(struct virtio_snd *snd)
 		[VIRTIO_SND_VQ_EVENT] = { "virtsnd-event",
 					  virtsnd_event_notify_cb },
 		[VIRTIO_SND_VQ_TX] = { "virtsnd-tx",
-				       virtsnd_pcm_tx_notify_cb },
+				       virtsnd_pcm_tx_notify_cb },/*tx队列处理*/
 		[VIRTIO_SND_VQ_RX] = { "virtsnd-rx",
-				       virtsnd_pcm_rx_notify_cb },
+				       virtsnd_pcm_rx_notify_cb },/*rx队列处理*/
 	};
 	struct virtqueue *vqs[VIRTIO_SND_VQ_MAX] = { 0 };
 	unsigned int i;
@@ -329,7 +329,7 @@ static int virtsnd_probe(struct virtio_device *vdev)
 
 	virtio_device_ready(vdev);
 
-	rc = virtsnd_build_devs(snd);
+	rc = virtsnd_build_devs(snd);/*构造sound设备*/
 	if (rc)
 		goto on_exit;
 
@@ -433,12 +433,13 @@ static unsigned int features[] = {
 	VIRTIO_SND_F_CTLS
 };
 
+/*sound对应的驱动*/
 static struct virtio_driver virtsnd_driver = {
 	.driver.name = KBUILD_MODNAME,
-	.id_table = id_table,
-	.feature_table = features,
+	.id_table = id_table,/*支持的设备id*/
+	.feature_table = features,/*支持的功能*/
 	.feature_table_size = ARRAY_SIZE(features),
-	.validate = virtsnd_validate,
+	.validate = virtsnd_validate,/*检查配置*/
 	.probe = virtsnd_probe,
 	.remove = virtsnd_remove,
 #ifdef CONFIG_PM_SLEEP

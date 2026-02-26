@@ -231,7 +231,7 @@ size_t virtio_max_dma_size(const struct virtio_device *vdev);
 struct virtio_driver {
 	struct device_driver driver;
 	const struct virtio_device_id *id_table;//支持的设备列表
-	const unsigned int *feature_table;//驱动提供了哪些功能
+	const unsigned int *feature_table;//驱动提供了哪些功能列表
 	unsigned int feature_table_size;//feature_table大小
 	const unsigned int *feature_table_legacy;//legacy功能列表
 	unsigned int feature_table_size_legacy;//legacy_table大小
@@ -252,6 +252,7 @@ struct virtio_driver {
 
 /* use a macro to avoid include chaining to get THIS_MODULE */
 #define register_virtio_driver(drv) \
+	/*注册virtio驱动*/\
 	__register_virtio_driver(drv, THIS_MODULE)
 int __register_virtio_driver(struct virtio_driver *drv, struct module *owner);
 void unregister_virtio_driver(struct virtio_driver *drv);

@@ -64,16 +64,18 @@ struct snd_kcontrol_new {
 
 struct snd_kcontrol_volatile {
 	struct snd_ctl_file *owner;	/* locked */
+	/*权限标记，例如是否可写*/
 	unsigned int access;	/* access rights */
 };
 
 struct snd_kcontrol {
 	struct list_head list;		/* list of controls */
 	struct snd_ctl_elem_id id;
+	/*指明id范围大小，自id.numid起始，自id.numid+count结束（也是vd数组长度）*/
 	unsigned int count;		/* count of same elements */
 	snd_kcontrol_info_t *info;
-	snd_kcontrol_get_t *get;
-	snd_kcontrol_put_t *put;
+	snd_kcontrol_get_t *get;/*读取数值*/
+	snd_kcontrol_put_t *put;/*设置数值*/
 	union {
 		snd_kcontrol_tlv_rw_t *c;
 		const unsigned int *p;
@@ -156,12 +158,12 @@ struct snd_kcontrol *snd_ctl_find_id(struct snd_card *card, const struct snd_ctl
  * Return: The pointer of the instance if found, or %NULL if not.
  */
 static inline struct snd_kcontrol *
-snd_ctl_find_id_mixer(struct snd_card *card, const char *name)
+snd_ctl_find_id_mixer(struct snd_card *card, const char *name/*要匹配的名称*/)
 {
 	struct snd_ctl_elem_id id = {};
 
-	id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(id.name, name, sizeof(id.name));
+	id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;/*查找mixer*/
+	strscpy(id.name, name, sizeof(id.name));/*mixer名称*/
 	return snd_ctl_find_id(card, &id);
 }
 

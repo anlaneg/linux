@@ -1567,7 +1567,7 @@ static ssize_t __resource_resize_show(struct device *dev, int n, char *buf)
 	return ret;
 }
 
-static ssize_t __resource_resize_store(struct device *dev, int n,
+static ssize_t __resource_resize_store(struct device *dev, int n/*resource编号*/,
 				       const char *buf, size_t count)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -1575,11 +1575,13 @@ static ssize_t __resource_resize_store(struct device *dev, int n,
 	int ret, i;
 	u16 cmd;
 
+	/*传入的数值*/
 	if (kstrtoul(buf, 0, &size) < 0)
 		return -EINVAL;
 
 	device_lock(dev);
 	if (dev->driver || pci_num_vf(pdev)) {
+		/*驱动已使能或者已有vf，则不容许变更*/
 		ret = -EBUSY;
 		goto unlock;
 	}
@@ -1587,6 +1589,7 @@ static ssize_t __resource_resize_store(struct device *dev, int n,
 	pci_config_pm_runtime_get(pdev);
 
 	if ((pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
+		/*vga移除冲突的文件*/
 		ret = aperture_remove_conflicting_pci_devices(pdev,
 						"resourceN_resize");
 		if (ret)

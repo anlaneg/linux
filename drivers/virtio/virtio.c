@@ -104,7 +104,7 @@ static int virtio_dev_match(struct device *_dv, const struct device_driver *_dr)
 	struct virtio_device *dev = dev_to_virtio(_dv);
 	const struct virtio_device_id *ids;
 
-	//检查drv支持的id_table是否与之匹配
+	//遍历drv支持的id_table是否与所给设备匹配
 	ids = drv_to_virtio(_dr)->id_table;
 	for (i = 0; ids[i].device; i++)
 		if (virtio_id_match(dev, &ids[i]))
@@ -117,7 +117,7 @@ static int virtio_uevent(const struct device *_dv, struct kobj_uevent_env *env)
 {
 	const struct virtio_device *dev = dev_to_virtio(_dv);
 
-	//添加设备模块别名
+	//添加virtio设备模块别名
 	return add_uevent_var(env, "MODALIAS=virtio:d%08Xv%08X",
 			      dev->id.device, dev->id.vendor);
 }

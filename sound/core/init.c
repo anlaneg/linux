@@ -135,7 +135,7 @@ int snd_device_alloc(struct device **dev_p, struct snd_card *card)
 	device_initialize(dev);
 	if (card)
 		dev->parent = &card->card_dev;
-	dev->class = &sound_class;
+	dev->class = &sound_class;/*指明设备Class*/
 	dev->release = default_release_alloc;
 	*dev_p = dev;
 	return 0;
@@ -169,7 +169,7 @@ static void release_card_device(struct device *dev)
  *  Return: Zero if successful or a negative error code.
  */
 int snd_card_new(struct device *parent, int idx, const char *xid,
-		    struct module *module, int extra_size,
+		    struct module *module, int extra_size/*私有数据长度*/,
 		    struct snd_card **card_ret)
 {
 	struct snd_card *card;
@@ -277,7 +277,7 @@ EXPORT_SYMBOL_GPL(snd_card_free_on_error);
 
 static int snd_card_init(struct snd_card *card, struct device *parent,
 			 int idx, const char *xid, struct module *module,
-			 size_t extra_size)
+			 size_t extra_size/*私有数据长度*/)
 {
 	int err;
 
@@ -350,7 +350,7 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 
 	/* the control interface cannot be accessed from the user space until */
 	/* snd_cards_bitmask and snd_cards are set with snd_card_register */
-	err = snd_ctl_create(card);
+	err = snd_ctl_create(card);/*创建control设备类型*/
 	if (err < 0) {
 		dev_err(parent, "unable to register control minors\n");
 		goto __error;

@@ -39,13 +39,20 @@
 #else /* CONFIG_SND_DYNAMIC_MINORS */
 
 enum {
+	/*作用：负责音量调节、静音开关、输入源切换（如选择麦克风或线路输入）、通道路由等*/
 	SNDRV_DEVICE_TYPE_CONTROL,
+	/*主要处理 MIDI（乐器数字接口）事件和时序控制。*/
 	SNDRV_DEVICE_TYPE_SEQUENCER,
+	/*作用：为音频事件提供精确的时间戳和同步。*/
 	SNDRV_DEVICE_TYPE_TIMER,
+	/*作用：为特定硬件提供“后门”，处理那些不属于通用规范的私有功能。*/
 	SNDRV_DEVICE_TYPE_HWDEP,
+	/*作用：处理电子乐器（键盘、合成器）的 MIDI 协议数据。*/
 	SNDRV_DEVICE_TYPE_RAWMIDI,
-	SNDRV_DEVICE_TYPE_PCM_PLAYBACK,
-	SNDRV_DEVICE_TYPE_PCM_CAPTURE,
+	/*处理数字音频采样数据，即真正的“声音”流。*/
+	SNDRV_DEVICE_TYPE_PCM_PLAYBACK,/*pcm播放*/
+	SNDRV_DEVICE_TYPE_PCM_CAPTURE,/*pcm录制*/
+	/*作用：处理硬件解码的压缩音频流（如 MP3, AAC, AC3）。*/
 	SNDRV_DEVICE_TYPE_COMPRESS,
 };
 

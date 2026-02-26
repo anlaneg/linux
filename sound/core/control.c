@@ -370,7 +370,7 @@ static bool elem_id_matches(const struct snd_kcontrol *kctl,
 	return kctl->id.iface == id->iface &&
 		kctl->id.device == id->device &&
 		kctl->id.subdevice == id->subdevice &&
-		!strncmp(kctl->id.name, id->name, sizeof(kctl->id.name)) &&
+		!strncmp(kctl->id.name, id->name, sizeof(kctl->id.name))/*名称匹配*/ &&
 		kctl->id.index <= id->index &&
 		kctl->id.index + kctl->count > id->index;
 }
@@ -468,13 +468,15 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 
 	id = kcontrol->id;
 	if (id.index > UINT_MAX - kcontrol->count)
-		return -EINVAL;
+		return -EINVAL;/*添加后会超限*/
 
 	old = snd_ctl_find_id(card, &id);
 	if (!old) {
+		/*旧的id不存在，将指明replace，则报错*/
 		if (mode == CTL_REPLACE)
 			return -EINVAL;
 	} else {
+		/*旧的id存在，且指明为exclusive add，则报错*/
 		if (mode == CTL_ADD_EXCLUSIVE) {
 			dev_err(card->dev,
 				"control %i:%i:%i:%s:%i is already present\n",
@@ -545,6 +547,7 @@ static int snd_ctl_add_replace(struct snd_card *card,
  */
 int snd_ctl_add(struct snd_card *card, struct snd_kcontrol *kcontrol)
 {
+	/*为card添加control*/
 	return snd_ctl_add_replace(card, kcontrol, CTL_ADD_EXCLUSIVE);
 }
 EXPORT_SYMBOL(snd_ctl_add);
@@ -846,6 +849,7 @@ struct snd_kcontrol *snd_ctl_find_id(struct snd_card *card,
 		return NULL;
 
 	if (id->numid != 0)
+		/*指明numid时，通过numid查找snd_kcontrol*/
 		return snd_ctl_find_numid(card, id->numid);
 #ifdef CONFIG_SND_CTL_FAST_LOOKUP
 	kctl = xa_load(&card->ctl_hash, get_ctl_id_hash(id));
@@ -856,6 +860,7 @@ struct snd_kcontrol *snd_ctl_find_id(struct snd_card *card,
 #endif
 	/* no matching in hash table - try all as the last resort */
 	guard(read_lock_irqsave)(&card->controls_rwlock);
+	/*遍历此卡注册的所有controls*/
 	list_for_each_entry(kctl, &card->controls, list)
 		if (elem_id_matches(kctl, id))
 			return kctl;
@@ -876,8 +881,8 @@ static int snd_ctl_card_info(struct snd_card *card/*要获取信息的声卡*/, 
 	scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
 		info->card = card->number;/*card编号*/
 		strscpy(info->id, card->id, sizeof(info->id));
-		strscpy(info->driver, card->driver, sizeof(info->driver));
-		strscpy(info->name, card->shortname, sizeof(info->name));
+		strscpy(info->driver, card->driver, sizeof(info->driver));/*声卡驱动名称*/
+		strscpy(info->name, card->shortname, sizeof(info->name));/*声卡名称*/
 		strscpy(info->longname, card->longname, sizeof(info->longname));
 		strscpy(info->mixername, card->mixername, sizeof(info->mixername));
 		strscpy(info->components, card->components, sizeof(info->components));
@@ -902,10 +907,11 @@ static int snd_ctl_elem_list(struct snd_card *card,
 	list->used = 0;
 	if (!space)
 		return 0;
+	/*遍历所有control*/
 	list_for_each_entry(kctl, &card->controls, list) {
 		if (offset >= kctl->count) {
 			offset -= kctl->count;
-			continue;
+			continue;/*未达到起始点，继续循环*/
 		}
 		for (jidx = offset; jidx < kctl->count; jidx++) {
 			snd_ctl_build_ioff(&id, kctl, jidx);
@@ -1227,7 +1233,7 @@ static int snd_ctl_elem_read(struct snd_card *card,
 
 	if (!snd_ctl_skip_validation(&info))
 		fill_remaining_elem_value(control, &info, pattern);
-	ret = kctl->get(kctl, control);
+	ret = kctl->get(kctl, control);/*取读数*/
 	if (ret < 0)
 		return ret;
 	if (!snd_ctl_skip_validation(&info) &&
@@ -1274,16 +1280,20 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 	int result = 0;
 
 	down_write(&card->controls_rwsem);
+	/*通过id查找到snd_kcontrol*/
 	kctl = snd_ctl_find_id(card, &control->id);
 	if (kctl == NULL) {
+		/*没有找到，失败*/
 		up_write(&card->controls_rwsem);
 		return -ENOENT;
 	}
 
+	/*取id在kctl->vd中的偏移*/
 	index_offset = snd_ctl_get_ioff(kctl, &control->id);
 	vd = &kctl->vd[index_offset];
 	if (!(vd->access & SNDRV_CTL_ELEM_ACCESS_WRITE) || kctl->put == NULL ||
 	    (file && vd->owner && vd->owner != file)) {
+		/*不支持写操作；无put回调*/
 		up_write(&card->controls_rwsem);
 		return -EPERM;
 	}
@@ -1301,14 +1311,15 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 							   false);
 	}
 	if (!result)
-		result = kctl->put(kctl, control);
+		result = kctl->put(kctl, control);/*触发put回调，执行写操作*/
 	if (result < 0) {
 		up_write(&card->controls_rwsem);
-		return result;
+		return result;/*写操作执行失败*/
 	}
 
 	if (result > 0) {
 		downgrade_write(&card->controls_rwsem);
+		/*执行成功通知(用于通知其它程序此card发生了变化）*/
 		snd_ctl_notify_one(card, SNDRV_CTL_EVENT_MASK_VALUE, kctl, index_offset);
 		up_read(&card->controls_rwsem);
 	} else {
@@ -1325,6 +1336,7 @@ static int snd_ctl_elem_write_user(struct snd_ctl_file *file,
 	struct snd_card *card;
 	int result;
 
+	/*取用户态输入*/
 	control = memdup_user(_control, sizeof(*control));
 	if (IS_ERR(control))
 		return PTR_ERR(control);
@@ -1333,6 +1345,7 @@ static int snd_ctl_elem_write_user(struct snd_ctl_file *file,
 	result = snd_power_ref_and_wait(card);
 	if (result < 0)
 		return result;
+	/*执行element write*/
 	result = snd_ctl_elem_write(card, file, control);
 	snd_power_unref(card);
 	if (result < 0)
@@ -1912,6 +1925,7 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		return -ENXIO;
 	switch (cmd) {
 	case SNDRV_CTL_IOCTL_PVERSION:
+		/*取ctl version*/
 		return put_user(SNDRV_CTL_VERSION, ip) ? -EFAULT : 0;
 	case SNDRV_CTL_IOCTL_CARD_INFO:
 		/*取声卡信息*/
@@ -1921,18 +1935,22 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	case SNDRV_CTL_IOCTL_ELEM_INFO:
 		return snd_ctl_elem_info_user(ctl, argp);
 	case SNDRV_CTL_IOCTL_ELEM_READ:
+		/*读取elem*/
 		return snd_ctl_elem_read_user(card, argp);
 	case SNDRV_CTL_IOCTL_ELEM_WRITE:
+		/*写elem*/
 		return snd_ctl_elem_write_user(ctl, argp);
 	case SNDRV_CTL_IOCTL_ELEM_LOCK:
 		return snd_ctl_elem_lock(ctl, argp);
 	case SNDRV_CTL_IOCTL_ELEM_UNLOCK:
 		return snd_ctl_elem_unlock(ctl, argp);
 	case SNDRV_CTL_IOCTL_ELEM_ADD:
+		/*添加elem*/
 		return snd_ctl_elem_add_user(ctl, argp, 0);
 	case SNDRV_CTL_IOCTL_ELEM_REPLACE:
 		return snd_ctl_elem_add_user(ctl, argp, 1);
 	case SNDRV_CTL_IOCTL_ELEM_REMOVE:
+		/*删除elem*/
 		return snd_ctl_elem_remove(ctl, argp);
 	case SNDRV_CTL_IOCTL_SUBSCRIBE_EVENTS:
 		return snd_ctl_subscribe_events(ctl, ip);
@@ -1967,10 +1985,11 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	}
 
 	guard(rwsem_read)(&snd_ioctl_rwsem);
+	/*在control ioctls链表上查找是否有回调可以处理此cmd*/
 	list_for_each_entry(p, &snd_control_ioctls, list) {
 		err = p->fioctl(card, ctl, cmd, arg);
 		if (err != -ENOIOCTLCMD)
-			return err;
+			return err;/*处理出错*/
 	}
 	dev_dbg(card->dev, "unknown ioctl = 0x%x\n", cmd);
 	return -ENOTTY;
@@ -2062,9 +2081,9 @@ static int _snd_ctl_register_ioctl(snd_kctl_ioctl_func_t fcn, struct list_head *
 	pn = kzalloc(sizeof(struct snd_kctl_ioctl), GFP_KERNEL);
 	if (pn == NULL)
 		return -ENOMEM;
-	pn->fioctl = fcn;
+	pn->fioctl = fcn;/*设置函数*/
 	guard(rwsem_write)(&snd_ioctl_rwsem);
-	list_add_tail(&pn->list, lists);
+	list_add_tail(&pn->list, lists);/*串连进lists*/
 	return 0;
 }
 
@@ -2078,6 +2097,7 @@ static int _snd_ctl_register_ioctl(snd_kctl_ioctl_func_t fcn, struct list_head *
  */
 int snd_ctl_register_ioctl(snd_kctl_ioctl_func_t fcn)
 {
+	/*注册ioctl处理回调*/
 	return _snd_ctl_register_ioctl(fcn, &snd_control_ioctls);
 }
 EXPORT_SYMBOL(snd_ctl_register_ioctl);
@@ -2127,6 +2147,7 @@ static int _snd_ctl_unregister_ioctl(snd_kctl_ioctl_func_t fcn,
  */
 int snd_ctl_unregister_ioctl(snd_kctl_ioctl_func_t fcn)
 {
+	/*移除ioctl处理回调*/
 	return _snd_ctl_unregister_ioctl(fcn, &snd_control_ioctls);
 }
 EXPORT_SYMBOL(snd_ctl_unregister_ioctl);
@@ -2292,9 +2313,10 @@ static const struct file_operations snd_ctl_f_ops =
  */
 static int snd_ctl_dev_register(struct snd_device *device)
 {
-	struct snd_card *card = device->device_data;
+	struct snd_card *card = device->device_data;/*取私有数据*/
 	int err;
 
+	/*注册control设备*/
 	err = snd_register_device(SNDRV_DEVICE_TYPE_CONTROL, card, -1,
 				  &snd_ctl_f_ops/*控制设备fops*/, card, card->ctl_dev);
 	if (err < 0)
@@ -2351,9 +2373,10 @@ static int snd_ctl_dev_free(struct snd_device *device)
  */
 int snd_ctl_create(struct snd_card *card)
 {
+	/*创建此card对应的control设备*/
 	static const struct snd_device_ops ops = {
 		.dev_free = snd_ctl_dev_free,
-		.dev_register =	snd_ctl_dev_register,
+		.dev_register =	snd_ctl_dev_register,/*注册ctrl设备*/
 		.dev_disconnect = snd_ctl_dev_disconnect,
 	};
 	int err;

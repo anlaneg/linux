@@ -428,6 +428,7 @@ snd_info_create_entry(const char *name, struct snd_info_entry *parent,
 
 int __init snd_info_init(void)
 {
+	/*设置根目录*/
 	snd_proc_root = snd_info_create_entry("asound", NULL, THIS_MODULE);
 	if (!snd_proc_root)
 		return -ENOMEM;
@@ -781,6 +782,7 @@ static int __snd_info_register(struct snd_info_entry *entry)
 	if (entry->p || !root)
 		return 0;
 	if (S_ISDIR(entry->mode)) {
+		/*在根目录下加入子目录*/
 		p = proc_mkdir_mode(entry->name, entry->mode, root);
 		if (!p)
 			return -ENOMEM;
@@ -870,6 +872,7 @@ EXPORT_SYMBOL_GPL(snd_card_rw_proc_new);
 
 static void snd_info_version_read(struct snd_info_entry *entry, struct snd_info_buffer *buffer)
 {
+	/*显示版本*/
 	snd_iprintf(buffer,
 		    "Advanced Linux Sound Architecture Driver Version k%s.\n",
 		    init_utsname()->release);
@@ -879,9 +882,10 @@ static int __init snd_info_version_init(void)
 {
 	struct snd_info_entry *entry;
 
+	/*创建version entry*/
 	entry = snd_info_create_module_entry(THIS_MODULE, "version", NULL);
 	if (entry == NULL)
 		return -ENOMEM;
-	entry->c.text.read = snd_info_version_read;
+	entry->c.text.read = snd_info_version_read;/*显示版本*/
 	return snd_info_register(entry); /* freed in error path */
 }

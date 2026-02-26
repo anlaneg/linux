@@ -60,7 +60,7 @@ struct virtio_kctl {
  * @nkctls: Number of control elements.
  */
 struct virtio_snd {
-	struct virtio_device *vdev;
+	struct virtio_device *vdev;/*对应的virtio设备*/
 	struct virtio_snd_queue queues[VIRTIO_SND_VQ_MAX];
 	struct snd_card *card;
 	struct list_head ctl_msgs;
@@ -95,13 +95,13 @@ virtsnd_event_queue(struct virtio_snd *snd)
 static inline struct virtio_snd_queue *
 virtsnd_tx_queue(struct virtio_snd *snd)
 {
-	return &snd->queues[VIRTIO_SND_VQ_TX];
+	return &snd->queues[VIRTIO_SND_VQ_TX];/*取tx队列*/
 }
 
 static inline struct virtio_snd_queue *
 virtsnd_rx_queue(struct virtio_snd *snd)
 {
-	return &snd->queues[VIRTIO_SND_VQ_RX];
+	return &snd->queues[VIRTIO_SND_VQ_RX];/*取rx队列*/
 }
 
 static inline struct virtio_snd_queue *

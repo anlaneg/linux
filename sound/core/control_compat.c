@@ -443,7 +443,7 @@ static inline long snd_ctl_ioctl_compat(struct file *file, unsigned int cmd, uns
 		return -ENXIO;
 
 	switch (cmd) {
-	case SNDRV_CTL_IOCTL_PVERSION:
+	case SNDRV_CTL_IOCTL_PVERSION:/*取ctrl version*/
 	case SNDRV_CTL_IOCTL_CARD_INFO:/*取声卡信息*/
 	case SNDRV_CTL_IOCTL_SUBSCRIBE_EVENTS:
 	case SNDRV_CTL_IOCTL_POWER:

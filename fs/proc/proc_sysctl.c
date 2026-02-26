@@ -441,7 +441,7 @@ static int sysctl_perm(struct ctl_table_header *head, const struct ctl_table *ta
 	if (root->permissions)
 		mode = root->permissions(head, table);
 	else
-		mode = table->mode;
+		mode = table->mode;/*取此表项权限标记*/
 
 	return test_perm(mode, op);
 }
@@ -574,6 +574,7 @@ static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 	/* if that can happen at all, it should be -EINVAL, not -EISDIR */
 	error = -EINVAL;
 	if (!table->proc_handler)
+		/*无回调，报错返回*/
 		goto out;
 
 	/* don't even try if the size is too large */

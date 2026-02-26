@@ -164,8 +164,8 @@ enum {
 };
 
 enum {
-	SNDRV_PCM_STREAM_PLAYBACK = 0,
-	SNDRV_PCM_STREAM_CAPTURE,
+	SNDRV_PCM_STREAM_PLAYBACK = 0,/*播放*/
+	SNDRV_PCM_STREAM_CAPTURE,/*录制*/
 	SNDRV_PCM_STREAM_LAST = SNDRV_PCM_STREAM_CAPTURE,
 };
 
@@ -1119,6 +1119,7 @@ typedef int __bitwise snd_ctl_elem_iface_t;
 #define SNDRV_CTL_ELEM_ID_NAME_MAXLEN	44
 
 struct snd_ctl_elem_id {
+	/*为0时无效，标记id*/
 	unsigned int numid;		/* numeric identifier, zero = invalid */
 	snd_ctl_elem_iface_t iface;	/* interface identifier */
 	unsigned int device;		/* device/client number */

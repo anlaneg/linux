@@ -24,7 +24,7 @@ MODULE_AUTHOR("Jaroslav Kysela <perex@perex.cz>, Abramo Bagnara <abramo@alsa-pro
 MODULE_DESCRIPTION("Midlevel PCM code for ALSA.");
 MODULE_LICENSE("GPL");
 
-static LIST_HEAD(snd_pcm_devices);
+static LIST_HEAD(snd_pcm_devices);/*罗列所有pcm设备（按device,card->num排序）*/
 static DEFINE_MUTEX(register_mutex);
 #if IS_ENABLED(CONFIG_SND_PCM_OSS)
 static LIST_HEAD(snd_pcm_notify_list);
@@ -51,7 +51,7 @@ static int snd_pcm_next(struct snd_card *card, int device)
 	struct snd_pcm *pcm;
 
 	list_for_each_entry(pcm, &snd_pcm_devices, list) {
-		if (pcm->card == card && pcm->device > device)
+		if (pcm->card == card/*属于同一个card*/ && pcm->device > device)
 			return pcm->device;
 		else if (pcm->card->number > card->number)
 			return -1;
@@ -92,7 +92,7 @@ static int snd_pcm_control_ioctl(struct snd_card *card,
 			if (get_user(device, (int __user *)arg))
 				return -EFAULT;
 			scoped_guard(mutex, &register_mutex)
-				device = snd_pcm_next(card, device);
+				device = snd_pcm_next(card, device);/*查找下一个device*/
 			if (put_user(device, (int __user *)arg))
 				return -EFAULT;
 			return 0;
@@ -107,6 +107,7 @@ static int snd_pcm_control_ioctl(struct snd_card *card,
 			struct snd_pcm_substream *substream;
 
 			info = (struct snd_pcm_info __user *)arg;
+			/*取用户态设置的device*/
 			if (get_user(device, &info->device))
 				return -EFAULT;
 			if (get_user(stream, &info->stream))
@@ -642,8 +643,9 @@ int snd_pcm_new_stream(struct snd_pcm *pcm, int stream, int substream_count)
 	err = snd_device_alloc(&pstr->dev, pcm->card);
 	if (err < 0)
 		return err;
+	/*设置设备名称*/
 	dev_set_name(pstr->dev, "pcmC%iD%i%c", pcm->card->number, pcm->device,
-		     stream == SNDRV_PCM_STREAM_PLAYBACK ? 'p' : 'c');
+		     stream == SNDRV_PCM_STREAM_PLAYBACK ? 'p'/*播放设备*/ : 'c'/*录制设备*/);
 	pstr->dev->groups = pcm_dev_attr_groups;
 	pstr->dev->type = &pcm_dev_type;
 	dev_set_drvdata(pstr->dev, pstr);
@@ -657,14 +659,14 @@ int snd_pcm_new_stream(struct snd_pcm *pcm, int stream, int substream_count)
 	}
 	prev = NULL;
 	for (idx = 0, prev = NULL; idx < substream_count; idx++) {
-		substream = kzalloc(sizeof(*substream), GFP_KERNEL);
+		substream = kzalloc(sizeof(*substream), GFP_KERNEL);/*创建子流*/
 		if (!substream)
 			return -ENOMEM;
 		substream->pcm = pcm;
 		substream->pstr = pstr;
-		substream->number = idx;
+		substream->number = idx;/*设置编号*/
 		substream->stream = stream;
-		sprintf(substream->name, "subdevice #%i", idx);
+		sprintf(substream->name, "subdevice #%i", idx);/*设置名称*/
 		substream->buffer_bytes_max = UINT_MAX;
 		if (prev == NULL)
 			pstr->substream = substream;
@@ -695,7 +697,7 @@ int snd_pcm_new_stream(struct snd_pcm *pcm, int stream, int substream_count)
 EXPORT_SYMBOL(snd_pcm_new_stream);
 
 static int _snd_pcm_new(struct snd_card *card, const char *id, int device,
-		int playback_count, int capture_count, bool internal,
+		int playback_count, int capture_count/*录制设备数目*/, bool internal,
 		struct snd_pcm **rpcm)
 {
 	struct snd_pcm *pcm;
@@ -1006,6 +1008,7 @@ void snd_pcm_detach_substream(struct snd_pcm_substream *substream)
 	substream->pstr->substream_opened--;
 }
 
+/*设置设备类型*/
 static ssize_t pcm_class_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
@@ -1061,9 +1064,11 @@ static int snd_pcm_dev_register(struct snd_device *device)
 			continue;
 		switch (cidx) {
 		case SNDRV_PCM_STREAM_PLAYBACK:
+			/*播放接口*/
 			devtype = SNDRV_DEVICE_TYPE_PCM_PLAYBACK;
 			break;
 		case SNDRV_PCM_STREAM_CAPTURE:
+			/*录制接口*/
 			devtype = SNDRV_DEVICE_TYPE_PCM_CAPTURE;
 			break;
 		}
@@ -1189,7 +1194,7 @@ static void snd_pcm_proc_init(void)
 
 	entry = snd_info_create_module_entry(THIS_MODULE, "pcm", NULL);
 	if (entry) {
-		snd_info_set_text_ops(entry, NULL, snd_pcm_proc_read);
+		snd_info_set_text_ops(entry, NULL/*私有数据为空*/, snd_pcm_proc_read);
 		if (snd_info_register(entry) < 0) {
 			snd_info_free_entry(entry);
 			entry = NULL;
@@ -1215,6 +1220,7 @@ static void snd_pcm_proc_done(void)
 
 static int __init alsa_pcm_init(void)
 {
+	/*注册pcm 类ioctl*/
 	snd_ctl_register_ioctl(snd_pcm_control_ioctl);
 	snd_ctl_register_ioctl_compat(snd_pcm_control_ioctl);
 	snd_pcm_proc_init();

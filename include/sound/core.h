@@ -60,14 +60,18 @@ struct snd_device;
 
 struct snd_device_ops {
 	int (*dev_free)(struct snd_device *dev);
+	/*实现从属于某一个card上的某snd_devcie设备注册*/
 	int (*dev_register)(struct snd_device *dev);
+	/*用于实现从属于某一个card上某snd_devcie设备disconnect*/
 	int (*dev_disconnect)(struct snd_device *dev);
 };
 
 struct snd_device {
+	/*用于串连*/
 	struct list_head list;		/* list of registered devices */
 	/*从属于哪张声卡*/
 	struct snd_card *card;		/* card which holds this device */
+	/*当前状态*/
 	enum snd_device_state state;	/* state of the device */
 	/*声卡设备控制类型*/
 	enum snd_device_type type;	/* device type */
@@ -97,6 +101,7 @@ struct snd_card {
 	void *private_data;		/* private data for soundcard */
 	void (*private_free) (struct snd_card *card); /* callback for freeing of
 								private data */
+	/*记录所有snd_device*/
 	struct list_head devices;	/* devices */
 
 	struct device *ctl_dev;		/* control device */
@@ -105,6 +110,7 @@ struct snd_card {
 	rwlock_t controls_rwlock;	/* lock for lookup and ctl_files list */
 	int controls_count;		/* count of all controls */
 	size_t user_ctl_alloc_size;	// current memory allocation by user controls.
+	/*此卡注册的所有controls*/
 	struct list_head controls;	/* all controls for this card */
 	struct list_head ctl_files;	/* active control files */
 #ifdef CONFIG_SND_CTL_FAST_LOOKUP

@@ -27,13 +27,14 @@
  * Return: Zero if successful, or a negative error code on failure.
  */
 int snd_device_new(struct snd_card *card, enum snd_device_type type,
-		   void *device_data, const struct snd_device_ops *ops)
+		   void *device_data, const struct snd_device_ops *ops/*声卡函数操作集*/)
 {
 	struct snd_device *dev;
 	struct list_head *p;
 
 	if (snd_BUG_ON(!card || !device_data || !ops))
 		return -ENXIO;
+	/*申请snd_device设备*/
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -48,7 +49,7 @@ int snd_device_new(struct snd_card *card, enum snd_device_type type,
 	list_for_each_prev(p, &card->devices) {
 		struct snd_device *pdev = list_entry(p, struct snd_device, list);
 		if ((unsigned int)pdev->type <= (unsigned int)type)
-			break;
+			break;/*type小的排前面*/
 	}
 
 	list_add(&dev->list, p);
@@ -58,6 +59,7 @@ EXPORT_SYMBOL(snd_device_new);
 
 static void __snd_device_disconnect(struct snd_device *dev)
 {
+	/*执行断开*/
 	if (dev->state == SNDRV_DEV_REGISTERED) {
 		if (dev->ops->dev_disconnect &&
 		    dev->ops->dev_disconnect(dev))
@@ -71,8 +73,9 @@ static void __snd_device_free(struct snd_device *dev)
 	/* unlink */
 	list_del(&dev->list);
 
-	__snd_device_disconnect(dev);
+	__snd_device_disconnect(dev);/*先执行断开*/
 	if (dev->ops->dev_free) {
+		/*再释放*/
 		if (dev->ops->dev_free(dev))
 			dev_err(dev->card->dev, "device free failure\n");
 	}
@@ -195,7 +198,7 @@ int snd_device_register_all(struct snd_card *card)
 	
 	if (snd_BUG_ON(!card))
 		return -ENXIO;
-	/*遍历并注册此card上所有设备*/
+	/*遍历并注册此card上所有设备，并逐个注册*/
 	list_for_each_entry(dev, &card->devices, list) {
 		err = __snd_device_register(dev);
 		if (err < 0)
@@ -214,6 +217,7 @@ void snd_device_disconnect_all(struct snd_card *card)
 
 	if (snd_BUG_ON(!card))
 		return;
+	/*遍历并注册此card上所有设备，并逐个执行断开*/
 	list_for_each_entry_reverse(dev, &card->devices, list)
 		__snd_device_disconnect(dev);
 }

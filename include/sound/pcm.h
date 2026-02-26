@@ -465,7 +465,7 @@ struct snd_pcm_substream {
 	struct snd_pcm *pcm;
 	struct snd_pcm_str *pstr;
 	void *private_data;		/* copied from pcm->private_data */
-	int number;
+	int number;/*子流编号*/
 	char name[32];			/* substream name */
 	int stream;			/* stream (direction) */
 	struct pm_qos_request latency_pm_qos_req; /* pm_qos request */

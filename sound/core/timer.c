@@ -2484,6 +2484,7 @@ static int __init alsa_timer_init(void)
 		goto put_timer;
 	}
 
+	/*注册timer类型sound*/
 	err = snd_register_device(SNDRV_DEVICE_TYPE_TIMER, NULL, 0,
 				  &snd_timer_f_ops, NULL, timer_dev);
 	if (err < 0) {

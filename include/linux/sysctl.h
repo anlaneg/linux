@@ -135,6 +135,7 @@ struct ctl_table {
 	void *data;/*记录一组配置项*/
 	int maxlen;/*这组数据字节数目*/
 	umode_t mode;
+	/*用于处理输入*/
 	proc_handler *proc_handler;	/* Callback for text formatting */
 	struct ctl_table_poll *poll;
 	void *extra1;
