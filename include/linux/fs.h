@@ -4092,10 +4092,10 @@ static inline bool is_root_inode(struct inode *inode)
 }
 
 static inline bool dir_emit(struct dir_context *ctx,
-			    const char *name, int namelen,
-			    u64 ino, unsigned type)
+			    const char *name/*文件名称*/, int namelen/*文件名称长度*/,
+			    u64 ino/*文件对应的inode*/, unsigned type)
 {
-	return ctx->actor(ctx, name, namelen, ctx->pos, ino, type);
+	return ctx->actor(ctx, name, namelen, ctx->pos/*当前偏移*/, ino, type);
 }
 static inline bool dir_emit_dot(struct file *file, struct dir_context *ctx)
 {

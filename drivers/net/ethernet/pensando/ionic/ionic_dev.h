@@ -225,15 +225,15 @@ struct ionic_queue {
 		void *info;
 		struct ionic_tx_desc_info *tx_info;
 		struct ionic_rx_desc_info *rx_info;
-		struct ionic_admin_desc_info *admin_info;
+		struct ionic_admin_desc_info *admin_info;/*存放与adminq对应的admin_info*/
 	};
 	u64 dbval;
 	unsigned long dbell_deadline;
 	unsigned long dbell_jiffies;
-	u16 head_idx;
-	u16 tail_idx;
+	u16 head_idx;/*生产指针*/
+	u16 tail_idx;/*消费指针*/
 	unsigned int index;
-	unsigned int num_descs;
+	unsigned int num_descs;/*队列长度*/
 	unsigned int max_sg_elems;
 
 	u64 features;
@@ -242,8 +242,8 @@ struct ionic_queue {
 	union {
 		void *base;
 		struct ionic_txq_desc *txq;
-		struct ionic_rxq_desc *rxq;
-		struct ionic_admin_cmd *adminq;
+		struct ionic_rxq_desc *rxq;/*rxq指针*/
+		struct ionic_admin_cmd *adminq;/*adminq指针（存放ionic_admin_cmd）*/
 	};
 	union {
 		void *sg_base;
@@ -311,9 +311,10 @@ static inline void ionic_intr_init(struct ionic_dev *idev,
 
 static inline unsigned int ionic_q_space_avail(struct ionic_queue *q)
 {
-	unsigned int avail = q->tail_idx;
+	unsigned int avail = q->tail_idx;/*取消费指针*/
 
 	if (q->head_idx >= avail)
+		/*生产指针在消息指针的前面*/
 		avail += q->num_descs - q->head_idx - 1;
 	else
 		avail -= q->head_idx + 1;
@@ -323,6 +324,7 @@ static inline unsigned int ionic_q_space_avail(struct ionic_queue *q)
 
 static inline bool ionic_q_has_space(struct ionic_queue *q, unsigned int want)
 {
+	//q是否有空间
 	return ionic_q_space_avail(q) >= want;
 }
 

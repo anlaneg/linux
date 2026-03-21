@@ -226,6 +226,7 @@ EXPORT_SYMBOL(dcache_readdir);
 
 ssize_t generic_read_dir(struct file *filp, char __user *buf, size_t siz, loff_t *ppos)
 {
+	/*不支持读取目录内容*/
 	return -EISDIR;
 }
 EXPORT_SYMBOL(generic_read_dir);

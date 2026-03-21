@@ -158,7 +158,7 @@ static int must_set_pos(struct file *file, loff_t *offset, int whence, loff_t eo
  */
 loff_t
 generic_file_llseek_size(struct file *file, loff_t offset, int whence,
-		loff_t maxsize, loff_t eof)
+		loff_t maxsize, loff_t eof/*文件大小*/)
 {
 	int ret;
 

@@ -100,8 +100,10 @@ static void ionic_lif_deferred_work(struct work_struct *work)
 		if (!w)
 			break;
 
+		/*依据不同work类型，处理work*/
 		switch (w->type) {
 		case IONIC_DW_TYPE_RX_MODE:
+			/*rx mode变更*/
 			ionic_lif_rx_mode(lif);
 			break;
 		case IONIC_DW_TYPE_LINK_STATUS:
@@ -1321,6 +1323,7 @@ void ionic_get_stats64(struct net_device *netdev,
 
 static int ionic_addr_add(struct net_device *netdev, const u8 *addr)
 {
+	/*添加此地址*/
 	return ionic_lif_list_addr(netdev_priv(netdev), addr, ADD_ADDR);
 }
 
@@ -1396,7 +1399,7 @@ void ionic_lif_rx_mode(struct ionic_lif *lif)
 		struct ionic_admin_ctx ctx = {
 			.work = COMPLETION_INITIALIZER_ONSTACK(ctx.work),
 			.cmd.rx_mode_set = {
-				.opcode = IONIC_CMD_RX_MODE_SET,
+				.opcode = IONIC_CMD_RX_MODE_SET,/*指明admin命令*/
 				.lif_index = cpu_to_le16(lif->index),
 			},
 		};
@@ -1420,8 +1423,8 @@ static void ionic_ndo_set_rx_mode(struct net_device *netdev)
 	struct ionic_deferred_work *work;
 
 	/* Sync the kernel filter list with the driver filter list */
-	__dev_uc_sync(netdev, ionic_addr_add, ionic_addr_del);
-	__dev_mc_sync(netdev, ionic_addr_add, ionic_addr_del);
+	__dev_uc_sync(netdev, ionic_addr_add, ionic_addr_del);/*单播mac同步（仅驱动同步）*/
+	__dev_mc_sync(netdev, ionic_addr_add, ionic_addr_del);/*组播mac同步（仅驱动同步）*/
 
 	/* Shove off the rest of the rxmode work to the work task
 	 * which will include syncing the filters to the firmware.
@@ -1433,7 +1436,7 @@ static void ionic_ndo_set_rx_mode(struct net_device *netdev)
 	}
 	work->type = IONIC_DW_TYPE_RX_MODE;
 	netdev_dbg(lif->netdev, "deferred: rx_mode\n");
-	ionic_lif_deferred_enqueue(lif, work);
+	ionic_lif_deferred_enqueue(lif, work);/*指明需处理rx mode变更work*/
 }
 
 static __le64 ionic_netdev_features_to_nic(netdev_features_t features)
@@ -2817,7 +2820,7 @@ static const struct net_device_ops ionic_netdev_ops = {
 	.ndo_bpf		= ionic_xdp,
 	.ndo_xdp_xmit		= ionic_xdp_xmit,
 	.ndo_get_stats64	= ionic_get_stats64,
-	.ndo_set_rx_mode	= ionic_ndo_set_rx_mode,
+	.ndo_set_rx_mode	= ionic_ndo_set_rx_mode,/*更新rx mode*/
 	.ndo_set_features	= ionic_set_features,
 	.ndo_set_mac_address	= ionic_set_mac_address,
 	.ndo_validate_addr	= eth_validate_addr,
@@ -3299,7 +3302,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 
 	spin_lock_init(&lif->deferred.lock);
 	INIT_LIST_HEAD(&lif->deferred.list);
-	INIT_WORK(&lif->deferred.work, ionic_lif_deferred_work);
+	INIT_WORK(&lif->deferred.work, ionic_lif_deferred_work);/*初始化deferred work*/
 
 	/* allocate lif info */
 	lif->info_sz = ALIGN(sizeof(*lif->info), PAGE_SIZE);

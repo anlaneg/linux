@@ -197,15 +197,15 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	BUILD_BUG_ON(32 != sizeof (struct minix_inode));
 	BUILD_BUG_ON(64 != sizeof(struct minix2_inode));
 
-	/*设置block size*/
+	/*设置block size（居然是常量）*/
 	if (!sb_set_blocksize(s, BLOCK_SIZE))
 		goto out_bad_hblock;
 
-	/*加载第一个block对应数据,其为super block*/
+	/*加载第一个block对应数据,其为super block（Super Block固定在块1）*/
 	if (!(bh = sb_bread(s, 1)))
 		goto out_bad_sb;
 
-	/*指向第一个block上读到的数据*/
+	/*指向minix supper block结构体（第一个block上读到的数据；Super Block固定在块1）*/
 	ms = (struct minix_super_block *) bh->b_data;
 
 	/*利用自磁盘读取的数据填充sbi*/
@@ -220,6 +220,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	sbi->s_log_zone_size = ms->s_log_zone_size;
 	s->s_maxbytes = ms->s_max_size;
 	s->s_magic = ms->s_magic;
+	/*按照magic确定版本*/
 	if (s->s_magic == MINIX_SUPER_MAGIC) {
 		sbi->s_version = MINIX_V1;
 		sbi->s_dirsize = 16;
@@ -276,7 +277,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	sbi->s_imap = &map[0];
 	sbi->s_zmap = &map[sbi->s_imap_blocks];
 
-	/*自block 2开始，加载sbi->s_imap_blocks个block(加载imap)*/
+	/*自block 2开始共计sbi->s_imap_blocks个block，为inode map区，加载它*/
 	block=2;
 	for (i=0 ; i < sbi->s_imap_blocks ; i++) {
 		if (!(sbi->s_imap[i]=sb_bread(s, block)))
@@ -284,14 +285,14 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 		block++;
 	}
 
-	/*自sbi->s_imap_blocks + 2 开始加载sbi->s_zmap(加载block map)*/
+	/*inode map后为zone map,共计sbi->s_zmap_blocks个block,加载它*/
 	for (i=0 ; i < sbi->s_zmap_blocks ; i++) {
 		if (!(sbi->s_zmap[i]=sb_bread(s, block)))
 			goto out_no_bitmap;
 		block++;
 	}
 
-	/*0号inode,0号block置为‘0’*/
+	/*0号inode为root,0号block为super block,均置为‘0’，表示占用*/
 	minix_set_bit(0,sbi->s_imap[0]->b_data);
 	minix_set_bit(0,sbi->s_zmap[0]->b_data);
 
@@ -301,8 +302,8 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	 */
 	block = minix_blocks_needed(sbi->s_ninodes, s->s_blocksize);
 	if (sbi->s_imap_blocks < block) {
-	    /*sbi->s_ninodes为系统总inode数目，通过其可计算其占用的block总数，这里imap_blocks
-	     * 更大，则说明当前bitmap不足以表示inode*/
+	    /*sbi->s_ninodes为此文件系统总inode数目，通过上面计算imap占用的block总数，这里imap_blocks
+	     * 更小，则说明当前总数计算的bitmap不足以表示imap_blocks宣称的，内容有误*/
 		printk("MINIX-fs: file system does not have enough "
 				"imap blocks allocated.  Refusing to mount.\n");
 		goto out_no_bitmap;
@@ -312,6 +313,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 			(sbi->s_nzones - sbi->s_firstdatazone + 1),
 			s->s_blocksize);
 	if (sbi->s_zmap_blocks < block) {
+		/*同上*/
 		printk("MINIX-fs: file system does not have enough "
 				"zmap blocks allocated.  Refusing to mount.\n");
 		goto out_no_bitmap;
@@ -321,7 +323,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	s->s_op = &minix_sops;
 	s->s_time_min = 0;
 	s->s_time_max = U32_MAX;
-	/*取root inode*/
+	/*取root inode（其位于1号block位置）*/
 	root_inode = minix_iget(s, MINIX_ROOT_INO);
 	if (IS_ERR(root_inode)) {
 		ret = PTR_ERR(root_inode);
@@ -329,6 +331,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	}
 
 	ret = -ENOMEM;
+	/*指明为根节点*/
 	s->s_root = d_make_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
@@ -393,6 +396,18 @@ out:
 	return ret;
 }
 
+/*获取根目录
+ * minix的格式如下示：
+ * [引导块 Boot Block] → [超级块 Super Block] → [inode 位图] → [块位图] → [inode 表] → [数据区]
+ * 超级块固定在分区第 1 块（块 1，偏移 1KB，块大小默认 1KB）。
+ * 块 2：Inode Bitmap（inode 位图）：标记哪个 inode 已用 / 空闲；1 个 bit 对应 1 个 inode
+ * 大小由 superblock 中的 s_imap_blocks 决定（通常 1 块）
+ * 块 3：Zone Bitmap（块位图）：标记哪个数据块已用 / 空闲；1 个 bit 对应 1 个数据块
+ * 大小由 s_zmap_blocks 决定
+ * Inode Table：从超级块指定的块号开始连续存放所有 inode 都在这里；固定大小：每个 inode 占 32/64 字节（v1/v2）
+ * inode 1 = 根目录 /（固定！）；inode 从 1 开始编号，不是 0
+ * Data Zone：文件真正内容；目录内容；间接块；从 s_firstdatazone 开始
+ * */
 static int minix_get_tree(struct fs_context *fc)
 {
 	 return get_tree_bdev(fc, minix_fill_super);
@@ -503,6 +518,7 @@ static const struct inode_operations minix_symlink_inode_operations = {
 	.getattr	= minix_getattr,
 };
 
+/*依据inode的mode,设置其对应的ops*/
 void minix_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {

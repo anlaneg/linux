@@ -295,6 +295,7 @@ static bool __ionic_is_fw_running(struct ionic_dev *idev, u8 *status_ptr)
 		return false;
 	}
 
+	/*读取fw状态*/
 	fw_status = ioread8(&idev->dev_info_regs->fw_status);
 	if (status_ptr)
 		*status_ptr = fw_status;
@@ -305,6 +306,7 @@ static bool __ionic_is_fw_running(struct ionic_dev *idev, u8 *status_ptr)
 	return (fw_status != 0xff) && (fw_status & IONIC_FW_STS_F_RUNNING);
 }
 
+/*检查fw是否仍在运行*/
 bool ionic_is_fw_running(struct ionic_dev *idev)
 {
 	return __ionic_is_fw_running(idev, NULL);
@@ -807,11 +809,12 @@ int ionic_q_init(struct ionic_lif *lif, struct ionic_dev *idev,
 	return 0;
 }
 
-void ionic_q_post(struct ionic_queue *q, bool ring_doorbell)
+void ionic_q_post(struct ionic_queue *q, bool ring_doorbell/*是否触发doorbell*/)
 {
 	struct ionic_lif *lif = q->lif;
 	struct device *dev = q->dev;
 
+	/*生产指针前移*/
 	q->head_idx = (q->head_idx + 1) & (q->num_descs - 1);
 
 	dev_dbg(dev, "lif=%d qname=%s qid=%d qtype=%d p_index=%d ringdb=%d\n",
@@ -819,6 +822,7 @@ void ionic_q_post(struct ionic_queue *q, bool ring_doorbell)
 		q->head_idx, ring_doorbell);
 
 	if (ring_doorbell) {
+		/*触发doorbell*/
 		ionic_dbell_ring(lif->kern_dbpage, q->hw_type,
 				 q->dbval | q->head_idx);
 

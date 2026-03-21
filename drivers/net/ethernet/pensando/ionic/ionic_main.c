@@ -189,6 +189,7 @@ static const char *ionic_opcode_to_str(enum ionic_cmd_opcode opcode)
 	}
 }
 
+/*清空adminq*/
 static void ionic_adminq_flush(struct ionic_lif *lif)
 {
 	struct ionic_admin_desc_info *desc_info;
@@ -242,6 +243,7 @@ static int ionic_adminq_check_err(struct ionic_lif *lif,
 						      ctx->comp.comp.status, err);
 
 		if (timeout)
+			/*超时，清空adminq*/
 			ionic_adminq_flush(lif);
 	}
 
@@ -366,6 +368,7 @@ bool ionic_adminq_poke_doorbell(struct ionic_queue *q)
 	return true;
 }
 
+/*向lif传递admin context*/
 int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 {
 	struct ionic_admin_desc_info *desc_info;
@@ -383,6 +386,7 @@ int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 	q = &lif->adminqcq->q;
 
 	if (!ionic_q_has_space(q, 1)) {
+		/*无空间，无法存入新的admin cmd*/
 		err = -ENOSPC;
 		goto err_out;
 	}
@@ -391,9 +395,11 @@ int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 	if (err)
 		goto err_out;
 
+	/*填写admin info*/
 	desc_info = &q->admin_info[q->head_idx];
 	desc_info->ctx = ctx;
 
+	/*填写adminq*/
 	desc = &q->adminq[q->head_idx];
 	memcpy(desc, &ctx->cmd, sizeof(ctx->cmd));
 
@@ -401,6 +407,7 @@ int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 	dynamic_hex_dump("cmd ", DUMP_PREFIX_OFFSET, 16, 1,
 			 &ctx->cmd, sizeof(ctx->cmd), true);
 
+	/*完成adminq内容填写，触发doorbell*/
 	ionic_q_post(q, true);
 
 err_out:
@@ -410,7 +417,7 @@ err_out:
 }
 
 int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
-		      const int err, const bool do_msg)
+		      const int err, const bool do_msg/*是否显示出错信息*/)
 {
 	struct net_device *netdev = lif->netdev;
 	unsigned long time_limit;
@@ -422,6 +429,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 	name = ionic_opcode_to_str(ctx->cmd.cmd.opcode);
 
 	if (err) {
+		/*显示出错信息*/
 		if (do_msg && !test_bit(IONIC_LIF_F_FW_RESET, lif->state))
 			netdev_err(netdev, "Posting of %s (%d) failed: %d\n",
 				   name, ctx->cmd.cmd.opcode, err);
@@ -429,9 +437,11 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 		return err;
 	}
 
+	/*设置超时时间*/
 	time_start = jiffies;
 	time_limit = time_start + HZ * (ulong)DEVCMD_TIMEOUT;
 	do {
+		/*等待work完成*/
 		remaining = wait_for_completion_timeout(&ctx->work,
 							IONIC_ADMINQ_TIME_SLICE);
 
@@ -440,7 +450,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 			break;
 
 		/* force a check of FW status and break out if FW reset */
-		ionic_heartbeat_check(lif->ionic);
+		ionic_heartbeat_check(lif->ionic);/*检查fw还活着不*/
 		if ((test_bit(IONIC_LIF_F_FW_RESET, lif->state) &&
 		     !lif->ionic->idev.fw_status_ready) ||
 		    test_bit(IONIC_LIF_F_FW_STOPPING, lif->state)) {
@@ -454,6 +464,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 	} while (time_before(jiffies, time_limit));
 	time_done = jiffies;
 
+	/*显示花了多长时间*/
 	dev_dbg(lif->ionic->dev, "%s: elapsed %d msecs\n",
 		__func__, jiffies_to_msecs(time_done - time_start));
 
@@ -462,6 +473,7 @@ int ionic_adminq_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx,
 				      do_msg);
 }
 
+/*发送admin ctx给fw，并等待完成*/
 static int __ionic_adminq_post_wait(struct ionic_lif *lif,
 				    struct ionic_admin_ctx *ctx,
 				    const bool do_msg)
@@ -471,18 +483,22 @@ static int __ionic_adminq_post_wait(struct ionic_lif *lif,
 	if (!ionic_is_fw_running(&lif->ionic->idev))
 		return 0;
 
+	/*post此admin ctx*/
 	err = ionic_adminq_post(lif, ctx);
 
+	/*等待完成*/
 	return ionic_adminq_wait(lif, ctx, err, do_msg);
 }
 
 int ionic_adminq_post_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 {
+	/*发送并等待响应（显示出错信息）*/
 	return __ionic_adminq_post_wait(lif, ctx, true);
 }
 
 int ionic_adminq_post_wait_nomsg(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 {
+	/*发送并等待响应（不显示出错信息）*/
 	return __ionic_adminq_post_wait(lif, ctx, false);
 }
 

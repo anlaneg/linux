@@ -214,7 +214,7 @@ struct ionic_lif {
 	bool doorbell_wa;
 	u16 lif_type;
 	unsigned int link_down_count;
-	unsigned int nmcast;
+	unsigned int nmcast;/*组播地址数*/
 	unsigned int nucast;
 	unsigned int nvlans;
 	unsigned int max_vlans;

@@ -139,6 +139,7 @@ int ionic_rx_filter_save(struct ionic_lif *lif, u32 flow_id, u16 rxq_index,
 		break;
 	case IONIC_RX_FILTER_MATCH_MAC:
 		key = *(u32 *)ac->mac.addr;
+		/*查此接口rx方向是否已有此过滤mac*/
 		f = ionic_rx_filter_by_addr(lif, ac->mac.addr);
 		break;
 	case IONIC_RX_FILTER_MATCH_MAC_VLAN:
@@ -152,10 +153,12 @@ int ionic_rx_filter_save(struct ionic_lif *lif, u32 flow_id, u16 rxq_index,
 	}
 
 	if (f) {
+		/*需要删除*/
 		/* remove from current linking so we can refresh it */
 		hlist_del(&f->by_id);
 		hlist_del(&f->by_hash);
 	} else {
+		/*需要新增*/
 		f = devm_kzalloc(dev, sizeof(*f), GFP_ATOMIC);
 		if (!f)
 			return -ENOMEM;
@@ -201,6 +204,7 @@ struct ionic_rx_filter *ionic_rx_filter_by_vlan(struct ionic_lif *lif, u16 vid)
 	return NULL;
 }
 
+/*检查addr在lif->rx_filters上是否存在*/
 struct ionic_rx_filter *ionic_rx_filter_by_addr(struct ionic_lif *lif,
 						const u8 *addr)
 {
@@ -254,7 +258,7 @@ static struct ionic_rx_filter *ionic_rx_filter_find(struct ionic_lif *lif,
 	}
 }
 
-int ionic_lif_list_addr(struct ionic_lif *lif, const u8 *addr, bool mode)
+int ionic_lif_list_addr(struct ionic_lif *lif, const u8 *addr, bool mode/*添加/删除*/)
 {
 	struct ionic_rx_filter *f;
 	int err;
@@ -263,16 +267,17 @@ int ionic_lif_list_addr(struct ionic_lif *lif, const u8 *addr, bool mode)
 
 	f = ionic_rx_filter_by_addr(lif, addr);
 	if (mode == ADD_ADDR && !f) {
+		/*需要增加*/
 		struct ionic_admin_ctx ctx = {
 			.work = COMPLETION_INITIALIZER_ONSTACK(ctx.work),
 			.cmd.rx_filter_add = {
-				.opcode = IONIC_CMD_RX_FILTER_ADD,
+				.opcode = IONIC_CMD_RX_FILTER_ADD,/*指定opcode*/
 				.lif_index = cpu_to_le16(lif->index),
-				.match = cpu_to_le16(IONIC_RX_FILTER_MATCH_MAC),
+				.match = cpu_to_le16(IONIC_RX_FILTER_MATCH_MAC),/*指明为mac过滤*/
 			},
 		};
 
-		memcpy(ctx.cmd.rx_filter_add.mac.addr, addr, ETH_ALEN);
+		memcpy(ctx.cmd.rx_filter_add.mac.addr, addr, ETH_ALEN);/*指明mac地址*/
 		err = ionic_rx_filter_save(lif, 0, IONIC_RXQ_INDEX_ANY, 0, &ctx,
 					   IONIC_FILTER_STATE_NEW);
 		if (err) {
@@ -281,15 +286,18 @@ int ionic_lif_list_addr(struct ionic_lif *lif, const u8 *addr, bool mode)
 		}
 
 	} else if (mode == ADD_ADDR && f) {
+		/*是添加，但已存在*/
 		if (f->state == IONIC_FILTER_STATE_OLD)
 			f->state = IONIC_FILTER_STATE_SYNCED;
 
 	} else if (mode == DEL_ADDR && f) {
+		/*是删除，且存在*/
 		if (f->state == IONIC_FILTER_STATE_NEW)
 			ionic_rx_filter_free(lif, f);
 		else if (f->state == IONIC_FILTER_STATE_SYNCED)
 			f->state = IONIC_FILTER_STATE_OLD;
 	} else if (mode == DEL_ADDR && !f) {
+		/*是删除，但不存在*/
 		spin_unlock_bh(&lif->rx_filters.lock);
 		return -ENOENT;
 	}
@@ -312,7 +320,7 @@ static int ionic_lif_filter_add(struct ionic_lif *lif,
 	int err = 0;
 
 	ctx.cmd.rx_filter_add = *ac;
-	ctx.cmd.rx_filter_add.opcode = IONIC_CMD_RX_FILTER_ADD;
+	ctx.cmd.rx_filter_add.opcode = IONIC_CMD_RX_FILTER_ADD;/*添加filter地址*/
 	ctx.cmd.rx_filter_add.lif_index = cpu_to_le16(lif->index);
 
 	spin_lock_bh(&lif->rx_filters.lock);
@@ -357,6 +365,7 @@ static int ionic_lif_filter_add(struct ionic_lif *lif,
 	}
 
 	if (err != -ENOSPC)
+		/*向lif传递adminq命令*/
 		err = ionic_adminq_post_wait_nomsg(lif, &ctx);
 
 	spin_lock_bh(&lif->rx_filters.lock);
@@ -418,7 +427,7 @@ static int ionic_lif_filter_add(struct ionic_lif *lif,
 		break;
 	case IONIC_RX_FILTER_MATCH_MAC:
 		if (is_multicast_ether_addr(ctx.cmd.rx_filter_add.mac.addr))
-			lif->nmcast++;
+			lif->nmcast++;/*添加的是组播地址数，数目增加*/
 		else
 			lif->nucast++;
 		break;
@@ -446,7 +455,7 @@ static int ionic_lif_filter_add(struct ionic_lif *lif,
 int ionic_lif_addr_add(struct ionic_lif *lif, const u8 *addr)
 {
 	struct ionic_rx_filter_add_cmd ac = {
-		.match = cpu_to_le16(IONIC_RX_FILTER_MATCH_MAC),
+		.match = cpu_to_le16(IONIC_RX_FILTER_MATCH_MAC),/*指明匹配mac*/
 	};
 
 	memcpy(&ac.mac.addr, addr, ETH_ALEN);
@@ -589,8 +598,10 @@ void ionic_rx_filter_sync(struct ionic_lif *lif)
 				sync_item->f = *f;
 
 				if (f->state == IONIC_FILTER_STATE_NEW)
+					/*添加进add list*/
 					list_add(&sync_item->list, &sync_add_list);
 				else
+					/*添加进del list*/
 					list_add(&sync_item->list, &sync_del_list);
 			}
 		}
@@ -604,6 +615,7 @@ loop_out:
 	 * they can clear room for some new filters
 	 */
 	list_for_each_entry_safe(sync_item, spos, &sync_del_list, list) {
+		/*执行cmd删除*/
 		ionic_lif_filter_del(lif, &sync_item->f.cmd);
 
 		list_del(&sync_item->list);
@@ -611,6 +623,7 @@ loop_out:
 	}
 
 	list_for_each_entry_safe(sync_item, spos, &sync_add_list, list) {
+		/*执行cmd添加*/
 		ionic_lif_filter_add(lif, &sync_item->f.cmd);
 
 		list_del(&sync_item->list);

@@ -238,8 +238,8 @@ struct neigh_parms;
 struct sk_buff;
 
 struct netdev_hw_addr {
-	struct list_head	list;//连接点
-	struct rb_node		node;
+	struct list_head	list;//连接点（用于链表串连）
+	struct rb_node		node;//连接点（用于rb树串连）
 	unsigned char		addr[MAX_ADDR_LEN];//硬件地址
 	unsigned char		type;//硬件地址类型
 //以太网地址
@@ -247,16 +247,16 @@ struct netdev_hw_addr {
 #define NETDEV_HW_ADDR_T_SAN		2
 #define NETDEV_HW_ADDR_T_UNICAST	3
 #define NETDEV_HW_ADDR_T_MULTICAST	4
-	bool			global_use;
+	bool			global_use;/*是否使用全局唯一地址*/
 	int			sync_cnt;
-	int			refcount;
+	int			refcount;/*引用计数（达到0时释放）*/
 	int			synced;
 	struct rcu_head		rcu_head;
 };
 
 struct netdev_hw_addr_list {
 	struct list_head	list;
-	int			count;//list长度
+	int			count;// list长度（元素总数）
 
 	/* Auxiliary tree for faster lookup on addition and deletion */
 	struct rb_root		tree;
@@ -1782,6 +1782,7 @@ enum netdev_priv_flags {
 	IFF_BRIDGE_PORT			= 1<<9,
 	IFF_OVS_DATAPATH		= 1<<10,
 	IFF_TX_SKB_SHARING		= 1<<11,
+	/*标记设备是否具有单播mac过滤能力*/
 	IFF_UNICAST_FLT			= 1<<12,
 	IFF_TEAM_PORT			= 1<<13,
 	IFF_SUPP_NOFCS			= 1<<14,

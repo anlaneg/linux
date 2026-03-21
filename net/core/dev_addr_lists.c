@@ -63,7 +63,7 @@ __hw_addr_create(const unsigned char *addr, int addr_len,
 	//构造硬件地址，并将其添加在list中
 	memcpy(ha->addr, addr, addr_len);
 	ha->type = addr_type;//地址类型
-	ha->refcount = 1;
+	ha->refcount = 1;/*首次创建，引用计数为1*/
 	ha->global_use = global;
 	ha->synced = sync ? 1 : 0;
 	ha->sync_cnt = 0;
@@ -89,6 +89,7 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 		ha = rb_entry(*ins_point, struct netdev_hw_addr, node);
 		diff = memcmp(addr, ha->addr, addr_len);
 		if (diff == 0)
+			/*地址相等，比对地址类型*/
 			diff = memcmp(&addr_type, &ha->type, sizeof(addr_type));
 
 		parent = *ins_point;
@@ -111,7 +112,7 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 			}
 			if (sync) {
 				if (ha->synced && sync_count)
-					return -EEXIST;
+					return -EEXIST;/*已存在*/
 				else
 					ha->synced++;
 			}
@@ -125,10 +126,10 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 	if (!ha)
 		return -ENOMEM;
 
-	rb_link_node(&ha->node, parent, ins_point);
+	rb_link_node(&ha->node, parent, ins_point);/*加入树*/
 	rb_insert_color(&ha->node, &list->tree);
 
-	list_add_tail_rcu(&ha->list, &list->list);
+	list_add_tail_rcu(&ha->list, &list->list);/*加入链表*/
 	list->count++;
 
 	return 0;
@@ -144,11 +145,11 @@ static int __hw_addr_add(struct netdev_hw_addr_list *list,
 }
 
 static int __hw_addr_del_entry(struct netdev_hw_addr_list *list,
-			       struct netdev_hw_addr *ha, bool global,
+			       struct netdev_hw_addr *ha, bool global/*是否移除global标记*/,
 			       bool sync)
 {
 	if (global && !ha->global_use)
-		return -ENOENT;
+		return -ENOENT;/*指明要移除global标记，但未提供globals标记*/
 
 	if (sync && !ha->synced)
 		return -ENOENT;
@@ -160,13 +161,13 @@ static int __hw_addr_del_entry(struct netdev_hw_addr_list *list,
 		ha->synced--;
 
 	if (--ha->refcount)
-		return 0;
+		return 0;/*引用计数减少后未达到0，不释放*/
 
 	rb_erase(&ha->node, &list->tree);
 
 	list_del_rcu(&ha->list);
 	kfree_rcu(ha, rcu_head);
-	list->count--;
+	list->count--;/*总数减少*/
 	return 0;
 }
 
@@ -183,14 +184,15 @@ static struct netdev_hw_addr *__hw_addr_lookup(struct netdev_hw_addr_list *list,
 		int diff = memcmp(addr, ha->addr, addr_len);
 
 		if (diff == 0 && addr_type)
+			/*addr_type不为0，则比对addr type*/
 			diff = memcmp(&addr_type, &ha->type, sizeof(addr_type));
 
 		if (diff < 0)
-			node = node->rb_left;
+			node = node->rb_left;/*左侧*/
 		else if (diff > 0)
-			node = node->rb_right;
+			node = node->rb_right;/*右侧*/
 		else
-			return ha;
+			return ha;/*命中*/
 	}
 
 	return NULL;
@@ -198,7 +200,7 @@ static struct netdev_hw_addr *__hw_addr_lookup(struct netdev_hw_addr_list *list,
 
 static int __hw_addr_del_ex(struct netdev_hw_addr_list *list,
 			    const unsigned char *addr, int addr_len,
-			    unsigned char addr_type, bool global, bool sync)
+			    unsigned char addr_type/*地址类型*/, bool global, bool sync)
 {
 	struct netdev_hw_addr *ha = __hw_addr_lookup(list, addr, addr_len, addr_type);
 
@@ -652,7 +654,7 @@ int dev_addr_del(struct net_device *dev, const unsigned char *addr,
 	 * dev->dev_addr points to that.
 	 */
 	ha = list_first_entry(&dev->dev_addrs.list,
-			      struct netdev_hw_addr, list);
+			      struct netdev_hw_addr, list);/*取链表头*/
 	if (!memcmp(ha->addr, addr, dev->addr_len) &&
 	    ha->type == addr_type && ha->refcount == 1)
 		return -ENOENT;
@@ -870,9 +872,10 @@ int dev_mc_add_excl(struct net_device *dev, const unsigned char *addr)
 
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_add_ex(&dev->mc, addr, dev->addr_len,
-			       NETDEV_HW_ADDR_T_MULTICAST, true, false,
+			       NETDEV_HW_ADDR_T_MULTICAST/*地址类型为组播*/, true/*全局地址*/, false,
 			       0, true);
 	if (!err)
+		/*添加成功，触发rx mode更新*/
 		__dev_set_rx_mode(dev);
 	netif_addr_unlock_bh(dev);
 	return err;
@@ -886,7 +889,7 @@ static int __dev_mc_add(struct net_device *dev, const unsigned char *addr,
 
 	netif_addr_lock_bh(dev);
 	err = __hw_addr_add_ex(&dev->mc, addr, dev->addr_len,
-			       NETDEV_HW_ADDR_T_MULTICAST, global, false,
+			       NETDEV_HW_ADDR_T_MULTICAST/*地址类型为组播*/, global, false,
 			       0, false);
 	if (!err)
 		__dev_set_rx_mode(dev);

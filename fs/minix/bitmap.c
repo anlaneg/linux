@@ -128,6 +128,7 @@ minix_V1_raw_inode(struct super_block *sb, ino_t ino, struct buffer_head **bh)
 	struct minix_inode *p;
 
 	if (!ino || ino > sbi->s_ninodes) {
+		/*ino有误*/
 		printk("Bad inode number on dev %s: %ld is out of range\n",
 		       sb->s_id, (long)ino);
 		return NULL;
@@ -135,12 +136,15 @@ minix_V1_raw_inode(struct super_block *sb, ino_t ino, struct buffer_head **bh)
 	ino--;
 	block = 2 + sbi->s_imap_blocks + sbi->s_zmap_blocks +
 		 ino / MINIX_INODES_PER_BLOCK;
+	/*读取此块内容*/
 	*bh = sb_bread(sb, block);
 	if (!*bh) {
 		printk("Unable to read inode block\n");
 		return NULL;
 	}
+	/*取得此块内容*/
 	p = (void *)(*bh)->b_data;
+	/*取得ino对应的结构体minix_inode*/
 	return p + ino % MINIX_INODES_PER_BLOCK;
 }
 
@@ -184,6 +188,7 @@ static void minix_clear_inode(struct inode *inode)
 	struct buffer_head *bh = NULL;
 
 	if (INODE_VERSION(inode) == MINIX_V1) {
+		/*版本1，清对应inode*/
 		struct minix_inode *raw_inode;
 		raw_inode = minix_V1_raw_inode(inode->i_sb, inode->i_ino, &bh);
 		if (raw_inode) {
@@ -191,6 +196,7 @@ static void minix_clear_inode(struct inode *inode)
 			raw_inode->i_mode = 0;
 		}
 	} else {
+		/*版本2，清对应inode*/
 		struct minix2_inode *raw_inode;
 		raw_inode = minix_V2_raw_inode(inode->i_sb, inode->i_ino, &bh);
 		if (raw_inode) {
@@ -199,6 +205,7 @@ static void minix_clear_inode(struct inode *inode)
 		}
 	}
 	if (bh) {
+		/*标记此页脏*/
 		mark_buffer_dirty(bh);
 		brelse (bh);
 	}
@@ -209,7 +216,7 @@ void minix_free_inode(struct inode * inode)
 	struct super_block *sb = inode->i_sb;
 	struct minix_sb_info *sbi = minix_sb(inode->i_sb);
 	struct buffer_head *bh;
-	int k = sb->s_blocksize_bits + 3;
+	int k = sb->s_blocksize_bits + 3;/*加3的目的是为了将字节换算成bit*/
 	unsigned long ino, bit;
 
 	ino = inode->i_ino;
@@ -217,7 +224,9 @@ void minix_free_inode(struct inode * inode)
 		printk("minix_free_inode: inode 0 or nonexistent inode\n");
 		return;
 	}
+	/*获得ino对应的bit*/
 	bit = ino & ((1<<k) - 1);
+	/*获得ino在s_imap中的偏移量（低k位为在imap数组中的offset)*/
 	ino >>= k;
 	if (ino >= sbi->s_imap_blocks) {
 		printk("minix_free_inode: nonexistent imap in superblock\n");
@@ -228,9 +237,11 @@ void minix_free_inode(struct inode * inode)
 
 	bh = sbi->s_imap[ino];
 	spin_lock(&bitmap_lock);
+	/*此inode不再占用，清除掉bit位*/
 	if (!minix_test_and_clear_bit(bit, bh->b_data))
 		printk("minix_free_inode: bit %lu already cleared\n", bit);
 	spin_unlock(&bitmap_lock);
+	/*标记此buffer dirty*/
 	mark_buffer_dirty(bh);
 }
 
@@ -283,7 +294,7 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode)
 		return ERR_PTR(-ENOSPC);
 	}
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
-	inode->i_ino = j;/*指明inode编号*/
+	inode->i_ino = j;/*指明此inode编号*/
 	/*更新inode修改时间，访问时间，更新时间*/
 	simple_inode_init_ts(inode);
 	inode->i_blocks = 0;

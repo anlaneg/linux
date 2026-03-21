@@ -1522,7 +1522,7 @@ EXPORT_SYMBOL(__breadahead);
  * Context: May sleep waiting for I/O.
  * Return: NULL if the block was unreadable.
  */
-struct buffer_head *__bread_gfp(struct block_device *bdev/*块设备*/, sector_t block/*block编号*/,
+struct buffer_head *__bread_gfp(struct block_device *bdev/*块设备*/, sector_t block/*要读取的block编号*/,
 		unsigned size/*要读取的block大小*/, gfp_t gfp)
 {
 	struct buffer_head *bh;

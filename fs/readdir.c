@@ -87,6 +87,7 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 	struct inode *inode = file_inode(file);
 	int res = -ENOTDIR;
 
+	/*没此回调，返回*/
 	if (!file->f_op->iterate_shared)
 		goto out;
 
@@ -105,6 +106,7 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 	res = -ENOENT;
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
+		/*触发fs的回调，遍历目录*/
 		res = file->f_op->iterate_shared(file, ctx);
 		file->f_pos = ctx->pos;
 		fsnotify_access(file);
@@ -510,8 +512,8 @@ struct compat_getdents_callback {
 	int error;
 };
 
-static bool compat_filldir(struct dir_context *ctx, const char *name, int namlen,
-		loff_t offset, u64 ino, unsigned int d_type)
+static bool compat_filldir(struct dir_context *ctx, const char *name/*文件名称*/, int namlen/*文件名称长度*/,
+		loff_t offset/*ctx偏移量*/, u64 ino/*文件对应的inode*/, unsigned int d_type)
 {
 	struct compat_linux_dirent __user *dirent, *prev;
 	struct compat_getdents_callback *buf =
@@ -545,10 +547,10 @@ static bool compat_filldir(struct dir_context *ctx, const char *name, int namlen
 		goto efault;
 
 	unsafe_put_user(offset, &prev->d_off, efault_end);
-	unsafe_put_user(d_ino, &dirent->d_ino, efault_end);
+	unsafe_put_user(d_ino, &dirent->d_ino, efault_end);/*设置文件inode编号*/
 	unsafe_put_user(reclen, &dirent->d_reclen, efault_end);
 	unsafe_put_user(d_type, (char __user *) dirent + reclen - 1, efault_end);
-	unsafe_copy_dirent_name(dirent->d_name, name, namlen, efault_end);
+	unsafe_copy_dirent_name(dirent->d_name, name, namlen, efault_end);/*文件名称*/
 	user_write_access_end();
 
 	buf->prev_reclen = reclen;
@@ -576,6 +578,7 @@ COMPAT_SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	if (fd_empty(f))
 		return -EBADF;
 
+	/*遍历目录内容*/
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (error >= 0)
 		error = buf.error;

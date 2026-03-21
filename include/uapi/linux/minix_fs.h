@@ -64,11 +64,11 @@ struct minix2_inode {
  * minix super-block data on disk
  */
 struct minix_super_block {
-	__u16 s_ninodes;
+	__u16 s_ninodes;/*inodes总数*/
 	__u16 s_nzones;
-	__u16 s_imap_blocks;
+	__u16 s_imap_blocks;/*inode map占用多少block*/
 	__u16 s_zmap_blocks;
-	__u16 s_firstdatazone;
+	__u16 s_firstdatazone;/*data区首block位置*/
 	__u16 s_log_zone_size;
 	__u32 s_max_size;
 	__u16 s_magic;
@@ -96,8 +96,8 @@ struct minix3_super_block {
 };
 
 struct minix_dir_entry {
-	__u16 inode;
-	char name[];
+	__u16 inode;/*此文件对应的inode*/
+	char name[];/*文件名称*/
 };
 
 /*目录实体*/

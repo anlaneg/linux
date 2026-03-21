@@ -2030,7 +2030,7 @@ void d_instantiate_new(struct dentry *entry, struct inode *inode)
 EXPORT_SYMBOL(d_instantiate_new);
 
 //依据root_inode 构造dentry
-struct dentry *d_make_root(struct inode *root_inode)
+struct dentry *d_make_root(struct inode *root_inode/*根inode*/)
 {
 	struct dentry *res = NULL;
 

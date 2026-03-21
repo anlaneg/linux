@@ -9903,11 +9903,13 @@ void __dev_set_rx_mode(struct net_device *dev)
 	if (!netif_device_present(dev))
 		return;
 
+	/*设备未提供单播filter能力，需要通过混杂来支持*/
 	if (!(dev->priv_flags & IFF_UNICAST_FLT)) {
 		/* Unicast addresses changes may only happen under the rtnl,
 		 * therefore calling __dev_set_promiscuity here is safe.
 		 */
 		if (!netdev_uc_empty(dev) && !dev->uc_promisc) {
+			/*uc队列不为空，且设备未开启uc混杂*/
 			__dev_set_promiscuity(dev, 1, false);
 			dev->uc_promisc = true;
 		} else if (netdev_uc_empty(dev) && dev->uc_promisc) {

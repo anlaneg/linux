@@ -1506,7 +1506,7 @@ static inline size_t readahead_batch_length(struct readahead_control *rac)
 
 static inline unsigned long dir_pages(struct inode *inode)
 {
-    /*inode大小按页对齐*/
+    /*此inode的内容对应多少page*/
 	return (unsigned long)(inode->i_size + PAGE_SIZE - 1) >>
 			       PAGE_SHIFT;
 }

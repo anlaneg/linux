@@ -38,6 +38,7 @@
 #define INR_OPEN_MAX 4096	/* Hard limit for nfile rlimits */
 
 #define BLOCK_SIZE_BITS 10
+/*指明block数目*/
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
 
 /* flags for integrity meta */

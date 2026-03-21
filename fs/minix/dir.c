@@ -20,9 +20,9 @@ typedef struct minix3_dir_entry minix3_dirent;
 static int minix_readdir(struct file *, struct dir_context *);
 
 const struct file_operations minix_dir_operations = {
-	.llseek		= generic_file_llseek,
-	.read		= generic_read_dir,
-	.iterate_shared	= minix_readdir,
+	.llseek		= generic_file_llseek,/*更新offset*/
+	.read		= generic_read_dir,/*读取目录内容*/
+	.iterate_shared	= minix_readdir,/*读取目录*/
 	.fsync		= generic_file_fsync,
 };
 
@@ -35,6 +35,7 @@ minix_last_byte(struct inode *inode, unsigned long page_nr)
 {
 	unsigned last_byte = PAGE_SIZE;
 
+	/*取page_nr号页对应的可读内容长度*/
 	if (page_nr == (inode->i_size >> PAGE_SHIFT))
 		last_byte = inode->i_size & (PAGE_SIZE - 1);
 	return last_byte;
@@ -76,22 +77,25 @@ static void *dir_get_folio(struct inode *dir, unsigned long n/*页序号*/,
 	return kmap_local_folio(folio, 0);
 }
 
+/*取下一个direntry起始地址*/
 static inline void *minix_next_entry(void *de, struct minix_sb_info *sbi)
 {
 	return (void*)((char*)de + sbi->s_dirsize);
 }
 
+/*读取目录内容*/
 static int minix_readdir(struct file *file, struct dir_context *ctx)
 {
-	struct inode *inode = file_inode(file);
+	struct inode *inode = file_inode(file);/*file对应的Inode*/
 	struct super_block *sb = inode->i_sb;
 	struct minix_sb_info *sbi = minix_sb(sb);
 	unsigned chunk_size = sbi->s_dirsize;
 	unsigned long npages = dir_pages(inode);/*目录占有多少page*/
-	unsigned long pos = ctx->pos;
+	unsigned long pos = ctx->pos;/*当前位置*/
 	unsigned offset;
 	unsigned long n;
 
+	/*位置按chunk_size对齐*/
 	ctx->pos = pos = ALIGN(pos, chunk_size);
 	if (pos >= inode->i_size)
 	    /*pos超过了inode大小，返回0*/
@@ -100,28 +104,35 @@ static int minix_readdir(struct file *file, struct dir_context *ctx)
 	offset = pos & ~PAGE_MASK;/*pos在页中的偏移*/
 	n = pos >> PAGE_SHIFT;/*pos对应的页号*/
 
+	/*遍历所有页*/
 	for ( ; n < npages; n++, offset = 0) {
 		char *p, *kaddr, *limit;
 		struct folio *folio;
 
+		/*取n号页内容*/
 		kaddr = dir_get_folio(inode, n, &folio);
 		if (IS_ERR(kaddr))
 			continue;
 		p = kaddr+offset;/*指向对应的dirent*/
+		/*最后一个dirent的起始指针*/
 		limit = kaddr + minix_last_byte(inode, n) - chunk_size;
+		/*遍历此页中包含的所有dirent*/
 		for ( ; p <= limit; p = minix_next_entry(p, sbi)) {
 			const char *name;
 			__u32 inumber;
 			if (sbi->s_version == MINIX_V3) {
+				/*3号版本采用此结构*/
 				minix3_dirent *de3 = (minix3_dirent *)p;
 				name = de3->name;
 				inumber = de3->inode;
 	 		} else {
+	 			/*其它版本采用此结构*/
 				minix_dirent *de = (minix_dirent *)p;
 				name = de->name;
 				inumber = de->inode;
 			}
 			if (inumber) {
+				/*取得文件名称*/
 				unsigned l = strnlen(name, sbi->s_namelen);
 				/*调用ctx->actor函数*/
 				if (!dir_emit(ctx, name, l,
@@ -210,6 +221,7 @@ found:
 	return (minix_dirent *)p;/*返回对应的dirent指针*/
 }
 
+/*此inode与dentry相互关联*/
 int minix_add_link(struct dentry *dentry, struct inode *inode)
 {
     /*取dentry父节点*/

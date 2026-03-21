@@ -3192,6 +3192,7 @@ union ionic_dev_regs {
 	__le32 words[1024];
 };
 
+/*用于定义adminq command*/
 union ionic_adminq_cmd {
 	struct ionic_admin_cmd cmd;
 	struct ionic_nop_cmd nop;

@@ -6,6 +6,7 @@
 #include <linux/pagemap.h>
 #include <linux/minix_fs.h>
 
+/*取inode版本*/
 #define INODE_VERSION(inode)	minix_sb(inode->i_sb)->s_version
 #define MINIX_V1		0x0001		/* original minix fs */
 #define MINIX_V2		0x0002		/* minix V2 fs */
@@ -26,15 +27,15 @@ struct minix_inode_info {
  * minix super-block data in memory
  */
 struct minix_sb_info {
-	unsigned long s_ninodes;/**/
+	unsigned long s_ninodes;/*inode数目总数*/
 	unsigned long s_nzones;
-	unsigned long s_imap_blocks;/*imap的block数目*/
-	unsigned long s_zmap_blocks;/*zmap的block数目*/
+	unsigned long s_imap_blocks;/*imap占用的block数目（s_imap数组长度）*/
+	unsigned long s_zmap_blocks;/*zmap占用的block数目（s_zmap数组长度）*/
 	unsigned long s_firstdatazone;/*指明首个block起始位置*/
 	unsigned long s_log_zone_size;
-	int s_dirsize;
-	int s_namelen;
-	/*指向s_imap_blocks个buffer指针，内容为inode bitmap,用于指明inode占用情况*/
+	int s_dirsize;/*目录占用的大小*/
+	int s_namelen;/*支持的文件名称长度*/
+	/*指向s_imap_blocks个buffer指针，内容为inode bitmap,用于指明所有inode占用情况*/
 	struct buffer_head ** s_imap;
 	/*指向s_zmap_blocks个buffer指针，内容为block bitmap,用于指明block占用情况*/
 	struct buffer_head ** s_zmap;
@@ -42,7 +43,7 @@ struct minix_sb_info {
 	struct buffer_head * s_sbh;
 	struct minix_super_block * s_ms;
 	unsigned short s_mount_state;
-	unsigned short s_version;
+	unsigned short s_version;/*版本号*/
 };
 
 struct inode *minix_iget(struct super_block *, unsigned long);

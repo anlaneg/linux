@@ -36,8 +36,8 @@ static struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry, un
 	return d_splice_alias(inode, dentry);
 }
 
-static int minix_mknod(struct mnt_idmap *idmap, struct inode *dir,
-		       struct dentry *dentry, umode_t mode, dev_t rdev)
+static int minix_mknod(struct mnt_idmap *idmap, struct inode *dir/*目录对应的inode*/,
+		       struct dentry *dentry/*新建的inode对应的dentry*/, umode_t mode/*文件模式*/, dev_t rdev)
 {
 	struct inode *inode;
 
@@ -49,14 +49,17 @@ static int minix_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 
+	/*依据Mode设置ops*/
 	minix_set_inode(inode, rdev);
 	mark_inode_dirty(inode);
+	/*此inode与dentry关联*/
 	return add_nondir(dentry, inode);
 }
 
 static int minix_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
 			 struct file *file, umode_t mode)
 {
+	/*创建inode*/
 	struct inode *inode = minix_new_inode(dir, mode);
 
 	if (IS_ERR(inode))
@@ -67,7 +70,7 @@ static int minix_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
 	return finish_open_simple(file, 0);
 }
 
-static int minix_create(struct mnt_idmap *idmap, struct inode *dir,
+static int minix_create(struct mnt_idmap *idmap, struct inode *dir/*目录对应的inode*/,
 			struct dentry *dentry, umode_t mode, bool excl)
 {
 	return minix_mknod(&nop_mnt_idmap, dir, dentry, mode, 0);
@@ -257,7 +260,7 @@ out:
  * directories can handle most operations...
  */
 const struct inode_operations minix_dir_inode_operations = {
-	.create		= minix_create,
+	.create		= minix_create,/*创建inode*/
 	.lookup		= minix_lookup,
 	.link		= minix_link,
 	.unlink		= minix_unlink,

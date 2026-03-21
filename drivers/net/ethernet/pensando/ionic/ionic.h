@@ -67,7 +67,7 @@ struct ionic {
 
 struct ionic_admin_ctx {
 	struct completion work;
-	union ionic_adminq_cmd cmd;
+	union ionic_adminq_cmd cmd;/*请求的命令*/
 	union ionic_adminq_comp comp;
 };
 
