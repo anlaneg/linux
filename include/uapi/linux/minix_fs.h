@@ -33,13 +33,13 @@
  * Note the 8-bit gid and atime and ctime.
  */
 struct minix_inode {
-	__u16 i_mode;
-	__u16 i_uid;
-	__u32 i_size;
+	__u16 i_mode;/*文件类型，权限*/
+	__u16 i_uid;/*所属用户*/
+	__u32 i_size;/*文件大小*/
 	__u32 i_time;
-	__u8  i_gid;
+	__u8  i_gid;/*所属组id*/
 	__u8  i_nlinks;
-	__u16 i_zone[9];
+	__u16 i_zone[9];/*0-6号zone均指向真实的block块（即6*block_size)*/
 };
 
 /*
@@ -66,9 +66,9 @@ struct minix2_inode {
 struct minix_super_block {
 	__u16 s_ninodes;/*inodes总数*/
 	__u16 s_nzones;
-	__u16 s_imap_blocks;/*inode map占用多少block*/
-	__u16 s_zmap_blocks;
-	__u16 s_firstdatazone;/*data区首block位置*/
+	__u16 s_imap_blocks;/*inode block map占用多少block*/
+	__u16 s_zmap_blocks;/*data block map占用多少block*/
+	__u16 s_firstdatazone;/*data block区首block位置*/
 	__u16 s_log_zone_size;
 	__u32 s_max_size;
 	__u16 s_magic;

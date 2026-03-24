@@ -1832,7 +1832,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		goto out;
 	}
 
-	/*检查port是否有效*/
+	/*检查port id是否有效*/
 	if ((cmd->base.attr_mask & IB_QP_PORT) &&
 	    !rdma_is_port_valid(qp->device, cmd->base.port_num)) {
 		ret = -EINVAL;
@@ -1920,6 +1920,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 	if (cmd->base.attr_mask & IB_QP_PATH_MIG_STATE)
 		attr->path_mig_state = cmd->base.path_mig_state;
 	if (cmd->base.attr_mask & IB_QP_QKEY) {
+		/*更新qkey*/
 		if (cmd->base.qkey & IB_QP_SET_QKEY &&
 		    !(rdma_nl_get_privileged_qkey() ||
 		      rdma_uattrs_has_raw_cap(attrs))) {
@@ -1929,8 +1930,10 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		attr->qkey = cmd->base.qkey;
 	}
 	if (cmd->base.attr_mask & IB_QP_RQ_PSN)
+		/*设置rq psn*/
 		attr->rq_psn = cmd->base.rq_psn;
 	if (cmd->base.attr_mask & IB_QP_SQ_PSN)
+		/*设置sq psn*/
 		attr->sq_psn = cmd->base.sq_psn;
 	if (cmd->base.attr_mask & IB_QP_DEST_QPN)
 		attr->dest_qp_num = cmd->base.dest_qp_num;/*设置目标qp对应的qpn*/
@@ -1951,6 +1954,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 	if (cmd->base.attr_mask & IB_QP_TIMEOUT)
 		attr->timeout = cmd->base.timeout;
 	if (cmd->base.attr_mask & IB_QP_RETRY_CNT)
+		/*设置重传次数*/
 		attr->retry_cnt = cmd->base.retry_cnt;
 	if (cmd->base.attr_mask & IB_QP_RNR_RETRY)
 		attr->rnr_retry = cmd->base.rnr_retry;

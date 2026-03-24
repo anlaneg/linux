@@ -771,6 +771,7 @@ struct ib_uverbs_modify_qp {
 };
 
 struct ib_uverbs_ex_modify_qp {
+	/*待修改的qp属性*/
 	struct ib_uverbs_modify_qp base;
 	__u32	rate_limit;
 	__u32	reserved;
