@@ -313,7 +313,7 @@ static int input_get_disposition(struct input_dev *dev,
 
 	case EV_REP:
 		if (code <= REP_MAX && value >= 0 && dev->rep[code] != value) {
-			dev->rep[code] = value;
+			dev->rep[code] = value;/*在此处更新rep对应的CODE取值*/
 			disposition = INPUT_PASS_TO_ALL;
 		}
 		break;

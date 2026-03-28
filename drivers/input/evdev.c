@@ -1056,11 +1056,12 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 		return put_user(EV_VERSION, ip);/*取版本号*/
 
 	case EVIOCGID:
+		/*取设备ID信息*/
 		if (copy_to_user(p, &dev->id, sizeof(struct input_id)))
 			return -EFAULT;
 		return 0;
 
-	case EVIOCGREP:
+	case EVIOCGREP:/*取设备repeat配置(1.是否支持;2.repeat生效前延迟多久;3.repeat生效后多周repeat一次;)*/
 		if (!test_bit(EV_REP, dev->evbit))
 			return -ENOSYS;
 		if (put_user(dev->rep[REP_DELAY], ip))
@@ -1071,12 +1072,13 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 
 	case EVIOCSREP:
 		if (!test_bit(EV_REP, dev->evbit))
-			return -ENOSYS;
+			return -ENOSYS;/*设备不支持设置rep事件*/
 		if (get_user(u, ip))
 			return -EFAULT;
 		if (get_user(v, ip + 1))
 			return -EFAULT;
 
+		/*设置repeat两个时间*/
 		input_inject_event(&evdev->handle, EV_REP, REP_DELAY, u);
 		input_inject_event(&evdev->handle, EV_REP, REP_PERIOD, v);
 
@@ -1179,6 +1181,7 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 					    SW_MAX, size, p, compat_mode);
 
 	case EVIOCGNAME(0):
+			/*取设备名称*/
 		return str_to_user(dev->name, size, p);
 
 	case EVIOCGPHYS(0):
@@ -1218,7 +1221,7 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 				return -EINVAL;
 
 			t = _IOC_NR(cmd) & ABS_MAX;
-			abs = dev->absinfo[t];
+			abs = dev->absinfo[t];/*取t对应的ABS配置信息*/
 
 			if (copy_to_user(p, &abs, min_t(size_t,
 					size, sizeof(struct input_absinfo))))
