@@ -441,7 +441,7 @@ static const struct super_operations bdev_sops = {
 	.statfs = simple_statfs,
 	.alloc_inode = bdev_alloc_inode,/*申请bdev对应的inode*/
 	.free_inode = bdev_free_inode,/*释放bdev对应的inode*/
-	.drop_inode = generic_delete_inode,
+	.drop_inode = inode_just_drop,
 	.evict_inode = bdev_evict_inode,
 };
 
