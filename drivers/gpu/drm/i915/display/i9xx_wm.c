@@ -3,7 +3,10 @@
  * Copyright © 2023 Intel Corporation
  */
 
-#include "i915_drv.h"
+#include <linux/iopoll.h>
+
+#include <drm/drm_print.h>
+
 #include "i915_reg.h"
 #include "i9xx_wm.h"
 #include "i9xx_wm_regs.h"
@@ -13,6 +16,8 @@
 #include "intel_display.h"
 #include "intel_display_regs.h"
 #include "intel_display_trace.h"
+#include "intel_display_utils.h"
+#include "intel_dram.h"
 #include "intel_fb.h"
 #include "intel_mchbar_regs.h"
 #include "intel_wm.h"
@@ -85,7 +90,8 @@ static const struct cxsr_latency cxsr_latency_table[] = {
 
 static const struct cxsr_latency *pnv_get_cxsr_latency(struct intel_display *display)
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
+	const struct dram_info *dram_info = intel_dram_info(display);
+	bool is_ddr3 = dram_info->type == INTEL_DRAM_DDR3;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(cxsr_latency_table); i++) {
@@ -93,15 +99,16 @@ static const struct cxsr_latency *pnv_get_cxsr_latency(struct intel_display *dis
 		bool is_desktop = !display->platform.mobile;
 
 		if (is_desktop == latency->is_desktop &&
-		    i915->is_ddr3 == latency->is_ddr3 &&
-		    DIV_ROUND_CLOSEST(i915->fsb_freq, 1000) == latency->fsb_freq &&
-		    DIV_ROUND_CLOSEST(i915->mem_freq, 1000) == latency->mem_freq)
+		    is_ddr3 == latency->is_ddr3 &&
+		    DIV_ROUND_CLOSEST(dram_info->fsb_freq, 1000) == latency->fsb_freq &&
+		    DIV_ROUND_CLOSEST(dram_info->mem_freq, 1000) == latency->mem_freq)
 			return latency;
 	}
 
 	drm_dbg_kms(display->drm,
-		    "Could not find CxSR latency for DDR%s, FSB %u kHz, MEM %u kHz\n",
-		    i915->is_ddr3 ? "3" : "2", i915->fsb_freq, i915->mem_freq);
+		    "Could not find CxSR latency for %s, FSB %u kHz, MEM %u kHz\n",
+		    intel_dram_type_str(dram_info->type),
+		    dram_info->fsb_freq, dram_info->mem_freq);
 
 	return NULL;
 }
@@ -109,6 +116,7 @@ static const struct cxsr_latency *pnv_get_cxsr_latency(struct intel_display *dis
 static void chv_set_memory_dvfs(struct intel_display *display, bool enable)
 {
 	u32 val;
+	int ret;
 
 	vlv_punit_get(display->drm);
 
@@ -121,8 +129,10 @@ static void chv_set_memory_dvfs(struct intel_display *display, bool enable)
 	val |= FORCE_DDR_FREQ_REQ_ACK;
 	vlv_punit_write(display->drm, PUNIT_REG_DDR_SETUP2, val);
 
-	if (wait_for((vlv_punit_read(display->drm, PUNIT_REG_DDR_SETUP2) &
-		      FORCE_DDR_FREQ_REQ_ACK) == 0, 3))
+	ret = poll_timeout_us(val = vlv_punit_read(display->drm, PUNIT_REG_DDR_SETUP2),
+			      (val & FORCE_DDR_FREQ_REQ_ACK) == 0,
+			      500, 3000, false);
+	if (ret)
 		drm_err(display->drm,
 			"timed out waiting for Punit DDR DVFS request\n");
 
@@ -1853,8 +1863,7 @@ static void vlv_atomic_update_fifo(struct intel_atomic_state *state,
 				   struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(crtc);
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	struct intel_uncore *uncore = &dev_priv->uncore;
+	struct intel_uncore *uncore = to_intel_uncore(display->drm);
 	const struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	const struct vlv_fifo_state *fifo_state =
@@ -2286,12 +2295,11 @@ static void i9xx_update_wm(struct intel_display *display)
 
 	crtc = single_enabled_crtc(display);
 	if (display->platform.i915gm && crtc) {
-		struct drm_gem_object *obj;
-
-		obj = intel_fb_bo(crtc->base.primary->state->fb);
+		const struct drm_framebuffer *fb =
+			crtc->base.primary->state->fb;
 
 		/* self-refresh seems busted with untiled */
-		if (!intel_bo_is_tiled(obj))
+		if (fb->modifier == DRM_FORMAT_MOD_LINEAR)
 			crtc = NULL;
 	}
 
@@ -2734,12 +2742,12 @@ static void ilk_compute_wm_level(struct intel_display *display,
 
 static void hsw_read_wm_latency(struct intel_display *display, u16 wm[])
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
+	struct intel_uncore *uncore = to_intel_uncore(display->drm);
 	u64 sskpd;
 
 	display->wm.num_levels = 5;
 
-	sskpd = intel_uncore_read64(&i915->uncore, MCH_SSKPD);
+	sskpd = intel_uncore_read64(uncore, MCH_SSKPD);
 
 	wm[0] = REG_FIELD_GET64(SSKPD_NEW_WM0_MASK_HSW, sskpd);
 	if (wm[0] == 0)
@@ -2752,12 +2760,12 @@ static void hsw_read_wm_latency(struct intel_display *display, u16 wm[])
 
 static void snb_read_wm_latency(struct intel_display *display, u16 wm[])
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
+	struct intel_uncore *uncore = to_intel_uncore(display->drm);
 	u32 sskpd;
 
 	display->wm.num_levels = 4;
 
-	sskpd = intel_uncore_read(&i915->uncore, MCH_SSKPD);
+	sskpd = intel_uncore_read(uncore, MCH_SSKPD);
 
 	wm[0] = REG_FIELD_GET(SSKPD_WM0_MASK_SNB, sskpd);
 	wm[1] = REG_FIELD_GET(SSKPD_WM1_MASK_SNB, sskpd);
@@ -2767,12 +2775,12 @@ static void snb_read_wm_latency(struct intel_display *display, u16 wm[])
 
 static void ilk_read_wm_latency(struct intel_display *display, u16 wm[])
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
+	struct intel_uncore *uncore = to_intel_uncore(display->drm);
 	u32 mltr;
 
 	display->wm.num_levels = 3;
 
-	mltr = intel_uncore_read(&i915->uncore, MLTR_ILK);
+	mltr = intel_uncore_read(uncore, MLTR_ILK);
 
 	/* ILK primary LP0 latency is 700 ns */
 	wm[0] = 7;
@@ -3902,6 +3910,7 @@ static void vlv_wm_get_hw_state(struct intel_display *display)
 	struct vlv_wm_values *wm = &display->wm.vlv;
 	struct intel_crtc *crtc;
 	u32 val;
+	int ret;
 
 	vlv_read_wm_values(display, wm);
 
@@ -3928,8 +3937,10 @@ static void vlv_wm_get_hw_state(struct intel_display *display)
 		val |= FORCE_DDR_FREQ_REQ_ACK;
 		vlv_punit_write(display->drm, PUNIT_REG_DDR_SETUP2, val);
 
-		if (wait_for((vlv_punit_read(display->drm, PUNIT_REG_DDR_SETUP2) &
-			      FORCE_DDR_FREQ_REQ_ACK) == 0, 3)) {
+		ret = poll_timeout_us(val = vlv_punit_read(display->drm, PUNIT_REG_DDR_SETUP2),
+				      (val & FORCE_DDR_FREQ_REQ_ACK) == 0,
+				      500, 3000, false);
+		if (ret) {
 			drm_dbg_kms(display->drm,
 				    "Punit not acking DDR DVFS request, "
 				    "assuming DDR DVFS is disabled\n");

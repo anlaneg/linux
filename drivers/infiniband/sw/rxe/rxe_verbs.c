@@ -1315,7 +1315,7 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	int err;
 
 	/*申请mr*/
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
@@ -1365,7 +1365,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd, u64 start/*内存起始
 	}
 
 	/*申请一个rxe_mr*/
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
@@ -1455,7 +1455,7 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type/*m
 	}
 
 	/*申请mr结构体*/
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 

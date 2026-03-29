@@ -12,6 +12,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/mutex.h>
+#include <linux/string.h>
 
 #include "internals.h"
 
@@ -47,6 +48,8 @@ static int show_irq_affinity(int type, struct seq_file *m)
 {
 	struct irq_desc *desc = irq_to_desc((long)m->private);
 	const struct cpumask *mask;
+
+	guard(raw_spinlock_irq)(&desc->lock);
 
 	switch (type) {
 	case AFFINITY:
@@ -316,7 +319,7 @@ void register_handler_proc(unsigned int irq, struct irqaction *action)
 		//desc没有创建成功目录，action已有目录，action没有名称或者action名称不唯一，均直接返回
 		return;
 
-	snprintf(name, MAX_NAMELEN, "%s", action->name);
+	strscpy(name, action->name);
 
 	/* create /proc/irq/1234/handler/ */
 	//创建action对应的名称，在此中断对应的/proc目录下

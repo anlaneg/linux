@@ -109,16 +109,15 @@ int ovs_flow_tbl_count(const struct flow_table *table)
 
 static void flow_free(struct sw_flow *flow)
 {
-	int cpu;
+	unsigned int cpu;
 
 	if (ovs_identifier_is_key(&flow->id))
 		kfree(flow->id.unmasked_key);
 	if (flow->sf_acts)
 		ovs_nla_free_flow_actions((struct sw_flow_actions __force *)
 					  flow->sf_acts);
-	/* We open code this to make sure cpu 0 is always considered */
-	for (cpu = 0; cpu < nr_cpu_ids;
-	     cpu = cpumask_next(cpu, flow->cpu_used_mask)) {
+
+	for_each_cpu(cpu, flow->cpu_used_mask) {
 		if (flow->stats[cpu])
 			kmem_cache_free(flow_stats_cache,
 					(struct sw_flow_stats __force *)flow->stats[cpu]);
@@ -154,15 +153,14 @@ static void __table_instance_destroy(struct table_instance *ti)
 //申请并初始化table_instance
 static struct table_instance *table_instance_alloc(int new_size)
 {
-	struct table_instance *ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	struct table_instance *ti = kmalloc_obj(*ti);
 	int i;
 
 	if (!ti)
 		return NULL;
 
 	//初始化桶
-	ti->buckets = kvmalloc_array(new_size, sizeof(struct hlist_head),
-				     GFP_KERNEL);
+	ti->buckets = kvmalloc_objs(struct hlist_head, new_size);
 	if (!ti->buckets) {
 		kfree(ti);
 		return NULL;
@@ -375,7 +373,7 @@ static struct mask_cache *tbl_mask_cache_alloc(u32 size)
 	    (size * sizeof(struct mask_cache_entry)) > PCPU_MIN_UNIT_SIZE)
 		return NULL;
 
-	new = kzalloc(sizeof(*new), GFP_KERNEL);
+	new = kzalloc_obj(*new);
 	if (!new)
 		return NULL;
 
@@ -991,7 +989,7 @@ static struct sw_flow_mask *mask_alloc(void)
 {
 	struct sw_flow_mask *mask;
 
-	mask = kmalloc(sizeof(*mask), GFP_KERNEL);
+	mask = kmalloc_obj(*mask);
 	if (mask)
 		mask->ref_count = 1;
 
@@ -1144,8 +1142,7 @@ void ovs_flow_masks_rebalance(struct flow_table *table)
 	int i;
 
 	/* Build array of all current entries with use counters. */
-	masks_and_count = kmalloc_array(ma->max, sizeof(*masks_and_count),
-					GFP_KERNEL);
+	masks_and_count = kmalloc_objs(*masks_and_count, ma->max);
 	if (!masks_and_count)
 		return;
 

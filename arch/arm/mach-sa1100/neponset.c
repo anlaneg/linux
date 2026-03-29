@@ -126,7 +126,7 @@ void neponset_ncr_frob(unsigned int mask, unsigned int val)
 	unsigned long m = mask, v = val;
 
 	if (nep)
-		n->gpio[0]->set_multiple_rv(n->gpio[0], &m, &v);
+		n->gpio[0]->set_multiple(n->gpio[0], &m, &v);
 	else
 		WARN(1, "nep unset\n");
 }
@@ -276,7 +276,7 @@ static int neponset_probe(struct platform_device *dev)
 		goto err_alloc;
 	}
 
-	d = kzalloc(sizeof(*d), GFP_KERNEL);
+	d = kzalloc_obj(*d);
 	if (!d) {
 		ret = -ENOMEM;
 		goto err_alloc;

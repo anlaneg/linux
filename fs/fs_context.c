@@ -24,21 +24,6 @@
 #include "mount.h"
 #include "internal.h"
 
-enum legacy_fs_param {
-	LEGACY_FS_UNSET_PARAMS,
-	LEGACY_FS_MONOLITHIC_PARAMS,
-	LEGACY_FS_INDIVIDUAL_PARAMS,
-};
-
-struct legacy_fs_context {
-	/*mount时传入的选项参数*/
-	char			*legacy_data;	/* Data page for legacy filesystems */
-	size_t			data_size;/*legacy_data参数长度*/
-	enum legacy_fs_param	param_type;/*legacy_parse_param函数对应的为LEGACY_FS_INDIVIDUAL_PARAMS类型*/
-};
-
-static int legacy_init_fs_context(struct fs_context *fc);
-
 static const struct constant_table common_set_sb_flag[] = {
 	{ "dirsync",	SB_DIRSYNC },
 	{ "lazytime",	SB_LAZYTIME },
@@ -178,14 +163,13 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 EXPORT_SYMBOL(vfs_parse_fs_param);
 
 /**
- * vfs_parse_fs_string - Convenience function to just parse a string.
+ * vfs_parse_fs_qstr - Convenience function to just parse a string.
  * @fc: Filesystem context.
  * @key: Parameter name.
  * @value: Default value.
- * @v_size: Maximum number of bytes in the value.
  */
-int vfs_parse_fs_string(struct fs_context *fc, const char *key,
-			const char *value, size_t v_size/*value长度*/)
+int vfs_parse_fs_qstr(struct fs_context *fc, const char *key,
+			const struct qstr *value/*value长度*/)
 {
 	int ret;
 
@@ -193,12 +177,12 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 	struct fs_parameter param = {
 		.key	= key,
 		.type	= fs_value_is_flag,
-		.size	= v_size,
+		.size	= value ? value->len : 0,
 	};
 
 	/*复制value字符串，填充param*/
 	if (value) {
-		param.string = kmemdup_nul(value, v_size, GFP_KERNEL);
+		param.string = kmemdup_nul(value->name, value->len, GFP_KERNEL);
 		if (!param.string)
 			return -ENOMEM;
 		param.type = fs_value_is_string;/*变更为string类型*/
@@ -209,7 +193,7 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 	kfree(param.string);
 	return ret;
 }
-EXPORT_SYMBOL(vfs_parse_fs_string);
+EXPORT_SYMBOL(vfs_parse_fs_qstr);
 
 /**
  * vfs_parse_monolithic_sep - Parse key[=val][,key[=val]]* mount data
@@ -240,7 +224,6 @@ int vfs_parse_monolithic_sep(struct fs_context *fc, void *data/*整块的参数*
 	//按','号分隔options,并进行遍历
 	while ((key = sep(&options)) != NULL) {
 		if (*key) {
-			size_t v_len = 0;
 			/*将这个串按key=value格式解释*/
 			char *value = strchr(key, '=');
 
@@ -249,10 +232,9 @@ int vfs_parse_monolithic_sep(struct fs_context *fc, void *data/*整块的参数*
 				if (unlikely(value == key))
 					continue;
 				*value++ = 0;/*将'='替换为'\0'*/
-				v_len = strlen(value);/*value的长度*/
 			}
 			//解析单个key,value参数
-			ret = vfs_parse_fs_string(fc, key, value, v_len);
+			ret = vfs_parse_fs_string(fc, key, value);
 			if (ret < 0)
 				break;
 		}
@@ -305,12 +287,11 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 				      enum fs_context_purpose purpose)
 {
 	/*创建并初始化fs_context*/
-	int (*init_fs_context)(struct fs_context *);
 	struct fs_context *fc;
 	int ret = -ENOMEM;
 
 	//申请fs context
-	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL_ACCOUNT);
+	fc = kzalloc_obj(struct fs_context, GFP_KERNEL_ACCOUNT);
 	if (!fc)
 		return ERR_PTR(-ENOMEM);
 
@@ -340,14 +321,8 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 		break;
 	}
 
-	/* TODO: Make all filesystems support this unconditionally */
-	init_fs_context = fc->fs_type->init_fs_context;
-	if (!init_fs_context)
-	    /*如果文件系统(fs_type)未提供此回调，则使用默认值*/
-		init_fs_context = legacy_init_fs_context;
-
 	/*通过函数使各fs初始化刚申请的fc*/
-	ret = init_fs_context(fc);
+	ret = fc->fs_type->init_fs_context(fc);
 	if (ret < 0)
 		goto err_fc;
 	//标记需要调用ops->free函数
@@ -413,8 +388,6 @@ void fc_drop_locked(struct fs_context *fc)
 	fc->root = NULL;
 	deactivate_locked_super(sb);
 }
-
-static void legacy_fs_context_free(struct fs_context *fc);
 
 /**
  * vfs_dup_fs_context - Duplicate a filesystem context.
@@ -574,203 +547,6 @@ void put_fs_context(struct fs_context *fc)
 }
 EXPORT_SYMBOL(put_fs_context);
 
-/*
- * Free the config for a filesystem that doesn't support fs_context.
- */
-static void legacy_fs_context_free(struct fs_context *fc)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-
-	if (ctx) {
-		if (ctx->param_type == LEGACY_FS_INDIVIDUAL_PARAMS)
-			kfree(ctx->legacy_data);
-		kfree(ctx);
-	}
-}
-
-/*
- * Duplicate a legacy config.
- */
-static int legacy_fs_context_dup(struct fs_context *fc, struct fs_context *src_fc)
-{
-	struct legacy_fs_context *ctx;
-	struct legacy_fs_context *src_ctx = src_fc->fs_private;
-
-	ctx = kmemdup(src_ctx, sizeof(*src_ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
-
-	if (ctx->param_type == LEGACY_FS_INDIVIDUAL_PARAMS) {
-		/*复制legacy_data(挂载参数）*/
-		ctx->legacy_data = kmemdup(src_ctx->legacy_data,
-					   src_ctx->data_size, GFP_KERNEL);
-		if (!ctx->legacy_data) {
-			kfree(ctx);
-			return -ENOMEM;
-		}
-	}
-
-	fc->fs_private = ctx;
-	return 0;
-}
-
-/*
- * Add a parameter to a legacy config.  We build up a comma-separated list of
- * options.
- */
-static int legacy_parse_param(struct fs_context *fc, struct fs_parameter *param)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-	unsigned int size = ctx->data_size;
-	size_t len = 0;
-	int ret;
-
-	/*处理source参数用*/
-	ret = vfs_parse_fs_param_source(fc, param);
-	if (ret != -ENOPARAM)
-		return ret;
-
-	/*不得为此类型*/
-	if (ctx->param_type == LEGACY_FS_MONOLITHIC_PARAMS)
-		return invalf(fc, "VFS: Legacy: Can't mix monolithic and individual options");
-
-	switch (param->type) {
-	case fs_value_is_string:
-		len = 1 + param->size;
-		fallthrough;
-	case fs_value_is_flag:
-		len += strlen(param->key);
-		break;
-	default:
-		/*只容许以上两种参数类型*/
-		return invalf(fc, "VFS: Legacy: Parameter type for '%s' not supported",
-			      param->key);
-	}
-
-	if (size + len + 2 > PAGE_SIZE)
-		/*参数内容过长*/
-		return invalf(fc, "VFS: Legacy: Cumulative options too large");
-	if (strchr(param->key, ',') ||
-	    (param->type == fs_value_is_string &&
-	     memchr(param->string, ',', param->size)))
-		/*key，value中不得包含有','符*/
-		return invalf(fc, "VFS: Legacy: Option '%s' contained comma",
-			      param->key);
-
-	/*初始化legacy_data*/
-	if (!ctx->legacy_data) {
-		ctx->legacy_data = kmalloc(PAGE_SIZE, GFP_KERNEL);
-		if (!ctx->legacy_data)
-			return -ENOMEM;
-	}
-
-	if (size)
-		ctx->legacy_data[size++] = ',';
-	len = strlen(param->key);
-	memcpy(ctx->legacy_data + size, param->key, len);/*将key写入到ctx->legacy_data*/
-	size += len;
-	if (param->type == fs_value_is_string) {
-		ctx->legacy_data[size++] = '=';
-		memcpy(ctx->legacy_data + size, param->string, param->size);/*将value写入到ctx->legacy_data*/
-		size += param->size;
-	}
-	ctx->legacy_data[size] = '\0';
-	ctx->data_size = size;
-	ctx->param_type = LEGACY_FS_INDIVIDUAL_PARAMS;
-	return 0;
-}
-
-/*
- * Add monolithic mount data.
- */
-static int legacy_parse_monolithic(struct fs_context *fc, void *data)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-
-	if (ctx->param_type != LEGACY_FS_UNSET_PARAMS) {
-		pr_warn("VFS: Can't mix monolithic and individual options\n");
-		return -EINVAL;
-	}
-
-	ctx->legacy_data = data;
-	ctx->param_type = LEGACY_FS_MONOLITHIC_PARAMS;
-	if (!ctx->legacy_data)
-		return 0;
-
-	if (fc->fs_type->fs_flags & FS_BINARY_MOUNTDATA)
-		return 0;
-	return security_sb_eat_lsm_opts(ctx->legacy_data, &fc->security);
-}
-
-/*
- * Get a mountable root with the legacy mount command.
- */
-static int legacy_get_tree(struct fs_context *fc)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-	struct super_block *sb;
-	struct dentry *root;
-
-	//调用fs_type的mount函数进行挂载并返回root节点
-	root = fc->fs_type->mount(fc->fs_type, fc->sb_flags,
-				      fc->source, ctx->legacy_data);
-	if (IS_ERR(root))
-		return PTR_ERR(root);
-
-	/*sb必须为非空*/
-	sb = root->d_sb;
-	BUG_ON(!sb);
-
-	/*填充root节点*/
-	fc->root = root;
-	return 0;
-}
-
-/*
- * Handle remount.
- */
-static int legacy_reconfigure(struct fs_context *fc)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-	struct super_block *sb = fc->root->d_sb;
-
-	if (!sb->s_op->remount_fs)
-		/*super block如无remount_fs回调，则直接返回*/
-		return 0;
-
-	/*触发remount_fs*/
-	return sb->s_op->remount_fs(sb, &fc->sb_flags,
-				    ctx ? ctx->legacy_data : NULL);
-}
-
-/*系统默认的fs_context操作变量*/
-const struct fs_context_operations legacy_fs_context_ops = {
-	.free			= legacy_fs_context_free,
-	.dup			= legacy_fs_context_dup,
-	/*解析文件系统挂载参数（单个，默认）*/
-	.parse_param		= legacy_parse_param,
-	/*解析文件系统挂载参数（整体，默认）*/
-	.parse_monolithic	= legacy_parse_monolithic,
-	/*获取并填充文件系统的root节点，此函数会调用fc->fs_type->mount*/
-	.get_tree		= legacy_get_tree,
-	/*此函数会触发sb->s_op->remount_fs*/
-	.reconfigure		= legacy_reconfigure,
-};
-
-/*
- * Initialise a legacy context for a filesystem that doesn't support
- * fs_context.
- */
-static int legacy_init_fs_context(struct fs_context *fc)
-{
-	//默认fs context初始化函数
-	fc->fs_private = kzalloc(sizeof(struct legacy_fs_context), GFP_KERNEL_ACCOUNT);
-	if (!fc->fs_private)
-		return -ENOMEM;
-	fc->ops = &legacy_fs_context_ops;
-	return 0;
-}
-
 /*解析mount传入的整块data*/
 int parse_monolithic_mount_data(struct fs_context *fc, void *data)
 {
@@ -822,10 +598,8 @@ int finish_clean_context(struct fs_context *fc)
 	if (fc->phase != FS_CONTEXT_AWAITING_RECONF)
 		return 0;
 
-	if (fc->fs_type->init_fs_context)
-		error = fc->fs_type->init_fs_context(fc);/*通过fs提供的回调初始化fc*/
-	else
-		error = legacy_init_fs_context(fc);/*使用默认初始化函数*/
+	error = fc->fs_type->init_fs_context(fc);/*通过fs提供的回调初始化fc*/
+
 	if (unlikely(error)) {
 		fc->phase = FS_CONTEXT_FAILED;
 		return error;

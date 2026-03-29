@@ -975,6 +975,8 @@ void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
 	int ret;
 
 	idr_for_each_entry_ul(idr, p, tmp, id) {
+		if (IS_ERR(p))
+			continue;
 		if (tc_act_in_hw(p) && !mutex_taken) {
 			rtnl_lock();
 			mutex_taken = true;
@@ -1018,7 +1020,7 @@ static int tcf_pernet_add_id_list(unsigned int id)
 		}
 	}
 
-	id_ptr = kzalloc(sizeof(*id_ptr), GFP_KERNEL);
+	id_ptr = kzalloc_obj(*id_ptr);
 	if (!id_ptr) {
 		ret = -ENOMEM;
 		goto err_out;
@@ -1317,7 +1319,7 @@ errout:
 
 static struct tc_cookie *nla_memdup_cookie(struct nlattr **tb)
 {
-	struct tc_cookie *c = kzalloc(sizeof(*c), GFP_KERNEL);
+	struct tc_cookie *c = kzalloc_obj(*c);
 	if (!c)
 		return NULL;
 
@@ -1643,7 +1645,7 @@ void tcf_action_update_stats(struct tc_action *a, u64 bytes, u64 packets,
 	}
 
 	_bstats_update(&a->tcfa_bstats, bytes, packets);
-	a->tcfa_qstats.drops += drops;
+	atomic_add(drops, &a->tcfa_drops);
 	if (hw)
 		_bstats_update(&a->tcfa_bstats_hw, bytes, packets);
 }
@@ -1652,8 +1654,9 @@ EXPORT_SYMBOL(tcf_action_update_stats);
 int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *p,
 			  int compat_mode)
 {
-	int err = 0;
+	struct gnet_stats_queue qstats = {0};
 	struct gnet_dump d;
+	int err = 0;
 
 	if (p == NULL)
 		goto errout;
@@ -1678,6 +1681,9 @@ int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *p,
 	if (err < 0)
 		goto errout;
 
+	qstats.drops = atomic_read(&p->tcfa_drops);
+	qstats.overlimits = atomic_read(&p->tcfa_overlimits);
+
 	/*汇总percpu:p->cpu_stats,将其填充到d中*/
 	if (gnet_stats_copy_basic(&d, p->cpu_bstats,
 				  &p->tcfa_bstats, false) < 0 ||
@@ -1685,8 +1691,8 @@ int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *p,
 				     &p->tcfa_bstats_hw, false) < 0 ||
 	    gnet_stats_copy_rate_est(&d, &p->tcfa_rate_est) < 0 ||
 	    gnet_stats_copy_queue(&d, p->cpu_qstats,
-				  &p->tcfa_qstats,
-				  p->tcfa_qstats.qlen) < 0)
+				  &qstats,
+				  qstats.qlen) < 0)
 		goto errout;
 
 	if (gnet_stats_finish_copy(&d) < 0)

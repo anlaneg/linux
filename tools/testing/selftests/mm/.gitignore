@@ -12,6 +12,7 @@ map_hugetlb
 map_populate
 thuge-gen
 compaction_test
+memory-failure
 migration
 mlock2-tests
 mrelease_test
@@ -21,6 +22,7 @@ on-fault-limit
 transhuge-stress
 pagemap_ioctl
 pfnmap
+process_madv
 *.tmp*
 protection_keys
 protection_keys_32
@@ -57,3 +59,5 @@ pkey_sighandler_tests_32
 pkey_sighandler_tests_64
 guard-regions
 merge
+prctl_thp_disable
+rmap

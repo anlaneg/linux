@@ -262,8 +262,7 @@ static void gpio_sim_dbg_show(struct seq_file *seq, struct gpio_chip *gc)
 	guard(mutex)(&chip->lock);
 
 	for_each_hwgpio(gc, i, label)
-		seq_printf(seq, " gpio-%-3d (%s) %s,%s\n",
-			   gc->base + i,
+		seq_printf(seq, " gpio-%-3d (%s) %s,%s\n", i,
 			   label ?: "<unused>",
 			   test_bit(i, chip->direction_map) ? "input" :
 				test_bit(i, chip->value_map) ? "output-high" :
@@ -486,9 +485,9 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 	gc->parent = dev;
 	gc->fwnode = swnode;
 	gc->get = gpio_sim_get;
-	gc->set_rv = gpio_sim_set;
+	gc->set = gpio_sim_set;
 	gc->get_multiple = gpio_sim_get_multiple;
-	gc->set_multiple_rv = gpio_sim_set_multiple;
+	gc->set_multiple = gpio_sim_set_multiple;
 	gc->direction_output = gpio_sim_direction_output;
 	gc->direction_input = gpio_sim_direction_input;
 	gc->get_direction = gpio_sim_get_direction;
@@ -814,7 +813,7 @@ static int gpio_sim_add_hogs(struct gpio_sim_device *dev)
 		return 0;
 
 	/* Allocate one more for the sentinel. */
-	dev->hogs = kcalloc(num_hogs + 1, sizeof(*dev->hogs), GFP_KERNEL);
+	dev->hogs = kzalloc_objs(*dev->hogs, num_hogs + 1);
 	if (!dev->hogs)
 		return -ENOMEM;
 
@@ -1385,7 +1384,7 @@ static void gpio_sim_hog_config_item_release(struct config_item *item)
 	kfree(hog);
 }
 
-static struct configfs_item_operations gpio_sim_hog_config_item_ops = {
+static const struct configfs_item_operations gpio_sim_hog_config_item_ops = {
 	.release	= gpio_sim_hog_config_item_release,
 };
 
@@ -1407,7 +1406,7 @@ gpio_sim_line_config_make_hog_item(struct config_group *group, const char *name)
 
 	guard(mutex)(&dev->lock);
 
-	hog = kzalloc(sizeof(*hog), GFP_KERNEL);
+	hog = kzalloc_obj(*hog);
 	if (!hog)
 		return ERR_PTR(-ENOMEM);
 
@@ -1434,11 +1433,11 @@ static void gpio_sim_line_config_group_release(struct config_item *item)
 	kfree(line);
 }
 
-static struct configfs_item_operations gpio_sim_line_config_item_ops = {
+static const struct configfs_item_operations gpio_sim_line_config_item_ops = {
 	.release	= gpio_sim_line_config_group_release,
 };
 
-static struct configfs_group_operations gpio_sim_line_config_group_ops = {
+static const struct configfs_group_operations gpio_sim_line_config_group_ops = {
 	.make_item	= gpio_sim_line_config_make_hog_item,
 };
 
@@ -1468,7 +1467,7 @@ gpio_sim_bank_config_make_line_group(struct config_group *group,
 	if (gpio_sim_device_is_live(dev))
 		return ERR_PTR(-EBUSY);
 
-	line = kzalloc(sizeof(*line), GFP_KERNEL);
+	line = kzalloc_obj(*line);
 	if (!line)
 		return ERR_PTR(-ENOMEM);
 
@@ -1495,11 +1494,11 @@ static void gpio_sim_bank_config_group_release(struct config_item *item)
 	kfree(bank);
 }
 
-static struct configfs_item_operations gpio_sim_bank_config_item_ops = {
+static const struct configfs_item_operations gpio_sim_bank_config_item_ops = {
 	.release	= gpio_sim_bank_config_group_release,
 };
 
-static struct configfs_group_operations gpio_sim_bank_config_group_ops = {
+static const struct configfs_group_operations gpio_sim_bank_config_group_ops = {
 	.make_group	= gpio_sim_bank_config_make_line_group,
 };
 
@@ -1522,7 +1521,7 @@ gpio_sim_device_config_make_bank_group(struct config_group *group,
 	if (gpio_sim_device_is_live(dev))
 		return ERR_PTR(-EBUSY);
 
-	bank = kzalloc(sizeof(*bank), GFP_KERNEL);
+	bank = kzalloc_obj(*bank);
 	if (!bank)
 		return ERR_PTR(-ENOMEM);
 
@@ -1550,11 +1549,11 @@ static void gpio_sim_device_config_group_release(struct config_item *item)
 	kfree(dev);
 }
 
-static struct configfs_item_operations gpio_sim_device_config_item_ops = {
+static const struct configfs_item_operations gpio_sim_device_config_item_ops = {
 	.release	= gpio_sim_device_config_group_release,
 };
 
-static struct configfs_group_operations gpio_sim_device_config_group_ops = {
+static const struct configfs_group_operations gpio_sim_device_config_group_ops = {
 	.make_group	= gpio_sim_device_config_make_bank_group,
 };
 
@@ -1570,8 +1569,7 @@ gpio_sim_config_make_device_group(struct config_group *group, const char *name)
 {
 	int id;
 
-	struct gpio_sim_device *dev __free(kfree) = kzalloc(sizeof(*dev),
-							    GFP_KERNEL);
+	struct gpio_sim_device *dev __free(kfree) = kzalloc_obj(*dev);
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
@@ -1590,7 +1588,7 @@ gpio_sim_config_make_device_group(struct config_group *group, const char *name)
 	return &no_free_ptr(dev)->group;
 }
 
-static struct configfs_group_operations gpio_sim_config_group_ops = {
+static const struct configfs_group_operations gpio_sim_config_group_ops = {
 	.make_group	= gpio_sim_config_make_device_group,
 };
 

@@ -63,8 +63,10 @@ tcp_find_option(u_int8_t option,
 	/*遍历tcp选项，检查选项中是否有option选项*/
 	for (i = 0; i < optlen; ) {
 		if (op[i] == option) return !invert;
-		if (op[i] < 2) i++;
-		else i += op[i+1]?:1;
+		if (op[i] < 2 || i == optlen - 1)
+			i++;
+		else
+			i += op[i + 1] ? : 1;
 	}
 
 	return invert;

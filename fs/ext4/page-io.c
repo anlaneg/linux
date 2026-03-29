@@ -7,6 +7,7 @@
  * Written by Theodore Ts'o, 2010.
  */
 
+#include <linux/blk-crypto.h>
 #include <linux/fs.h>
 #include <linux/time.h>
 #include <linux/highuid.h>
@@ -401,7 +402,7 @@ void ext4_io_submit(struct ext4_io_submit *io)
 	if (bio) {
 		if (io->io_wbc->sync_mode == WB_SYNC_ALL)
 			io->io_bio->bi_opf |= REQ_SYNC;
-		submit_bio(io->io_bio);
+		blk_crypto_submit_bio(io->io_bio);
 	}
 	io->io_bio = NULL;
 }
@@ -547,7 +548,7 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 		 * first page of the bio.  Otherwise it can deadlock.
 		 */
 		if (io->io_bio)
-			gfp_flags = GFP_NOWAIT | __GFP_NOWARN;
+			gfp_flags = GFP_NOWAIT;
 	retry_encrypt:
 		bounce_page = fscrypt_encrypt_pagecache_blocks(folio,
 					enc_bytes, 0, gfp_flags);

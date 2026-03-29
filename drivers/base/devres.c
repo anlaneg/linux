@@ -556,7 +556,7 @@ void *devres_open_group(struct device *dev, void *id, gfp_t gfp)
 	struct devres_group *grp;
 	unsigned long flags;
 
-	grp = kmalloc(sizeof(*grp), gfp);
+	grp = kmalloc_obj(*grp, gfp);
 	if (unlikely(!grp))
 		return NULL;
 
@@ -1119,6 +1119,27 @@ void *devm_kmemdup(struct device *dev, const void *src, size_t len, gfp_t gfp)
 }
 EXPORT_SYMBOL_GPL(devm_kmemdup);
 
+/**
+ * devm_kmemdup_const - conditionally duplicate and manage a region of memory
+ *
+ * @dev: Device this memory belongs to
+ * @src: memory region to duplicate
+ * @len: memory region length,
+ * @gfp: GFP mask to use
+ *
+ * Return: source address if it is in .rodata or the return value of kmemdup()
+ * to which the function falls back otherwise.
+ */
+const void *
+devm_kmemdup_const(struct device *dev, const void *src, size_t len, gfp_t gfp)
+{
+	if (is_kernel_rodata((unsigned long)src))
+		return src;
+
+	return devm_kmemdup(dev, src, len, gfp);
+}
+EXPORT_SYMBOL_GPL(devm_kmemdup_const);
+
 struct pages_devres {
 	unsigned long addr;
 	unsigned int order;
@@ -1203,13 +1224,6 @@ static void devm_percpu_release(struct device *dev, void *pdata)
 	free_percpu(p);
 }
 
-static int devm_percpu_match(struct device *dev, void *data, void *p)
-{
-	struct devres *devr = container_of(data, struct devres, data);
-
-	return *(void **)devr->data == p;
-}
-
 /**
  * __devm_alloc_percpu - Resource-managed alloc_percpu
  * @dev: Device to allocate per-cpu memory for
@@ -1245,21 +1259,3 @@ void __percpu *__devm_alloc_percpu(struct device *dev, size_t size,
 	return pcpu;
 }
 EXPORT_SYMBOL_GPL(__devm_alloc_percpu);
-
-/**
- * devm_free_percpu - Resource-managed free_percpu
- * @dev: Device this memory belongs to
- * @pdata: Per-cpu memory to free
- *
- * Free memory allocated with devm_alloc_percpu().
- */
-void devm_free_percpu(struct device *dev, void __percpu *pdata)
-{
-	/*
-	 * Use devres_release() to prevent memory leakage as
-	 * devm_free_pages() does.
-	 */
-	WARN_ON(devres_release(dev, devm_percpu_release, devm_percpu_match,
-			       (void *)(__force unsigned long)pdata));
-}
-EXPORT_SYMBOL_GPL(devm_free_percpu);

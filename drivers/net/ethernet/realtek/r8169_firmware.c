@@ -69,7 +69,7 @@ static bool rtl_fw_format_ok(struct rtl_fw *rtl_fw)
 			return false;
 
 		/*设置fw版本*/
-		strscpy(rtl_fw->version, fw_info->version, RTL_VER_SIZE);
+		strscpy(rtl_fw->version, fw_info->version);
 
 		pa->code = (__le32 *)(fw->data + start);
 		pa->size = size;

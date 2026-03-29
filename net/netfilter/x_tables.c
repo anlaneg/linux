@@ -1796,7 +1796,7 @@ xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 		return ERR_PTR(-EINVAL);//参数有误，没有注册hook
 
 	//申请num_hooks个ops
-	ops = kcalloc(num_hooks, sizeof(*ops), GFP_KERNEL);
+	ops = kzalloc_objs(*ops, num_hooks);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -1819,7 +1819,7 @@ EXPORT_SYMBOL_GPL(xt_hook_ops_alloc);
 int xt_register_template(const struct xt_table *table,
 			 int (*table_init)(struct net *net))
 {
-	int ret = -EEXIST, af = table->af;
+	int ret = -EBUSY, af = table->af;
 	struct xt_template *t;
 
 	mutex_lock(&xt[af].mutex);
@@ -1830,7 +1830,7 @@ int xt_register_template(const struct xt_table *table,
 	}
 
 	ret = -ENOMEM;
-	t = kzalloc(sizeof(*t), GFP_KERNEL);
+	t = kzalloc_obj(*t);
 	if (!t)
 		goto out_unlock;
 
@@ -2055,7 +2055,7 @@ static int __init xt_init(void)
 		}
 	}
 
-	xt = kcalloc(NFPROTO_NUMPROTO, sizeof(struct xt_af), GFP_KERNEL);
+	xt = kzalloc_objs(struct xt_af, NFPROTO_NUMPROTO);
 	if (!xt)
 		return -ENOMEM;
 

@@ -44,7 +44,7 @@ int kobj_map(struct kobj_map *domain, dev_t dev/*首个device number*/, unsigned
 		n = 255;//最多支持255个probe
 
 	//申请n个probe对象数组
-	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
+	p = kmalloc_objs(struct probe, n);
 	if (p == NULL)
 		return -ENOMEM;
 
@@ -152,8 +152,8 @@ retry:
 
 struct kobj_map *kobj_map_init(kobj_probe_t *base_probe, struct mutex *lock)
 {
-	struct kobj_map *p = kmalloc(sizeof(struct kobj_map), GFP_KERNEL);
-	struct probe *base = kzalloc(sizeof(*base), GFP_KERNEL);
+	struct kobj_map *p = kmalloc_obj(struct kobj_map);
+	struct probe *base = kzalloc_obj(*base);
 	int i;
 
 	if ((p == NULL) || (base == NULL)) {

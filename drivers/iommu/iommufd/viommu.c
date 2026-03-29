@@ -312,7 +312,7 @@ iommufd_hw_queue_alloc_phys(struct iommu_hw_queue_alloc *cmd,
 	 * Use kvcalloc() to avoid memory fragmentation for a large page array.
 	 * Set __GFP_NOWARN to avoid syzkaller blowups
 	 */
-	pages = kvcalloc(max_npages, sizeof(*pages), GFP_KERNEL | __GFP_NOWARN);
+	pages = kvzalloc_objs(*pages, max_npages, GFP_KERNEL | __GFP_NOWARN);
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
@@ -339,7 +339,7 @@ iommufd_hw_queue_alloc_phys(struct iommu_hw_queue_alloc *cmd,
 	}
 
 	*base_pa = (page_to_pfn(pages[0]) << PAGE_SHIFT) + offset;
-	kfree(pages);
+	kvfree(pages);
 	return access;
 
 out_unpin:
@@ -349,7 +349,7 @@ out_detach:
 out_destroy:
 	iommufd_access_destroy_internal(viommu->ictx, access);
 out_free:
-	kfree(pages);
+	kvfree(pages);
 	return ERR_PTR(rc);
 }
 

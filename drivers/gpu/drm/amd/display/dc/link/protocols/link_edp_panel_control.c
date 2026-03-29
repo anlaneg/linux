@@ -39,6 +39,7 @@
 #include "dce/dmub_replay.h"
 #include "abm.h"
 #include "resource.h"
+#include "link_dp_panel_replay.h"
 #define DC_LOGGER \
 	link->ctx->logger
 #define DC_LOGGER_INIT(logger)
@@ -91,11 +92,10 @@ void dp_set_panel_mode(struct dc_link *link, enum dp_panel_mode panel_mode)
 	}
 
 	link->panel_mode = panel_mode;
-	DC_LOG_DETECTION_DP_CAPS("Link: %d eDP panel mode supported: %d "
-		 "eDP panel mode enabled: %d \n",
-		 link->link_index,
-		 link->dpcd_caps.panel_mode_edp,
-		 panel_mode_edp);
+	DC_LOG_DETECTION_DP_CAPS("%d eDP panel mode supported: %d, enabled: %d\n",
+				 link->link_index,
+				 link->dpcd_caps.panel_mode_edp,
+				 panel_mode_edp);
 }
 
 enum dp_panel_mode dp_get_panel_mode(struct dc_link *link)
@@ -703,6 +703,20 @@ bool edp_setup_psr(struct dc_link *link,
 	if (!link)
 		return false;
 
+	/* This is a workaround: some vendors require the source to
+	 * read the PSR cap; otherwise, the vendor's PSR feature will
+	 * fall back to its default behavior, causing a misconfiguration
+	 * of this feature.
+	 */
+	if (link->panel_config.psr.read_psrcap_again) {
+		dm_helpers_dp_read_dpcd(
+			link->ctx,
+			link,
+			DP_PSR_SUPPORT,
+			&link->dpcd_caps.psr_info.psr_version,
+			sizeof(link->dpcd_caps.psr_info.psr_version));
+	}
+
 	//Clear PSR cfg
 	memset(&psr_configuration, 0, sizeof(psr_configuration));
 	dm_helpers_dp_write_dpcd(
@@ -870,6 +884,8 @@ bool edp_setup_psr(struct dc_link *link,
 
 	psr_context->dsc_slice_height = psr_config->dsc_slice_height;
 
+	psr_context->os_request_force_ffu = psr_config->os_request_force_ffu;
+
 	if (psr) {
 		link->psr_settings.psr_feature_enabled = psr->funcs->psr_copy_settings(psr,
 			link, psr_context, panel_inst);
@@ -927,13 +943,13 @@ bool edp_set_replay_allow_active(struct dc_link *link, const bool *allow_active,
 	if (replay == NULL && force_static)
 		return false;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
 	/* Set power optimization flag */
 	if (power_opts && link->replay_settings.replay_power_opt_active != *power_opts) {
 		if (replay != NULL && link->replay_settings.replay_feature_enabled &&
-		    replay->funcs->replay_set_power_opt) {
+			replay->funcs->replay_set_power_opt) {
 			replay->funcs->replay_set_power_opt(replay, *power_opts, panel_inst);
 			link->replay_settings.replay_power_opt_active = *power_opts;
 		}
@@ -944,7 +960,7 @@ bool edp_set_replay_allow_active(struct dc_link *link, const bool *allow_active,
 		// TODO: Handle mux change case if force_static is set
 		// If force_static is set, just change the replay_allow_active state directly
 		if (replay != NULL && link->replay_settings.replay_feature_enabled)
-			replay->funcs->replay_enable(replay, *allow_active, wait, panel_inst, link);
+			replay->funcs->replay_enable(replay, *allow_active, wait, panel_inst);
 		link->replay_settings.replay_allow_active = *allow_active;
 	}
 
@@ -958,7 +974,7 @@ bool edp_get_replay_state(const struct dc_link *link, uint64_t *state)
 	unsigned int panel_inst;
 	enum replay_state pr_state = REPLAY_STATE_0;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
 	if (replay != NULL && link->replay_settings.replay_feature_enabled)
@@ -968,7 +984,8 @@ bool edp_get_replay_state(const struct dc_link *link, uint64_t *state)
 	return true;
 }
 
-bool edp_setup_replay(struct dc_link *link, const struct dc_stream_state *stream)
+
+bool edp_setup_freesync_replay(struct dc_link *link, const struct dc_stream_state *stream)
 {
 	/* To-do: Setup Replay */
 	struct dc *dc;
@@ -1004,7 +1021,7 @@ bool edp_setup_replay(struct dc_link *link, const struct dc_stream_state *stream
 	if (!replay)
 		return false;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
 	replay_context.aux_inst = link->ddc->ddc_pin->hw_info.ddc_channel;
@@ -1029,6 +1046,8 @@ bool edp_setup_replay(struct dc_link *link, const struct dc_stream_state *stream
 
 	replay_context.line_time_in_ns = lineTimeInNs;
 
+	replay_context.os_request_force_ffu = link->replay_settings.config.os_request_force_ffu;
+
 	link->replay_settings.replay_feature_enabled =
 			replay->funcs->replay_copy_settings(replay, link, &replay_context, panel_inst);
 	if (link->replay_settings.replay_feature_enabled) {
@@ -1042,7 +1061,13 @@ bool edp_setup_replay(struct dc_link *link, const struct dc_stream_state *stream
 			(uint8_t *)&(replay_config.raw), sizeof(uint8_t));
 
 		memset(&alpm_config, 0, sizeof(alpm_config));
-		alpm_config.bits.ENABLE = 1;
+		alpm_config.bits.ENABLE = link->replay_settings.config.alpm_mode != DC_ALPM_UNSUPPORTED ? 1 : 0;
+
+		if (link->replay_settings.config.alpm_mode == DC_ALPM_AUXLESS) {
+			alpm_config.bits.ALPM_MODE_SEL = 1;
+			alpm_config.bits.ACDS_PERIOD_DURATION = 0;
+		}
+
 		dm_helpers_dp_write_dpcd(
 			link->ctx,
 			link,
@@ -1055,6 +1080,7 @@ bool edp_setup_replay(struct dc_link *link, const struct dc_stream_state *stream
 
 	return true;
 }
+
 
 /*
  * This is general Interface for Replay to set an 32 bit variable to dmub
@@ -1074,7 +1100,7 @@ bool edp_send_replay_cmd(struct dc_link *link,
 
 	DC_LOGGER_INIT(link->ctx->logger);
 
-	if (dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (dp_pr_get_panel_inst(dc, link, &panel_inst))
 		cmd_data->panel_inst = panel_inst;
 	else {
 		DC_LOG_DC("%s(): get edp panel inst fail ", __func__);
@@ -1086,7 +1112,7 @@ bool edp_send_replay_cmd(struct dc_link *link,
 	return true;
 }
 
-bool edp_set_coasting_vtotal(struct dc_link *link, uint32_t coasting_vtotal)
+bool edp_set_coasting_vtotal(struct dc_link *link, uint32_t coasting_vtotal, uint16_t frame_skip_number)
 {
 	struct dc *dc = link->ctx->dc;
 	struct dmub_replay *replay = dc->res_pool->replay;
@@ -1095,12 +1121,14 @@ bool edp_set_coasting_vtotal(struct dc_link *link, uint32_t coasting_vtotal)
 	if (!replay)
 		return false;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
-	if (coasting_vtotal && link->replay_settings.coasting_vtotal != coasting_vtotal) {
-		replay->funcs->replay_set_coasting_vtotal(replay, coasting_vtotal, panel_inst);
+	if (coasting_vtotal && (link->replay_settings.coasting_vtotal != coasting_vtotal ||
+		link->replay_settings.frame_skip_number != frame_skip_number)) {
+		replay->funcs->replay_set_coasting_vtotal(replay, coasting_vtotal, panel_inst, frame_skip_number);
 		link->replay_settings.coasting_vtotal = coasting_vtotal;
+		link->replay_settings.frame_skip_number = frame_skip_number;
 	}
 
 	return true;
@@ -1113,7 +1141,7 @@ bool edp_replay_residency(const struct dc_link *link,
 	struct dmub_replay *replay = dc->res_pool->replay;
 	unsigned int panel_inst;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
 	if (!residency)
@@ -1128,24 +1156,27 @@ bool edp_replay_residency(const struct dc_link *link,
 }
 
 bool edp_set_replay_power_opt_and_coasting_vtotal(struct dc_link *link,
-	const unsigned int *power_opts, uint32_t coasting_vtotal)
+	const unsigned int *power_opts, uint32_t coasting_vtotal, uint16_t frame_skip_number)
 {
 	struct dc  *dc = link->ctx->dc;
 	struct dmub_replay *replay = dc->res_pool->replay;
 	unsigned int panel_inst;
 
-	if (!dc_get_edp_link_panel_inst(dc, link, &panel_inst))
+	if (!dp_pr_get_panel_inst(dc, link, &panel_inst))
 		return false;
 
 	/* Only both power and coasting vtotal changed, this func could return true */
 	if (power_opts && link->replay_settings.replay_power_opt_active != *power_opts &&
-		coasting_vtotal && link->replay_settings.coasting_vtotal != coasting_vtotal) {
+		(coasting_vtotal &&
+		(link->replay_settings.coasting_vtotal != coasting_vtotal ||
+		link->replay_settings.frame_skip_number != frame_skip_number))) {
 		if (link->replay_settings.replay_feature_enabled &&
 			replay->funcs->replay_set_power_opt_and_coasting_vtotal) {
 			replay->funcs->replay_set_power_opt_and_coasting_vtotal(replay,
-				*power_opts, panel_inst, coasting_vtotal);
+				*power_opts, panel_inst, coasting_vtotal, frame_skip_number);
 			link->replay_settings.replay_power_opt_active = *power_opts;
 			link->replay_settings.coasting_vtotal = coasting_vtotal;
+			link->replay_settings.frame_skip_number = frame_skip_number;
 		} else
 			return false;
 	} else
@@ -1153,6 +1184,7 @@ bool edp_set_replay_power_opt_and_coasting_vtotal(struct dc_link *link,
 
 	return true;
 }
+
 
 static struct abm *get_abm_from_stream_res(const struct dc_link *link)
 {

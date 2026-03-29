@@ -12,6 +12,7 @@
 #include <linux/atomic.h>
 #include <linux/container_of.h>
 #include <linux/uidgid.h>
+#include <net/inet_dscp.h>
 
 struct flow_keys;
 
@@ -32,7 +33,7 @@ struct flowi_common {
 	int	flowic_iif;//入接口
 	int     flowic_l3mdev;
 	__u32	flowic_mark;/*skb mark取值*/
-	__u8	flowic_tos;//tos取值
+	dscp_t	flowic_dscp;//tos取值
 	__u8	flowic_scope;
 	__u8	flowic_proto;//下层协议号（4层）
 	__u8	flowic_flags;
@@ -74,7 +75,7 @@ struct flowi4 {
 	//报文命中的mark值
 #define flowi4_mark		__fl_common.flowic_mark
 	//报文tos
-#define flowi4_tos		__fl_common.flowic_tos
+#define flowi4_dscp		__fl_common.flowic_dscp
 	//地址scope
 #define flowi4_scope		__fl_common.flowic_scope
 	//4层的网络协议号
@@ -116,7 +117,7 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif/*出接口*/,
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
 	fl4->flowi4_l3mdev = 0;
 	fl4->flowi4_mark = mark;
-	fl4->flowi4_tos = tos;
+	fl4->flowi4_dscp = inet_dsfield_to_dscp(tos);
 	fl4->flowi4_scope = scope;
 	fl4->flowi4_proto = proto;/*对应的4层协议*/
 	fl4->flowi4_flags = flags;
@@ -155,7 +156,7 @@ struct flowi6 {
 #define flowi6_uid		__fl_common.flowic_uid
 	struct in6_addr		daddr;//目的地址
 	struct in6_addr		saddr;//源地址
-	/* Note: flowi6_tos is encoded in flowlabel, too. */
+	/* Note: flowi6_dscp is encoded in flowlabel, too. */
 	__be32			flowlabel;/*ipv6头部flowlabel*/
 	union flowi_uli		uli;
 #define fl6_sport		uli.ports.sport
@@ -177,7 +178,7 @@ struct flowi {
 #define flowi_iif	u.__fl_common.flowic_iif
 #define flowi_l3mdev	u.__fl_common.flowic_l3mdev
 #define flowi_mark	u.__fl_common.flowic_mark
-#define flowi_tos	u.__fl_common.flowic_tos
+#define flowi_dscp	u.__fl_common.flowic_dscp
 #define flowi_scope	u.__fl_common.flowic_scope
 #define flowi_proto	u.__fl_common.flowic_proto
 #define flowi_flags	u.__fl_common.flowic_flags

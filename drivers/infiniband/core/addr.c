@@ -82,37 +82,25 @@ static const struct nla_policy ib_nl_addr_policy[LS_NLA_TYPE_MAX] = {
 		.min = sizeof(struct rdma_nla_ls_gid)},
 };
 
-static inline bool ib_nl_is_good_ip_resp(const struct nlmsghdr *nlh)
+static void ib_nl_process_ip_rsep(const struct nlmsghdr *nlh)
 {
 	struct nlattr *tb[LS_NLA_TYPE_MAX] = {};
+	union ib_gid gid;
+	struct addr_req *req;
+	int found = 0;
 	int ret;
 
 	if (nlh->nlmsg_flags & RDMA_NL_LS_F_ERR)
-		return false;
+		return;
 
 	ret = nla_parse_deprecated(tb, LS_NLA_TYPE_MAX - 1, nlmsg_data(nlh),
 				   nlmsg_len(nlh), ib_nl_addr_policy, NULL);
 	if (ret)
-		return false;
+		return;
 
-	return true;
-}
-
-static void ib_nl_process_good_ip_rsep(const struct nlmsghdr *nlh)
-{
-	const struct nlattr *head, *curr;
-	union ib_gid gid;
-	struct addr_req *req;
-	int len, rem;
-	int found = 0;
-
-	head = (const struct nlattr *)nlmsg_data(nlh);
-	len = nlmsg_len(nlh);
-
-	nla_for_each_attr(curr, head, len, rem) {
-		if (curr->nla_type == LS_NLA_TYPE_DGID)
-			memcpy(&gid, nla_data(curr), nla_len(curr));
-	}
+	if (!tb[LS_NLA_TYPE_DGID])
+		return;
+	memcpy(&gid, nla_data(tb[LS_NLA_TYPE_DGID]), sizeof(gid));
 
 	spin_lock_bh(&lock);
 	list_for_each_entry(req, &req_list, list) {
@@ -139,8 +127,7 @@ int ib_nl_handle_ip_res_resp(struct sk_buff *skb,
 	    !(NETLINK_CB(skb).sk))
 		return -EPERM;
 
-	if (ib_nl_is_good_ip_resp(nlh))
-		ib_nl_process_good_ip_rsep(nlh);
+	ib_nl_process_ip_rsep(nlh);
 
 	return 0;
 }
@@ -470,40 +457,58 @@ static int addr6_resolve(struct sockaddr *src_sock,
 }
 #endif
 
+static bool is_dst_local(const struct dst_entry *dst)
+{
+	if (dst->ops->family == AF_INET)
+		return !!(dst_rtable(dst)->rt_type & RTN_LOCAL);
+	else if (dst->ops->family == AF_INET6)
+		return !!(dst_rt6_info(dst)->rt6i_flags & RTF_LOCAL);
+	else
+		return false;
+}
+
 /*解析邻居表项,填充目的MAC*/
 static int addr_resolve_neigh(const struct dst_entry *dst,
 			      const struct sockaddr *dst_in,
 			      struct rdma_dev_addr *addr,
-			      unsigned int ndev_flags,
 			      u32 seq)
 {
-	int ret = 0;
-
-	if (ndev_flags & IFF_LOOPBACK) {
-		/*loopback设备,源MAC与目的MAC一致*/
+	if (is_dst_local(dst)) {
+		/* When the destination is local entry, source and destination
+		 * are same. Skip the neighbour lookup.
+		 */
 		memcpy(addr->dst_dev_addr, addr->src_dev_addr, MAX_ADDR_LEN);
-	} else {
-		if (!(ndev_flags & IFF_NOARP)) {
-			/* If the device doesn't do ARP internally */
-			/*此接口没有指明noarp,获取领居表项*/
-			ret = fetch_ha(dst, addr, dst_in, seq);
-		}
+		return 0;
 	}
-	return ret;
+
+	return fetch_ha(dst, addr, dst_in, seq);
 }
 
 /*复制源mac地址*/
-static int copy_src_l2_addr(struct rdma_dev_addr *dev_addr,
-			    const struct sockaddr *dst_in,
-			    const struct dst_entry *dst,
-			    const struct net_device *ndev)
+static int rdma_set_src_addr_rcu(struct rdma_dev_addr *dev_addr,
+				 const struct sockaddr *dst_in,
+				 const struct dst_entry *dst)
 {
-	int ret = 0;
+	struct net_device *ndev = READ_ONCE(dst->dev);
 
-	if (dst->dev->flags & IFF_LOOPBACK)
+	/* A physical device must be the RDMA device to use */
+	if (is_dst_local(dst)) {
+		int ret;
+		/*
+		 * RDMA (IB/RoCE, iWarp) doesn't run on lo interface or
+		 * loopback IP address. So if route is resolved to loopback
+		 * interface, translate that to a real ndev based on non
+		 * loopback IP address.
+		 */
+		ndev = rdma_find_ndev_for_src_ip_rcu(dev_net(ndev), dst_in);
+		if (IS_ERR(ndev))
+			return -ENODEV;
 		ret = rdma_translate_ip(dst_in, dev_addr);
-	else
+		if (ret)
+			return ret;
+	} else {
 		rdma_copy_src_l2_addr(dev_addr, dst->dev);/*利用出接口填充l2地址*/
+	}
 
 	/*
 	 * If there's a gateway and type of device not ARPHRD_INFINIBAND,
@@ -518,32 +523,7 @@ static int copy_src_l2_addr(struct rdma_dev_addr *dev_addr,
 	else
 		dev_addr->network = RDMA_NETWORK_IB;
 
-	return ret;
-}
-
-static int rdma_set_src_addr_rcu(struct rdma_dev_addr *dev_addr,
-				 unsigned int *ndev_flags,
-				 const struct sockaddr *dst_in/*目的地址*/,
-				 const struct dst_entry *dst)
-{
-	struct net_device *ndev = READ_ONCE(dst->dev);
-
-	*ndev_flags = ndev->flags;
-	/* A physical device must be the RDMA device to use */
-	if (ndev->flags & IFF_LOOPBACK) {/*出接口是loopback设备*/
-		/*
-		 * RDMA (IB/RoCE, iWarp) doesn't run on lo interface or
-		 * loopback IP address. So if route is resolved to loopback
-		 * interface, translate that to a real ndev based on non
-		 * loopback IP address.
-		 */
-		ndev = rdma_find_ndev_for_src_ip_rcu(dev_net(ndev), dst_in);/*此时目的IP在本机,检查此IP属于哪个NETDEV*/
-		if (IS_ERR(ndev))
-			return -ENODEV;/*查找设备失败*/
-	}
-
-	/*设置源地址*/
-	return copy_src_l2_addr(dev_addr, dst_in, dst, ndev);
+	return 0;
 }
 
 static int set_addr_netns_by_gid_rcu(struct rdma_dev_addr *addr)
@@ -580,7 +560,6 @@ static int addr_resolve(struct sockaddr *src_in/*入出参,源地址*/,
 			u32 seq)
 {
 	struct dst_entry *dst = NULL;
-	unsigned int ndev_flags = 0;
 	struct rtable *rt = NULL;
 	int ret;
 
@@ -621,7 +600,7 @@ static int addr_resolve(struct sockaddr *src_in/*入出参,源地址*/,
 		rcu_read_unlock();
 		goto done;
 	}
-	ret = rdma_set_src_addr_rcu(addr, &ndev_flags, dst_in, dst);
+	ret = rdma_set_src_addr_rcu(addr, dst_in, dst);
 	rcu_read_unlock();
 
 	/*
@@ -629,8 +608,8 @@ static int addr_resolve(struct sockaddr *src_in/*入出参,源地址*/,
 	 * only if src addr translation didn't fail.
 	 */
 	if (!ret && resolve_neigh)
-	    /*邻居表项解析*/
-		ret = addr_resolve_neigh(dst, dst_in/*目的地址*/, addr, ndev_flags, seq);
+		/*邻居表项解析*/
+		ret = addr_resolve_neigh(dst, dst_in/*目的地址*/, addr, seq);
 
 	if (src_in->sa_family == AF_INET)
 		ip_rt_put(rt);
@@ -705,7 +684,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 	int ret = 0;
 
 	/*申请addr reqeust变量，并填充*/
-	req = kzalloc(sizeof *req, GFP_KERNEL);
+	req = kzalloc_obj(*req);
 	if (!req)
 		return -ENOMEM;
 

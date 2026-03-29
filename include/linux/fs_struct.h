@@ -2,6 +2,7 @@
 #ifndef _LINUX_FS_STRUCT_H
 #define _LINUX_FS_STRUCT_H
 
+#include <linux/sched.h>
 #include <linux/path.h>
 #include <linux/spinlock.h>
 #include <linux/seqlock.h>
@@ -43,5 +44,10 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd/*出参，�
 }
 
 extern bool current_chrooted(void);
+
+static inline int current_umask(void)
+{
+	return current->fs->umask;
+}
 
 #endif /* _LINUX_FS_STRUCT_H */

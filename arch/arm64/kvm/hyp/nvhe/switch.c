@@ -50,6 +50,10 @@ extern void kvm_nvhe_prepare_backtrace(unsigned long fp, unsigned long pc);
 static void __activate_traps(struct kvm_vcpu *vcpu)
 {
 	___activate_traps(vcpu, vcpu->arch.hcr_el2);
+
+	*host_data_ptr(host_debug_state.mdcr_el2) = read_sysreg(mdcr_el2);
+	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
+
 	__activate_traps_common(vcpu);
 	__activate_cptr_traps(vcpu);
 
@@ -92,6 +96,8 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 		write_sysreg_el1(val | SCTLR_ELx_M, SYS_SCTLR);
 		isb();
 	}
+
+	write_sysreg(*host_data_ptr(host_debug_state.mdcr_el2), mdcr_el2);
 
 	__deactivate_traps_common(vcpu);
 
@@ -205,7 +211,7 @@ static inline bool fixup_guest_exit(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
 	const exit_handler_fn *handlers = kvm_get_exit_handler_array(vcpu);
 
-	synchronize_vcpu_pstate(vcpu, exit_code);
+	synchronize_vcpu_pstate(vcpu);
 
 	/*
 	 * Some guests (e.g., protected VMs) are not be allowed to run in

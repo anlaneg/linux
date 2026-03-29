@@ -37,6 +37,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
+#include <drm/drm_print.h>
 
 #include "drm_internal.h"
 
@@ -93,13 +94,13 @@ struct drm_prime_member {
 	struct rb_node handle_rb;
 };
 
-static int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv,
+int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv,
 				    struct dma_buf *dma_buf, uint32_t handle)
 {
 	struct drm_prime_member *member;
 	struct rb_node **p, *rb;
 
-	member = kmalloc(sizeof(*member), GFP_KERNEL);
+	member = kmalloc_obj(*member);
 	if (!member)
 		return -ENOMEM;
 
@@ -190,8 +191,6 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 {
 	struct rb_node *rb;
 
-	mutex_lock(&prime_fpriv->lock);
-
 	rb = prime_fpriv->handles.rb_node;
 	while (rb) {
 		struct drm_prime_member *member;
@@ -210,8 +209,6 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 			rb = rb->rb_left;
 		}
 	}
-
-	mutex_unlock(&prime_fpriv->lock);
 }
 
 void drm_prime_init_file_private(struct drm_prime_file_private *prime_fpriv)
@@ -783,8 +780,8 @@ int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 		return 0;
 	}
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	fil = kzalloc(sizeof(*fil), GFP_KERNEL);
+	priv = kzalloc_obj(*priv);
+	fil = kzalloc_obj(*fil);
 	if (!priv || !fil) {
 		ret = -ENOMEM;
 		goto out;
@@ -857,7 +854,7 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 	size_t max_segment = 0;
 	int err;
 
-	sg = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	sg = kmalloc_obj(struct sg_table);
 	if (!sg)
 		return ERR_PTR(-ENOMEM);
 

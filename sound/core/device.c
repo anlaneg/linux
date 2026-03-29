@@ -35,7 +35,7 @@ int snd_device_new(struct snd_card *card, enum snd_device_type type,
 	if (snd_BUG_ON(!card || !device_data || !ops))
 		return -ENXIO;
 	/*申请snd_device设备*/
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc_obj(*dev);
 	if (!dev)
 		return -ENOMEM;
 	INIT_LIST_HEAD(&dev->list);

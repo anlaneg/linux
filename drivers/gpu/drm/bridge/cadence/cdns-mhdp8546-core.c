@@ -1984,8 +1984,10 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	mhdp_state = to_cdns_mhdp_bridge_state(new_state);
 
 	mhdp_state->current_mode = drm_mode_duplicate(bridge->dev, mode);
-	if (!mhdp_state->current_mode)
-		return;
+	if (!mhdp_state->current_mode) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	drm_mode_set_name(mhdp_state->current_mode);
 
@@ -2053,7 +2055,7 @@ cdns_mhdp_bridge_atomic_duplicate_state(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_bridge_state *state;
 
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	state = kzalloc_obj(*state);
 	if (!state)
 		return NULL;
 
@@ -2083,7 +2085,7 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_bridge_state *cdns_mhdp_state;
 
-	cdns_mhdp_state = kzalloc(sizeof(*cdns_mhdp_state), GFP_KERNEL);
+	cdns_mhdp_state = kzalloc_obj(*cdns_mhdp_state);
 	if (!cdns_mhdp_state)
 		return NULL;
 
@@ -2103,7 +2105,7 @@ static u32 *cdns_mhdp_get_input_bus_fmts(struct drm_bridge *bridge,
 
 	*num_input_fmts = 0;
 
-	input_fmts = kzalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kzalloc_obj(*input_fmts);
 	if (!input_fmts)
 		return NULL;
 

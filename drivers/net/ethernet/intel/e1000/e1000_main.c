@@ -316,8 +316,7 @@ static void e1000_update_mng_vlan(struct e1000_adapter *adapter)
 		} else {
 			adapter->mng_vlan_id = E1000_MNG_VLAN_NONE;
 		}
-		if ((old_vid != (u16)E1000_MNG_VLAN_NONE) &&
-		    (vid != old_vid) &&
+		if (old_vid != E1000_MNG_VLAN_NONE && vid != old_vid &&
 		    !test_bit(old_vid, adapter->active_vlans))
 			e1000_vlan_rx_kill_vid(netdev, htons(ETH_P_8021Q),
 					       old_vid);
@@ -1340,13 +1339,13 @@ static int e1000_sw_init(struct e1000_adapter *adapter)
  **/
 static int e1000_alloc_queues(struct e1000_adapter *adapter)
 {
-	adapter->tx_ring = kcalloc(adapter->num_tx_queues,
-				   sizeof(struct e1000_tx_ring), GFP_KERNEL);
+	adapter->tx_ring = kzalloc_objs(struct e1000_tx_ring,
+					adapter->num_tx_queues);
 	if (!adapter->tx_ring)
 		return -ENOMEM;
 
-	adapter->rx_ring = kcalloc(adapter->num_rx_queues,
-				   sizeof(struct e1000_rx_ring), GFP_KERNEL);
+	adapter->rx_ring = kzalloc_objs(struct e1000_rx_ring,
+					adapter->num_rx_queues);
 	if (!adapter->rx_ring) {
 		kfree(adapter->tx_ring);
 		return -ENOMEM;
@@ -2972,8 +2971,6 @@ static int e1000_tx_map(struct e1000_adapter *adapter,
 dma_error:
 	dev_err(&pdev->dev, "TX DMA map failed\n");
 	buffer_info->dma = 0;
-	if (count)
-		count--;
 
 	while (count--) {
 		if (i == 0)
@@ -4115,7 +4112,15 @@ static bool e1000_tbi_should_accept(struct e1000_adapter *adapter,
 				    u32 length, const u8 *data)
 {
 	struct e1000_hw *hw = &adapter->hw;
-	u8 last_byte = *(data + length - 1);
+	u8 last_byte;
+
+	/* Guard against OOB on data[length - 1] */
+	if (unlikely(!length))
+		return false;
+	/* Upper bound: length must not exceed rx_buffer_len */
+	if (unlikely(length > adapter->rx_buffer_len))
+		return false;
+	last_byte = *(data + length - 1);
 
 	if (TBI_ACCEPT(hw, status, errors, length, last_byte)) {
 		unsigned long irq_flags;

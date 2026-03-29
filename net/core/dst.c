@@ -71,6 +71,7 @@ void dst_init(struct dst_entry *dst, struct dst_ops *ops,
 	dst->lwtstate = NULL;
 	rcuref_init(&dst->__rcuref, 1);
 	INIT_LIST_HEAD(&dst->rt_uncached);
+	dst->rt_uncached_list = NULL;
 	dst->__use = 0;
 	dst->lastuse = jiffies;
 	dst->flags = flags;
@@ -155,7 +156,7 @@ void dst_dev_put(struct dst_entry *dst)
 	WRITE_ONCE(dst->input, dst_discard);
 	/*指定报文对应的设备为blackhole，所有发向此设备的报文将被丢弃*/
 	WRITE_ONCE(dst->output, dst_discard_out);
-	WRITE_ONCE(dst->dev, blackhole_netdev);
+	rcu_assign_pointer(dst->dev_rcu, blackhole_netdev);
 	netdev_ref_replace(dev, blackhole_netdev, &dst->dev_tracker,
 			   GFP_ATOMIC);
 }
@@ -195,7 +196,7 @@ EXPORT_SYMBOL(dst_release_immediate);
 
 u32 *dst_cow_metrics_generic(struct dst_entry *dst, unsigned long old)
 {
-	struct dst_metrics *p = kmalloc(sizeof(*p), GFP_ATOMIC);
+	struct dst_metrics *p = kmalloc_obj(*p, GFP_ATOMIC);
 
 	if (p) {
 		struct dst_metrics *old_p = (struct dst_metrics *)__DST_METRICS_PTR(old);
@@ -303,8 +304,7 @@ struct metadata_dst *metadata_dst_alloc(u8 optslen/*选项长度*/, enum metadat
 	struct metadata_dst *md_dst;
 
 	//申请含opt长度的metadata_dst
-	md_dst = kmalloc(struct_size(md_dst, u.tun_info.options, optslen),
-			 flags);
+	md_dst = kmalloc_flex(*md_dst, u.tun_info.options, optslen, flags);
 	if (!md_dst)
 		return NULL;
 

@@ -104,7 +104,7 @@ static inline void ipcm_init_sk(struct ipcm_cookie *ipcm,
 	ipcm->oif = READ_ONCE(inet->sk.sk_bound_dev_if);
 	/*使用socket记录的src address*/
 	ipcm->addr = inet->inet_saddr;
-	ipcm->protocol = inet->inet_num;
+	ipcm->protocol = READ_ONCE(inet->inet_num);
 }
 
 #define IPCB(skb) ((struct inet_skb_parm*)((skb)->cb))
@@ -265,8 +265,8 @@ static inline u8 ip_sendmsg_scope(const struct inet_sock *inet,
 }
 
 /* datagram.c */
-int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
-int ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+int __ip4_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len);
+int ip4_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len);
 
 void ip4_datagram_release_cb(struct sock *sk);
 
@@ -333,11 +333,12 @@ static inline u64 snmp_fold_field64(void __percpu *mib, int offt, size_t syncp_o
 #endif
 
 /*汇总各cpu关于snmp的统计计数*/
-#define snmp_get_cpu_field64_batch(buff64/*出参*/, stats_list, mib_statistic, offset) \
+#define snmp_get_cpu_field64_batch_cnt(buff64, stats_list, cnt,	\
+				       mib_statistic, offset)	\
 { \
 	int i, c; \
 	for_each_possible_cpu(c) { \
-		for (i = 0; stats_list[i].name; i++) \
+		for (i = 0; i < cnt; i++) \
 			buff64[i] += snmp_get_cpu_field64( \
 					mib_statistic/*统计数组*/, \
 					c, stats_list[i].entry/*i号统计数据，在数组中的下标*/, \
@@ -346,11 +347,11 @@ static inline u64 snmp_fold_field64(void __percpu *mib, int offt, size_t syncp_o
 }
 
 /*统计各cpu上的计数信息，并填充buff[i]*/
-#define snmp_get_cpu_field_batch(buff, stats_list, mib_statistic) \
+#define snmp_get_cpu_field_batch_cnt(buff, stats_list, cnt, mib_statistic) \
 { \
 	int i, c; \
 	for_each_possible_cpu(c) { \
-		for (i = 0; stats_list[i].name; i++) \
+		for (i = 0; i < cnt; i++) \
 			buff[i] += snmp_get_cpu_field( \
 						mib_statistic, \
 						c, stats_list[i].entry); \
@@ -479,12 +480,14 @@ static inline unsigned int ip_dst_mtu_maybe_forward(const struct dst_entry *dst,
 						    bool forwarding)
 {
 	const struct rtable *rt = dst_rtable(dst);
+	const struct net_device *dev;
 	unsigned int mtu, res;
 	struct net *net;
 
 	rcu_read_lock();
 
-	net = dev_net_rcu(dst_dev(dst));
+	dev = dst_dev_rcu(dst);
+	net = dev_net_rcu(dev);
 	if (READ_ONCE(net->ipv4.sysctl_ip_fwd_use_pmtu) ||
 	    ip_mtu_locked(dst) ||
 	    !forwarding) {
@@ -498,7 +501,7 @@ static inline unsigned int ip_dst_mtu_maybe_forward(const struct dst_entry *dst,
 	if (mtu)
 		goto out;
 
-	mtu = READ_ONCE(dst_dev(dst)->mtu);/*自设备中提取mtu*/
+	mtu = READ_ONCE(dev->mtu);/*自设备中提取mtu*/
 
 	if (unlikely(ip_mtu_locked(dst))) {
 		if (rt->rt_uses_gateway && mtu > 576)

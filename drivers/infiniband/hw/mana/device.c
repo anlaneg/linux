@@ -69,6 +69,12 @@ static const struct ib_device_ops mana_ib_device_stats_ops = {
 	.alloc_hw_device_stats = mana_ib_alloc_hw_device_stats,
 };
 
+const struct ib_device_ops mana_ib_dev_dm_ops = {
+	.alloc_dm = mana_ib_alloc_dm,
+	.dealloc_dm = mana_ib_dealloc_dm,
+	.reg_dm_mr = mana_ib_reg_dm_mr,
+};
+
 static int mana_ib_netdev_event(struct notifier_block *this,
 				unsigned long event, void *ptr)
 {
@@ -139,6 +145,7 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 		ib_set_device_ops(&dev->ib_dev, &mana_ib_stats_ops);
 		if (dev->adapter_caps.feature_flags & MANA_IB_FEATURE_DEV_COUNTERS_SUPPORT)
 			ib_set_device_ops(&dev->ib_dev, &mana_ib_device_stats_ops);
+		ib_set_device_ops(&dev->ib_dev, &mana_ib_dev_dm_ops);
 
 		ret = mana_ib_create_eqs(dev);
 		if (ret) {
@@ -229,6 +236,9 @@ free_ib_device:
 static void mana_ib_remove(struct auxiliary_device *adev)
 {
 	struct mana_ib_dev *dev = dev_get_drvdata(&adev->dev);
+
+	if (mana_ib_is_rnic(dev))
+		mana_drain_gsi_sqs(dev);
 
 	ib_unregister_device(&dev->ib_dev);
 	dma_pool_destroy(dev->av_pool);

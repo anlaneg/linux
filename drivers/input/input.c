@@ -8,6 +8,7 @@
 
 #define pr_fmt(fmt) KBUILD_BASENAME ": " fmt
 
+#include <linux/export.h>
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/idr.h>
@@ -463,7 +464,7 @@ void input_alloc_absinfo(struct input_dev *dev)
 	if (dev->absinfo)
 		return;/*已有absinfo,不再申请*/
 
-	dev->absinfo = kcalloc(ABS_CNT, sizeof(*dev->absinfo), GFP_KERNEL);
+	dev->absinfo = kzalloc_objs(*dev->absinfo, ABS_CNT);
 	if (!dev->absinfo) {
 		dev_err(dev->dev.parent ?: &dev->dev,
 			"%s: unable to allocate memory\n", __func__);
@@ -998,7 +999,7 @@ static const struct input_device_id *input_match_device(struct input_handler *ha
 {
 	const struct input_device_id *id;
 
-	for (id = handler->id_table; id->flags || id->driver_info; id++) {
+	for (id = handler->id_table; id->flags; id++) {
 		if (input_match_device_id(dev, id) &&
 		    (!handler->match || handler->match(handler, dev))) {
 			return id;
@@ -1025,44 +1026,6 @@ static int input_attach_handler(struct input_dev *dev, struct input_handler *han
 
 	return error;
 }
-
-#ifdef CONFIG_COMPAT
-
-static int input_bits_to_string(char *buf, int buf_size,
-				unsigned long bits, bool skip_empty/*是否跳过空*/)
-{
-	int len = 0;
-
-	if (in_compat_syscall()) {
-		u32 dword = bits >> 32;
-		if (dword || !skip_empty)
-			/*显示高4字节*/
-			len += snprintf(buf, buf_size, "%x ", dword);
-
-		/*显示低4字节*/
-		dword = bits & 0xffffffffUL;
-		if (dword || !skip_empty || len)
-			len += snprintf(buf + len, max(buf_size - len, 0),
-					"%x", dword);
-	} else {
-		/*按8字节直接显示*/
-		if (bits || !skip_empty)
-			len += snprintf(buf, buf_size, "%lx", bits);
-	}
-
-	return len;
-}
-
-#else /* !CONFIG_COMPAT */
-
-static int input_bits_to_string(char *buf, int buf_size,
-				unsigned long bits, bool skip_empty)
-{
-	return bits || !skip_empty ?
-		snprintf(buf, buf_size, "%lx", bits) : 0;
-}
-
-#endif
 
 #ifdef CONFIG_PROC_FS
 
@@ -1960,7 +1923,7 @@ struct input_dev *input_allocate_device(void)
 	struct input_dev *dev;
 
 	/*申请一个input设备*/
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc_obj(*dev);
 	if (!dev)
 		return NULL;
 
@@ -1971,7 +1934,7 @@ struct input_dev *input_allocate_device(void)
 	 */
 	dev->max_vals = 10;
 	/*创建max_vals个struct input_value*/
-	dev->vals = kcalloc(dev->max_vals, sizeof(*dev->vals), GFP_KERNEL);
+	dev->vals = kzalloc_objs(*dev->vals, dev->max_vals);
 	if (!dev->vals) {
 		kfree(dev);
 		return NULL;

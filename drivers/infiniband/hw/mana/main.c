@@ -273,9 +273,8 @@ int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, u32 size,
 
 	umem = ib_umem_get(&mdev->ib_dev, addr, size, IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(umem)) {
-		err = PTR_ERR(umem);
-		ibdev_dbg(&mdev->ib_dev, "Failed to get umem, %d\n", err);
-		return err;
+		ibdev_dbg(&mdev->ib_dev, "Failed to get umem, %pe\n", umem);
+		return PTR_ERR(umem);
 	}
 
 	err = mana_ib_create_zero_offset_dma_region(mdev, umem, &queue->gdma_region);
@@ -794,8 +793,8 @@ int mana_ib_create_eqs(struct mana_ib_dev *mdev)
 	if (err)
 		return err;
 
-	mdev->eqs = kcalloc(mdev->ib_dev.num_comp_vectors, sizeof(struct gdma_queue *),
-			    GFP_KERNEL);
+	mdev->eqs = kzalloc_objs(struct gdma_queue *,
+				 mdev->ib_dev.num_comp_vectors);
 	if (!mdev->eqs) {
 		err = -ENOMEM;
 		goto destroy_fatal_eq;

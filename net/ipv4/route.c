@@ -84,6 +84,7 @@
 #include <linux/jhash.h>
 #include <net/dst.h>
 #include <net/dst_metadata.h>
+#include <net/flow.h>
 #include <net/inet_dscp.h>
 #include <net/net_namespace.h>
 #include <net/ip.h>
@@ -314,7 +315,7 @@ static int rt_acct_proc_show(struct seq_file *m, void *v)
 	struct ip_rt_acct *dst, *src;
 	unsigned int i, j;
 
-	dst = kcalloc(256, sizeof(struct ip_rt_acct), GFP_KERNEL);
+	dst = kzalloc_objs(struct ip_rt_acct, 256);
 	if (!dst)
 		return -ENOMEM;
 
@@ -414,11 +415,11 @@ static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
 					   const void *daddr)
 {
 	const struct rtable *rt = container_of(dst, struct rtable, dst);
-	struct net_device *dev = dst_dev(dst);
+	struct net_device *dev;
 	struct neighbour *n;
 
 	rcu_read_lock();
-
+	dev = dst_dev_rcu(dst);
 	if (likely(rt->rt_gw_family == AF_INET)) {
 	    /*有网关,查询网关对应的邻居表项*/
 		n = ip_neigh_gw4(dev, rt->rt_gw4);
@@ -611,6 +612,11 @@ static void fnhe_remove_oldest(struct fnhe_hash_bucket *hash)
 			oldest_p = fnhe_p;
 		}
 	}
+
+	/* Clear oldest->fnhe_daddr to prevent this fnhe from being
+	 * rebound with new dsts in rt_bind_exception().
+	 */
+	oldest->fnhe_daddr = 0;
 	fnhe_flush_routes(oldest);
 	*oldest_p = oldest->fnhe_next;
 	kfree_rcu(oldest, rcu);
@@ -659,7 +665,7 @@ static void update_or_create_fnhe(struct fib_nh_common *nhc, __be32 daddr,
 
 	hash = rcu_dereference(nhc->nhc_exceptions);
 	if (!hash) {
-		hash = kcalloc(FNHE_HASH_SIZE, sizeof(*hash), GFP_ATOMIC);
+		hash = kzalloc_objs(*hash, FNHE_HASH_SIZE, GFP_ATOMIC);
 		if (!hash)
 			goto out_unlock;
 		rcu_assign_pointer(nhc->nhc_exceptions, hash);
@@ -702,7 +708,7 @@ static void update_or_create_fnhe(struct fib_nh_common *nhc, __be32 daddr,
 			depth--;
 		}
 
-		fnhe = kzalloc(sizeof(*fnhe), GFP_ATOMIC);
+		fnhe = kzalloc_obj(*fnhe, GFP_ATOMIC);
 		if (!fnhe)
 			goto out_unlock;
 
@@ -1036,7 +1042,7 @@ static void __ip_rt_update_pmtu(struct rtable *rt, struct flowi4 *fl4, u32 mtu)
 		return;
 
 	rcu_read_lock();
-	net = dev_net_rcu(dst_dev(dst));
+	net = dst_dev_net_rcu(dst);
 	if (mtu < net->ipv4.ip_rt_min_pmtu) {
 		lock = true;
 		mtu = min(old_mtu, net->ipv4.ip_rt_min_pmtu);
@@ -1231,8 +1237,8 @@ EXPORT_INDIRECT_CALLABLE(ipv4_dst_check);
 
 static void ipv4_send_dest_unreach(struct sk_buff *skb)
 {
+	struct inet_skb_parm parm;
 	struct net_device *dev;
-	struct ip_options opt;
 	int res;
 
 	/* Recompile ip options since IPCB may not be valid anymore.
@@ -1242,22 +1248,22 @@ static void ipv4_send_dest_unreach(struct sk_buff *skb)
 	    ip_hdr(skb)->version != 4 || ip_hdr(skb)->ihl < 5)
 		return;
 
-	memset(&opt, 0, sizeof(opt));
+	memset(&parm, 0, sizeof(parm));
 	if (ip_hdr(skb)->ihl > 5) {
 		if (!pskb_network_may_pull(skb, ip_hdr(skb)->ihl * 4))
 			return;
-		opt.optlen = ip_hdr(skb)->ihl * 4 - sizeof(struct iphdr);
+		parm.opt.optlen = ip_hdr(skb)->ihl * 4 - sizeof(struct iphdr);
 
 		rcu_read_lock();
 		dev = skb->dev ? skb->dev : skb_rtable(skb)->dst.dev;
-		res = __ip_options_compile(dev_net(dev), &opt, skb, NULL);
+		res = __ip_options_compile(dev_net(dev), &parm.opt, skb, NULL);
 		rcu_read_unlock();
 
 		if (res)
 			return;
 	}
 	//响应icmp dst unreach报文给发送方
-	__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, &opt);
+	__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, &parm);
 }
 
 static void ipv4_link_failure(struct sk_buff *skb)
@@ -1302,7 +1308,7 @@ void ip_rt_get_source(u8 *addr, struct sk_buff *skb, struct rtable *rt)
 		struct flowi4 fl4 = {
 			.daddr = iph->daddr,
 			.saddr = iph->saddr,
-			.flowi4_tos = inet_dscp_to_dsfield(ip4h_dscp(iph)),
+			.flowi4_dscp = ip4h_dscp(iph),
 			.flowi4_oif = rt->dst.dev->ifindex,
 			.flowi4_iif = skb->dev->ifindex,
 			.flowi4_mark = skb->mark,
@@ -1338,7 +1344,7 @@ static unsigned int ipv4_default_advmss(const struct dst_entry *dst)
 	struct net *net;
 
 	rcu_read_lock();
-	net = dev_net_rcu(dst_dev(dst));
+	net = dst_dev_net_rcu(dst);
 	advmss = max_t(unsigned int, ipv4_mtu(dst) - header_size,
 				   net->ipv4.ip_rt_min_advmss);
 	rcu_read_unlock();
@@ -1543,9 +1549,9 @@ void rt_add_uncached_list(struct rtable *rt)
 
 void rt_del_uncached_list(struct rtable *rt)
 {
-	if (!list_empty(&rt->dst.rt_uncached)) {
-		struct uncached_list *ul = rt->dst.rt_uncached_list;
+	struct uncached_list *ul = rt->dst.rt_uncached_list;
 
+	if (ul) {
 		spin_lock_bh(&ul->lock);
 		list_del_init(&rt->dst.rt_uncached);
 		spin_unlock_bh(&ul->lock);
@@ -1806,8 +1812,8 @@ static void ip_handle_martian_source(struct net_device *dev,
 		 *	RFC1812 recommendation, if source is martian,
 		 *	the only hint is MAC header.
 		 */
-		pr_warn("martian source %pI4 from %pI4, on dev %s\n",
-			&daddr, &saddr, dev->name);
+		pr_warn("martian source (src=%pI4, dst=%pI4, dev=%s)\n",
+			&saddr, &daddr, dev->name);
 		if (dev->hard_header_len && skb_mac_header_was_set(skb)) {
 			print_hex_dump(KERN_WARNING, "ll header: ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
@@ -2254,7 +2260,7 @@ ip_route_use_hint(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto martian_source;
 	}
 
-	if (rt->rt_type != RTN_LOCAL)
+	if (!(rt->rt_flags & RTCF_LOCAL))
 		goto skip_validate_source;
 
 	reason = fib_validate_source_reason(skb, saddr, daddr, dscp, 0, dev,
@@ -2384,7 +2390,7 @@ ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	fl4.flowi4_oif = 0;/*出接口指定为0,未知*/
 	fl4.flowi4_iif = dev->ifindex;/*指定入接口*/
 	fl4.flowi4_mark = skb->mark;
-	fl4.flowi4_tos = inet_dscp_to_dsfield(dscp);
+	fl4.flowi4_dscp = dscp;
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 	fl4.flowi4_flags = 0;
 	fl4.daddr = daddr;/*目的地址*/
@@ -2536,8 +2542,8 @@ martian_destination:
 	RT_CACHE_STAT_INC(in_martian_dst);
 #ifdef CONFIG_IP_ROUTE_VERBOSE
 	if (IN_DEV_LOG_MARTIANS(in_dev))
-		net_warn_ratelimited("martian destination %pI4 from %pI4, dev %s\n",
-				     &daddr, &saddr, dev->name);
+		net_warn_ratelimited("martian destination (src=%pI4, dst=%pI4, dev=%s)\n",
+				     &saddr, &daddr, dev->name);
 #endif
 	goto out;
 
@@ -2646,12 +2652,16 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 		    !netif_is_l3_master(dev_out))
 			return ERR_PTR(-EINVAL);
 
-	if (ipv4_is_lbcast(fl4->daddr))
+	if (ipv4_is_lbcast(fl4->daddr)) {
 		type = RTN_BROADCAST;
-	else if (ipv4_is_multicast(fl4->daddr))
+
+		/* reset fi to prevent gateway resolution */
+		fi = NULL;
+	} else if (ipv4_is_multicast(fl4->daddr)) {
 		type = RTN_MULTICAST;
-	else if (ipv4_is_zeronet(fl4->daddr))
+	} else if (ipv4_is_zeronet(fl4->daddr)) {
 		return ERR_PTR(-EINVAL);
+	}
 
 	if (dev_out->flags & IFF_LOOPBACK)
 		flags |= RTCF_LOCAL;
@@ -2765,9 +2775,6 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 
 	//按入接口为lookback查询
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
-	/*清除掉tos上的额外标记*/
-	/*如果tos有onlink标记，则变更scope*/
-	fl4->flowi4_tos &= INET_DSCP_MASK;
 
 	rcu_read_lock();
 	rth = ip_route_output_key_hash_rcu(net, fl4, &res, skb);
@@ -3442,7 +3449,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 
 	fl4.daddr = dst;
 	fl4.saddr = src;
-	fl4.flowi4_tos = inet_dscp_to_dsfield(dscp);
+	fl4.flowi4_dscp = dscp;
 	fl4.flowi4_oif = nla_get_u32_default(tb[RTA_OIF], 0);
 	fl4.flowi4_mark = mark;
 	fl4.flowi4_uid = uid;
@@ -3792,7 +3799,7 @@ static __net_initdata struct pernet_operations rt_genid_ops = {
 
 static int __net_init ipv4_inetpeer_init(struct net *net)
 {
-	struct inet_peer_base *bp = kmalloc(sizeof(*bp), GFP_KERNEL);
+	struct inet_peer_base *bp = kmalloc_obj(*bp);
 
 	if (!bp)
 		return -ENOMEM;

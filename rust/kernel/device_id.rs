@@ -15,7 +15,7 @@ use core::mem::MaybeUninit;
 /// # Safety
 ///
 /// Implementers must ensure that `Self` is layout-compatible with [`RawDeviceId::RawType`];
-/// i.e. it's safe to transmute to `RawDeviceId`.
+/// i.e. it's safe to transmute to `RawType`.
 ///
 /// This requirement is needed so `IdArray::new` can convert `Self` to `RawType` when building
 /// the ID table.
@@ -100,7 +100,7 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
                 unsafe {
                     raw_ids[i]
                         .as_mut_ptr()
-                        .byte_offset(data_offset as _)
+                        .byte_add(data_offset)
                         .cast::<usize>()
                         .write(i);
                 }
@@ -177,7 +177,7 @@ impl<T: RawDeviceId, U, const N: usize> IdTable<T, U> for IdArray<T, U, N> {
     fn as_ptr(&self) -> *const T::RawType {
         // This cannot be `self.ids.as_ptr()`, as the return pointer must have correct provenance
         // to access the sentinel.
-        (self as *const Self).cast()
+        core::ptr::from_ref(self).cast()
     }
 
     fn id(&self, index: usize) -> &T::RawType {
@@ -195,10 +195,10 @@ macro_rules! module_device_table {
     ($table_type: literal, $module_table_name:ident, $table_name:ident) => {
         #[rustfmt::skip]
         #[export_name =
-            concat!("__mod_device_table__", $table_type,
-                    "__", module_path!(),
-                    "_", line!(),
-                    "_", stringify!($table_name))
+            concat!("__mod_device_table__", line!(),
+                    "__kmod_", module_path!(),
+                    "__", $table_type,
+                    "__", stringify!($table_name))
         ]
         static $module_table_name: [::core::mem::MaybeUninit<u8>; $table_name.raw_ids().size()] =
             unsafe { ::core::mem::transmute_copy($table_name.raw_ids()) };

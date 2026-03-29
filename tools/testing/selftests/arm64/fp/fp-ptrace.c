@@ -27,7 +27,7 @@
 #include <asm/sve_context.h>
 #include <asm/ptrace.h>
 
-#include "../../kselftest.h"
+#include "kselftest.h"
 
 #include "fp-ptrace.h"
 
@@ -1071,7 +1071,7 @@ static bool sve_write_supported(struct test_config *config)
 
 static bool sve_write_fpsimd_supported(struct test_config *config)
 {
-	if (!sve_supported())
+	if (!sve_supported() && !sme_supported())
 		return false;
 
 	if ((config->svcr_in & SVCR_ZA) != (config->svcr_expected & SVCR_ZA))
@@ -1187,7 +1187,7 @@ static void sve_write_sve(pid_t child, struct test_config *config)
 	if (!vl)
 		return;
 
-	iov.iov_len = SVE_PT_SVE_OFFSET + SVE_PT_SVE_SIZE(vq, SVE_PT_REGS_SVE);
+	iov.iov_len = SVE_PT_SIZE(vq, SVE_PT_REGS_SVE);
 	iov.iov_base = malloc(iov.iov_len);
 	if (!iov.iov_base) {
 		ksft_print_msg("Failed allocating %lu byte SVE write buffer\n",
@@ -1231,11 +1231,7 @@ static void sve_write_fpsimd(pid_t child, struct test_config *config)
 	vl = vl_expected(config);
 	vq = __sve_vq_from_vl(vl);
 
-	if (!vl)
-		return;
-
-	iov.iov_len = SVE_PT_SVE_OFFSET + SVE_PT_SVE_SIZE(vq,
-							  SVE_PT_REGS_FPSIMD);
+	iov.iov_len = SVE_PT_SIZE(vq, SVE_PT_REGS_FPSIMD);
 	iov.iov_base = malloc(iov.iov_len);
 	if (!iov.iov_base) {
 		ksft_print_msg("Failed allocating %lu byte SVE write buffer\n",
@@ -1569,7 +1565,6 @@ static void run_sve_tests(void)
 					  &test_config);
 		}
 	}
-
 }
 
 static void run_sme_tests(void)

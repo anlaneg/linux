@@ -70,14 +70,15 @@ MODULE_PARM_DESC(experimental_zcopytx, "Enable Zero Copy TX;"
 
 #define VHOST_DMA_IS_DONE(len) ((__force u32)(len) >= (__force u32)VHOST_DMA_DONE_LEN)
 
-static const u64 vhost_net_features[VIRTIO_FEATURES_DWORDS] = {
-	VHOST_FEATURES |
-	(1ULL << VHOST_NET_F_VIRTIO_NET_HDR) |
-	(1ULL << VIRTIO_NET_F_MRG_RXBUF) |
-	(1ULL << VIRTIO_F_ACCESS_PLATFORM) |
-	(1ULL << VIRTIO_F_RING_RESET),
-	VIRTIO_BIT(VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) |
-	VIRTIO_BIT(VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO),
+static const int vhost_net_bits[] = {
+	VHOST_FEATURES,
+	VHOST_NET_F_VIRTIO_NET_HDR,
+	VIRTIO_NET_F_MRG_RXBUF,
+	VIRTIO_F_ACCESS_PLATFORM,
+	VIRTIO_F_RING_RESET,
+	VIRTIO_F_IN_ORDER,
+	VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO,
+	VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO
 };
 
 enum {
@@ -99,6 +100,7 @@ struct vhost_net_ubuf_ref {
 	atomic_t refcount;
 	wait_queue_head_t wait;
 	struct vhost_virtqueue *vq;
+	struct rcu_head rcu;
 };
 
 #define VHOST_NET_BATCH 64
@@ -256,7 +258,7 @@ vhost_net_ubuf_alloc(struct vhost_virtqueue *vq, bool zcopy)
 	if (!zcopy)
 	    /*没有开启零copy，则不处理*/
 		return NULL;
-	ubufs = kmalloc(sizeof(*ubufs), GFP_KERNEL);
+	ubufs = kmalloc_obj(*ubufs);
 	if (!ubufs)
 		return ERR_PTR(-ENOMEM);
 	atomic_set(&ubufs->refcount, 1);
@@ -267,9 +269,13 @@ vhost_net_ubuf_alloc(struct vhost_virtqueue *vq, bool zcopy)
 
 static int vhost_net_ubuf_put(struct vhost_net_ubuf_ref *ubufs)
 {
-	int r = atomic_sub_return(1, &ubufs->refcount);
+	int r;
+
+	rcu_read_lock();
+	r = atomic_sub_return(1, &ubufs->refcount);
 	if (unlikely(!r))
 		wake_up(&ubufs->wait);
+	rcu_read_unlock();
 	return r;
 }
 
@@ -282,7 +288,7 @@ static void vhost_net_ubuf_put_and_wait(struct vhost_net_ubuf_ref *ubufs)
 static void vhost_net_ubuf_put_wait_and_free(struct vhost_net_ubuf_ref *ubufs)
 {
 	vhost_net_ubuf_put_and_wait(ubufs);
-	kfree(ubufs);
+	kfree_rcu(ubufs, rcu);
 }
 
 static void vhost_net_clear_ubuf_info(struct vhost_net *n)
@@ -307,9 +313,7 @@ static int vhost_net_set_ubuf_info(struct vhost_net *n)
 			continue;
 		//申请ubuf_info空间
 		n->vqs[i].ubuf_info =
-			kmalloc_array(UIO_MAXIOV,
-				      sizeof(*n->vqs[i].ubuf_info),
-				      GFP_KERNEL);
+			kmalloc_objs(*n->vqs[i].ubuf_info, UIO_MAXIOV);
 		if  (!n->vqs[i].ubuf_info)
 			goto err;
 	}
@@ -397,7 +401,8 @@ static void vhost_zerocopy_signal_used(struct vhost_net *net,
 	while (j) {
 		add = min(UIO_MAXIOV - nvq->done_idx, j);
 		vhost_add_used_and_signal_n(vq->dev, vq,
-					    &vq->heads[nvq->done_idx], add);
+					    &vq->heads[nvq->done_idx],
+					    NULL, add);
 		nvq->done_idx = (nvq->done_idx + add) % UIO_MAXIOV;
 		j -= add;
 	}
@@ -476,7 +481,8 @@ static int vhost_net_enable_vq(struct vhost_net *n,
 	return vhost_poll_start(poll, sock->file);
 }
 
-static void vhost_net_signal_used(struct vhost_net_virtqueue *nvq)
+static void vhost_net_signal_used(struct vhost_net_virtqueue *nvq,
+				  unsigned int count)
 {
 	struct vhost_virtqueue *vq = &nvq->vq;
 	struct vhost_dev *dev = vq->dev;
@@ -485,7 +491,8 @@ static void vhost_net_signal_used(struct vhost_net_virtqueue *nvq)
 		/*已置为0,不再通知*/
 		return;
 
-	vhost_add_used_and_signal_n(dev, vq, vq->heads, nvq->done_idx);
+	vhost_add_used_and_signal_n(dev, vq, vq->heads,
+				    vq->nheads, count);
 	nvq->done_idx = 0;
 }
 
@@ -494,12 +501,19 @@ static void vhost_tx_batch(struct vhost_net *net,
 			   struct socket *sock,
 			   struct msghdr *msghdr)
 {
+	struct vhost_virtqueue *vq = &nvq->vq;
+	bool in_order = vhost_has_feature(vq, VIRTIO_F_IN_ORDER);
 	struct tun_msg_ctl ctl = {
 		.type = TUN_MSG_PTR,
 		.num = nvq->batched_xdp,
 		.ptr = nvq->xdp,
 	};
 	int i, err;
+
+	if (in_order) {
+		vq->heads[0].len = 0;
+		vq->nheads[0] = nvq->done_idx;
+	}
 
 	if (nvq->batched_xdp == 0)
 		goto signal_used;
@@ -522,7 +536,7 @@ static void vhost_tx_batch(struct vhost_net *net,
 	}
 
 signal_used:
-	vhost_net_signal_used(nvq);
+	vhost_net_signal_used(nvq, in_order ? 1 : nvq->done_idx);
 	nvq->batched_xdp = 0;
 }
 
@@ -609,15 +623,16 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 static int vhost_net_tx_get_vq_desc(struct vhost_net *net,
 				    struct vhost_net_virtqueue *tnvq/*tx对应的vq*/,
 				    unsigned int *out_num/*出参，可读数据片数目*/, unsigned int *in_num/*出参，可写数据片数目*/,
-				    struct msghdr *msghdr, bool *busyloop_intr)
+				    struct msghdr *msghdr, bool *busyloop_intr,
+				    unsigned int *ndesc)
 {
 	struct vhost_net_virtqueue *rnvq = &net->vqs[VHOST_NET_VQ_RX];/*取rx对应的vq*/
 	struct vhost_virtqueue *rvq = &rnvq->vq;
 	struct vhost_virtqueue *tvq = &tnvq->vq;
 
 	//读buffer地址到tvq->iov
-	int r = vhost_get_vq_desc(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
-				  out_num, in_num, NULL, NULL);
+	int r = vhost_get_vq_desc_n(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
+				    out_num, in_num, NULL, NULL, ndesc);
 
 	if (r == tvq->num && tvq->busyloop_timeout) {
 		/* Flush batched packets first */
@@ -628,8 +643,8 @@ static int vhost_net_tx_get_vq_desc(struct vhost_net *net,
 
 		vhost_net_busy_poll(net, rvq, tvq, busyloop_intr, false);
 
-		r = vhost_get_vq_desc(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
-				      out_num, in_num, NULL, NULL);
+		r = vhost_get_vq_desc_n(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
+					out_num, in_num, NULL, NULL, ndesc);
 	}
 
 	return r;
@@ -660,13 +675,15 @@ static int get_tx_bufs(struct vhost_net *net,
 		       struct vhost_net_virtqueue *nvq,
 		       struct msghdr *msg,
 		       unsigned int *out/*出参，可读数据片数目*/, unsigned int *in/*出参，可写数据片数目*/,
-		       size_t *len, bool *busyloop_intr)
+		       size_t *len, bool *busyloop_intr,
+		       unsigned int *ndesc)
 {
 	struct vhost_virtqueue *vq = &nvq->vq;
 	int ret;
 
 	//取tx可用描述符指明的buffer
-	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
+	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg,
+				       busyloop_intr, ndesc);
 
 	//提取失败或者无可用描述符，直接返回
 	if (ret < 0 || ret == vq->num)
@@ -788,26 +805,36 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 	int err;
 	int sent_pkts = 0;
 	bool sock_can_batch = (sock->sk->sk_sndbuf == INT_MAX);
-	bool busyloop_intr;
+	bool in_order = vhost_has_feature(vq, VIRTIO_F_IN_ORDER);
+	unsigned int ndesc = 0;
 
 	do {
-		busyloop_intr = false;
+		bool busyloop_intr = false;
+
 		if (nvq->done_idx == VHOST_NET_BATCH)
 			vhost_tx_batch(net, nvq, sock, &msg);
 
 		//获取描述符索引及其指明的buffer,并将内容填充到msg中
 		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len/*出参，buffer长度*/,
-				   &busyloop_intr);
+				   &busyloop_intr, &ndesc);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(head < 0))
 			/*获取时出错*/
 			break;
 		/* Nothing new?  Wait for eventfd to tell us they refilled. */
 		if (head == vq->num) {
-			/* Kicks are disabled at this point, break loop and
-			 * process any remaining batched packets. Queue will
-			 * be re-enabled afterwards.
+			/* Flush batched packets to handle pending RX
+			 * work (if busyloop_intr is set) and to avoid
+			 * unnecessary virtqueue kicks.
 			 */
+			vhost_tx_batch(net, nvq, sock, &msg);
+			if (unlikely(busyloop_intr)) {
+				vhost_poll_queue(&vq->poll);
+			} else if (unlikely(vhost_enable_notify(&net->dev,
+								vq))) {
+				vhost_disable_notify(&net->dev, vq);
+				continue;
+			}
 			/*没有数据*/
 			break;
 		}
@@ -823,16 +850,18 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 				goto done;
 			} else if (unlikely(err != -ENOSPC)) {
 				vhost_tx_batch(net, nvq, sock, &msg);
-				vhost_discard_vq_desc(vq, 1);
+				vhost_discard_vq_desc(vq, 1, ndesc);
 				vhost_net_enable_vq(net, vq);
 				break;
 			}
 
-			/* We can't build XDP buff, go for single
-			 * packet path but let's flush batched
-			 * packets.
-			 */
-			vhost_tx_batch(net, nvq, sock, &msg);
+			if (nvq->batched_xdp) {
+				/* We can't build XDP buff, go for single
+				 * packet path but let's flush batched
+				 * packets.
+				 */
+				vhost_tx_batch(net, nvq, sock, &msg);
+			}
 			msg.msg_control = NULL;
 		} else {
 			if (tx_can_batch(vq, total_len))
@@ -846,7 +875,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		if (unlikely(err < 0)) {
 			if (err == -EAGAIN || err == -ENOMEM || err == -ENOBUFS) {
 			    /*向对方发送失败，回退描述符，后续重试*/
-				vhost_discard_vq_desc(vq, 1);
+				vhost_discard_vq_desc(vq, 1, ndesc);
 				vhost_net_enable_vq(net, vq);
 				break;
 			}
@@ -856,28 +885,17 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 			pr_debug("Truncated TX packet: len %d != %zd\n",
 				 err, len);
 done:
-        /*发送完成，填充vq->heads*/
-		vq->heads[nvq->done_idx].id = cpu_to_vhost32(vq, head);
-		vq->heads[nvq->done_idx].len = 0;
+		if (in_order) {
+			vq->heads[0].id = cpu_to_vhost32(vq, head);
+		} else {
+			/*发送完成，填充vq->heads*/
+			vq->heads[nvq->done_idx].id = cpu_to_vhost32(vq, head);
+			vq->heads[nvq->done_idx].len = 0;
+		}
 		++nvq->done_idx;
 	} while (likely(!vhost_exceeds_weight(vq, ++sent_pkts, total_len)));
 
-	/* Kicks are still disabled, dispatch any remaining batched msgs. */
 	vhost_tx_batch(net, nvq, sock, &msg);
-
-	if (unlikely(busyloop_intr))
-		/* If interrupted while doing busy polling, requeue the
-		 * handler to be fair handle_rx as well as other tasks
-		 * waiting on cpu.
-		 */
-		vhost_poll_queue(&vq->poll);
-	else
-		/* All of our work has been completed; however, before
-		 * leaving the TX handler, do one last check for work,
-		 * and requeue handler if necessary. If there is no work,
-		 * queue will be reenabled.
-		 */
-		vhost_net_busy_poll_try_queue(net, vq);
 }
 
 static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
@@ -898,6 +916,7 @@ static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
 	int err;
 	struct vhost_net_ubuf_ref *ubufs;
 	struct ubuf_info_msgzc *ubuf;
+	unsigned int ndesc = 0;
 	bool zcopy_used;
 	int sent_pkts = 0;
 
@@ -909,7 +928,7 @@ static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
 
 		busyloop_intr = false;
 		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len,
-				   &busyloop_intr);
+				   &busyloop_intr, &ndesc);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(head < 0))
 			break;
@@ -971,7 +990,7 @@ static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
 					vq->heads[ubuf->desc].len = VHOST_DMA_DONE_LEN;
 			}
 			if (retry) {
-				vhost_discard_vq_desc(vq, 1);
+				vhost_discard_vq_desc(vq, 1, ndesc);
 				vhost_net_enable_vq(net, vq);
 				break;
 			}
@@ -1047,7 +1066,7 @@ static int peek_head_len(struct vhost_net_virtqueue *rvq, struct sock *sk)
 }
 
 static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
-				      bool *busyloop_intr)
+				      bool *busyloop_intr, unsigned int *count)
 {
 	struct vhost_net_virtqueue *rnvq = &net->vqs[VHOST_NET_VQ_RX];
 	struct vhost_net_virtqueue *tnvq = &net->vqs[VHOST_NET_VQ_TX];
@@ -1059,7 +1078,8 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
 	if (!len && rvq->busyloop_timeout) {
 	    /*rx队列上没有报文，且用户指定了busyloop的超时时间*/
 		/* Flush batched heads first */
-		vhost_net_signal_used(rnvq);
+		vhost_net_signal_used(rnvq, *count);
+		*count = 0;
 		/* Both tx vq and rx socket were polled here */
 		vhost_net_busy_poll(net, rvq, tvq, busyloop_intr, true);
 
@@ -1071,7 +1091,7 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
 
 /* This is a multi-buffer version of vhost_get_desc, that works if
  *	vq has read descriptors only.
- * @vq		- the relevant virtqueue
+ * @nvq		- the relevant vhost_net virtqueue
  * @datalen	- data length we'll be reading
  * @iovcount	- returned count of io vectors we fill
  * @log		- vhost log
@@ -1079,15 +1099,19 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
  * @quota       - headcount quota, 1 for big buffer
  *	returns number of buffer heads allocated, negative on error
  */
-static int get_rx_bufs(struct vhost_virtqueue *vq,
+static int get_rx_bufs(struct vhost_net_virtqueue *nvq,
 		       struct vring_used_elem *heads/*出参，需占用描述符及其能提供的buffer尺寸*/,
+		       u16 *nheads,
 		       int datalen/*预期要获得的buffer总大小*/,
 		       unsigned *iovcount/*出参，vq->iov被占用总数目*/,
 		       struct vhost_log *log,
 		       unsigned *log_num,
-		       unsigned int quota/*容许占用的描述符数目上限*/)
+		       unsigned int quota/*容许占用的描述符数目上限*/,
+		       unsigned int *ndesc)
 {
-	unsigned int out, in;
+	struct vhost_virtqueue *vq = &nvq->vq;
+	bool in_order = vhost_has_feature(vq, VIRTIO_F_IN_ORDER);
+	unsigned int out, in, desc_num, n = 0;
 	/*当前vq->iov已占用segment大小*/
 	int seg = 0;
 	int headcount = 0;
@@ -1104,11 +1128,10 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 			r = -ENOBUFS;
 			goto err;
 		}
-
 		//取可用描述符索引
-		r = vhost_get_vq_desc(vq, vq->iov + seg/*iov起始位置*/,
-				      ARRAY_SIZE(vq->iov) - seg/*可用iov数目*/, &out,
-				      &in, log, log_num);
+		r = vhost_get_vq_desc_n(vq, vq->iov + seg/*iov起始位置*/,
+					ARRAY_SIZE(vq->iov) - seg/*可用iov数目*/, &out,
+					&in, log, log_num, &desc_num);
 		if (unlikely(r < 0))
 			goto err;
 
@@ -1129,15 +1152,18 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 			nlogs += *log_num;
 			log += *log_num;
 		}
-		heads[headcount].id = cpu_to_vhost32(vq, d);
 		//当前已占用描述符可提供的buffer大小
 		len = iov_length(vq->iov + seg, in);
-		heads[headcount].len = cpu_to_vhost32(vq, len);
-		datalen -= len;//剩余待需要buffer大小
+		if (!in_order) {
+			heads[headcount].id = cpu_to_vhost32(vq, d);
+			heads[headcount].len = cpu_to_vhost32(vq, len);
+		}
 		++headcount;//已占用描述符数目
+		datalen -= len;//剩余待需要buffer大小
 		seg += in;/*当前已占用iov 数据片总数目*/
+		n += desc_num;
 	}
-	heads[headcount - 1].len = cpu_to_vhost32(vq, len + datalen);
+
 	*iovcount = seg;
 	if (unlikely(log))
 		*log_num = nlogs;
@@ -1148,9 +1174,20 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 		r = UIO_MAXIOV + 1;
 		goto err;
 	}
+
+	if (!in_order)
+		heads[headcount - 1].len = cpu_to_vhost32(vq, len + datalen);
+	else {
+		heads[0].len = cpu_to_vhost32(vq, len + datalen);
+		heads[0].id = cpu_to_vhost32(vq, d);
+		nheads[0] = headcount;
+	}
+
+	*ndesc = n;
+
 	return headcount;
 err:
-	vhost_discard_vq_desc(vq, headcount);
+	vhost_discard_vq_desc(vq, headcount, n);
 	return r;
 }
 
@@ -1163,6 +1200,8 @@ static void handle_rx(struct vhost_net *net)
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_RX];
 	/*取rx对应的vq*/
 	struct vhost_virtqueue *vq = &nvq->vq;
+	bool in_order = vhost_has_feature(vq, VIRTIO_F_IN_ORDER);
+	unsigned int count = 0;
 	unsigned in, log;
 	struct vhost_log *vq_log;
 	struct msghdr msg = {
@@ -1187,6 +1226,7 @@ static void handle_rx(struct vhost_net *net)
 	struct iov_iter fixup;
 	__virtio16 num_buffers;
 	int recv_pkts = 0;
+	unsigned int ndesc;
 
 	/*锁住此队列*/
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_RX);
@@ -1217,19 +1257,19 @@ static void handle_rx(struct vhost_net *net)
 	do {
 	    //通过peek首先确定要接收的pkt长度
 		sock_len = vhost_net_rx_peek_head_len(net, sock->sk,
-						      &busyloop_intr);
+						      &busyloop_intr, &count);
 		if (!sock_len)
 		    /*无数据，跳出*/
 			break;
-
 		//需要读取的buffer总长为vhost_len,获取足够描述符，以便可以存入它
 		sock_len += sock_hlen;/*socket负载长度（含socket header）*/
 		vhost_len = sock_len + vhost_hlen;/*vhost负载长度（含vhost header)*/
-
 		//获取足够容纳报文的描述符
-		headcount = get_rx_bufs(vq, vq->heads + nvq->done_idx,
+		headcount = get_rx_bufs(nvq, vq->heads + count,
+					vq->nheads + count,
 					vhost_len/*vhost负载长度*/, &in, vq_log, &log,
-					likely(mergeable) ? UIO_MAXIOV : 1);
+					likely(mergeable) ? UIO_MAXIOV : 1,
+					&ndesc);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(headcount < 0))
 		    /*获取描述符失败，退出*/
@@ -1286,7 +1326,7 @@ static void handle_rx(struct vhost_net *net)
 		    //报文长度有误，归还申请的描述符
 			pr_debug("Discarded rx packet: "
 				 " len %d, expected %zd\n", err, sock_len);
-			vhost_discard_vq_desc(vq, headcount);
+			vhost_discard_vq_desc(vq, headcount, ndesc);
 			continue;
 		}
 
@@ -1313,13 +1353,16 @@ static void handle_rx(struct vhost_net *net)
 		    copy_to_iter(&num_buffers, sizeof num_buffers,
 				 &fixup) != sizeof num_buffers) {
 			vq_err(vq, "Failed num_buffers write");
-			vhost_discard_vq_desc(vq, headcount);
+			vhost_discard_vq_desc(vq, headcount, ndesc);
 			goto out;
 		}
 		nvq->done_idx += headcount;
+		count += in_order ? 1 : headcount;
 		//如果用量超过阀值，则通知对端
-		if (nvq->done_idx > VHOST_NET_BATCH)
-			vhost_net_signal_used(nvq);
+		if (nvq->done_idx > VHOST_NET_BATCH) {
+			vhost_net_signal_used(nvq, count);
+			count = 0;
+		}
 		if (unlikely(vq_log))
 			vhost_log_write(vq, vq_log, log, vhost_len,
 					vq->iov, in);
@@ -1333,8 +1376,8 @@ static void handle_rx(struct vhost_net *net)
 		/*当前数据了，wait等待事件再发生*/
 		vhost_net_enable_vq(net, vq);
 out:
-    //通知对端有报文
-	vhost_net_signal_used(nvq);
+	//通知对端有报文
+	vhost_net_signal_used(nvq, count);
 	mutex_unlock(&vq->mutex);
 }
 
@@ -1388,12 +1431,11 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	int i;
 
 	/*申请vhost_net*/
-	n = kvmalloc(sizeof *n, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
+	n = kvmalloc_obj(*n, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!n)
 		return -ENOMEM;
-
 	//申请一对儿vq指针
-	vqs = kmalloc_array(VHOST_NET_VQ_MAX, sizeof(*vqs), GFP_KERNEL);
+	vqs = kmalloc_objs(*vqs, VHOST_NET_VQ_MAX);
 	if (!vqs) {
 		kvfree(n);
 		return -ENOMEM;
@@ -1412,7 +1454,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	n->vqs[VHOST_NET_VQ_RX].rxq.queue = queue;
 
 	/*初始化xdp发队列buffer*/
-	xdp = kmalloc_array(VHOST_NET_BATCH, sizeof(*xdp), GFP_KERNEL);
+	xdp = kmalloc_objs(*xdp, VHOST_NET_BATCH);
 	if (!xdp) {
 		kfree(vqs);
 		kvfree(n);
@@ -1847,7 +1889,8 @@ out:
 static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			    unsigned long arg)
 {
-	u64 all_features[VIRTIO_FEATURES_DWORDS];
+	const DEFINE_VHOST_FEATURES_ARRAY(vhost_net_features, vhost_net_bits);
+	u64 all_features[VIRTIO_FEATURES_U64S];
 	/*取此文件对应的vhost_net结构体*/
 	struct vhost_net *n = f->private_data;
 	void __user *argp = (void __user *)arg;
@@ -1884,7 +1927,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 
 		/* Copy the net features, up to the user-provided buffer size */
 		argp += sizeof(u64);
-		copied = min(count, VIRTIO_FEATURES_DWORDS);
+		copied = min(count, (u64)VIRTIO_FEATURES_U64S);
 		if (copy_to_user(argp, vhost_net_features,
 				 copied * sizeof(u64)))
 			return -EFAULT;
@@ -1899,13 +1942,13 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 
 		virtio_features_zero(all_features);
 		argp += sizeof(u64);
-		copied = min(count, VIRTIO_FEATURES_DWORDS);
+		copied = min(count, (u64)VIRTIO_FEATURES_U64S);
 		if (copy_from_user(all_features, argp, copied * sizeof(u64)))
 			return -EFAULT;
 
 		/*
 		 * Any feature specified by user-space above
-		 * VIRTIO_FEATURES_MAX is not supported by definition.
+		 * VIRTIO_FEATURES_BITS is not supported by definition.
 		 */
 		for (i = copied; i < count; ++i) {
 			if (copy_from_user(&features, featurep + 1 + i,
@@ -1915,7 +1958,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 				return -EOPNOTSUPP;
 		}
 
-		for (i = 0; i < VIRTIO_FEATURES_DWORDS; i++)
+		for (i = 0; i < VIRTIO_FEATURES_U64S; i++)
 			if (all_features[i] & ~vhost_net_features[i])
 				return -EOPNOTSUPP;
 

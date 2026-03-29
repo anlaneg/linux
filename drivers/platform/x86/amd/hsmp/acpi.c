@@ -22,11 +22,10 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
+#include <linux/topology.h>
 #include <linux/uuid.h>
 
 #include <uapi/asm-generic/errno-base.h>
-
-#include <asm/amd/node.h>
 
 #include "hsmp.h"
 
@@ -495,16 +494,16 @@ static int init_acpi(struct device *dev)
 	if (hsmp_pdev->proto_ver == HSMP_PROTO_VER6) {
 		ret = hsmp_get_tbl_dram_base(sock_ind);
 		if (ret)
-			dev_err(dev, "Failed to init metric table\n");
+			dev_info(dev, "Failed to init metric table\n");
 	}
 
 	ret = hsmp_create_sensor(dev, sock_ind);
 	if (ret)
-		dev_err(dev, "Failed to register HSMP sensors with hwmon\n");
+		dev_info(dev, "Failed to register HSMP sensors with hwmon\n");
 
 	dev_set_drvdata(dev, &hsmp_pdev->sock[sock_ind]);
 
-	return ret;
+	return 0;
 }
 
 static const struct bin_attribute  hsmp_metric_tbl_attr = {
@@ -586,9 +585,9 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	if (!hsmp_pdev->is_probed) {
-		hsmp_pdev->num_sockets = amd_num_nodes();
-		if (hsmp_pdev->num_sockets == 0 || hsmp_pdev->num_sockets > MAX_AMD_NUM_NODES) {
-			dev_err(&pdev->dev, "Wrong number of sockets\n");
+		hsmp_pdev->num_sockets = topology_max_packages();
+		if (!hsmp_pdev->num_sockets) {
+			dev_err(&pdev->dev, "No CPU sockets detected\n");
 			return -ENODEV;
 		}
 

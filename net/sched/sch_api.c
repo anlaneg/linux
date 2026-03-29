@@ -458,7 +458,7 @@ struct qdisc_rate_table *qdisc_get_rtab(struct tc_ratespec *r,
 
 	for (rtab = qdisc_rtab_list; rtab; rtab = rtab->next) {
 		if (!memcmp(&rtab->rate, r, sizeof(struct tc_ratespec)) &&
-		    !memcmp(&rtab->data, nla_data(tab), 1024)) {
+		    !memcmp(&rtab->data, nla_data(tab), TC_RTAB_SIZE)) {
 			/*tab与当前遍历项rtab相等，增加引用计数，并返回*/
 			rtab->refcnt++;
 			return rtab;
@@ -466,11 +466,11 @@ struct qdisc_rate_table *qdisc_get_rtab(struct tc_ratespec *r,
 	}
 
 	/*没有找到相同的，执执申请rtab,并填充后，添加到qdisc_rtab_list的头部*/
-	rtab = kmalloc(sizeof(*rtab), GFP_KERNEL);
+	rtab = kmalloc_obj(*rtab);
 	if (rtab) {
 		rtab->rate = *r;
 		rtab->refcnt = 1;
-		memcpy(rtab->data, nla_data(tab), 1024);
+		memcpy(rtab->data, nla_data(tab), TC_RTAB_SIZE);
 		if (r->linklayer == TC_LINKLAYER_UNAWARE)
 			r->linklayer = __detect_linklayer(r, rtab->data);
 		rtab->next = qdisc_rtab_list;
@@ -563,7 +563,7 @@ static struct qdisc_size_table *qdisc_get_stab(struct nlattr *opt,
 		return ERR_PTR(-EINVAL);
 	}
 
-	stab = kmalloc(struct_size(stab, data, tsize), GFP_KERNEL);
+	stab = kmalloc_flex(*stab, data, tsize);
 	if (!stab)
 		return ERR_PTR(-ENOMEM);
 
@@ -705,7 +705,7 @@ static struct hlist_head *qdisc_class_hash_alloc(unsigned int n)
 	struct hlist_head *h;
 	unsigned int i;
 
-	h = kvmalloc_array(n, sizeof(struct hlist_head), GFP_KERNEL);
+	h = kvmalloc_objs(struct hlist_head, n);
 
 	if (h != NULL) {
 		for (i = 0; i < n; i++)
@@ -1444,7 +1444,7 @@ err_out4:
 		ops->destroy(sch);
 	qdisc_put_stab(rtnl_dereference(sch->stab));
 err_out3:
-	lockdep_unregister_key(&sch->root_lock_key);
+	qdisc_lock_uninit(sch, ops);
 	netdev_put(dev, &sch->dev_tracker);
 	qdisc_free(sch);
 err_out2:
@@ -1708,6 +1708,11 @@ static int __tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find specified qdisc");
 					return -ENOENT;
+				}
+				if (p->flags & TCQ_F_INGRESS) {
+					NL_SET_ERR_MSG(extack,
+						       "Cannot add children to ingress/clsact qdisc");
+					return -EOPNOTSUPP;
 				}
 				/*clid是一个由major:minor组成，现在查此class绑定的队列*/
 				q = qdisc_leaf(p, clid, extack);

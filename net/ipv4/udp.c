@@ -68,7 +68,7 @@
  *	YOSHIFUJI Hideaki @USAGI and:	Support IPV6_V6ONLY socket option, which
  *	Alexey Kuznetsov:		allow both IPv4 and IPv6 sockets to bind
  *					a single port at the same time.
- *	Derek Atkins <derek@ihtfp.com>: Add Encapulation Support
+ *	Derek Atkins <derek@ihtfp.com>: Add Encapsulation Support
  *	James Chapman		:	Add L2TP encapsulation type.
  */
 
@@ -298,7 +298,7 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 	    /*函数指定了snum,查询此udp port对应的slot*/
 		hslot = udp_hashslot(udptable, net, snum);
 		spin_lock_bh(&hslot->lock);
-		if (hslot->count > 10) {
+		if (inet_use_hash2_on_bind(sk) && hslot->count > 10) {
 			int exist;
 			unsigned int slot2 = udp_sk(sk)->udp_portaddr_hash ^ snum;
 
@@ -539,7 +539,7 @@ rescore:
 
 			/* compute_score is too long of a function to be
 			 * inlined, and calling it again here yields
-			 * measureable overhead for some
+			 * measurable overhead for some
 			 * workloads. Work around it by jumping
 			 * backwards to rescore 'result'.
 			 */
@@ -1237,7 +1237,7 @@ csum_partial:
 
 send:
 	err = ip_send_skb(sock_net(sk), skb);
-	if (err) {
+	if (unlikely(err)) {
 		if (err == -ENOBUFS &&
 		    !inet_test_bit(RECVERR, sk)) {
 			UDP_INC_STATS(sock_net(sk),
@@ -1316,6 +1316,8 @@ EXPORT_IPV6_MOD_GPL(udp_cmsg_send);
 //针对udp socket的报文发送
 int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长度*/)
 {
+	DEFINE_RAW_FLEX(struct ip_options_rcu, opt_copy, opt.__data,
+			IP_OPTIONS_DATA_FIXED_SIZE);
 	struct inet_sock *inet = inet_sk(sk);
 	struct udp_sock *up = udp_sk(sk);
 	/*取目的端地址*/
@@ -1335,7 +1337,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 	int corkreq = udp_test_bit(CORK, sk) || msg->msg_flags & MSG_MORE;
 	int (*getfrag)(void *, char *, int, int, int, struct sk_buff *);
 	struct sk_buff *skb;
-	struct ip_options_data opt_copy;
 	int uc_index;
 
 	/*msg长度过大*/
@@ -1425,9 +1426,9 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 		rcu_read_lock();
 		inet_opt = rcu_dereference(inet->inet_opt);
 		if (inet_opt) {
-			memcpy(&opt_copy, inet_opt,
+			memcpy(opt_copy, inet_opt,
 			       sizeof(*inet_opt) + inet_opt->opt.optlen);
-			ipc.opt = &opt_copy.opt;
+			ipc.opt = opt_copy;
 		}
 		rcu_read_unlock();
 	}
@@ -1751,31 +1752,6 @@ static void udp_skb_dtor_locked(struct sock *sk, struct sk_buff *skb)
 	udp_rmem_release(sk, udp_skb_truesize(skb), 1, true);
 }
 
-/* Idea of busylocks is to let producers grab an extra spinlock
- * to relieve pressure on the receive_queue spinlock shared by consumer.
- * Under flood, this means that only one producer can be in line
- * trying to acquire the receive_queue spinlock.
- * These busylock can be allocated on a per cpu manner, instead of a
- * per socket one (that would consume a cache line per socket)
- */
-static int udp_busylocks_log __read_mostly;
-static spinlock_t *udp_busylocks __read_mostly;
-
-static spinlock_t *busylock_acquire(void *ptr)
-{
-	spinlock_t *busy;
-
-	busy = udp_busylocks + hash_ptr(ptr, udp_busylocks_log);
-	spin_lock(busy);
-	return busy;
-}
-
-static void busylock_release(spinlock_t *busy)
-{
-	if (busy)
-		spin_unlock(busy);
-}
-
 static int udp_rmem_schedule(struct sock *sk, int size)
 {
 	int delta;
@@ -1790,13 +1766,23 @@ static int udp_rmem_schedule(struct sock *sk, int size)
 int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 {
 	struct sk_buff_head *list = &sk->sk_receive_queue;
+	struct udp_prod_queue *udp_prod_queue;
+	struct sk_buff *next, *to_drop = NULL;
+	struct llist_node *ll_list;
 	unsigned int rmem, rcvbuf;
-	spinlock_t *busy = NULL;
 	int size, err = -ENOMEM;
+	int total_size = 0;
+	int q_size = 0;
+	int dropcount;
+	int nb = 0;
 
 	rmem = atomic_read(&sk->sk_rmem_alloc);
 	rcvbuf = READ_ONCE(sk->sk_rcvbuf);
 	size = skb->truesize;
+
+	udp_prod_queue = &udp_sk(sk)->udp_prod_queue[numa_node_id()];
+
+	rmem += atomic_read(&udp_prod_queue->rmem_alloc);
 
 	/* Immediately drop when the receive queue is full.
 	 * Cast to unsigned int performs the boundary check for INT_MAX.
@@ -1805,8 +1791,8 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 		if (rcvbuf > INT_MAX >> 1)
 			goto drop;
 
-		/* Always allow at least one packet for small buffer. */
-		if (rmem > rcvbuf)
+		/* Accept the packet if queue is empty. */
+		if (rmem)
 			//超过接受缓冲区门限rcvbuf，丢包
 			goto drop;
 	}
@@ -1821,46 +1807,99 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	if (rmem > (rcvbuf >> 1)) {
 		skb_condense(skb);
 		size = skb->truesize;
-		busy = busylock_acquire(sk);
 	}
 
 	//记录报文有多少字节
 	udp_set_dev_scratch(skb);
 
 	//尝试原子加，并在加后进行检查（由于上面的检查不是原子的）
-	atomic_add(size, &sk->sk_rmem_alloc);
+	atomic_add(size, &udp_prod_queue->rmem_alloc);
+
+	if (!llist_add(&skb->ll_node, &udp_prod_queue->ll_root))
+		return 0;
+
+	dropcount = sock_flag(sk, SOCK_RXQ_OVFL) ? sk_drops_read(sk) : 0;
 
 	spin_lock(&list->lock);
-	err = udp_rmem_schedule(sk, size);
-	if (err) {
-		spin_unlock(&list->lock);
-		goto uncharge_drop;
+
+	ll_list = llist_del_all(&udp_prod_queue->ll_root);
+
+	ll_list = llist_reverse_order(ll_list);
+
+	llist_for_each_entry_safe(skb, next, ll_list, ll_node) {
+		size = udp_skb_truesize(skb);
+		total_size += size;
+		err = udp_rmem_schedule(sk, size);
+		if (unlikely(err)) {
+			/*  Free the skbs outside of locked section. */
+			skb->next = to_drop;
+			to_drop = skb;
+			continue;
+		}
+
+		q_size += size;
+		sk_forward_alloc_add(sk, -size);
+
+		/* no need to setup a destructor, we will explicitly release the
+		 * forward allocated memory on dequeue
+		 */
+		SOCK_SKB_CB(skb)->dropcount = dropcount;
+		nb++;
+		//将skb放置在报文接受队列上。
+		__skb_queue_tail(list, skb);
 	}
 
-	sk_forward_alloc_add(sk, -size);
+	atomic_add(q_size, &sk->sk_rmem_alloc);
 
-	/* no need to setup a destructor, we will explicitly release the
-	 * forward allocated memory on dequeue
-	 */
-	sock_skb_set_dropcount(sk, skb);
-
-	//将skb放置在报文接受队列上。
-	__skb_queue_tail(list, skb);
 	spin_unlock(&list->lock);
 
 	//如果socket无dead标记，则知会socket数据ready
-	if (!sock_flag(sk, SOCK_DEAD))
-		INDIRECT_CALL_1(sk->sk_data_ready, sock_def_readable, sk);
+	if (!sock_flag(sk, SOCK_DEAD)) {
+		/* Multiple threads might be blocked in recvmsg(),
+		 * using prepare_to_wait_exclusive().
+		 */
+		while (nb) {
+			INDIRECT_CALL_1(READ_ONCE(sk->sk_data_ready),
+					sock_def_readable, sk);
+			nb--;
+		}
+	}
 
-	busylock_release(busy);
+	if (unlikely(to_drop)) {
+		int err_ipv4 = 0;
+		int err_ipv6 = 0;
+
+		for (nb = 0; to_drop != NULL; nb++) {
+			skb = to_drop;
+			if (skb->protocol == htons(ETH_P_IP))
+				err_ipv4++;
+			else
+				err_ipv6++;
+			to_drop = skb->next;
+			skb_mark_not_on_list(skb);
+			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
+		}
+		numa_drop_add(&udp_sk(sk)->drop_counters, nb);
+		if (err_ipv4 > 0) {
+			SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_MEMERRORS,
+				       err_ipv4);
+			SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_INERRORS,
+				       err_ipv4);
+		}
+		if (err_ipv6 > 0) {
+			SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_MEMERRORS,
+				       err_ipv6);
+			SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_INERRORS,
+				       err_ipv6);
+		}
+	}
+
+	atomic_sub(total_size, &udp_prod_queue->rmem_alloc);
+
 	return 0;
 
-uncharge_drop:
-	atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
-
 drop:
-	atomic_inc(&sk->sk_drops);
-	busylock_release(busy);
+	udp_drops_inc(sk);
 	return err;
 }
 EXPORT_IPV6_MOD_GPL(__udp_enqueue_schedule_skb);
@@ -1878,6 +1917,7 @@ void udp_destruct_common(struct sock *sk)
 		kfree_skb(skb);
 	}
 	udp_rmem_release(sk, total, 0, true);
+	kfree(up->udp_prod_queue);
 }
 EXPORT_IPV6_MOD_GPL(udp_destruct_common);
 
@@ -1890,17 +1930,24 @@ static void udp_destruct_sock(struct sock *sk)
 //udp的socket初始化函数，socket创建期间调用
 int udp_init_sock(struct sock *sk)
 {
-    /*初始化reader_queue*/
-	udp_lib_init_sock(sk);
+	int res = udp_lib_init_sock(sk);
+
+	/*初始化reader_queue*/
 	sk->sk_destruct = udp_destruct_sock;
 	set_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);
-	return 0;
+	return res;
 }
 
 void skb_consume_udp(struct sock *sk, struct sk_buff *skb, int len)
 {
 	if (unlikely(READ_ONCE(udp_sk(sk)->peeking_with_offset)))
 		sk_peek_offset_bwd(sk, len);
+
+	if (!skb_shared(skb)) {
+		skb_orphan(skb);
+		skb_attempt_defer_free(skb);
+		return;
+	}
 
 	if (!skb_unref(skb))
 		return;
@@ -1926,7 +1973,7 @@ static struct sk_buff *__first_packet_length(struct sock *sk,
 					IS_UDPLITE(sk));
 			__UDP_INC_STATS(sock_net(sk), UDP_MIB_INERRORS,
 					IS_UDPLITE(sk));
-			atomic_inc(&sk->sk_drops);
+			udp_drops_inc(sk);
 			__skb_unlink(skb, rcvq);
 			*total += skb->truesize;
 			kfree_skb_reason(skb, SKB_DROP_REASON_UDP_CSUM);
@@ -2093,7 +2140,7 @@ try_again:
 
 		__UDP_INC_STATS(net, UDP_MIB_CSUMERRORS, is_udplite);
 		__UDP_INC_STATS(net, UDP_MIB_INERRORS, is_udplite);
-		atomic_inc(&sk->sk_drops);
+		udp_drops_inc(sk);
 		kfree_skb_reason(skb, SKB_DROP_REASON_UDP_CSUM);
 		goto try_again;
 	}
@@ -2168,7 +2215,7 @@ try_again:
 
 	if (unlikely(err)) {
 		if (!peeking) {
-			atomic_inc(&sk->sk_drops);
+			udp_drops_inc(sk);
 			UDP_INC_STATS(sock_net(sk),
 				      UDP_MIB_INERRORS, is_udplite);
 		}
@@ -2224,7 +2271,8 @@ csum_copy_err:
 	goto try_again;
 }
 
-int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+int udp_pre_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
+		    int addr_len)
 {
 	/* This check is replicated from __ip4_datagram_connect() and
 	 * intended to prevent BPF program called below from accessing bytes
@@ -2238,7 +2286,8 @@ int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 }
 EXPORT_IPV6_MOD(udp_pre_connect);
 
-static int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+static int udp_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
+		       int addr_len)
 {
 	int res;
 
@@ -2336,7 +2385,6 @@ void udp_lib_rehash(struct sock *sk, u16 newhash, u16 newhash4)
 		/*先采用旧的hash找到hslot2,再通过newhash找到nhslot2,并记录socket对应的hash*/
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
 		nhslot2 = udp_hashslot2(udptable, newhash);
-		udp_sk(sk)->udp_portaddr_hash = newhash;
 
 		/*新旧的slot不相等，需要先移除再添加*/
 		if (hslot2 != nhslot2 ||
@@ -2373,19 +2421,25 @@ void udp_lib_rehash(struct sock *sk, u16 newhash, u16 newhash4)
 		if (udp_hashed4(sk)) {
 			spin_lock_bh(&hslot->lock);
 
-			udp_rehash4(udptable, sk, newhash4);
-			if (hslot2 != nhslot2) {
-				spin_lock(&hslot2->lock);
-				udp_hash4_dec(hslot2);
-				spin_unlock(&hslot2->lock);
+			if (inet_rcv_saddr_any(sk)) {
+				udp_unhash4(udptable, sk);
+			} else {
+				udp_rehash4(udptable, sk, newhash4);
+				if (hslot2 != nhslot2) {
+					spin_lock(&hslot2->lock);
+					udp_hash4_dec(hslot2);
+					spin_unlock(&hslot2->lock);
 
-				spin_lock(&nhslot2->lock);
-				udp_hash4_inc(nhslot2);
-				spin_unlock(&nhslot2->lock);
+					spin_lock(&nhslot2->lock);
+					udp_hash4_inc(nhslot2);
+					spin_unlock(&nhslot2->lock);
+				}
 			}
 
 			spin_unlock_bh(&hslot->lock);
 		}
+
+		udp_sk(sk)->udp_portaddr_hash = newhash;
 	}
 }
 EXPORT_IPV6_MOD(udp_lib_rehash);
@@ -2507,7 +2561,8 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 	/*
 	 * 	UDP-Lite specific tests, ignored on UDP sockets
 	 */
-	if (udp_test_bit(UDPLITE_RECV_CC, sk) && UDP_SKB_CB(skb)->partial_cov) {
+	if (unlikely(udp_test_bit(UDPLITE_RECV_CC, sk) &&
+		     UDP_SKB_CB(skb)->partial_cov)) {
 		u16 pcrlen = READ_ONCE(up->pcrlen);
 
 		/*
@@ -2557,7 +2612,7 @@ csum_error:
 	__UDP_INC_STATS(sock_net(sk), UDP_MIB_CSUMERRORS, is_udplite);
 drop:
 	__UDP_INC_STATS(sock_net(sk), UDP_MIB_INERRORS, is_udplite);
-	atomic_inc(&sk->sk_drops);
+	udp_drops_inc(sk);
 	sk_skb_reason_drop(sk, skb, drop_reason);
 	return -1;
 }
@@ -2650,7 +2705,7 @@ start_lookup:
 
 		if (unlikely(!nskb)) {
 			//没有copy成功
-			atomic_inc(&sk->sk_drops);
+			udp_drops_inc(sk);
 			__UDP_INC_STATS(net, UDP_MIB_RCVBUFERRORS,
 					IS_UDPLITE(sk));
 			__UDP_INC_STATS(net, UDP_MIB_INERRORS,
@@ -2729,7 +2784,7 @@ static inline int udp4_csum_init(struct sk_buff *skb, struct udphdr *uh,
 	return 0;
 }
 
-/* wrapper for udp_queue_rcv_skb tacking care of csum conversion and
+/* wrapper for udp_queue_rcv_skb taking care of csum conversion and
  * return code conversion for ip layer consumption
  */
 //收到udp skb,且查找到此skb对应的socket,处理此单播报文
@@ -2941,7 +2996,7 @@ static struct sock *__udp4_lib_demux_lookup(struct net *net,
 	return NULL;
 }
 
-int udp_v4_early_demux(struct sk_buff *skb)
+enum skb_drop_reason udp_v4_early_demux(struct sk_buff *skb)
 {
 	struct net *net = dev_net(skb->dev);
 	struct in_device *in_dev = NULL;
@@ -2955,7 +3010,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 
 	/* validate the packet */
 	if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct udphdr)))
-		return 0;
+		return SKB_NOT_DROPPED_YET;
 
 	iph = ip_hdr(skb);
 	uh = udp_hdr(skb);
@@ -2965,12 +3020,12 @@ int udp_v4_early_demux(struct sk_buff *skb)
 		in_dev = __in_dev_get_rcu(skb->dev);
 
 		if (!in_dev)
-			return 0;
+			return SKB_NOT_DROPPED_YET;
 
 		ours = ip_check_mc_rcu(in_dev, iph->daddr, iph->saddr,
 				       iph->protocol);
 		if (!ours)
-			return 0;
+			return SKB_NOT_DROPPED_YET;
 
 		sk = __udp4_lib_mcast_demux_lookup(net, uh->dest, iph->daddr,
 						   uh->source, iph->saddr,
@@ -2982,7 +3037,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 	}
 
 	if (!sk)
-		return 0;
+		return SKB_NOT_DROPPED_YET;
 
 	skb->sk = sk;
 	DEBUG_NET_WARN_ON_ONCE(sk_is_refcounted(sk));
@@ -3009,7 +3064,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 						     ip4h_dscp(iph),
 						     skb->dev, in_dev, &itag);
 	}
-	return 0;
+	return SKB_NOT_DROPPED_YET;
 }
 
 //udp协议处理(收到udp报文）
@@ -3527,7 +3582,7 @@ static void udp4_format_sock(struct sock *sp, struct seq_file *f,
 		from_kuid_munged(seq_user_ns(f), sk_uid(sp)),
 		0, sock_i_ino(sp),
 		refcount_read(&sp->sk_refcnt), sp,
-		atomic_read(&sp->sk_drops));
+		sk_drops_read(sp));
 }
 
 int udp4_seq_show(struct seq_file *seq, void *v)
@@ -3954,7 +4009,7 @@ static struct udp_table __net_init *udp_pernet_table_alloc(unsigned int hash_ent
 	unsigned int slot_size;
 	int i;
 
-	udptable = kmalloc(sizeof(*udptable), GFP_KERNEL);
+	udptable = kmalloc_obj(*udptable);
 	if (!udptable)
 		goto out;
 
@@ -4067,8 +4122,8 @@ static int bpf_iter_udp_realloc_batch(struct bpf_udp_iter_state *iter,
 {
 	union bpf_udp_iter_batch_item *new_batch;
 
-	new_batch = kvmalloc_array(new_batch_sz, sizeof(*new_batch),
-				   flags | __GFP_NOWARN);
+	new_batch = kvmalloc_objs(*new_batch, new_batch_sz,
+				  flags | __GFP_NOWARN);
 	if (!new_batch)
 		return -ENOMEM;
 
@@ -4139,7 +4194,6 @@ static void __init bpf_iter_register(void)
 void __init udp_init(void)
 {
 	unsigned long limit;
-	unsigned int i;
 
 	udp_table_init(&udp_table, "UDP");
 	limit = nr_free_buffer_pages() / 8;
@@ -4147,15 +4201,6 @@ void __init udp_init(void)
 	sysctl_udp_mem[0] = limit / 4 * 3;
 	sysctl_udp_mem[1] = limit;
 	sysctl_udp_mem[2] = sysctl_udp_mem[0] * 2;
-
-	/* 16 spinlocks per cpu */
-	udp_busylocks_log = ilog2(nr_cpu_ids) + 4;
-	udp_busylocks = kmalloc(sizeof(spinlock_t) << udp_busylocks_log,
-				GFP_KERNEL);
-	if (!udp_busylocks)
-		panic("UDP: failed to alloc udp_busylocks\n");
-	for (i = 0; i < (1U << udp_busylocks_log); i++)
-		spin_lock_init(udp_busylocks + i);
 
 	if (register_pernet_subsys(&udp_sysctl_ops))
 		panic("UDP: failed to init sysctl parameters.\n");

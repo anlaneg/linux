@@ -71,7 +71,7 @@ static inline int has_expired(const struct net_bridge *br,
 	/*检查指定fdb表是否已过期*/
 	return !test_bit(BR_FDB_STATIC, &fdb->flags) &&
 	       !test_bit(BR_FDB_ADDED_BY_EXT_LEARN, &fdb->flags) &&
-	       time_before_eq(fdb->updated + hold_time(br), jiffies);
+	       time_before_eq(READ_ONCE(fdb->updated) + hold_time(br), jiffies);
 }
 
 static int fdb_to_nud(const struct net_bridge *br,
@@ -131,9 +131,9 @@ static int fdb_fill_info(struct sk_buff *skb, const struct net_bridge *br,
 	if (nla_put_u32(skb, NDA_FLAGS_EXT, ext_flags))
 		goto nla_put_failure;
 
-	ci.ndm_used	 = jiffies_to_clock_t(now - fdb->used);
+	ci.ndm_used	 = jiffies_to_clock_t(now - READ_ONCE(fdb->used));
 	ci.ndm_confirmed = 0;
-	ci.ndm_updated	 = jiffies_to_clock_t(now - fdb->updated);
+	ci.ndm_updated	 = jiffies_to_clock_t(now - READ_ONCE(fdb->updated));
 	ci.ndm_refcnt	 = 0;
 	if (nla_put(skb, NDA_CACHEINFO, sizeof(ci), &ci))
 		goto nla_put_failure;
@@ -477,6 +477,9 @@ void br_fdb_changeaddr(struct net_bridge_port *p, const unsigned char *newaddr)
 	struct net_bridge_fdb_entry *f;
 	struct net_bridge *br = p->br;
 	struct net_bridge_vlan *v;
+	bool local_vlan_0;
+
+	local_vlan_0 = br_opt_get(br, BROPT_FDB_LOCAL_VLAN_0);
 
 	spin_lock_bh(&br->hash_lock);
 	vg = nbp_vlan_group(p);
@@ -486,11 +489,11 @@ void br_fdb_changeaddr(struct net_bridge_port *p, const unsigned char *newaddr)
 			/* delete old one */
 			fdb_delete_local(br, p, f);
 
-			/* if this port has no vlan information
-			 * configured, we can safely be done at
-			 * this point.
+			/* if this port has no vlan information configured, or
+			 * local entries are only kept on VLAN 0, we can safely
+			 * be done at this point.
 			 */
-			if (!vg || !vg->num_vlans)
+			if (!vg || !vg->num_vlans || local_vlan_0)
 				goto insert;
 		}
 	}
@@ -499,7 +502,7 @@ insert:
 	/* insert new address,  may fail if invalid address or dup. */
 	fdb_add_local(br, p, newaddr, 0);
 
-	if (!vg || !vg->num_vlans)
+	if (!vg || !vg->num_vlans || local_vlan_0)
 		goto done;
 
 	/* Now add entries for every VLAN configured on the port.
@@ -518,6 +521,9 @@ void br_fdb_change_mac_address(struct net_bridge *br, const u8 *newaddr)
 	struct net_bridge_vlan_group *vg;
 	struct net_bridge_fdb_entry *f;
 	struct net_bridge_vlan *v;
+	bool local_vlan_0;
+
+	local_vlan_0 = br_opt_get(br, BROPT_FDB_LOCAL_VLAN_0);
 
 	spin_lock_bh(&br->hash_lock);
 
@@ -529,7 +535,7 @@ void br_fdb_change_mac_address(struct net_bridge *br, const u8 *newaddr)
 
 	fdb_add_local(br, NULL, newaddr, 0);
 	vg = br_vlan_group(br);
-	if (!vg || !vg->num_vlans)
+	if (!vg || !vg->num_vlans || local_vlan_0)
 		goto out;
 	/* Now remove and add entries for every VLAN configured on the
 	 * bridge.  This function runs under RTNL so the bitmap will not
@@ -565,7 +571,7 @@ void br_fdb_cleanup(struct work_struct *work)
 	rcu_read_lock();
 	//遍历每个fdb表项
 	hlist_for_each_entry_rcu(f, &br->fdb_list, fdb_node) {
-		unsigned long this_timer = f->updated + delay;
+		unsigned long this_timer = READ_ONCE(f->updated) + delay;
 
 		//跳过静态表项
 		if (test_bit(BR_FDB_STATIC, &f->flags) ||
@@ -598,6 +604,102 @@ void br_fdb_cleanup(struct work_struct *work)
 	//重启worker
 	work_delay = max_t(unsigned long, work_delay, msecs_to_jiffies(10));
 	mod_delayed_work(system_long_wq, &br->gc_work, work_delay);
+}
+
+static void br_fdb_delete_locals_per_vlan_port(struct net_bridge *br,
+					       struct net_bridge_port *p)
+{
+	struct net_bridge_vlan_group *vg;
+	struct net_bridge_vlan *v;
+	struct net_device *dev;
+
+	if (p) {
+		vg = nbp_vlan_group(p);
+		dev = p->dev;
+	} else {
+		vg = br_vlan_group(br);
+		dev = br->dev;
+	}
+
+	list_for_each_entry(v, &vg->vlan_list, vlist)
+		br_fdb_find_delete_local(br, p, dev->dev_addr, v->vid);
+}
+
+static void br_fdb_delete_locals_per_vlan(struct net_bridge *br)
+{
+	struct net_bridge_port *p;
+
+	ASSERT_RTNL();
+
+	list_for_each_entry(p, &br->port_list, list)
+		br_fdb_delete_locals_per_vlan_port(br, p);
+
+	br_fdb_delete_locals_per_vlan_port(br, NULL);
+}
+
+static int br_fdb_insert_locals_per_vlan_port(struct net_bridge *br,
+					      struct net_bridge_port *p,
+					      struct netlink_ext_ack *extack)
+{
+	struct net_bridge_vlan_group *vg;
+	struct net_bridge_vlan *v;
+	struct net_device *dev;
+	int err;
+
+	if (p) {
+		vg = nbp_vlan_group(p);
+		dev = p->dev;
+	} else {
+		vg = br_vlan_group(br);
+		dev = br->dev;
+	}
+
+	list_for_each_entry(v, &vg->vlan_list, vlist) {
+		if (!br_vlan_should_use(v))
+			continue;
+
+		err = br_fdb_add_local(br, p, dev->dev_addr, v->vid);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int br_fdb_insert_locals_per_vlan(struct net_bridge *br,
+					 struct netlink_ext_ack *extack)
+{
+	struct net_bridge_port *p;
+	int err;
+
+	ASSERT_RTNL();
+
+	list_for_each_entry(p, &br->port_list, list) {
+		err = br_fdb_insert_locals_per_vlan_port(br, p, extack);
+		if (err)
+			goto rollback;
+	}
+
+	err = br_fdb_insert_locals_per_vlan_port(br, NULL, extack);
+	if (err)
+		goto rollback;
+
+	return 0;
+
+rollback:
+	NL_SET_ERR_MSG_MOD(extack, "fdb_local_vlan_0 toggle: FDB entry insertion failed");
+	br_fdb_delete_locals_per_vlan(br);
+	return err;
+}
+
+int br_fdb_toggle_local_vlan_0(struct net_bridge *br, bool on,
+			       struct netlink_ext_ack *extack)
+{
+	if (!on)
+		return br_fdb_insert_locals_per_vlan(br, extack);
+
+	br_fdb_delete_locals_per_vlan(br);
+	return 0;
 }
 
 static bool __fdb_flush_matches(const struct net_bridge *br,
@@ -846,6 +948,7 @@ int br_fdb_fillbuf(struct net_bridge *br, void *buf,
 {
 	struct net_bridge_fdb_entry *f;
 	struct __fdb_entry *fe = buf;
+	unsigned long delta;
 	int num = 0;
 
 	memset(buf, 0, maxnum*sizeof(struct __fdb_entry));
@@ -875,8 +978,11 @@ int br_fdb_fillbuf(struct net_bridge *br, void *buf,
 		fe->port_hi = f->dst->port_no >> 8;
 
 		fe->is_local = test_bit(BR_FDB_LOCAL, &f->flags);
-		if (!test_bit(BR_FDB_STATIC, &f->flags))
-			fe->ageing_timer_value = jiffies_delta_to_clock_t(jiffies - f->updated);
+		if (!test_bit(BR_FDB_STATIC, &f->flags)) {
+			delta = jiffies - READ_ONCE(f->updated);
+			fe->ageing_timer_value =
+				jiffies_delta_to_clock_t(delta);
+		}
 		++fe;
 		++num;
 	}
@@ -927,9 +1033,9 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source/*目的
 			unsigned long now = jiffies;
 			bool fdb_modified = false;
 
-			if (now != fdb->updated) {
+			if (now != READ_ONCE(fdb->updated)) {
 				/*变更fdb update时间*/
-				fdb->updated = now;
+				WRITE_ONCE(fdb->updated, now);
 				fdb_modified = __fdb_mark_active(fdb);
 			}
 
@@ -1178,10 +1284,10 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 	if (fdb_handle_notify(fdb, notify))
 		modified = true;
 
-	fdb->used = jiffies;
+	WRITE_ONCE(fdb->used, jiffies);
 	if (modified) {
 		if (refresh)
-			fdb->updated = jiffies;/*更新fdb更新时间*/
+			WRITE_ONCE(fdb->updated, jiffies);/*更新fdb更新时间*/
 		fdb_notify(br, fdb, RTM_NEWNEIGH, true);
 	}
 
@@ -1505,7 +1611,7 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 			goto err_unlock;
 		}
 
-		fdb->updated = jiffies;
+		WRITE_ONCE(fdb->updated, jiffies);
 
 		/*更新目的接口*/
 		if (READ_ONCE(fdb->dst) != p) {
@@ -1515,7 +1621,7 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 
 		if (test_and_set_bit(BR_FDB_ADDED_BY_EXT_LEARN, &fdb->flags)) {
 			/* Refresh entry */
-			fdb->used = jiffies;
+			WRITE_ONCE(fdb->used, jiffies);
 		} else {
 			modified = true;
 		}

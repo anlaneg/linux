@@ -475,6 +475,7 @@ static int dualpi2_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			 * (3) Enqueue fragment & set ts in dualpi2_enqueue_skb
 			 */
 			qdisc_skb_cb(nskb)->pkt_len = nskb->len;
+			qdisc_skb_cb(nskb)->pkt_segs = 1;
 			dualpi2_skb_cb(nskb)->classified =
 				dualpi2_skb_cb(skb)->classified;
 			dualpi2_skb_cb(nskb)->ect = dualpi2_skb_cb(skb)->ect;
@@ -927,7 +928,8 @@ static int dualpi2_init(struct Qdisc *sch, struct nlattr *opt,
 
 	q->sch = sch;
 	dualpi2_reset_default(sch);
-	hrtimer_setup(&q->pi2_timer, dualpi2_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_PINNED);
+	hrtimer_setup(&q->pi2_timer, dualpi2_timer, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_ABS_PINNED_SOFT);
 
 	if (opt && nla_len(opt)) {
 		err = dualpi2_change(sch, opt, extack);
@@ -937,7 +939,7 @@ static int dualpi2_init(struct Qdisc *sch, struct nlattr *opt,
 	}
 
 	hrtimer_start(&q->pi2_timer, next_pi2_timeout(q),
-		      HRTIMER_MODE_ABS_PINNED);
+		      HRTIMER_MODE_ABS_PINNED_SOFT);
 	return 0;
 }
 

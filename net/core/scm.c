@@ -86,7 +86,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 	if (!fpl)
 	{
 		/*fpl未指定空间，在这里申请*/
-		fpl = kmalloc(sizeof(struct scm_fp_list), GFP_KERNEL_ACCOUNT);
+		fpl = kmalloc_obj(struct scm_fp_list, GFP_KERNEL_ACCOUNT);
 		if (!fpl)
 			return -ENOMEM;
 		*fplp = fpl;
@@ -277,15 +277,13 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 
 		check_object_size(data, cmlen - sizeof(*cm), true);
 
-		if (!user_write_access_begin(cm, cmlen))
-			goto efault;
-
-		unsafe_put_user(cmlen, &cm->cmsg_len, efault_end);
-		unsafe_put_user(level, &cm->cmsg_level, efault_end);
-		unsafe_put_user(type, &cm->cmsg_type, efault_end);
-		unsafe_copy_to_user(CMSG_USER_DATA(cm), data,
-				    cmlen - sizeof(*cm), efault_end);
-		user_write_access_end();
+		scoped_user_write_access_size(cm, cmlen, efault) {
+			unsafe_put_user(cmlen, &cm->cmsg_len, efault);
+			unsafe_put_user(level, &cm->cmsg_level, efault);
+			unsafe_put_user(type, &cm->cmsg_type, efault);
+			unsafe_copy_to_user(CMSG_USER_DATA(cm), data,
+					    cmlen - sizeof(*cm), efault);
+		}
 	} else {
 		struct cmsghdr *cm = msg->msg_control;
 
@@ -303,8 +301,6 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 	msg->msg_controllen -= cmlen;
 	return 0;
 
-efault_end:
-	user_write_access_end();
 efault:
 	return -EFAULT;
 }

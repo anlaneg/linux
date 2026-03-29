@@ -355,7 +355,7 @@ static int pxa_init_gpio_chip(struct pxa_gpio_chip *pchip, int ngpio, void __iom
 	pchip->chip.direction_input  = pxa_gpio_direction_input;
 	pchip->chip.direction_output = pxa_gpio_direction_output;
 	pchip->chip.get = pxa_gpio_get;
-	pchip->chip.set_rv = pxa_gpio_set;
+	pchip->chip.set = pxa_gpio_set;
 	pchip->chip.to_irq = pxa_gpio_to_irq;
 	pchip->chip.ngpio = ngpio;
 	pchip->chip.request = gpiochip_generic_request;
@@ -499,8 +499,6 @@ static void pxa_mask_muxed_gpio(struct irq_data *d)
 	gfer = readl_relaxed(base + GFER_OFFSET) & ~GPIO_bit(gpio);
 	writel_relaxed(grer, base + GRER_OFFSET);
 	writel_relaxed(gfer, base + GFER_OFFSET);
-
-	gpiochip_disable_irq(&pchip->chip, gpio);
 }
 
 static int pxa_gpio_set_wake(struct irq_data *d, unsigned int on)
@@ -520,21 +518,17 @@ static void pxa_unmask_muxed_gpio(struct irq_data *d)
 	unsigned int gpio = irqd_to_hwirq(d);
 	struct pxa_gpio_bank *c = gpio_to_pxabank(&pchip->chip, gpio);
 
-	gpiochip_enable_irq(&pchip->chip, gpio);
-
 	c->irq_mask |= GPIO_bit(gpio);
 	update_edge_detect(c);
 }
 
-static const struct irq_chip pxa_muxed_gpio_chip = {
+static struct irq_chip pxa_muxed_gpio_chip = {
 	.name		= "GPIO",
 	.irq_ack	= pxa_ack_muxed_gpio,
 	.irq_mask	= pxa_mask_muxed_gpio,
 	.irq_unmask	= pxa_unmask_muxed_gpio,
 	.irq_set_type	= pxa_gpio_irq_type,
 	.irq_set_wake	= pxa_gpio_set_wake,
-	.flags = IRQCHIP_IMMUTABLE,
-	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
 static int pxa_gpio_nums(struct platform_device *pdev)
@@ -753,7 +747,7 @@ static int __init pxa_gpio_dt_init(void)
 device_initcall(pxa_gpio_dt_init);
 
 #ifdef CONFIG_PM
-static int pxa_gpio_suspend(void)
+static int pxa_gpio_suspend(void *data)
 {
 	struct pxa_gpio_chip *pchip = pxa_gpio_chip;
 	struct pxa_gpio_bank *c;
@@ -774,7 +768,7 @@ static int pxa_gpio_suspend(void)
 	return 0;
 }
 
-static void pxa_gpio_resume(void)
+static void pxa_gpio_resume(void *data)
 {
 	struct pxa_gpio_chip *pchip = pxa_gpio_chip;
 	struct pxa_gpio_bank *c;
@@ -798,14 +792,18 @@ static void pxa_gpio_resume(void)
 #define pxa_gpio_resume		NULL
 #endif
 
-static struct syscore_ops pxa_gpio_syscore_ops = {
+static const struct syscore_ops pxa_gpio_syscore_ops = {
 	.suspend	= pxa_gpio_suspend,
 	.resume		= pxa_gpio_resume,
 };
 
+static struct syscore pxa_gpio_syscore = {
+	.ops = &pxa_gpio_syscore_ops,
+};
+
 static int __init pxa_gpio_sysinit(void)
 {
-	register_syscore_ops(&pxa_gpio_syscore_ops);
+	register_syscore(&pxa_gpio_syscore);
 	return 0;
 }
 postcore_initcall(pxa_gpio_sysinit);

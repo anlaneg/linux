@@ -125,7 +125,7 @@ int vfio_virqfd_enable(void *opaque,
 	__poll_t events;
 
 	/*创建virqfd*/
-	virqfd = kzalloc(sizeof(*virqfd), GFP_KERNEL_ACCOUNT);
+	virqfd = kzalloc_obj(*virqfd, GFP_KERNEL_ACCOUNT);
 	if (!virqfd)
 		return -ENOMEM;
 

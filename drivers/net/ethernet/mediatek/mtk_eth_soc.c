@@ -1761,6 +1761,13 @@ static netdev_tx_t mtk_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	bool gso = false;
 	int tx_num;
 
+	if (skb_vlan_tag_present(skb) &&
+	    !eth_proto_is_802_3(eth_hdr(skb)->h_proto)) {
+		skb = __vlan_hwaccel_push_inside(skb);
+		if (!skb)
+			goto dropped;
+	}
+
 	/* normally we can rely on the stack not calling this more than once,
 	 * however we have 2 queues running on the same ring so we need to lock
 	 * the ring access
@@ -1806,8 +1813,9 @@ static netdev_tx_t mtk_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 drop:
 	spin_unlock(&eth->page_lock);
-	stats->tx_dropped++;
 	dev_kfree_skb_any(skb);
+dropped:
+	stats->tx_dropped++;
 	return NETDEV_TX_OK;
 }
 
@@ -2639,8 +2647,7 @@ static int mtk_tx_alloc(struct mtk_eth *eth)
 	else
 		ring_size = soc->tx.dma_size;
 
-	ring->buf = kcalloc(ring_size, sizeof(*ring->buf),
-			       GFP_KERNEL);
+	ring->buf = kzalloc_objs(*ring->buf, ring_size);
 	if (!ring->buf)
 		goto no_tx_mem;
 
@@ -3741,11 +3748,20 @@ static int mtk_xdp_setup(struct net_device *dev, struct bpf_prog *prog,
 		mtk_stop(dev);
 
 	old_prog = rcu_replace_pointer(eth->prog, prog, lockdep_rtnl_is_held());
+
+	if (netif_running(dev) && need_update) {
+		int err;
+
+		err = mtk_open(dev);
+		if (err) {
+			rcu_assign_pointer(eth->prog, old_prog);
+
+			return err;
+		}
+	}
+
 	if (old_prog)
 		bpf_prog_put(old_prog);
-
-	if (netif_running(dev) && need_update)
-		return mtk_open(dev);
 
 	return 0;
 }
@@ -4617,18 +4633,20 @@ static void mtk_get_ethtool_stats(struct net_device *dev,
 	} while (u64_stats_fetch_retry(&hwstats->syncp, start));
 }
 
+static u32 mtk_get_rx_ring_count(struct net_device *dev)
+{
+	if (dev->hw_features & NETIF_F_LRO)
+		return MTK_MAX_RX_RING_NUM;
+
+	return 0;
+}
+
 static int mtk_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *cmd,
 			 u32 *rule_locs)
 {
 	int ret = -EOPNOTSUPP;
 
 	switch (cmd->cmd) {
-	case ETHTOOL_GRXRINGS:
-		if (dev->hw_features & NETIF_F_LRO) {
-			cmd->data = MTK_MAX_RX_RING_NUM;
-			ret = 0;
-		}
-		break;
 	case ETHTOOL_GRXCLSRLCNT:
 		if (dev->hw_features & NETIF_F_LRO) {
 			struct mtk_mac *mac = netdev_priv(dev);
@@ -4733,6 +4751,7 @@ static const struct ethtool_ops mtk_ethtool_ops = {
 	.set_pauseparam		= mtk_set_pauseparam,
 	.get_rxnfc		= mtk_get_rxnfc,
 	.set_rxnfc		= mtk_set_rxnfc,
+	.get_rx_ring_count	= mtk_get_rx_ring_count,
 	.get_eee		= mtk_get_eee,
 	.set_eee		= mtk_set_eee,
 };
@@ -4983,7 +5002,6 @@ static int mtk_sgmii_init(struct mtk_eth *eth)
 {
 	struct device_node *np;
 	struct regmap *regmap;
-	u32 flags;
 	int i;
 
 	for (i = 0; i < MTK_MAX_DEVS; i++) {
@@ -4992,18 +5010,16 @@ static int mtk_sgmii_init(struct mtk_eth *eth)
 			break;
 
 		regmap = syscon_node_to_regmap(np);
-		flags = 0;
-		if (of_property_read_bool(np, "mediatek,pnswap"))
-			flags |= MTK_SGMII_FLAG_PN_SWAP;
-
-		of_node_put(np);
-
-		if (IS_ERR(regmap))
+		if (IS_ERR(regmap)) {
+			of_node_put(np);
 			return PTR_ERR(regmap);
+		}
 
-		eth->sgmii_pcs[i] = mtk_pcs_lynxi_create(eth->dev, regmap,
-							 eth->soc->ana_rgc3,
-							 flags);
+		eth->sgmii_pcs[i] = mtk_pcs_lynxi_create(eth->dev,
+							 of_fwnode_handle(np),
+							 regmap,
+							 eth->soc->ana_rgc3);
+		of_node_put(np);
 	}
 
 	return 0;

@@ -50,6 +50,11 @@ struct xsk_queue {
 	u64 queue_empty_descs;
 	/*ring创建时vmalloc申请用的size*/
 	size_t ring_vmalloc_size;
+	/* Mutual exclusion of the completion ring in the SKB mode.
+	 * Protect: when sockets share a single cq when the same netdev
+	 * and queue id is shared.
+	 */
+	spinlock_t cq_cached_prod_lock;
 };
 
 struct parsed_desc {
@@ -147,14 +152,24 @@ static inline bool xp_unused_options_set(u32 options)
 static inline bool xp_aligned_validate_desc(struct xsk_buff_pool *pool,
 					    struct xdp_desc *desc)
 {
-	u64 addr = desc->addr - pool->tx_metadata_len;
-	u64 len = desc->len + pool->tx_metadata_len;
-	u64 offset = addr & (pool->chunk_size - 1);
+	u64 len = desc->len;
+	u64 addr, offset;
 
-	if (!desc->len)
+	if (!len)
 		return false;
 
-	if (offset + len > pool->chunk_size)
+	/* Can overflow if desc->addr < pool->tx_metadata_len */
+	if (check_sub_overflow(desc->addr, pool->tx_metadata_len, &addr))
+		return false;
+
+	offset = addr & (pool->chunk_size - 1);
+
+	/*
+	 * Can't overflow: @offset is guaranteed to be < ``U32_MAX``
+	 * (pool->chunk_size is ``u32``), @len is guaranteed
+	 * to be <= ``U32_MAX``.
+	 */
+	if (offset + len + pool->tx_metadata_len > pool->chunk_size)
 		return false;
 
 	if (addr >= pool->addrs_cnt)
@@ -162,27 +177,42 @@ static inline bool xp_aligned_validate_desc(struct xsk_buff_pool *pool,
 
 	if (xp_unused_options_set(desc->options))
 		return false;
+
 	return true;
 }
 
 static inline bool xp_unaligned_validate_desc(struct xsk_buff_pool *pool,
 					      struct xdp_desc *desc)
 {
-	u64 addr = xp_unaligned_add_offset_to_addr(desc->addr) - pool->tx_metadata_len;
-	u64 len = desc->len + pool->tx_metadata_len;
+	u64 len = desc->len;
+	u64 addr, end;
 
-	if (!desc->len)
+	if (!len)
 		return false;
 
+	/* Can't overflow: @len is guaranteed to be <= ``U32_MAX`` */
+	len += pool->tx_metadata_len;
 	if (len > pool->chunk_size)
 		return false;
 
-	if (addr >= pool->addrs_cnt || addr + len > pool->addrs_cnt ||
-	    xp_desc_crosses_non_contig_pg(pool, addr, len))
+	/* Can overflow if desc->addr is close to 0 */
+	if (check_sub_overflow(xp_unaligned_add_offset_to_addr(desc->addr),
+			       pool->tx_metadata_len, &addr))
+		return false;
+
+	if (addr >= pool->addrs_cnt)
+		return false;
+
+	/* Can overflow if pool->addrs_cnt is high enough */
+	if (check_add_overflow(addr, len, &end) || end > pool->addrs_cnt)
+		return false;
+
+	if (xp_desc_crosses_non_contig_pg(pool, addr, len))
 		return false;
 
 	if (xp_unused_options_set(desc->options))
 		return false;
+
 	return true;
 }
 
@@ -355,6 +385,11 @@ static inline u32 xskq_cons_present_entries(struct xsk_queue *q)
 
 /* Functions for producers */
 
+static inline u32 xskq_get_prod(struct xsk_queue *q)
+{
+	return READ_ONCE(q->ring->producer);
+}
+
 static inline u32 xskq_prod_nb_free(struct xsk_queue *q, u32 max)
 {
 	/*取空闲实体数*/
@@ -404,6 +439,13 @@ static inline int xskq_prod_reserve_addr(struct xsk_queue *q, u64 addr)
 	/* A, matches D */
 	ring->desc[q->cached_prod++ & q->ring_mask] = addr;
 	return 0;
+}
+
+static inline void xskq_prod_write_addr(struct xsk_queue *q, u32 idx, u64 addr)
+{
+	struct xdp_umem_ring *ring = (struct xdp_umem_ring *)q->ring;
+
+	ring->desc[idx & q->ring_mask] = addr;
 }
 
 static inline void xskq_prod_write_addr_batch(struct xsk_queue *q, struct xdp_desc *descs,

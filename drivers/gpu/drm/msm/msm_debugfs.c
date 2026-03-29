@@ -76,7 +76,7 @@ static int msm_gpu_open(struct inode *inode, struct file *file)
 	if (!gpu || !gpu->funcs->gpu_state_get)
 		return -ENODEV;
 
-	show_priv = kmalloc(sizeof(*show_priv), GFP_KERNEL);
+	show_priv = kmalloc_obj(*show_priv);
 	if (!show_priv)
 		return -ENOMEM;
 
@@ -325,25 +325,28 @@ static struct drm_info_list msm_debugfs_list[] = {
 
 static int late_init_minor(struct drm_minor *minor)
 {
-	struct drm_device *dev = minor->dev;
-	struct msm_drm_private *priv = dev->dev_private;
+	struct drm_device *dev;
+	struct msm_drm_private *priv;
 	int ret;
 
 	if (!minor)
 		return 0;
+
+	dev = minor->dev;
+	priv = dev->dev_private;
 
 	if (!priv->gpu_pdev)
 		return 0;
 
 	ret = msm_rd_debugfs_init(minor);
 	if (ret) {
-		DRM_DEV_ERROR(minor->dev->dev, "could not install rd debugfs\n");
+		DRM_DEV_ERROR(dev->dev, "could not install rd debugfs\n");
 		return ret;
 	}
 
 	ret = msm_perf_debugfs_init(minor);
 	if (ret) {
-		DRM_DEV_ERROR(minor->dev->dev, "could not install perf debugfs\n");
+		DRM_DEV_ERROR(dev->dev, "could not install perf debugfs\n");
 		return ret;
 	}
 

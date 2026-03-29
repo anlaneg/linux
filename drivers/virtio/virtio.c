@@ -65,7 +65,7 @@ static ssize_t features_show(struct device *_d,
 	/* We actually represent this as a bitstring, as it could be
 	 * arbitrary length in future. */
 	//遍历所有features位，列出当前支持的features
-	for (i = 0; i < VIRTIO_FEATURES_MAX; i++)
+	for (i = 0; i < VIRTIO_FEATURES_BITS; i++)
 		len += sysfs_emit_at(buf, len, "%c",
 			       __virtio_test_bit(dev, i) ? '1' : '0');
 	len += sysfs_emit_at(buf, len, "\n");
@@ -169,7 +169,7 @@ EXPORT_SYMBOL_GPL(virtio_config_changed);
 
 /**
  * virtio_config_driver_disable - disable config change reporting by drivers
- * @dev: the device to reset
+ * @dev: the device to disable
  *
  * This is only allowed to be called by a driver and disabling can't
  * be nested.
@@ -184,7 +184,7 @@ EXPORT_SYMBOL_GPL(virtio_config_driver_disable);
 
 /**
  * virtio_config_driver_enable - enable config change reporting by drivers
- * @dev: the device to reset
+ * @dev: the device to enable
  *
  * This is only allowed to be called by a driver and enabling can't
  * be nested.
@@ -304,8 +304,8 @@ static int virtio_dev_probe(struct device *_d)
 	struct virtio_device *dev = dev_to_virtio(_d);
 	//设备的驱动
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
-	u64 device_features[VIRTIO_FEATURES_DWORDS];
-	u64 driver_features[VIRTIO_FEATURES_DWORDS];
+	u64 device_features[VIRTIO_FEATURES_U64S];
+	u64 driver_features[VIRTIO_FEATURES_U64S];
 	u64 driver_features_legacy;
 
 	/* We have a driver! */
@@ -321,7 +321,7 @@ static int virtio_dev_probe(struct device *_d)
 	virtio_features_zero(driver_features);
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
-		if (!WARN_ON_ONCE(f >= VIRTIO_FEATURES_MAX))
+		if (!WARN_ON_ONCE(f >= VIRTIO_FEATURES_BITS))
 			virtio_features_set_bit(driver_features, f);
 	}
 
@@ -341,7 +341,7 @@ static int virtio_dev_probe(struct device *_d)
 	//如果使能v1.0,则取与操作计算两者合并device与driver获得的features
 	/*V1.0要求,驱动不得使用设备未提供的功能*/
 	if (virtio_features_test_bit(device_features, VIRTIO_F_VERSION_1)) {
-		for (i = 0; i < VIRTIO_FEATURES_DWORDS; ++i)
+		for (i = 0; i < VIRTIO_FEATURES_U64S; ++i)
 			dev->features_array[i] = driver_features[i] &
 						 device_features[i];
 	} else {
@@ -366,7 +366,7 @@ static int virtio_dev_probe(struct device *_d)
 
 	//调用driver的validate函数，检查设备功能配置
 	if (drv->validate) {
-		u64 features[VIRTIO_FEATURES_DWORDS];
+		u64 features[VIRTIO_FEATURES_U64S];
 
 		virtio_features_copy(features, dev->features_array);
 		err = drv->validate(dev);
@@ -570,7 +570,7 @@ out:
  * On error, the caller must call put_device on &@dev->dev (and not kfree),
  * as another code path may have obtained a reference to @dev.
  *
- * Returns: 0 on suceess, -error on failure
+ * Returns: 0 on success, -error on failure
  */
 //virtio设备注册
 int register_virtio_device(struct virtio_device *dev)
@@ -597,6 +597,7 @@ int register_virtio_device(struct virtio_device *dev)
 		goto out_ida_remove;
 
 	spin_lock_init(&dev->config_lock);
+	dev->config_driver_disabled = false;
 	dev->config_core_enabled = false;
 	dev->config_change_pending = false;
 

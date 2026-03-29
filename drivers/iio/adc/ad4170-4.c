@@ -1807,7 +1807,7 @@ static int ad4170_gpio_init(struct iio_dev *indio_dev)
 	st->gpiochip.direction_input = ad4170_gpio_direction_input;
 	st->gpiochip.direction_output = ad4170_gpio_direction_output;
 	st->gpiochip.get = ad4170_gpio_get;
-	st->gpiochip.set_rv = ad4170_gpio_set;
+	st->gpiochip.set = ad4170_gpio_set;
 	st->gpiochip.owner = THIS_MODULE;
 
 	return devm_gpiochip_add_data(&st->spi->dev, &st->gpiochip, indio_dev);
@@ -2973,7 +2973,7 @@ static int ad4170_probe(struct spi_device *spi)
 
 	if (spi->irq) {
 		ret = devm_request_irq(dev, spi->irq, &ad4170_irq_handler,
-				       IRQF_ONESHOT, indio_dev->name, indio_dev);
+				       IRQF_NO_THREAD, indio_dev->name, indio_dev);
 		if (ret)
 			return ret;
 

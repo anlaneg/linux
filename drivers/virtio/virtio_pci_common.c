@@ -143,14 +143,11 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors/*请
 
 	vp_dev->msix_vectors = nvectors;
 
-	vp_dev->msix_names = kmalloc_array(nvectors,
-					   sizeof(*vp_dev->msix_names),
-					   GFP_KERNEL);
+	vp_dev->msix_names = kmalloc_objs(*vp_dev->msix_names, nvectors);
 	if (!vp_dev->msix_names)
 		goto error;
 	vp_dev->msix_affinity_masks
-		= kcalloc(nvectors, sizeof(*vp_dev->msix_affinity_masks),
-			  GFP_KERNEL);
+		= kzalloc_objs(*vp_dev->msix_affinity_masks, nvectors);
 	if (!vp_dev->msix_affinity_masks)
 		goto error;
 	for (i = 0; i < nvectors; ++i)
@@ -229,7 +226,7 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int in
 				     struct virtio_pci_vq_info **p_info)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
-	struct virtio_pci_vq_info *info = kmalloc(sizeof *info, GFP_KERNEL);
+	struct virtio_pci_vq_info *info = kmalloc_obj(*info);
 	struct virtqueue *vq;
 	unsigned long flags;
 
@@ -411,7 +408,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs,
 	u16 avq_num = 0;
 
 	//创建nvqs个virtio_pci_vq_info指针
-	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
+	vp_dev->vqs = kzalloc_objs(*vp_dev->vqs, nvqs);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
 
@@ -490,7 +487,7 @@ static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned int nvqs,
 	struct virtqueue *vq;
 	u16 avq_num = 0;
 
-	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
+	vp_dev->vqs = kzalloc_objs(*vp_dev->vqs, nvqs);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
 
@@ -721,7 +718,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 
 	/* allocate our structure and fill it out */
 	//申请virtio pci设备
-	vp_dev = kzalloc(sizeof(struct virtio_pci_device), GFP_KERNEL);
+	vp_dev = kzalloc_obj(struct virtio_pci_device);
 	if (!vp_dev)
 		return -ENOMEM;
 

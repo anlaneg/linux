@@ -292,7 +292,7 @@ DEFINE_STATIC_KEY_FALSE(timers_migration_enabled);
 
 static void timers_update_migration(void)
 {
-	if (sysctl_timer_migration && tick_nohz_active)
+	if (sysctl_timer_migration && tick_nohz_is_active())
 		static_branch_enable(&timers_migration_enabled);
 	else
 		static_branch_disable(&timers_migration_enabled);
@@ -1516,13 +1516,14 @@ static int __try_to_del_timer_sync(struct timer_list *timer, bool shutdown)
 	/*获取timer所处的base,并加锁*/
 	base = lock_timer_base(timer, &flags);
 
-	if (base->running_timer != timer)
+	if (base->running_timer != timer) {
 		/*timer所在的base上正在运行的不是此timer,尝试将其移除*/
 		ret = detach_if_pending(timer, base, true);
-	//如果上面的if没有进入，则说明此base是其它cpu的指针，且timer正在其它cpu上被运行
-	if (shutdown)
-		/*shutdown为真，将回调置为NULL*/
-		timer->function = NULL;
+		//如果上面的if没有进入，则说明此base是其它cpu的指针，且timer正在其它cpu上被运行
+		if (shutdown)
+			/*shutdown为真，将回调置为NULL*/
+			timer->function = NULL;
+	}
 
 	/*对base进行解锁*/
 	raw_spin_unlock_irqrestore(&base->lock, flags);
@@ -2572,7 +2573,7 @@ void update_process_times(int user_tick)
 	run_local_timers();
 	rcu_sched_clock_irq(user_tick);
 #ifdef CONFIG_IRQ_WORK
-	if (in_irq())
+	if (in_hardirq())
 		irq_work_tick();
 #endif
 	sched_tick();

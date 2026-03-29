@@ -259,8 +259,6 @@ static const struct file_operations signalfd_fops = {
 
 static int do_signalfd4(int ufd, sigset_t *mask, int flags/*标记*/)
 {
-	struct signalfd_ctx *ctx;
-
 	/* Check the SFD_* constants for consistency.  */
 	BUILD_BUG_ON(SFD_CLOEXEC != O_CLOEXEC);
 	BUILD_BUG_ON(SFD_NONBLOCK != O_NONBLOCK);/*标记定义必须一致*/
@@ -274,33 +272,25 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags/*标记*/)
 	signotset(mask);
 
 	if (ufd == -1) {
-		struct file *file;
+		int fd;
+		struct signalfd_ctx *ctx __free(kfree) = NULL;
 
-		ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+		ctx = kmalloc_obj(*ctx);
 		if (!ctx)
 			return -ENOMEM;
 
 		ctx->sigmask = *mask;
 
-		ufd = get_unused_fd_flags(flags & O_CLOEXEC);
-		if (ufd < 0) {
-			/*无可用fd*/
-			kfree(ctx);
-			return ufd;
-		}
-
-		/*申请signal file*/
-		file = anon_inode_getfile_fmode("[signalfd]", &signalfd_fops,
-					ctx/*指定私有结构体*/, O_RDWR | (flags & O_NONBLOCK),
-					FMODE_NOWAIT);
-		if (IS_ERR(file)) {
-			put_unused_fd(ufd);
-			kfree(ctx);
-			return PTR_ERR(file);
-		}
-		/*file与fd关联*/
-		fd_install(ufd, file);
+		fd = FD_ADD(flags & O_CLOEXEC,
+			    anon_inode_getfile_fmode(
+				    "[signalfd]", &signalfd_fops, ctx,
+				    O_RDWR | (flags & O_NONBLOCK), FMODE_NOWAIT));
+		if (fd >= 0)
+			retain_and_null_ptr(ctx);
+		return fd;
 	} else {
+		struct signalfd_ctx *ctx;
+
 		CLASS(fd, f)(ufd);
 		if (fd_empty(f))
 			return -EBADF;

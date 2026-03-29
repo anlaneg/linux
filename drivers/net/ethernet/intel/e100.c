@@ -2162,7 +2162,7 @@ static int e100_rx_alloc_list(struct nic *nic)
 	nic->ru_running = RU_UNINITIALIZED;
 
 	/*申请count个rx*/
-	if (!(nic->rxs = kcalloc(count, sizeof(struct rx), GFP_KERNEL)))
+	if (!(nic->rxs = kzalloc_objs(struct rx, count)))
 		return -ENOMEM;
 
 	/*遍历rx*/

@@ -13,8 +13,7 @@ struct flow_rule *flow_rule_alloc(unsigned int num_actions)
 	struct flow_rule *rule;
 	int i;
 
-	rule = kzalloc(struct_size(rule, action.entries, num_actions),
-		       GFP_KERNEL);
+	rule = kzalloc_flex(*rule, action.entries, num_actions);
 	if (!rule)
 		return NULL;
 
@@ -34,8 +33,7 @@ struct flow_offload_action *offload_action_alloc(unsigned int num_actions)
 	struct flow_offload_action *fl_action;
 	int i;
 
-	fl_action = kzalloc(struct_size(fl_action, action.entries, num_actions),
-			    GFP_KERNEL);
+	fl_action = kzalloc_flex(*fl_action, action.entries, num_actions);
 	if (!fl_action)
 		return NULL;
 
@@ -295,7 +293,7 @@ struct flow_block_cb *flow_block_cb_alloc(flow_setup_cb_t *cb,
 {
 	struct flow_block_cb *block_cb;
 
-	block_cb = kzalloc(sizeof(*block_cb), GFP_KERNEL);
+	block_cb = kzalloc_obj(*block_cb);
 	if (!block_cb)
 		return ERR_PTR(-ENOMEM);
 
@@ -442,7 +440,7 @@ static struct flow_indr_dev *flow_indr_dev_alloc(flow_indr_block_bind_cb_t *cb,
 {
 	struct flow_indr_dev *indr_dev;
 
-	indr_dev = kmalloc(sizeof(*indr_dev), GFP_KERNEL);
+	indr_dev = kmalloc_obj(*indr_dev);
 	if (!indr_dev)
 		return NULL;
 
@@ -640,7 +638,7 @@ static int indir_dev_add(void *data, struct net_device *dev, struct Qdisc *sch,
 	if (info)
 		return -EEXIST;
 
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc_obj(*info);
 	if (!info)
 		return -ENOMEM;
 

@@ -947,7 +947,7 @@ static int hidp_session_new(struct hidp_session **out/*出参，*/, const bdaddr
 	ctrl = bt_sk(ctrl_sock->sk);/*控制socket*/
 	intr = bt_sk(intr_sock->sk);/*中断socket*/
 
-	session = kzalloc(sizeof(*session), GFP_KERNEL);
+	session = kzalloc_obj(*session);
 	if (!session)
 		return -ENOMEM;
 
@@ -1014,7 +1014,8 @@ static void session_free(struct kref *ref)
 	skb_queue_purge(&session->intr_transmit);
 	fput(session->intr_sock->file);
 	fput(session->ctrl_sock->file);
-	l2cap_conn_put(session->conn);
+	if (session->conn)
+		l2cap_conn_put(session->conn);
 	kfree(session);
 }
 
@@ -1202,6 +1203,15 @@ static void hidp_session_remove(struct l2cap_conn *conn,
 
 	down_write(&hidp_session_sem);
 
+	/* Drop L2CAP reference immediately to indicate that
+	 * l2cap_unregister_user() shall not be called as it is already
+	 * considered removed.
+	 */
+	if (session->conn) {
+		l2cap_conn_put(session->conn);
+		session->conn = NULL;
+	}
+
 	/*标记停止此session，对应的kernel线程也会停止*/
 	hidp_session_terminate(session);
 
@@ -1344,7 +1354,9 @@ static int hidp_session_thread(void *arg)
 	 * Instead, this call has the same semantics as if user-space tried to
 	 * delete the session.
 	 */
-	l2cap_unregister_user(session->conn, &session->user);
+	if (session->conn)
+		l2cap_unregister_user(session->conn, &session->user);
+
 	hidp_session_put(session);
 
 	module_put_and_kthread_exit(0);

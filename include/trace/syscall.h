@@ -16,6 +16,9 @@
  * @name: name of the syscall
  * @syscall_nr: number of the syscall
  * @nb_args: number of parameters it takes
+ * @user_arg_is_str: set if the arg for @user_arg_size is a string
+ * @user_arg_size: holds @arg that has size of the user space to read
+ * @user_mask: mask of @args that will read user space
  * @types: list of types as strings
  * @args: list of args as strings (args[i] matches types[i])
  * @enter_fields: list of fields for syscall_enter trace event
@@ -25,7 +28,10 @@
 struct syscall_metadata {
 	const char	*name;/*系统调用名称，含sys前缀*/
 	int		syscall_nr;
-	int		nb_args;/*参数数目*/
+	u8		nb_args:7;/*参数数目*/
+	u8		user_arg_is_str:1;
+	s8		user_arg_size;
+	short		user_mask;
 	const char	**types;/*各参数类型对应的字符串名称*/
 	const char	**args;/*各参数类型对应的字符串变量名*/
 	struct list_head enter_fields;

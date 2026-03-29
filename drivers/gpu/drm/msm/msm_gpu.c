@@ -197,8 +197,7 @@ static ssize_t msm_gpu_devcoredump_read(char *buffer, loff_t offset,
 	drm_printf(&p, "---\n");
 	drm_printf(&p, "kernel: " UTS_RELEASE "\n");
 	drm_printf(&p, "module: " KBUILD_MODNAME "\n");
-	drm_printf(&p, "time: %lld.%09ld\n",
-		state->time.tv_sec, state->time.tv_nsec);
+	drm_printf(&p, "time: %ptSp\n", &state->time);
 	if (state->comm)
 		drm_printf(&p, "comm: %s\n", state->comm);
 	if (state->cmd)
@@ -287,16 +286,17 @@ static void crashstate_get_bos(struct msm_gpu_state *state, struct msm_gem_submi
 
 		state->bos = kcalloc(cnt, sizeof(struct msm_gpu_state_bo), GFP_KERNEL);
 
-		drm_gpuvm_for_each_va (vma, submit->vm) {
-			bool dump = rd_full || (vma->flags & MSM_VMA_DUMP);
+		if (state->bos)
+			drm_gpuvm_for_each_va(vma, submit->vm) {
+				bool dump = rd_full || (vma->flags & MSM_VMA_DUMP);
 
-			/* Skip MAP_NULL/PRR VMAs: */
-			if (!vma->gem.obj)
-				continue;
+				/* Skip MAP_NULL/PRR VMAs: */
+				if (!vma->gem.obj)
+					continue;
 
-			msm_gpu_crashstate_get_bo(state, vma->gem.obj, vma->va.addr,
-						  dump, vma->gem.offset, vma->va.range);
-		}
+				msm_gpu_crashstate_get_bo(state, vma->gem.obj, vma->va.addr,
+							  dump, vma->gem.offset, vma->va.range);
+			}
 
 		drm_exec_fini(&exec);
 	} else {
@@ -304,7 +304,7 @@ static void crashstate_get_bos(struct msm_gpu_state *state, struct msm_gem_submi
 			sizeof(struct msm_gpu_state_bo), GFP_KERNEL);
 
 		for (int i = 0; state->bos && i < submit->nr_bos; i++) {
-			struct drm_gem_object *obj = submit->bos[i].obj;;
+			struct drm_gem_object *obj = submit->bos[i].obj;
 			bool dump = rd_full || (submit->bos[i].flags & MSM_SUBMIT_BO_DUMP);
 
 			msm_gem_lock(obj);
@@ -346,8 +346,11 @@ static void crashstate_get_vm_logs(struct msm_gpu_state *state, struct msm_gem_v
 		state->nr_vm_logs = vm_log_len;
 	}
 
-	state->vm_logs = kmalloc_array(
-		state->nr_vm_logs, sizeof(vm->log[0]), GFP_KERNEL);
+	state->vm_logs = kmalloc_objs(vm->log[0], state->nr_vm_logs);
+	if (!state->vm_logs) {
+		state->nr_vm_logs = 0;
+	}
+
 	for (int i = 0; i < state->nr_vm_logs; i++) {
 		int idx = (i + first) & vm_log_mask;
 
@@ -465,6 +468,7 @@ static void recover_worker(struct kthread_work *work)
 	struct msm_gem_submit *submit;
 	struct msm_ringbuffer *cur_ring = gpu->funcs->active_ring(gpu);
 	char *comm = NULL, *cmd = NULL;
+	struct task_struct *task;
 	int i;
 
 	mutex_lock(&gpu->lock);
@@ -482,16 +486,20 @@ static void recover_worker(struct kthread_work *work)
 
 	/* Increment the fault counts */
 	submit->queue->faults++;
-	if (submit->vm) {
+
+	task = get_pid_task(submit->pid, PIDTYPE_PID);
+	if (!task)
+		gpu->global_faults++;
+	else {
 		struct msm_gem_vm *vm = to_msm_vm(submit->vm);
 
 		vm->faults++;
 
 		/*
 		 * If userspace has opted-in to VM_BIND (and therefore userspace
-		 * management of the VM), faults mark the VM as unusuable.  This
+		 * management of the VM), faults mark the VM as unusable. This
 		 * matches vulkan expectations (vulkan is the main target for
-		 * VM_BIND)
+		 * VM_BIND).
 		 */
 		if (!vm->managed)
 			msm_gem_vm_unusable(submit->vm);
@@ -553,8 +561,15 @@ static void recover_worker(struct kthread_work *work)
 			unsigned long flags;
 
 			spin_lock_irqsave(&ring->submit_lock, flags);
-			list_for_each_entry(submit, &ring->submits, node)
+			list_for_each_entry(submit, &ring->submits, node) {
+				/*
+				 * If the submit uses an unusable vm make sure
+				 * we don't actually run it
+				 */
+				if (to_msm_vm(submit->vm)->unusable)
+					submit->nr_cmds = 0;
 				gpu->funcs->submit(gpu, submit);
+			}
 			spin_unlock_irqrestore(&ring->submit_lock, flags);
 		}
 	}

@@ -34,6 +34,7 @@ struct ovl_fs_context {
 	struct ovl_fs_context_layer *lower;/*数组，有效长度为capacity，用于存储lowerdir（包含data layer)*/
 	/*保存用户在挂载期间提供的lowerdir配置*/
 	char *lowerdir_all; /* user provided lowerdir string */
+	bool casefold_set;
 };
 
 int ovl_init_fs_context(struct fs_context *fc);

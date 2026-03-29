@@ -616,8 +616,7 @@ static int hccs_get_all_port_info_on_die(struct hccs_dev *hdev,
 	int ret;
 	u8 i;
 
-	attrs = kcalloc(die->port_num, sizeof(struct hccs_port_attr),
-			GFP_KERNEL);
+	attrs = kzalloc_objs(struct hccs_port_attr, die->port_num);
 	if (!attrs)
 		return -ENOMEM;
 
@@ -1464,7 +1463,7 @@ static ssize_t dec_lane_of_type_store(struct kobject *kobj, struct kobj_attribut
 		goto out;
 	if (!all_in_idle) {
 		ret = -EBUSY;
-		dev_err(hdev->dev, "please don't decrese lanes on high load with %s, ret = %d.\n",
+		dev_err(hdev->dev, "please don't decrease lanes on high load with %s, ret = %d.\n",
 			hccs_port_type_to_name(hdev, port_type), ret);
 		goto out;
 	}

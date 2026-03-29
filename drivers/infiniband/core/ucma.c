@@ -199,7 +199,7 @@ static struct ucma_context *ucma_alloc_ctx(struct ucma_file *file)
 {
 	struct ucma_context *ctx;
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kzalloc_obj(*ctx);
 	if (!ctx)
 		return NULL;
 
@@ -267,7 +267,7 @@ static struct ucma_event *ucma_create_uevent(struct ucma_context *ctx,
 {
 	struct ucma_event *uevent;
 
-	uevent = kzalloc(sizeof(*uevent), GFP_KERNEL);
+	uevent = kzalloc_obj(*uevent);
 	if (!uevent)
 		return NULL;
 
@@ -287,6 +287,10 @@ static struct ucma_event *ucma_create_uevent(struct ucma_context *ctx,
 	}
 	uevent->resp.event = event->event;
 	uevent->resp.status = event->status;
+
+	if (event->event == RDMA_CM_EVENT_ADDRINFO_RESOLVED)
+		goto out;
+
 	if (ctx->cm_id->qp_type == IB_QPT_UD)
 		ucma_copy_ud_event(ctx->cm_id->device, &uevent->resp.param.ud,
 				   &event->param.ud);
@@ -294,6 +298,7 @@ static struct ucma_event *ucma_create_uevent(struct ucma_context *ctx,
 		ucma_copy_conn_event(&uevent->resp.param.conn,
 				     &event->param.conn);
 
+out:
 	uevent->resp.ece.vendor_id = event->ece.vendor_id;
 	uevent->resp.ece.attr_mod = event->ece.attr_mod;
 	return uevent;
@@ -372,7 +377,7 @@ static int ucma_event_handler(struct rdma_cm_id *cm_id/*event关联的cm_id*/,
 	if (event->event == RDMA_CM_EVENT_DEVICE_REMOVAL) {
 		xa_lock(&ctx_table);
 		if (xa_load(&ctx_table, ctx->id) == ctx)
-			queue_work(system_unbound_wq, &ctx->close_work);
+			queue_work(system_dfl_wq, &ctx->close_work);
 		xa_unlock(&ctx_table);
 	}
 	return 0;
@@ -764,6 +769,28 @@ static ssize_t ucma_resolve_addr(struct ucma_file *file,
 	return ret;
 }
 
+static ssize_t ucma_resolve_ib_service(struct ucma_file *file,
+				       const char __user *inbuf, int in_len,
+				       int out_len)
+{
+	struct rdma_ucm_resolve_ib_service cmd;
+	struct ucma_context *ctx;
+	int ret;
+
+	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
+		return -EFAULT;
+
+	ctx = ucma_get_ctx(file, cmd.id);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	mutex_lock(&ctx->mutex);
+	ret = rdma_resolve_ib_service(ctx->cm_id, &cmd.ibs);
+	mutex_unlock(&ctx->mutex);
+	ucma_put_ctx(ctx);
+	return ret;
+}
+
 /*路由解析命令(当resolve_ip后执行路由解析)*/
 static ssize_t ucma_resolve_route(struct ucma_file *file,
 				  const char __user *inbuf,
@@ -1046,6 +1073,43 @@ static ssize_t ucma_query_gid(struct ucma_context *ctx,
 	return ret;
 }
 
+static ssize_t ucma_query_ib_service(struct ucma_context *ctx,
+				     void __user *response, int out_len)
+{
+	struct rdma_ucm_query_ib_service_resp *resp;
+	int n, ret = 0;
+
+	if (out_len < sizeof(struct rdma_ucm_query_ib_service_resp))
+		return -ENOSPC;
+
+	if (!ctx->cm_id->route.service_recs)
+		return -ENODATA;
+
+	resp = kzalloc(out_len, GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	resp->num_service_recs = ctx->cm_id->route.num_service_recs;
+
+	n = (out_len - sizeof(struct rdma_ucm_query_ib_service_resp)) /
+		sizeof(struct ib_user_service_rec);
+
+	if (!n)
+		goto out;
+
+	if (n > ctx->cm_id->route.num_service_recs)
+		n = ctx->cm_id->route.num_service_recs;
+
+	memcpy(resp->recs, ctx->cm_id->route.service_recs,
+	       sizeof(*resp->recs) * n);
+	if (copy_to_user(response, resp, struct_size(resp, recs, n)))
+		ret = -EFAULT;
+
+out:
+	kfree(resp);
+	return ret;
+}
+
 /*用于响应用户态的ucma查询请求*/
 static ssize_t ucma_query(struct ucma_file *file,
 			  const char __user *inbuf,
@@ -1077,6 +1141,9 @@ static ssize_t ucma_query(struct ucma_file *file,
 	case RDMA_USER_CM_QUERY_GID:
 		/*响应gid查询*/
 		ret = ucma_query_gid(ctx, response, out_len);
+		break;
+	case RDMA_USER_CM_QUERY_IB_SERVICE:
+		ret = ucma_query_ib_service(ctx, response, out_len);
 		break;
 	default:
 		ret = -ENOSYS;
@@ -1534,7 +1601,7 @@ static ssize_t ucma_process_join(struct ucma_file *file,
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
-	mc = kzalloc(sizeof(*mc), GFP_KERNEL);
+	mc = kzalloc_obj(*mc);
 	if (!mc) {
 		ret = -ENOMEM;
 		goto err_put_ctx;
@@ -1750,6 +1817,55 @@ err_unlock:
 	return ret;
 }
 
+static ssize_t ucma_write_cm_event(struct ucma_file *file,
+				   const char __user *inbuf, int in_len,
+				   int out_len)
+{
+	struct rdma_ucm_write_cm_event cmd;
+	struct rdma_cm_event event = {};
+	struct ucma_event *uevent;
+	struct ucma_context *ctx;
+	int ret = 0;
+
+	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
+		return -EFAULT;
+
+	if ((cmd.event != RDMA_CM_EVENT_USER) &&
+	    (cmd.event != RDMA_CM_EVENT_INTERNAL))
+		return -EINVAL;
+
+	ctx = ucma_get_ctx(file, cmd.id);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	event.event = cmd.event;
+	event.status = cmd.status;
+	event.param.arg = cmd.param.arg;
+
+	uevent = kzalloc_obj(*uevent);
+	if (!uevent) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	uevent->ctx = ctx;
+	uevent->resp.uid = ctx->uid;
+	uevent->resp.id = ctx->id;
+	uevent->resp.event = event.event;
+	uevent->resp.status = event.status;
+	memcpy(uevent->resp.param.arg32, &event.param.arg,
+	       sizeof(event.param.arg));
+
+	mutex_lock(&ctx->file->mut);
+	list_add_tail(&uevent->list, &ctx->file->event_list);
+	mutex_unlock(&ctx->file->mut);
+	wake_up_interruptible(&ctx->file->poll_wait);
+
+out:
+	ucma_put_ctx(ctx);
+	return ret;
+}
+
 /*ucma命令表*/
 static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 				   const char __user *inbuf,
@@ -1776,7 +1892,9 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_QUERY]	 = ucma_query, /*响应path查询*/
 	[RDMA_USER_CM_CMD_BIND]		 = ucma_bind,/*通过bind命令来绑定(非ip协议）*/
 	[RDMA_USER_CM_CMD_RESOLVE_ADDR]	 = ucma_resolve_addr,
-	[RDMA_USER_CM_CMD_JOIN_MCAST]	 = ucma_join_multicast
+	[RDMA_USER_CM_CMD_JOIN_MCAST]	 = ucma_join_multicast,
+	[RDMA_USER_CM_CMD_RESOLVE_IB_SERVICE] = ucma_resolve_ib_service,
+	[RDMA_USER_CM_CMD_WRITE_CM_EVENT] = ucma_write_cm_event,
 };
 
 static ssize_t ucma_write(struct file *filp, const char __user *buf,
@@ -1848,7 +1966,7 @@ static int ucma_open(struct inode *inode, struct file *filp)
     //打开rcma_cm设备，创建一个ucma_file
 	struct ucma_file *file;
 
-	file = kmalloc(sizeof *file, GFP_KERNEL);
+	file = kmalloc_obj(*file);
 	if (!file)
 		return -ENOMEM;
 

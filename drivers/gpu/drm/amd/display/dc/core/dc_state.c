@@ -35,8 +35,8 @@
 #include "link_enc_cfg.h"
 
 #if defined(CONFIG_DRM_AMD_DC_FP)
-#include "dml2/dml2_wrapper.h"
-#include "dml2/dml2_internal_types.h"
+#include "dml2_0/dml2_wrapper.h"
+#include "dml2_0/dml2_internal_types.h"
 #endif
 
 #define DC_LOGGER \
@@ -195,7 +195,7 @@ struct dc_state *dc_state_create(struct dc *dc, struct dc_state_create_params *p
 {
 	struct dc_state *state;
 
-	state = kvzalloc(sizeof(struct dc_state), GFP_KERNEL);
+	state = kvzalloc_obj(struct dc_state);
 
 	if (!state)
 		return NULL;
@@ -211,7 +211,7 @@ struct dc_state *dc_state_create(struct dc *dc, struct dc_state_create_params *p
 			return NULL;
 		}
 
-		if (!dml2_create(dc, &dc->dml2_dc_power_options, &state->bw_ctx.dml2_dc_power_source)) {
+		if (dc->caps.dcmode_power_limits_present && !dml2_create(dc, &dc->dml2_dc_power_options, &state->bw_ctx.dml2_dc_power_source)) {
 			dc_state_release(state);
 			return NULL;
 		}
@@ -251,8 +251,7 @@ struct dc_state *dc_state_create_copy(struct dc_state *src_state)
 {
 	struct dc_state *new_state;
 
-	new_state = kvmalloc(sizeof(struct dc_state),
-			GFP_KERNEL);
+	new_state = kvmalloc_obj(struct dc_state);
 	if (!new_state)
 		return NULL;
 

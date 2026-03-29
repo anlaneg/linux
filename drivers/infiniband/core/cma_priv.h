@@ -47,7 +47,9 @@ enum rdma_cm_state {
 	RDMA_CM_ADDR_BOUND,
 	RDMA_CM_LISTEN,
 	RDMA_CM_DEVICE_REMOVAL,
-	RDMA_CM_DESTROYING
+	RDMA_CM_DESTROYING,
+	RDMA_CM_ADDRINFO_QUERY,
+	RDMA_CM_ADDRINFO_RESOLVED
 };
 
 /*rdma_id_private是直接面向用户的*/
@@ -72,6 +74,7 @@ struct rdma_id_private {
 
 	int			internal_id;
 	enum rdma_cm_state	state;/*状态(初始状态为RDMA_CM_IDLE)*/
+	u8			restricted_node_type;
 	spinlock_t		lock;
 	struct mutex		qp_mutex;
 

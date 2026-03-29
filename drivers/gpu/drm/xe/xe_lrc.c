@@ -8,6 +8,7 @@
 #include <generated/xe_wa_oob.h>
 
 #include <linux/ascii85.h>
+#include <linux/panic.h>
 
 #include "instructions/xe_mi_commands.h"
 #include "instructions/xe_gfxpipe_commands.h"
@@ -16,6 +17,7 @@
 #include "regs/xe_lrc_layout.h"
 #include "xe_bb.h"
 #include "xe_bo.h"
+#include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_drm_client.h"
 #include "xe_exec_queue_types.h"
@@ -41,7 +43,11 @@
 #define LRC_PPHWSP_SIZE				SZ_4K
 #define LRC_INDIRECT_CTX_BO_SIZE		SZ_4K
 #define LRC_INDIRECT_RING_STATE_SIZE		SZ_4K
-#define LRC_WA_BB_SIZE				SZ_4K
+
+#define LRC_PRIORITY				GENMASK_ULL(10, 9)
+#define LRC_PRIORITY_LOW			0
+#define LRC_PRIORITY_NORMAL			1
+#define LRC_PRIORITY_HIGH			2
 
 /*
  * Layout of the LRC and associated data allocated as
@@ -76,16 +82,33 @@ lrc_to_xe(struct xe_lrc *lrc)
 static bool
 gt_engine_needs_indirect_ctx(struct xe_gt *gt, enum xe_engine_class class)
 {
+	struct xe_device *xe = gt_to_xe(gt);
+
+	if (XE_GT_WA(gt, 16010904313) &&
+	    (class == XE_ENGINE_CLASS_RENDER ||
+	     class == XE_ENGINE_CLASS_COMPUTE))
+		return true;
+
+	if (xe_configfs_get_ctx_restore_mid_bb(to_pci_dev(xe->drm.dev),
+					       class, NULL))
+		return true;
+
 	return false;
 }
 
-size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
+/**
+ * xe_gt_lrc_hang_replay_size() - Hang replay size
+ * @gt: The GT
+ * @class: Hardware engine class
+ *
+ * Determine size of GPU hang replay state for a GT and hardware engine class.
+ *
+ * Return: Size of GPU hang replay size
+ */
+size_t xe_gt_lrc_hang_replay_size(struct xe_gt *gt, enum xe_engine_class class)
 {
 	struct xe_device *xe = gt_to_xe(gt);
-	size_t size;
-
-	/* Per-process HW status page (PPHWSP) */
-	size = LRC_PPHWSP_SIZE;
+	size_t size = 0;
 
 	/* Engine context image */
 	switch (class) {
@@ -111,11 +134,18 @@ size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
 		size += 1 * SZ_4K;
 	}
 
+	return size;
+}
+
+size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
+{
+	size_t size = xe_gt_lrc_hang_replay_size(gt, class);
+
 	/* Add indirect ring state page */
 	if (xe_gt_has_indirect_ring_state(gt))
 		size += LRC_INDIRECT_RING_STATE_SIZE;
 
-	return size;
+	return size + LRC_PPHWSP_SIZE;
 }
 
 /*
@@ -692,7 +722,13 @@ u32 xe_lrc_regs_offset(struct xe_lrc *lrc)
 	return xe_lrc_pphwsp_offset(lrc) + LRC_PPHWSP_SIZE;
 }
 
-static size_t lrc_reg_size(struct xe_device *xe)
+/**
+ * xe_lrc_reg_size() - Get size of the LRC registers area within queues
+ * @xe: the &xe_device struct instance
+ *
+ * Returns: Size of the LRC registers area for current platform
+ */
+size_t xe_lrc_reg_size(struct xe_device *xe)
 {
 	if (GRAPHICS_VERx100(xe) >= 1250)
 		return 96 * sizeof(u32);
@@ -702,7 +738,7 @@ static size_t lrc_reg_size(struct xe_device *xe)
 
 size_t xe_lrc_skip_size(struct xe_device *xe)
 {
-	return LRC_PPHWSP_SIZE + lrc_reg_size(xe);
+	return LRC_PPHWSP_SIZE + xe_lrc_reg_size(xe);
 }
 
 static inline u32 __xe_lrc_seqno_offset(struct xe_lrc *lrc)
@@ -821,7 +857,7 @@ u32 xe_lrc_ctx_timestamp_udw_ggtt_addr(struct xe_lrc *lrc)
  *
  * Returns: ctx timestamp value
  */
-u64 xe_lrc_ctx_timestamp(struct xe_lrc *lrc)
+static u64 xe_lrc_ctx_timestamp(struct xe_lrc *lrc)
 {
 	struct xe_device *xe = lrc_to_xe(lrc);
 	struct iosys_map map;
@@ -943,6 +979,47 @@ static void *empty_lrc_data(struct xe_hw_engine *hwe)
 	return data;
 }
 
+/**
+ * xe_default_lrc_update_memirq_regs_with_address - Re-compute GGTT references in default LRC
+ * of given engine.
+ * @hwe: the &xe_hw_engine struct instance
+ */
+void xe_default_lrc_update_memirq_regs_with_address(struct xe_hw_engine *hwe)
+{
+	struct xe_gt *gt = hwe->gt;
+	u32 *regs;
+
+	if (!gt->default_lrc[hwe->class])
+		return;
+
+	regs = gt->default_lrc[hwe->class] + LRC_PPHWSP_SIZE;
+	set_memory_based_intr(regs, hwe);
+}
+
+/**
+ * xe_lrc_update_memirq_regs_with_address - Re-compute GGTT references in mem interrupt data
+ * for given LRC.
+ * @lrc: the &xe_lrc struct instance
+ * @hwe: the &xe_hw_engine struct instance
+ * @regs: scratch buffer to be used as temporary storage
+ */
+void xe_lrc_update_memirq_regs_with_address(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+					    u32 *regs)
+{
+	struct xe_gt *gt = hwe->gt;
+	struct iosys_map map;
+	size_t regs_len;
+
+	if (!xe_device_uses_memirq(gt_to_xe(gt)))
+		return;
+
+	map = __xe_lrc_regs_map(lrc);
+	regs_len = xe_lrc_reg_size(gt_to_xe(gt));
+	xe_map_memcpy_from(gt_to_xe(gt), regs, &map, 0, regs_len);
+	set_memory_based_intr(regs, hwe);
+	xe_map_memcpy_to(gt_to_xe(gt), &map, 0, regs, regs_len);
+}
+
 static void xe_lrc_set_ppgtt(struct xe_lrc *lrc, struct xe_vm *vm)
 {
 	u64 desc = xe_vm_pdp4_descriptor(vm, gt_to_tile(lrc->gt));
@@ -991,6 +1068,9 @@ static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
 {
 	u32 *cmd = batch;
 
+	if (IS_SRIOV_VF(gt_to_xe(lrc->gt)))
+		return 0;
+
 	if (xe_gt_WARN_ON(lrc->gt, max_len < 12))
 		return -ENOSPC;
 
@@ -1010,6 +1090,121 @@ static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
 		*cmd++ = 0;
 		*cmd++ = upper_32_bits(CONTEXT_ACTIVE);
 	}
+
+	return cmd - batch;
+}
+
+static ssize_t setup_timestamp_wa(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+				  u32 *batch, size_t max_len)
+{
+	const u32 ts_addr = __xe_lrc_ctx_timestamp_ggtt_addr(lrc);
+	u32 *cmd = batch;
+
+	if (!XE_GT_WA(lrc->gt, 16010904313) ||
+	    !(hwe->class == XE_ENGINE_CLASS_RENDER ||
+	      hwe->class == XE_ENGINE_CLASS_COMPUTE ||
+	      hwe->class == XE_ENGINE_CLASS_COPY ||
+	      hwe->class == XE_ENGINE_CLASS_VIDEO_DECODE ||
+	      hwe->class == XE_ENGINE_CLASS_VIDEO_ENHANCE))
+		return 0;
+
+	if (xe_gt_WARN_ON(lrc->gt, max_len < 12))
+		return -ENOSPC;
+
+	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO |
+		 MI_LRM_ASYNC;
+	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
+	*cmd++ = ts_addr;
+	*cmd++ = 0;
+
+	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO |
+		 MI_LRM_ASYNC;
+	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
+	*cmd++ = ts_addr;
+	*cmd++ = 0;
+
+	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO;
+	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
+	*cmd++ = ts_addr;
+	*cmd++ = 0;
+
+	return cmd - batch;
+}
+
+static ssize_t setup_configfs_post_ctx_restore_bb(struct xe_lrc *lrc,
+						  struct xe_hw_engine *hwe,
+						  u32 *batch, size_t max_len)
+{
+	struct xe_device *xe = gt_to_xe(lrc->gt);
+	const u32 *user_batch;
+	u32 *cmd = batch;
+	u32 count;
+
+	count = xe_configfs_get_ctx_restore_post_bb(to_pci_dev(xe->drm.dev),
+						    hwe->class, &user_batch);
+	if (!count)
+		return 0;
+
+	if (count > max_len)
+		return -ENOSPC;
+
+	/*
+	 * This should be used only for tests and validation. Taint the kernel
+	 * as anything could be submitted directly in context switches
+	 */
+	add_taint(TAINT_TEST, LOCKDEP_STILL_OK);
+
+	memcpy(cmd, user_batch, count * sizeof(u32));
+	cmd += count;
+
+	return cmd - batch;
+}
+
+static ssize_t setup_configfs_mid_ctx_restore_bb(struct xe_lrc *lrc,
+						 struct xe_hw_engine *hwe,
+						 u32 *batch, size_t max_len)
+{
+	struct xe_device *xe = gt_to_xe(lrc->gt);
+	const u32 *user_batch;
+	u32 *cmd = batch;
+	u32 count;
+
+	count = xe_configfs_get_ctx_restore_mid_bb(to_pci_dev(xe->drm.dev),
+						   hwe->class, &user_batch);
+	if (!count)
+		return 0;
+
+	if (count > max_len)
+		return -ENOSPC;
+
+	/*
+	 * This should be used only for tests and validation. Taint the kernel
+	 * as anything could be submitted directly in context switches
+	 */
+	add_taint(TAINT_TEST, LOCKDEP_STILL_OK);
+
+	memcpy(cmd, user_batch, count * sizeof(u32));
+	cmd += count;
+
+	return cmd - batch;
+}
+
+static ssize_t setup_invalidate_state_cache_wa(struct xe_lrc *lrc,
+					       struct xe_hw_engine *hwe,
+					       u32 *batch, size_t max_len)
+{
+	u32 *cmd = batch;
+
+	if (!XE_GT_WA(lrc->gt, 18022495364) ||
+	    hwe->class != XE_ENGINE_CLASS_RENDER)
+		return 0;
+
+	if (xe_gt_WARN_ON(lrc->gt, max_len < 3))
+		return -ENOSPC;
+
+	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1);
+	*cmd++ = CS_DEBUG_MODE2(0).addr;
+	*cmd++ = _MASKED_BIT_ENABLE(INSTRUCTION_STATE_CACHE_INVALIDATE);
 
 	return cmd - batch;
 }
@@ -1040,13 +1235,10 @@ static int setup_bo(struct bo_setup_state *state)
 	ssize_t remain;
 
 	if (state->lrc->bo->vmap.is_iomem) {
-		state->buffer = kmalloc(state->max_size, GFP_KERNEL);
-		if (!state->buffer)
-			return -ENOMEM;
+		xe_gt_assert(state->hwe->gt, state->buffer);
 		state->ptr = state->buffer;
 	} else {
 		state->ptr = state->lrc->bo->vmap.vaddr + state->offset;
-		state->buffer = NULL;
 	}
 
 	remain = state->max_size / sizeof(u32);
@@ -1071,30 +1263,39 @@ static int setup_bo(struct bo_setup_state *state)
 	return 0;
 
 fail:
-	kfree(state->buffer);
 	return -ENOSPC;
 }
 
 static void finish_bo(struct bo_setup_state *state)
 {
-	if (!state->buffer)
+	if (!state->lrc->bo->vmap.is_iomem)
 		return;
 
 	xe_map_memcpy_to(gt_to_xe(state->lrc->gt), &state->lrc->bo->vmap,
 			 state->offset, state->buffer,
 			 state->written * sizeof(u32));
-	kfree(state->buffer);
 }
 
-static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+/**
+ * xe_lrc_setup_wa_bb_with_scratch - Execute all wa bb setup callbacks.
+ * @lrc: the &xe_lrc struct instance
+ * @hwe: the &xe_hw_engine struct instance
+ * @scratch: preallocated scratch buffer for temporary storage
+ * Return: 0 on success, negative error code on failure
+ */
+int xe_lrc_setup_wa_bb_with_scratch(struct xe_lrc *lrc, struct xe_hw_engine *hwe, u32 *scratch)
 {
 	static const struct bo_setup funcs[] = {
+		{ .setup = setup_timestamp_wa },
+		{ .setup = setup_invalidate_state_cache_wa },
 		{ .setup = setup_utilization_wa },
+		{ .setup = setup_configfs_post_ctx_restore_bb },
 	};
 	struct bo_setup_state state = {
 		.lrc = lrc,
 		.hwe = hwe,
 		.max_size = LRC_WA_BB_SIZE,
+		.buffer = scratch,
 		.reserve_dw = 1,
 		.offset = __xe_lrc_wa_bb_offset(lrc),
 		.funcs = funcs,
@@ -1117,15 +1318,39 @@ static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
 	return 0;
 }
 
+static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+{
+	u32 *buf = NULL;
+	int ret;
+
+	if (lrc->bo->vmap.is_iomem) {
+		buf = kmalloc(LRC_WA_BB_SIZE, GFP_KERNEL);
+		if (!buf)
+			return -ENOMEM;
+	}
+
+	ret = xe_lrc_setup_wa_bb_with_scratch(lrc, hwe, buf);
+
+	kfree(buf);
+
+	return ret;
+}
+
 static int
 setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
 {
-	static struct bo_setup rcs_funcs[] = {
+	static const struct bo_setup rcs_funcs[] = {
+		{ .setup = setup_timestamp_wa },
+		{ .setup = setup_configfs_mid_ctx_restore_bb },
+	};
+	static const struct bo_setup xcs_funcs[] = {
+		{ .setup = setup_configfs_mid_ctx_restore_bb },
 	};
 	struct bo_setup_state state = {
 		.lrc = lrc,
 		.hwe = hwe,
 		.max_size = (63 * 64) /* max 63 cachelines */,
+		.buffer = NULL,
 		.offset = __xe_lrc_indirect_ctx_offset(lrc),
 	};
 	int ret;
@@ -1137,14 +1362,25 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
 	    hwe->class == XE_ENGINE_CLASS_COMPUTE) {
 		state.funcs = rcs_funcs;
 		state.num_funcs = ARRAY_SIZE(rcs_funcs);
+	} else {
+		state.funcs = xcs_funcs;
+		state.num_funcs = ARRAY_SIZE(xcs_funcs);
 	}
 
 	if (xe_gt_WARN_ON(lrc->gt, !state.funcs))
 		return 0;
 
+	if (lrc->bo->vmap.is_iomem) {
+		state.buffer = kmalloc(state.max_size, GFP_KERNEL);
+		if (!state.buffer)
+			return -ENOMEM;
+	}
+
 	ret = setup_bo(&state);
-	if (ret)
+	if (ret) {
+		kfree(state.buffer);
 		return ret;
+	}
 
 	/*
 	 * Align to 64B cacheline so there's no garbage at the end for CS to
@@ -1156,21 +1392,48 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
 	}
 
 	finish_bo(&state);
+	kfree(state.buffer);
 
+	/*
+	 * Enable INDIRECT_CTX leaving INDIRECT_CTX_OFFSET at its default: it
+	 * varies per engine class, but the default is good enough
+	 */
 	xe_lrc_write_ctx_reg(lrc,
 			     CTX_CS_INDIRECT_CTX,
 			     (xe_bo_ggtt_addr(lrc->bo) + state.offset) |
 			     /* Size in CLs. */
 			     (state.written * sizeof(u32) / 64));
-	xe_lrc_write_ctx_reg(lrc,
-			     CTX_CS_INDIRECT_CTX_OFFSET,
-			     CTX_INDIRECT_CTX_OFFSET_DEFAULT);
 
 	return 0;
 }
 
+static u8 xe_multi_queue_prio_to_lrc(struct xe_lrc *lrc, enum xe_multi_queue_priority priority)
+{
+	struct xe_device *xe = gt_to_xe(lrc->gt);
+
+	xe_assert(xe, (priority >= XE_MULTI_QUEUE_PRIORITY_LOW &&
+		       priority <= XE_MULTI_QUEUE_PRIORITY_HIGH));
+
+	/* xe_multi_queue_priority is directly mapped to LRC priority values */
+	return priority;
+}
+
+/**
+ * xe_lrc_set_multi_queue_priority() - Set multi queue priority in LRC
+ * @lrc: Logical Ring Context
+ * @priority: Multi queue priority of the exec queue
+ *
+ * Convert @priority to LRC multi queue priority and update the @lrc descriptor
+ */
+void xe_lrc_set_multi_queue_priority(struct xe_lrc *lrc, enum xe_multi_queue_priority priority)
+{
+	lrc->desc &= ~LRC_PRIORITY;
+	lrc->desc |= FIELD_PREP(LRC_PRIORITY, xe_multi_queue_prio_to_lrc(lrc, priority));
+}
+
 static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
-		       struct xe_vm *vm, u32 ring_size, u16 msix_vec,
+		       struct xe_vm *vm, void *replay_state, u32 ring_size,
+		       u16 msix_vec,
 		       u32 init_flags)
 {
 	struct xe_gt *gt = hwe->gt;
@@ -1185,6 +1448,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 
 	kref_init(&lrc->refcount);
 	lrc->gt = gt;
+	lrc->replay_size = xe_gt_lrc_hang_replay_size(gt, hwe->class);
 	lrc->size = lrc_size;
 	lrc->flags = 0;
 	lrc->ring.size = ring_size;
@@ -1200,12 +1464,14 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 
 	bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile) | XE_BO_FLAG_GGTT |
 		   XE_BO_FLAG_GGTT_INVALIDATE;
-	if (vm && vm->xef) /* userspace */
-		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE;
 
-	lrc->bo = xe_bo_create_pin_map(xe, tile, NULL, bo_size,
-				       ttm_bo_type_kernel,
-				       bo_flags);
+	if ((vm && vm->xef) || init_flags & XE_LRC_CREATE_USER_CTX) /* userspace */
+		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE | XE_BO_FLAG_FORCE_USER_VRAM;
+
+	lrc->bo = xe_bo_create_pin_map_novm(xe, tile,
+					    bo_size,
+					    ttm_bo_type_kernel,
+					    bo_flags, false);
 	if (IS_ERR(lrc->bo))
 		return PTR_ERR(lrc->bo);
 
@@ -1219,11 +1485,14 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	 * scratch.
 	 */
 	map = __xe_lrc_pphwsp_map(lrc);
-	if (gt->default_lrc[hwe->class]) {
+	if (gt->default_lrc[hwe->class] || replay_state) {
 		xe_map_memset(xe, &map, 0, 0, LRC_PPHWSP_SIZE);	/* PPHWSP */
 		xe_map_memcpy_to(xe, &map, LRC_PPHWSP_SIZE,
 				 gt->default_lrc[hwe->class] + LRC_PPHWSP_SIZE,
 				 lrc_size - LRC_PPHWSP_SIZE);
+		if (replay_state)
+			xe_map_memcpy_to(xe, &map, LRC_PPHWSP_SIZE,
+					 replay_state, lrc->replay_size);
 	} else {
 		void *init_data = empty_lrc_data(hwe);
 
@@ -1331,6 +1600,7 @@ err_lrc_finish:
  * xe_lrc_create - Create a LRC
  * @hwe: Hardware Engine
  * @vm: The VM (address space)
+ * @replay_state: GPU hang replay state
  * @ring_size: LRC ring size
  * @msix_vec: MSI-X interrupt vector (for platforms that support it)
  * @flags: LRC initialization flags
@@ -1341,16 +1611,16 @@ err_lrc_finish:
  * upon failure.
  */
 struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
-			     u32 ring_size, u16 msix_vec, u32 flags)
+			     void *replay_state, u32 ring_size, u16 msix_vec, u32 flags)
 {
 	struct xe_lrc *lrc;
 	int err;
 
-	lrc = kzalloc(sizeof(*lrc), GFP_KERNEL);
+	lrc = kzalloc_obj(*lrc);
 	if (!lrc)
 		return ERR_PTR(-ENOMEM);
 
-	err = xe_lrc_init(lrc, hwe, vm, ring_size, msix_vec, flags);
+	err = xe_lrc_init(lrc, hwe, vm, replay_state, ring_size, msix_vec, flags);
 	if (err) {
 		kfree(lrc);
 		return ERR_PTR(err);
@@ -1372,6 +1642,23 @@ void xe_lrc_destroy(struct kref *ref)
 
 	xe_lrc_finish(lrc);
 	kfree(lrc);
+}
+
+/**
+ * xe_lrc_update_hwctx_regs_with_address - Re-compute GGTT references within given LRC.
+ * @lrc: the &xe_lrc struct instance
+ */
+void xe_lrc_update_hwctx_regs_with_address(struct xe_lrc *lrc)
+{
+	if (xe_lrc_has_indirect_ring_state(lrc)) {
+		xe_lrc_write_ctx_reg(lrc, CTX_INDIRECT_RING_STATE,
+				     __xe_lrc_indirect_ring_ggtt_addr(lrc));
+
+		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START,
+					      __xe_lrc_ring_ggtt_addr(lrc));
+	} else {
+		xe_lrc_write_ctx_reg(lrc, CTX_RING_START, __xe_lrc_ring_ggtt_addr(lrc));
+	}
 }
 
 void xe_lrc_set_ring_tail(struct xe_lrc *lrc, u32 tail)
@@ -1939,7 +2226,7 @@ u32 *xe_lrc_emit_hwe_state_instructions(struct xe_exec_queue *q, u32 *cs)
 	 * continue to emit all of the SVG state since it's best not to leak
 	 * any of the state between contexts, even if that leakage is harmless.
 	 */
-	if (XE_WA(gt, 14019789679) && q->hwe->class == XE_ENGINE_CLASS_RENDER) {
+	if (XE_GT_WA(gt, 14019789679) && q->hwe->class == XE_ENGINE_CLASS_RENDER) {
 		state_table = xe_hpg_svg_state;
 		state_table_size = ARRAY_SIZE(xe_hpg_svg_state);
 	}
@@ -1982,7 +2269,7 @@ u32 *xe_lrc_emit_hwe_state_instructions(struct xe_exec_queue *q, u32 *cs)
 
 struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
 {
-	struct xe_lrc_snapshot *snapshot = kmalloc(sizeof(*snapshot), GFP_NOWAIT);
+	struct xe_lrc_snapshot *snapshot = kmalloc_obj(*snapshot, GFP_NOWAIT);
 
 	if (!snapshot)
 		return NULL;
@@ -1999,6 +2286,8 @@ struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
 	snapshot->lrc_bo = xe_bo_get(lrc->bo);
 	snapshot->lrc_offset = xe_lrc_pphwsp_offset(lrc);
 	snapshot->lrc_size = lrc->size;
+	snapshot->replay_offset = 0;
+	snapshot->replay_size = lrc->replay_size;
 	snapshot->lrc_snapshot = NULL;
 	snapshot->ctx_timestamp = lower_32_bits(xe_lrc_ctx_timestamp(lrc));
 	snapshot->ctx_job_timestamp = xe_lrc_ctx_job_timestamp(lrc);
@@ -2069,6 +2358,9 @@ void xe_lrc_snapshot_print(struct xe_lrc_snapshot *snapshot, struct drm_printer 
 	}
 
 	drm_printf(p, "\n\t[HWCTX].length: 0x%lx\n", snapshot->lrc_size - LRC_PPHWSP_SIZE);
+	drm_printf(p, "\n\t[HWCTX].replay_offset: 0x%lx\n", snapshot->replay_offset);
+	drm_printf(p, "\n\t[HWCTX].replay_length: 0x%lx\n", snapshot->replay_size);
+
 	drm_puts(p, "\t[HWCTX].data: ");
 	for (; i < snapshot->lrc_size; i += sizeof(u32)) {
 		u32 *val = snapshot->lrc_snapshot + i;
@@ -2117,35 +2409,31 @@ static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
 }
 
 /**
- * xe_lrc_update_timestamp() - Update ctx timestamp
+ * xe_lrc_timestamp() - Current ctx timestamp
  * @lrc: Pointer to the lrc.
- * @old_ts: Old timestamp value
  *
- * Populate @old_ts current saved ctx timestamp, read new ctx timestamp and
- * update saved value. With support for active contexts, the calculation may be
- * slightly racy, so follow a read-again logic to ensure that the context is
- * still active before returning the right timestamp.
+ * Return latest ctx timestamp. With support for active contexts, the
+ * calculation may be slightly racy, so follow a read-again logic to ensure that
+ * the context is still active before returning the right timestamp.
  *
  * Returns: New ctx timestamp value
  */
-u64 xe_lrc_update_timestamp(struct xe_lrc *lrc, u64 *old_ts)
+u64 xe_lrc_timestamp(struct xe_lrc *lrc)
 {
-	u64 lrc_ts, reg_ts;
+	u64 lrc_ts, reg_ts, new_ts = lrc->ctx_timestamp;
 	u32 engine_id;
-
-	*old_ts = lrc->ctx_timestamp;
 
 	lrc_ts = xe_lrc_ctx_timestamp(lrc);
 	/* CTX_TIMESTAMP mmio read is invalid on VF, so return the LRC value */
 	if (IS_SRIOV_VF(lrc_to_xe(lrc))) {
-		lrc->ctx_timestamp = lrc_ts;
+		new_ts = lrc_ts;
 		goto done;
 	}
 
 	if (lrc_ts == CONTEXT_ACTIVE) {
 		engine_id = xe_lrc_engine_id(lrc);
 		if (!get_ctx_timestamp(lrc, engine_id, &reg_ts))
-			lrc->ctx_timestamp = reg_ts;
+			new_ts = reg_ts;
 
 		/* read lrc again to ensure context is still active */
 		lrc_ts = xe_lrc_ctx_timestamp(lrc);
@@ -2156,9 +2444,27 @@ u64 xe_lrc_update_timestamp(struct xe_lrc *lrc, u64 *old_ts)
 	 * be a separate if condition.
 	 */
 	if (lrc_ts != CONTEXT_ACTIVE)
-		lrc->ctx_timestamp = lrc_ts;
+		new_ts = lrc_ts;
 
 done:
+	return new_ts;
+}
+
+/**
+ * xe_lrc_update_timestamp() - Update ctx timestamp
+ * @lrc: Pointer to the lrc.
+ * @old_ts: Old timestamp value
+ *
+ * Populate @old_ts current saved ctx timestamp, read new ctx timestamp and
+ * update saved value.
+ *
+ * Returns: New ctx timestamp value
+ */
+u64 xe_lrc_update_timestamp(struct xe_lrc *lrc, u64 *old_ts)
+{
+	*old_ts = lrc->ctx_timestamp;
+	lrc->ctx_timestamp = xe_lrc_timestamp(lrc);
+
 	trace_xe_lrc_update_timestamp(lrc, *old_ts);
 
 	return lrc->ctx_timestamp;

@@ -282,7 +282,9 @@ static void virt_wifi_connect_complete(struct work_struct *work)
 		priv->is_connected = true;/*指明已连接*/
 
 	/* Schedules an event that acquires the rtnl lock. */
-	cfg80211_connect_result(priv->upperdev, requested_bss, NULL, 0, NULL, 0,
+	cfg80211_connect_result(priv->upperdev,
+				priv->is_connected ? fake_router_bssid : NULL,
+				NULL, 0, NULL, 0,
 				status/*指明连接结果（成功/失败）*/, GFP_KERNEL);
 	netif_carrier_on(priv->upperdev);
 }
@@ -575,7 +577,7 @@ static int virt_wifi_newlink(struct net_device *dev,
 	netif_stacked_transfer_operstate(priv->lowerdev, dev);
 
 	SET_NETDEV_DEV(dev, &priv->lowerdev->dev);
-	dev->ieee80211_ptr = kzalloc(sizeof(*dev->ieee80211_ptr), GFP_KERNEL);
+	dev->ieee80211_ptr = kzalloc_obj(*dev->ieee80211_ptr);
 
 	if (!dev->ieee80211_ptr) {
 		err = -ENOMEM;

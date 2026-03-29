@@ -504,9 +504,7 @@ iwl_mld_scan_get_cmd_gen_flags2(struct iwl_mld *mld,
 	 */
 	if (scan_status == IWL_MLD_SCAN_REGULAR &&
 	    ieee80211_vif_type_p2p(vif) == NL80211_IFTYPE_AP &&
-	    gen_flags & IWL_UMAC_SCAN_GEN_FLAGS_V2_FORCE_PASSIVE &&
-	    iwl_fw_lookup_notif_ver(mld->fw, SCAN_GROUP,
-				    CHANNEL_SURVEY_NOTIF, 0) >= 1)
+	    gen_flags & IWL_UMAC_SCAN_GEN_FLAGS_V2_FORCE_PASSIVE)
 		flags |= IWL_UMAC_SCAN_GEN_FLAGS2_COLLECT_CHANNEL_STATS;
 
 	return flags;
@@ -1065,14 +1063,15 @@ static int
 iwl_mld_scan_cmd_set_6ghz_chan_params(struct iwl_mld *mld,
 				      struct iwl_mld_scan_params *params,
 				      struct ieee80211_vif *vif,
-				      struct iwl_scan_req_params_v17 *scan_p,
-				      enum iwl_mld_scan_status scan_status)
+				      struct iwl_scan_req_params_v17 *scan_p)
 {
 	struct iwl_scan_channel_params_v7 *chan_p = &scan_p->channel_params;
 	struct iwl_scan_probe_params_v4 *probe_p = &scan_p->probe_params;
 
-	chan_p->flags = iwl_mld_scan_get_cmd_gen_flags(mld, params, vif,
-						       scan_status);
+	/* Explicitly clear the flags since most of them are not
+	 * relevant for 6 GHz scan.
+	 */
+	chan_p->flags = 0;
 	chan_p->count = iwl_mld_scan_cfg_channels_6g(mld, params,
 						     params->n_channels,
 						     probe_p, chan_p,
@@ -1108,8 +1107,7 @@ iwl_mld_scan_cmd_set_chan_params(struct iwl_mld *mld,
 
 	if (params->scan_6ghz)
 		return iwl_mld_scan_cmd_set_6ghz_chan_params(mld, params,
-							     vif, scan_p,
-							     scan_status);
+							     vif, scan_p);
 
 	/* relevant only for 2.4 GHz/5 GHz scan */
 	cp->flags = iwl_mld_scan_cmd_set_chan_flags(mld, params, vif,
@@ -2085,9 +2083,8 @@ void iwl_mld_handle_channel_survey_notif(struct iwl_mld *mld,
 			n_channels += mld->wiphy->bands[band]->n_channels;
 		}
 
-		mld->channel_survey = kzalloc(struct_size(mld->channel_survey,
-							  channels, n_channels),
-							  GFP_KERNEL);
+		mld->channel_survey = kzalloc_flex(*mld->channel_survey,
+						   channels, n_channels);
 
 		if (!mld->channel_survey)
 			return;

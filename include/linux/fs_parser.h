@@ -130,6 +130,8 @@ static inline bool fs_validate_description(const char *name,
 #define fsparam_u32(NAME/*参数名称*/, OPT/*参数对应的选项id*/)	__fsparam(fs_param_is_u32/*参数值转u32*/, NAME, OPT, 0, NULL)
 #define fsparam_u32oct(NAME, OPT) \
 			__fsparam(fs_param_is_u32, NAME, OPT, 0, (void *)8/*指明为8进制*/)
+#define fsparam_u32hex(NAME, OPT) \
+			__fsparam(fs_param_is_u32, NAME, OPT, 0, (void *)16)
 #define fsparam_s32(NAME, OPT)	__fsparam(fs_param_is_s32, NAME, OPT, 0, NULL)
 #define fsparam_u64(NAME, OPT)	__fsparam(fs_param_is_u64, NAME, OPT, 0, NULL)
 #define fsparam_enum(NAME, OPT, array)	__fsparam(fs_param_is_enum/*参数值为enum类型*/, NAME, OPT, 0, array/*类型为enum,array为enum的常量字符串表形式*/)

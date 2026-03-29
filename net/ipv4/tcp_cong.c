@@ -16,6 +16,7 @@
 #include <linux/gfp.h>
 #include <linux/jhash.h>
 #include <net/tcp.h>
+#include <net/tcp_ecn.h>
 #include <trace/events/tcp.h>
 
 static DEFINE_SPINLOCK(tcp_cong_list_lock);
@@ -240,7 +241,7 @@ void tcp_assign_congestion_control(struct sock *sk)
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 	if (ca->flags & TCP_CONG_NEEDS_ECN)
 		/*拥塞算法依赖ecn，添加INET_ECN_ECT_0标记*/
-		INET_ECN_xmit(sk);
+		INET_ECN_xmit_ect_1_negotiation(sk);
 	else
 		/*不依赖ecn,清除tos上设置的ecn标记*/
 		INET_ECN_dontxmit(sk);
@@ -276,7 +277,7 @@ static void tcp_reinit_congestion_control(struct sock *sk,
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 
 	if (ca->flags & TCP_CONG_NEEDS_ECN)
-		INET_ECN_xmit(sk);/*要求ecn标记，tos上添加enc0标记*/
+		INET_ECN_xmit_ect_1_negotiation(sk);/*要求ecn标记，tos上添加enc0标记*/
 	else
 		INET_ECN_dontxmit(sk);/*不需要ecn标记，清楚掉ecn标记*/
 

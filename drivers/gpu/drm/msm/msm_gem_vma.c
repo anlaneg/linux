@@ -65,7 +65,7 @@ struct msm_vm_unmap_op {
 };
 
 /**
- * struct msm_vma_op - A MAP or UNMAP operation
+ * struct msm_vm_op - A MAP or UNMAP operation
  */
 struct msm_vm_op {
 	/** @op: The operation type */
@@ -319,13 +319,10 @@ msm_gem_vma_map(struct drm_gpuva *vma, int prot, struct sg_table *sgt)
 		mutex_lock(&vm->mmu_lock);
 
 	/*
-	 * NOTE: iommu/io-pgtable can allocate pages, so we cannot hold
+	 * NOTE: if not using pgtable preallocation, we cannot hold
 	 * a lock across map/unmap which is also used in the job_run()
 	 * path, as this can cause deadlock in job_run() vs shrinker/
 	 * reclaim.
-	 *
-	 * Revisit this if we can come up with a scheme to pre-alloc pages
-	 * for the pgtable in map/unmap ops.
 	 */
 	ret = vm_map_op(vm, &(struct msm_vm_map_op){
 		.iova = vma->va.addr,
@@ -378,7 +375,7 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 
 	drm_gpuvm_resv_assert_held(&vm->base);
 
-	vma = kzalloc(sizeof(*vma), GFP_KERNEL);
+	vma = kzalloc_obj(*vma);
 	if (!vma)
 		return ERR_PTR(-ENOMEM);
 
@@ -399,7 +396,14 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 	if (obj)
 		GEM_WARN_ON((range_end - range_start) > obj->size);
 
-	drm_gpuva_init(&vma->base, range_start, range_end - range_start, obj, offset);
+	struct drm_gpuva_op_map op_map = {
+		.va.addr = range_start,
+		.va.range = range_end - range_start,
+		.gem.obj = obj,
+		.gem.offset = offset,
+	};
+
+	drm_gpuva_init_from_op(&vma->base, &op_map);
 	vma->mapped = false;
 
 	ret = drm_gpuva_insert(&vm->base, &vma->base);
@@ -409,7 +413,7 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 	if (!obj)
 		return &vma->base;
 
-	vm_bo = drm_gpuvm_bo_obtain(&vm->base, obj);
+	vm_bo = drm_gpuvm_bo_obtain_locked(&vm->base, obj);
 	if (IS_ERR(vm_bo)) {
 		ret = PTR_ERR(vm_bo);
 		goto err_va_remove;
@@ -454,17 +458,24 @@ msm_gem_vm_bo_validate(struct drm_gpuvm_bo *vm_bo, struct drm_exec *exec)
 struct op_arg {
 	unsigned flags;
 	struct msm_vm_bind_job *job;
+	const struct msm_vm_bind_op *op;
+	bool kept;
 };
 
-static void
+static int
 vm_op_enqueue(struct op_arg *arg, struct msm_vm_op _op)
 {
-	struct msm_vm_op *op = kmalloc(sizeof(*op), GFP_KERNEL);
+	struct msm_vm_op *op = kmalloc_obj(*op);
+	if (!op)
+		return -ENOMEM;
+
 	*op = _op;
 	list_add_tail(&op->node, &arg->job->vm_ops);
 
 	if (op->obj)
 		drm_gem_object_get(op->obj);
+
+	return 0;
 }
 
 static struct drm_gpuva *
@@ -475,13 +486,18 @@ vma_from_op(struct op_arg *arg, struct drm_gpuva_op_map *op)
 }
 
 static int
-msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *arg)
+msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg)
 {
-	struct msm_vm_bind_job *job = ((struct op_arg *)arg)->job;
+	struct op_arg *arg = _arg;
+	struct msm_vm_bind_job *job = arg->job;
 	struct drm_gem_object *obj = op->map.gem.obj;
 	struct drm_gpuva *vma;
 	struct sg_table *sgt;
 	unsigned prot;
+	int ret;
+
+	if (arg->kept)
+		return 0;
 
 	vma = vma_from_op(arg, &op->map);
 	if (WARN_ON(IS_ERR(vma)))
@@ -489,8 +505,6 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *arg)
 
 	vm_dbg("%p:%p:%p: %016llx %016llx", vma->vm, vma, vma->gem.obj,
 	       vma->va.addr, vma->va.range);
-
-	vma->flags = ((struct op_arg *)arg)->flags;
 
 	if (obj) {
 		sgt = to_msm_bo(obj)->sgt;
@@ -500,7 +514,7 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *arg)
 		prot = IOMMU_READ | IOMMU_WRITE;
 	}
 
-	vm_op_enqueue(arg, (struct msm_vm_op){
+	ret = vm_op_enqueue(arg, (struct msm_vm_op){
 		.op = MSM_VM_OP_MAP,
 		.map = {
 			.sgt = sgt,
@@ -513,6 +527,10 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *arg)
 		.obj = vma->gem.obj,
 	});
 
+	if (ret)
+		return ret;
+
+	vma->flags = ((struct op_arg *)arg)->flags;
 	to_msm_vma(vma)->mapped = true;
 
 	return 0;
@@ -528,6 +546,7 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 	struct drm_gpuvm_bo *vm_bo = orig_vma->vm_bo;
 	bool mapped = to_msm_vma(orig_vma)->mapped;
 	unsigned flags;
+	int ret;
 
 	vm_dbg("orig_vma: %p:%p:%p: %016llx %016llx", vm, orig_vma,
 	       orig_vma->gem.obj, orig_vma->va.addr, orig_vma->va.range);
@@ -537,7 +556,7 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 
 		drm_gpuva_op_remap_to_unmap_range(&op->remap, &unmap_start, &unmap_range);
 
-		vm_op_enqueue(arg, (struct msm_vm_op){
+		ret = vm_op_enqueue(arg, (struct msm_vm_op){
 			.op = MSM_VM_OP_UNMAP,
 			.unmap = {
 				.iova = unmap_start,
@@ -546,6 +565,9 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 			},
 			.obj = orig_vma->gem.obj,
 		});
+
+		if (ret)
+			return ret;
 
 		/*
 		 * Part of this GEM obj is still mapped, but we're going to kill the
@@ -602,19 +624,46 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 }
 
 static int
-msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *arg)
+msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *_arg)
 {
-	struct msm_vm_bind_job *job = ((struct op_arg *)arg)->job;
+	struct op_arg *arg = _arg;
+	struct msm_vm_bind_job *job = arg->job;
 	struct drm_gpuva *vma = op->unmap.va;
 	struct msm_gem_vma *msm_vma = to_msm_vma(vma);
+	int ret;
 
 	vm_dbg("%p:%p:%p: %016llx %016llx", vma->vm, vma, vma->gem.obj,
 	       vma->va.addr, vma->va.range);
 
+	/*
+	 * Detect in-place remap.  Turnip does this to change the vma flags,
+	 * in particular MSM_VMA_DUMP.  In this case we want to avoid actually
+	 * touching the page tables, as that would require synchronization
+	 * against SUBMIT jobs running on the GPU.
+	 */
+	if (op->unmap.keep &&
+	    (arg->op->op == MSM_VM_BIND_OP_MAP) &&
+	    (vma->gem.obj == arg->op->obj) &&
+	    (vma->gem.offset == arg->op->obj_offset) &&
+	    (vma->va.addr == arg->op->iova) &&
+	    (vma->va.range == arg->op->range)) {
+		/* We are only expecting a single in-place unmap+map cb pair: */
+		WARN_ON(arg->kept);
+
+		/* Leave the existing VMA in place, but signal that to the map cb: */
+		arg->kept = true;
+
+		/* Only flags are changing, so update that in-place: */
+		unsigned orig_flags = vma->flags & (DRM_GPUVA_USERBITS - 1);
+		vma->flags = orig_flags | arg->flags;
+
+		return 0;
+	}
+
 	if (!msm_vma->mapped)
 		goto out_close;
 
-	vm_op_enqueue(arg, (struct msm_vm_op){
+	ret = vm_op_enqueue(arg, (struct msm_vm_op){
 		.op = MSM_VM_OP_UNMAP,
 		.unmap = {
 			.iova = vma->va.addr,
@@ -623,6 +672,9 @@ msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *arg)
 		},
 		.obj = vma->gem.obj,
 	});
+
+	if (ret)
+		return ret;
 
 	msm_vma->mapped = false;
 
@@ -746,6 +798,9 @@ static const struct drm_sched_backend_ops msm_vm_bind_ops = {
  * synchronous operations are supported.  In a user managed VM, userspace
  * handles virtual address allocation, and both async and sync operations
  * are supported.
+ *
+ * Returns: pointer to the created &struct drm_gpuvm on success
+ * or an ERR_PTR(-errno) on failure.
  */
 struct drm_gpuvm *
 msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
@@ -764,7 +819,7 @@ msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
 	if (IS_ERR(mmu))
 		return ERR_CAST(mmu);
 
-	vm = kzalloc(sizeof(*vm), GFP_KERNEL);
+	vm = kzalloc_obj(*vm);
 	if (!vm)
 		return ERR_PTR(-ENOMEM);
 
@@ -814,8 +869,8 @@ msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
 		vm->log_shift = MIN(vm_log_shift, 8);
 
 	if (vm->log_shift) {
-		vm->log = kmalloc_array(1 << vm->log_shift, sizeof(vm->log[0]),
-					GFP_KERNEL | __GFP_ZERO);
+		vm->log = kmalloc_objs(vm->log[0], 1 << vm->log_shift,
+				       GFP_KERNEL | __GFP_ZERO);
 	}
 
 	return &vm->base;
@@ -895,15 +950,9 @@ vm_bind_job_create(struct drm_device *dev, struct drm_file *file,
 		   struct msm_gpu_submitqueue *queue, uint32_t nr_ops)
 {
 	struct msm_vm_bind_job *job;
-	uint64_t sz;
 	int ret;
 
-	sz = struct_size(job, ops, nr_ops);
-
-	if (sz > SIZE_MAX)
-		return ERR_PTR(-ENOMEM);
-
-	job = kzalloc(sz, GFP_KERNEL | __GFP_NOWARN);
+	job = kzalloc_flex(*job, ops, nr_ops, GFP_KERNEL | __GFP_NOWARN);
 	if (!job)
 		return ERR_PTR(-ENOMEM);
 
@@ -935,6 +984,7 @@ static int
 lookup_op(struct msm_vm_bind_job *job, const struct drm_msm_vm_bind_op *op)
 {
 	struct drm_device *dev = job->vm->drm;
+	struct msm_drm_private *priv = dev->dev_private;
 	int i = job->nr_ops++;
 	int ret = 0;
 
@@ -981,6 +1031,11 @@ lookup_op(struct msm_vm_bind_job *job, const struct drm_msm_vm_bind_op *op)
 		break;
 	}
 
+	if ((op->op == MSM_VM_BIND_OP_MAP_NULL) &&
+	    !adreno_smmu_has_prr(priv->gpu)) {
+		ret = UERR(EINVAL, dev, "PRR not supported\n");
+	}
+
 	return ret;
 }
 
@@ -994,6 +1049,7 @@ vm_bind_job_lookup_ops(struct msm_vm_bind_job *job, struct drm_msm_vm_bind *args
 	struct drm_device *dev = job->vm->drm;
 	int ret = 0;
 	int cnt = 0;
+	int i = -1;
 
 	if (args->nr_ops == 1) {
 		/* Single op case, the op is inlined: */
@@ -1027,11 +1083,12 @@ vm_bind_job_lookup_ops(struct msm_vm_bind_job *job, struct drm_msm_vm_bind *args
 
 	spin_lock(&file->table_lock);
 
-	for (unsigned i = 0; i < args->nr_ops; i++) {
+	for (i = 0; i < args->nr_ops; i++) {
+		struct msm_vm_bind_op *op = &job->ops[i];
 		struct drm_gem_object *obj;
 
-		if (!job->ops[i].handle) {
-			job->ops[i].obj = NULL;
+		if (!op->handle) {
+			op->obj = NULL;
 			continue;
 		}
 
@@ -1039,16 +1096,22 @@ vm_bind_job_lookup_ops(struct msm_vm_bind_job *job, struct drm_msm_vm_bind *args
 		 * normally use drm_gem_object_lookup(), but for bulk lookup
 		 * all under single table_lock just hit object_idr directly:
 		 */
-		obj = idr_find(&file->object_idr, job->ops[i].handle);
+		obj = idr_find(&file->object_idr, op->handle);
 		if (!obj) {
-			ret = UERR(EINVAL, dev, "invalid handle %u at index %u\n", job->ops[i].handle, i);
+			ret = UERR(EINVAL, dev, "invalid handle %u at index %u\n", op->handle, i);
 			goto out_unlock;
 		}
 
 		drm_gem_object_get(obj);
 
-		job->ops[i].obj = obj;
+		op->obj = obj;
 		cnt++;
+
+		if ((op->range + op->obj_offset) > obj->size) {
+			ret = UERR(EINVAL, dev, "invalid range: %016llx + %016llx > %016zx\n",
+				   op->range, op->obj_offset, obj->size);
+			goto out_unlock;
+		}
 	}
 
 	*nr_bos = cnt;
@@ -1056,6 +1119,17 @@ vm_bind_job_lookup_ops(struct msm_vm_bind_job *job, struct drm_msm_vm_bind *args
 out_unlock:
 	spin_unlock(&file->table_lock);
 
+	if (ret) {
+		for (; i >= 0; i--) {
+			struct msm_vm_bind_op *op = &job->ops[i];
+
+			if (!op->obj)
+				continue;
+
+			drm_gem_object_put(op->obj);
+			op->obj = NULL;
+		}
+	}
 out:
 	return ret;
 }
@@ -1171,11 +1245,17 @@ vm_bind_job_lock_objects(struct msm_vm_bind_job *job, struct drm_exec *exec)
 							      op->obj_offset);
 				break;
 			case MSM_VM_BIND_OP_MAP:
-			case MSM_VM_BIND_OP_MAP_NULL:
-				ret = drm_gpuvm_sm_map_exec_lock(job->vm, exec, 1,
-							    op->iova, op->range,
-							    op->obj, op->obj_offset);
+			case MSM_VM_BIND_OP_MAP_NULL: {
+				struct drm_gpuvm_map_req map_req = {
+					.map.va.addr = op->iova,
+					.map.va.range = op->range,
+					.map.gem.obj = op->obj,
+					.map.gem.offset = op->obj_offset,
+				};
+
+				ret = drm_gpuvm_sm_map_exec_lock(job->vm, exec, 1, &map_req);
 				break;
+			}
 			default:
 				/*
 				 * lookup_op() should have already thrown an error for
@@ -1271,6 +1351,7 @@ vm_bind_job_prepare(struct msm_vm_bind_job *job)
 		const struct msm_vm_bind_op *op = &job->ops[i];
 		struct op_arg arg = {
 			.job = job,
+			.op = op,
 		};
 
 		switch (op->op) {
@@ -1282,10 +1363,17 @@ vm_bind_job_prepare(struct msm_vm_bind_job *job)
 			if (op->flags & MSM_VM_BIND_OP_DUMP)
 				arg.flags |= MSM_VMA_DUMP;
 			fallthrough;
-		case MSM_VM_BIND_OP_MAP_NULL:
-			ret = drm_gpuvm_sm_map(job->vm, &arg, op->iova,
-					       op->range, op->obj, op->obj_offset);
+		case MSM_VM_BIND_OP_MAP_NULL: {
+			struct drm_gpuvm_map_req map_req = {
+				.map.va.addr = op->iova,
+				.map.va.range = op->range,
+				.map.gem.obj = op->obj,
+				.map.gem.offset = op->obj_offset,
+			};
+
+			ret = drm_gpuvm_sm_map(job->vm, &arg, &map_req);
 			break;
+		}
 		default:
 			/*
 			 * lookup_op() should have already thrown an error for
@@ -1352,7 +1440,7 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 	 * Maybe we could allow just UNMAP ops?  OTOH userspace should just
 	 * immediately close the device file and all will be torn down.
 	 */
-	if (to_msm_vm(ctx->vm)->unusable)
+	if (to_msm_vm(msm_context_vm(dev, ctx))->unusable)
 		return UERR(EPIPE, dev, "context is unusable");
 
 	/*
@@ -1460,12 +1548,8 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 
 	if (args->flags & MSM_VM_BIND_FENCE_FD_OUT) {
 		sync_file = sync_file_create(job->fence);
-		if (!sync_file) {
+		if (!sync_file)
 			ret = -ENOMEM;
-		} else {
-			fd_install(out_fence_fd, sync_file->file);
-			args->fence_fd = out_fence_fd;
-		}
 	}
 
 	if (ret)
@@ -1494,10 +1578,14 @@ out:
 out_unlock:
 	mutex_unlock(&queue->lock);
 out_post_unlock:
-	if (ret && (out_fence_fd >= 0)) {
-		put_unused_fd(out_fence_fd);
+	if (ret) {
+		if (out_fence_fd >= 0)
+			put_unused_fd(out_fence_fd);
 		if (sync_file)
 			fput(sync_file->file);
+	} else if (sync_file) {
+		fd_install(out_fence_fd, sync_file->file);
+		args->fence_fd = out_fence_fd;
 	}
 
 	if (!IS_ERR_OR_NULL(job)) {

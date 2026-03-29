@@ -146,6 +146,7 @@
 #define  HDMI_COLOR_DEPTH_24		FIELD_PREP(HDMI_COLOR_DEPTH, 4)
 
 #define HDMI_REG_PKT_GENERAL_CTRL	0xc6
+#define HDMI_REG_PKT_NULL_CTRL		0xc9
 #define HDMI_REG_AVI_INFOFRM_CTRL	0xcd
 #define  ENABLE_PKT			BIT(0)
 #define  REPEAT_PKT			BIT(1)
@@ -153,6 +154,12 @@
 /* -----------------------------------------------------------------------------
  * 3) HDMI register bank1: 0x130 ~ 0x1ff (HDMI packet registers)
  */
+
+/* NULL packet registers */
+/* Header Byte(HB): n = 0 ~ 2 */
+#define HDMI_REG_PKT_HB(n)		(0x138 + (n))
+/* Packet Byte(PB): n = 0 ~ 27(HDMI_MAX_INFOFRAME_SIZE), n = 0 for checksum */
+#define HDMI_REG_PKT_PB(n)		(0x13b + (n))
 
 /* AVI packet registers */
 #define HDMI_REG_AVI_DB1		0x158
@@ -224,7 +231,9 @@ static bool it6263_hdmi_writeable_reg(struct device *dev, unsigned int reg)
 	case HDMI_REG_HDMI_MODE:
 	case HDMI_REG_GCP:
 	case HDMI_REG_PKT_GENERAL_CTRL:
+	case HDMI_REG_PKT_NULL_CTRL:
 	case HDMI_REG_AVI_INFOFRM_CTRL:
+	case HDMI_REG_PKT_HB(0) ... HDMI_REG_PKT_PB(HDMI_MAX_INFOFRAME_SIZE):
 	case HDMI_REG_AVI_DB1:
 	case HDMI_REG_AVI_DB2:
 	case HDMI_REG_AVI_DB3:
@@ -726,7 +735,7 @@ it6263_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 	if (!it6263_is_input_bus_fmt_valid(it->lvds_data_mapping))
 		return NULL;
 
-	input_fmts = kmalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kmalloc_obj(*input_fmts);
 	if (!input_fmts)
 		return NULL;
 
@@ -750,30 +759,29 @@ it6263_hdmi_tmds_char_rate_valid(const struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-static int it6263_hdmi_clear_infoframe(struct drm_bridge *bridge,
-				       enum hdmi_infoframe_type type)
+static int it6263_hdmi_clear_avi_infoframe(struct drm_bridge *bridge)
 {
 	struct it6263 *it = bridge_to_it6263(bridge);
 
-	if (type == HDMI_INFOFRAME_TYPE_AVI)
-		regmap_write(it->hdmi_regmap, HDMI_REG_AVI_INFOFRM_CTRL, 0);
-	else
-		dev_dbg(it->dev, "unsupported HDMI infoframe 0x%x\n", type);
+	regmap_write(it->hdmi_regmap, HDMI_REG_AVI_INFOFRM_CTRL, 0);
 
 	return 0;
 }
 
-static int it6263_hdmi_write_infoframe(struct drm_bridge *bridge,
-				       enum hdmi_infoframe_type type,
-				       const u8 *buffer, size_t len)
+static int it6263_hdmi_clear_hdmi_infoframe(struct drm_bridge *bridge)
+{
+	struct it6263 *it = bridge_to_it6263(bridge);
+
+	regmap_write(it->hdmi_regmap, HDMI_REG_PKT_NULL_CTRL, 0);
+
+	return 0;
+}
+
+static int it6263_hdmi_write_avi_infoframe(struct drm_bridge *bridge,
+					   const u8 *buffer, size_t len)
 {
 	struct it6263 *it = bridge_to_it6263(bridge);
 	struct regmap *regmap = it->hdmi_regmap;
-
-	if (type != HDMI_INFOFRAME_TYPE_AVI) {
-		dev_dbg(it->dev, "unsupported HDMI infoframe 0x%x\n", type);
-		return 0;
-	}
 
 	/* write the first AVI infoframe data byte chunk(DB1-DB5) */
 	regmap_bulk_write(regmap, HDMI_REG_AVI_DB1,
@@ -789,7 +797,24 @@ static int it6263_hdmi_write_infoframe(struct drm_bridge *bridge,
 	/* write checksum */
 	regmap_write(regmap, HDMI_REG_AVI_CSUM, buffer[3]);
 
-	regmap_write(regmap, HDMI_REG_AVI_INFOFRM_CTRL, ENABLE_PKT | REPEAT_PKT);
+	regmap_write(regmap, HDMI_REG_AVI_INFOFRM_CTRL,
+		     ENABLE_PKT | REPEAT_PKT);
+
+	return 0;
+}
+
+static int it6263_hdmi_write_hdmi_infoframe(struct drm_bridge *bridge,
+					    const u8 *buffer, size_t len)
+{
+	struct it6263 *it = bridge_to_it6263(bridge);
+	struct regmap *regmap = it->hdmi_regmap;
+
+	/* write header and payload */
+	regmap_bulk_write(regmap, HDMI_REG_PKT_HB(0), buffer, len);
+
+	regmap_write(regmap, HDMI_REG_PKT_NULL_CTRL,
+		     ENABLE_PKT | REPEAT_PKT);
+
 
 	return 0;
 }
@@ -806,8 +831,10 @@ static const struct drm_bridge_funcs it6263_bridge_funcs = {
 	.edid_read = it6263_bridge_edid_read,
 	.atomic_get_input_bus_fmts = it6263_bridge_atomic_get_input_bus_fmts,
 	.hdmi_tmds_char_rate_valid = it6263_hdmi_tmds_char_rate_valid,
-	.hdmi_clear_infoframe = it6263_hdmi_clear_infoframe,
-	.hdmi_write_infoframe = it6263_hdmi_write_infoframe,
+	.hdmi_clear_avi_infoframe = it6263_hdmi_clear_avi_infoframe,
+	.hdmi_write_avi_infoframe = it6263_hdmi_write_avi_infoframe,
+	.hdmi_clear_hdmi_infoframe = it6263_hdmi_clear_hdmi_infoframe,
+	.hdmi_write_hdmi_infoframe = it6263_hdmi_write_hdmi_infoframe,
 };
 
 static int it6263_probe(struct i2c_client *client)

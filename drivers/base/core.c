@@ -76,7 +76,7 @@ static int __fwnode_link_add(struct fwnode_handle *con,
 			return 0;
 		}
 
-	link = kzalloc(sizeof(*link), GFP_KERNEL);
+	link = kzalloc_obj(*link);
 	if (!link)
 		return -ENOMEM;
 
@@ -287,7 +287,7 @@ static bool device_is_ancestor(struct device *dev, struct device *target)
 #define DL_MARKER_FLAGS		(DL_FLAG_INFERRED | \
 				 DL_FLAG_CYCLE | \
 				 DL_FLAG_MANAGED)
-static inline bool device_link_flag_is_sync_state_only(u32 flags)
+bool device_link_flag_is_sync_state_only(u32 flags)
 {
 	return (flags & ~DL_MARKER_FLAGS) == DL_FLAG_SYNC_STATE_ONLY;
 }
@@ -844,7 +844,7 @@ struct device_link *device_link_add(struct device *consumer,
 		goto out;
 	}
 
-	link = kzalloc(sizeof(*link), GFP_KERNEL);
+	link = kzalloc_obj(*link);
 	if (!link)
 		goto out;
 
@@ -1784,7 +1784,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 		return 0;
 
 	if (fw_devlink_sync_state == FW_DEVLINK_SYNC_STATE_STRICT) {
-		dev_warn(sup, "sync_state() pending due to %s\n",
+		dev_info(sup, "sync_state() pending due to %s\n",
 			 dev_name(link->consumer));
 		return 0;
 	}
@@ -2560,6 +2560,7 @@ static void device_release(struct kobject *kobj)
 	devres_release_all(dev);
 
 	kfree(dev->dma_range_map);
+	kfree(dev->driver_override.name);
 
 	if (dev->release)
 		dev->release(dev);
@@ -2763,7 +2764,7 @@ static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 		if (!kset->uevent_ops->filter(&dev->kobj))
 			goto out;
 
-	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
+	env = kzalloc_obj(struct kobj_uevent_env);
 	if (!env)
 		return -ENOMEM;
 
@@ -3180,6 +3181,7 @@ void device_initialize(struct device *dev)
 	kobject_init(&dev->kobj, &device_ktype);
 	INIT_LIST_HEAD(&dev->dma_pools);
 	mutex_init(&dev->mutex);
+	spin_lock_init(&dev->driver_override.lock);
 	lockdep_set_novalidate_class(&dev->mutex);
 	spin_lock_init(&dev->devres_lock);
 	INIT_LIST_HEAD(&dev->devres_head);
@@ -3242,7 +3244,7 @@ static struct kobject *class_dir_create_and_add(struct subsys_private *sp,
 	struct class_dir *dir;
 	int retval;
 
-	dir = kzalloc(sizeof(*dir), GFP_KERNEL);
+	dir = kzalloc_obj(*dir);
 	if (!dir)
 		return ERR_PTR(-ENOMEM);
 
@@ -3559,7 +3561,7 @@ static void device_remove_sys_dev_entry(struct device *dev)
 //初始化device的私有数据
 static int device_private_init(struct device *dev)
 {
-	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
+	dev->p = kzalloc_obj(*dev->p);
 	if (!dev->p)
 		return -ENOMEM;
 	dev->p->device = dev;
@@ -4049,8 +4051,8 @@ const char *device_get_devnode(const struct device *dev,
 /**
  * device_for_each_child - device child iterator.
  * @parent: parent struct device.
- * @fn: function to be called for each device.
  * @data: data for the callback.
+ * @fn: function to be called for each device.
  *
  * Iterate over @parent's child devices, and call @fn for each,
  * passing it @data.
@@ -4081,8 +4083,8 @@ EXPORT_SYMBOL_GPL(device_for_each_child);
 /**
  * device_for_each_child_reverse - device child iterator in reversed order.
  * @parent: parent struct device.
- * @fn: function to be called for each device.
  * @data: data for the callback.
+ * @fn: function to be called for each device.
  *
  * Iterate over @parent's child devices, and call @fn for each,
  * passing it @data.
@@ -4112,8 +4114,8 @@ EXPORT_SYMBOL_GPL(device_for_each_child_reverse);
  * device_for_each_child_reverse_from - device child iterator in reversed order.
  * @parent: parent struct device.
  * @from: optional starting point in child list
- * @fn: function to be called for each device.
  * @data: data for the callback.
+ * @fn: function to be called for each device.
  *
  * Iterate over @parent's child devices, starting at @from, and call @fn
  * for each, passing it @data. This helper is identical to
@@ -4146,8 +4148,8 @@ EXPORT_SYMBOL_GPL(device_for_each_child_reverse_from);
 /**
  * device_find_child - device iterator for locating a particular device.
  * @parent: parent struct device
- * @match: Callback function to check device
  * @data: Data to pass to match function
+ * @match: Callback function to check device
  *
  * This is similar to the device_for_each_child() function above, but it
  * returns a reference to a device that is 'found' for later use, as
@@ -4201,7 +4203,7 @@ int __init devices_init(void)
 	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);
 	if (!sysfs_dev_char_kobj)
 		goto char_kobj_err;
-	device_link_wq = alloc_workqueue("device_link_wq", 0, 0);
+	device_link_wq = alloc_workqueue("device_link_wq", WQ_PERCPU, 0);
 	if (!device_link_wq)
 		goto wq_err;
 
@@ -4341,7 +4343,7 @@ struct device *__root_device_register(const char *name, struct module *owner)
 	struct root_device *root;
 	int err = -ENOMEM;
 
-	root = kzalloc(sizeof(struct root_device), GFP_KERNEL);
+	root = kzalloc_obj(struct root_device);
 	if (!root)
 		return ERR_PTR(err);
 
@@ -4414,7 +4416,7 @@ device_create_groups_vargs(const struct class *class/*设备类别*/, struct dev
 		goto error;
 
 	/*申请device结构体*/
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc_obj(*dev);
 	if (!dev) {
 		retval = -ENOMEM;
 		goto error;
@@ -4845,7 +4847,6 @@ out:
 	put_device(dev);
 	return error;
 }
-EXPORT_SYMBOL_GPL(device_change_owner);
 
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
@@ -5343,6 +5344,25 @@ void device_set_node(struct device *dev, struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL_GPL(device_set_node);
 
+/**
+ * get_dev_from_fwnode - Obtain a reference count of the struct device the
+ * struct fwnode_handle is associated with.
+ * @fwnode: The pointer to the struct fwnode_handle to obtain the struct device
+ * reference count of.
+ *
+ * This function obtains a reference count of the device the device pointer
+ * embedded in the struct fwnode_handle points to.
+ *
+ * Note that the struct device pointer embedded in struct fwnode_handle does
+ * *not* have a reference count of the struct device itself.
+ *
+ * Hence, it is a UAF (and thus a bug) to call this function if the caller can't
+ * guarantee that the last reference count of the corresponding struct device is
+ * not dropped concurrently.
+ *
+ * This is possible since struct fwnode_handle has its own reference count and
+ * hence can out-live the struct device it is associated with.
+ */
 struct device *get_dev_from_fwnode(struct fwnode_handle *fwnode)
 {
 	return get_device((fwnode)->dev);

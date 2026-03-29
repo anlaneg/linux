@@ -176,7 +176,7 @@ struct psi_group psi_system = {
 	.pcpu = &system_group_pcpu,
 };
 
-static DEFINE_PER_CPU(seqcount_t, psi_seq);
+static DEFINE_PER_CPU(seqcount_t, psi_seq) = SEQCNT_ZERO(psi_seq);
 
 static inline void psi_write_begin(int cpu)
 {
@@ -204,11 +204,7 @@ static void poll_timer_fn(struct timer_list *t);
 
 static void group_init(struct psi_group *group)
 {
-	int cpu;
-
 	group->enabled = true;
-	for_each_possible_cpu(cpu)
-		seqcount_init(per_cpu_ptr(&psi_seq, cpu));
 	group->avg_last_update = sched_clock();
 	group->avg_next_update = group->avg_last_update + psi_period;
 	mutex_init(&group->avgs_lock);
@@ -1118,7 +1114,7 @@ int psi_cgroup_alloc(struct cgroup *cgroup)
 	if (!static_branch_likely(&psi_cgroups_enabled))
 		return 0;
 
-	cgroup->psi = kzalloc(sizeof(struct psi_group), GFP_KERNEL);
+	cgroup->psi = kzalloc_obj(struct psi_group);
 	if (!cgroup->psi)
 		return -ENOMEM;
 
@@ -1344,7 +1340,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	if (threshold_us == 0 || threshold_us > window_us)
 		return ERR_PTR(-EINVAL);
 
-	t = kmalloc(sizeof(*t), GFP_KERNEL);
+	t = kmalloc_obj(*t);
 	if (!t)
 		return ERR_PTR(-ENOMEM);
 

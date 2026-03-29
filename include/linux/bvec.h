@@ -22,11 +22,8 @@ struct page;
  * @bv_len:    Number of bytes in the address range.
  * @bv_offset: Start of the address range relative to the start of @bv_page.
  *
- * The following holds for a bvec if n * PAGE_SIZE < bv_offset + bv_len:
- *
- *   nth_page(@bv_page, n) == @bv_page + n
- *
- * This holds because page_is_mergeable() checks the above property.
+ * All pages within a bio_vec starting from @bv_page are contiguous and
+ * can simply be iterated (see bvec_advance()).
  */
 struct bio_vec {
 	struct page	*bv_page;/*页指针*/
@@ -78,18 +75,31 @@ static inline void bvec_set_virt(struct bio_vec *bv, void *vaddr,
 }
 
 struct bvec_iter {
+	/*
+	 * Current device address in 512 byte sectors. Only updated by the bio
+	 * iter wrappers and not the bvec iterator helpers themselves.
+	 */
 	/*设备对应的扇区数*/
-	sector_t		bi_sector;	/* device address in 512 byte
-						   sectors */
+	sector_t		bi_sector;
+
+	/*
+	 * Remaining size in bytes.
+	 */
 	/*剩余的io的字节数*/
-	unsigned int		bi_size;	/* residual I/O count */
+	unsigned int		bi_size;
 
+	/*
+	 * Current index into the bvec array. This indexes into `bi_io_vec` when
+	 * iterating a bvec array that is part of a `bio`.
+	 */
 	/*当前遍历位置（即bvl_vec数组索引）*/
-	unsigned int		bi_idx;		/* current index into bvl_vec */
+	unsigned int		bi_idx;
 
+	/*
+	 * Current offset in the bvec entry pointed to by `bi_idx`.
+	 */
 	/*此iter中已完成的数目（本bi已完成访问的字节数）*/
-	unsigned int            bi_bvec_done;	/* number of bytes completed in
-						   current bvec */
+	unsigned int		bi_bvec_done;
 } __packed __aligned(4);
 
 struct bvec_iter_all {

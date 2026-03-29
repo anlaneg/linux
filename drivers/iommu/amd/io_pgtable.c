@@ -588,6 +588,7 @@ static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *coo
 	return &pgtable->pgtbl;
 }
 
+/*v1版本对应的init_fns*/
 struct io_pgtable_init_fns io_pgtable_amd_iommu_v1_init_fns = {
 	.alloc	= v1_alloc_pgtable,
 	.free	= v1_free_pgtable,

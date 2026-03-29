@@ -59,7 +59,7 @@ int pci_add_dynid(struct pci_driver *drv,
     //创建dynid
 	struct pci_dynid *dynid;
 
-	dynid = kzalloc(sizeof(*dynid), GFP_KERNEL);
+	dynid = kzalloc_obj(*dynid);
 	if (!dynid)
 		return -ENOMEM;
 
@@ -215,7 +215,7 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 
 	//如果不是7个值，则填充
 	if (fields != 7) {
-		struct pci_dev *pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
+		struct pci_dev *pdev = kzalloc_obj(*pdev);
 		if (!pdev)
 			return -ENOMEM;
 
@@ -324,9 +324,8 @@ struct drv_dev_and_id {
 	const struct pci_device_id *id;
 };
 
-static long local_pci_probe(void *_ddi)
+static int local_pci_probe(struct drv_dev_and_id *ddi)
 {
-	struct drv_dev_and_id *ddi = _ddi;
 	struct pci_dev *pci_dev = ddi->dev;//探测的设备
 	struct pci_driver *pci_drv = ddi->drv;//用来尝试的驱动
 	struct device *dev = &pci_dev->dev;//更一般形式的驱动
@@ -364,6 +363,21 @@ static long local_pci_probe(void *_ddi)
 	return 0;
 }
 
+static struct workqueue_struct *pci_probe_wq;
+
+struct pci_probe_arg {
+	struct drv_dev_and_id *ddi;
+	struct work_struct work;
+	int ret;
+};
+
+static void local_pci_probe_callback(struct work_struct *work)
+{
+	struct pci_probe_arg *arg = container_of(work, struct pci_probe_arg, work);
+
+	arg->ret = local_pci_probe(arg->ddi);
+}
+
 static bool pci_physfn_is_probed(struct pci_dev *dev)
 {
 #ifdef CONFIG_PCI_IOV
@@ -389,41 +403,55 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	dev->is_probed = 1;
 
 	cpu_hotplug_disable();
-
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
 	 * device is probed from work_on_cpu() of the Physical device.
 	 */
 	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
 	    pci_physfn_is_probed(dev)) {
-		cpu = nr_cpu_ids;
+		error = local_pci_probe(&ddi);
 	} else {
-		//取node所属的一个在线cpu
-		cpumask_var_t wq_domain_mask;
+		struct pci_probe_arg arg = { .ddi = &ddi };
 
-		if (!zalloc_cpumask_var(&wq_domain_mask, GFP_KERNEL)) {
-			error = -ENOMEM;
-			goto out;
-		}
-		cpumask_and(wq_domain_mask,
-			    housekeeping_cpumask(HK_TYPE_WQ),
-			    housekeeping_cpumask(HK_TYPE_DOMAIN));
-
+		INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
+		/*
+		 * The target election and the enqueue of the work must be within
+		 * the same RCU read side section so that when the workqueue pool
+		 * is flushed after a housekeeping cpumask update, further readers
+		 * are guaranteed to queue the probing work to the appropriate
+		 * targets.
+		 */
+		rcu_read_lock();
 		cpu = cpumask_any_and(cpumask_of_node(node),
-				      wq_domain_mask);
-		free_cpumask_var(wq_domain_mask);
+				      housekeeping_cpumask(HK_TYPE_DOMAIN));
+
+		if (cpu < nr_cpu_ids) {
+			struct workqueue_struct *wq = pci_probe_wq;
+
+			if (WARN_ON_ONCE(!wq))
+				wq = system_percpu_wq;
+			//在$cpu上直接执行local_pci_probe
+			queue_work_on(cpu, wq, &arg.work);
+			rcu_read_unlock();
+			flush_work(&arg.work);
+			error = arg.ret;
+		} else {
+			rcu_read_unlock();
+			//在本cpu上执行local_pci_probe
+			error = local_pci_probe(&ddi);
+		}
+
+		destroy_work_on_stack(&arg.work);
 	}
 
-	if (cpu < nr_cpu_ids)
-		//在$cpu上直接执行local_pci_probe
-		error = work_on_cpu(cpu, local_pci_probe, &ddi);
-	else
-		//在本cpu上执行local_pci_probe
-		error = local_pci_probe(&ddi);
-out:
 	dev->is_probed = 0;
 	cpu_hotplug_enable();
 	return error;
+}
+
+void pci_probe_flush_workqueue(void)
+{
+	flush_workqueue(pci_probe_wq);
 }
 
 /**
@@ -665,6 +693,8 @@ static int pci_legacy_suspend(struct device *dev, pm_message_t state)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	struct pci_driver *drv = pci_dev->driver;
+
+	pci_dev->state_saved = false;
 
 	if (drv && drv->suspend) {
 		pci_power_t prev = pci_dev->current_state;
@@ -1073,6 +1103,8 @@ static int pci_pm_freeze(struct device *dev)
 
 	if (!pm) {
 		pci_pm_default_suspend(pci_dev);
+		if (!pm_runtime_suspended(dev))
+			pci_dev->state_saved = false;
 		return 0;
 	}
 
@@ -1165,8 +1197,6 @@ static int pci_pm_thaw(struct device *dev)
 	} else {
 		pci_pm_reenable_device(pci_dev);
 	}
-
-	pci_dev->state_saved = false;
 
 	return error;
 }
@@ -1623,7 +1653,7 @@ static int pci_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	return 0;
 }
 
-#if defined(CONFIG_PCIEAER) || defined(CONFIG_EEH)
+#if defined(CONFIG_PCIEAER) || defined(CONFIG_EEH) || defined(CONFIG_S390)
 /**
  * pci_uevent_ers - emit a uevent during recovery path of PCI device
  * @pdev: PCI device undergoing error recovery
@@ -1637,6 +1667,7 @@ void pci_uevent_ers(struct pci_dev *pdev, enum pci_ers_result err_type)
 	switch (err_type) {
 	case PCI_ERS_RESULT_NONE:
 	case PCI_ERS_RESULT_CAN_RECOVER:
+	case PCI_ERS_RESULT_NEED_RESET:
 		envp[idx++] = "ERROR_EVENT=BEGIN_RECOVERY";
 		envp[idx++] = "DEVICE_ONLINE=0";
 		break;
@@ -1673,7 +1704,7 @@ static int pci_bus_num_vf(struct device *dev)
  */
 static int pci_dma_configure(struct device *dev)
 {
-	struct pci_driver *driver = to_pci_driver(dev->driver);
+	const struct device_driver *drv = READ_ONCE(dev->driver);
 	struct device *bridge;
 	int ret = 0;
 
@@ -1688,10 +1719,18 @@ static int pci_dma_configure(struct device *dev)
 		ret = acpi_dma_configure(dev, acpi_get_dma_attr(adev));
 	}
 
+	/*
+	 * Attempt to enable ACS regardless of capability because some Root
+	 * Ports (e.g. those quirked with *_intel_pch_acs_*) do not have
+	 * the standard ACS capability but still support ACS via those
+	 * quirks.
+	 */
+	pci_enable_acs(to_pci_dev(dev));
+
 	pci_put_host_bridge_device(bridge);
 
-	/* @driver may not be valid when we're called from the IOMMU layer */
-	if (!ret && dev->driver && !driver->driver_managed_dma) {
+	/* @drv may not be valid when we're called from the IOMMU layer */
+	if (!ret && drv && !to_pci_driver(drv)->driver_managed_dma) {
 		ret = iommu_device_use_default_domain(dev);
 		if (ret)
 			arch_teardown_dma_ops(dev);
@@ -1742,39 +1781,14 @@ const struct bus_type pci_bus_type = {
 };
 EXPORT_SYMBOL(pci_bus_type);
 
-#ifdef CONFIG_PCIEPORTBUS
-static int pcie_port_bus_match(struct device *dev, const struct device_driver *drv)
-{
-	struct pcie_device *pciedev;
-	const struct pcie_port_service_driver *driver;
-
-	if (drv->bus != &pcie_port_bus_type || dev->bus != &pcie_port_bus_type)
-		return 0;
-
-	pciedev = to_pcie_device(dev);
-	driver = to_service_driver(drv);
-
-	if (driver->service != pciedev->service)
-		return 0;
-
-	if (driver->port_type != PCIE_ANY_PORT &&
-	    driver->port_type != pci_pcie_type(pciedev->port))
-		return 0;
-
-	return 1;
-}
-
-//pcie对应的bus
-const struct bus_type pcie_port_bus_type = {
-	.name		= "pci_express",
-	.match		= pcie_port_bus_match,
-};
-#endif
-
 //pci驱动初始化，创建/sys/bus/pci目录，方便其它drvier引用bus
 static int __init pci_driver_init(void)
 {
 	int ret;
+
+	pci_probe_wq = alloc_workqueue("sync_wq", WQ_PERCPU, 0);
+	if (!pci_probe_wq)
+		return -ENOMEM;
 
 	//为pci创建相应的/sys/bus/pci目录
 	ret = bus_register(&pci_bus_type);

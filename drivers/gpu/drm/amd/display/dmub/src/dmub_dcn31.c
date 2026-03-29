@@ -59,9 +59,9 @@ static void dmub_dcn31_get_fb_base_offset(struct dmub_srv *dmub,
 {
 	uint32_t tmp;
 
-	if (dmub->fb_base || dmub->fb_offset) {
-		*fb_base = dmub->fb_base;
-		*fb_offset = dmub->fb_offset;
+	if (dmub->soc_fb_info.fb_base || dmub->soc_fb_info.fb_offset) {
+		*fb_base = dmub->soc_fb_info.fb_base;
+		*fb_offset = dmub->soc_fb_info.fb_offset;
 		return;
 	}
 
@@ -377,8 +377,10 @@ void dmub_dcn31_enable_dmub_boot_options(struct dmub_srv *dmub, const struct dmu
 	boot_options.bits.dpia_hpd_int_enable_supported = params->dpia_hpd_int_enable_supported;
 	boot_options.bits.power_optimization = params->power_optimization;
 	boot_options.bits.lower_hbr3_phy_ssc = params->lower_hbr3_phy_ssc;
+	boot_options.bits.override_hbr3_pll_vco = params->override_hbr3_pll_vco;
 
 	boot_options.bits.sel_mux_phy_c_d_phy_f_g = (dmub->asic == DMUB_ASIC_DCN31B) ? 1 : 0;
+	boot_options.bits.disable_dpia_bw_allocation = params->disable_dpia_bw_allocation;
 
 	REG_WRITE(DMCUB_SCRATCH14, boot_options.all);
 }

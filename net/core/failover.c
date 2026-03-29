@@ -282,7 +282,7 @@ struct failover *failover_register(struct net_device *dev,
 		return ERR_PTR(-EINVAL);
 
 	//申请一个failover
-	failover = kzalloc(sizeof(*failover), GFP_KERNEL);
+	failover = kzalloc_obj(*failover);
 	if (!failover)
 		return ERR_PTR(-ENOMEM);
 

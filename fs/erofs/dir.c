@@ -5,6 +5,7 @@
  * Copyright (C) 2022, Alibaba Cloud
  */
 #include "internal.h"
+#include <linux/filelock.h>
 
 static int erofs_fill_dentries(struct inode *dir, struct dir_context *ctx,
 			       void *dentry_blk, struct erofs_dirent *de,
@@ -123,4 +124,9 @@ const struct file_operations erofs_dir_fops = {
 	.llseek		= generic_file_llseek,
 	.read		= generic_read_dir,
 	.iterate_shared	= erofs_readdir,
+	.unlocked_ioctl = erofs_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = erofs_compat_ioctl,
+#endif
+	.setlease	= generic_setlease,
 };

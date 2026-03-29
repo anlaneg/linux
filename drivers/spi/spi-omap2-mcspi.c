@@ -988,6 +988,7 @@ static int omap2_mcspi_setup_transfer(struct spi_device *spi,
 	else
 		l &= ~OMAP2_MCSPI_CHCONF_PHA;
 
+	mcspi_write_chconf0(spi, l | OMAP2_MCSPI_CHCONF_FORCE);
 	mcspi_write_chconf0(spi, l);
 
 	cs->mode = spi->mode;
@@ -1075,7 +1076,7 @@ static int omap2_mcspi_setup(struct spi_device *spi)
 	struct omap2_mcspi_cs	*cs = spi->controller_state;
 
 	if (!cs) {
-		cs = kzalloc(sizeof(*cs), GFP_KERNEL);
+		cs = kzalloc_obj(*cs);
 		if (!cs)
 			return -ENOMEM;
 		cs->base = mcspi->base + spi_get_chipselect(spi, 0) * 0x14;

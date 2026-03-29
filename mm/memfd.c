@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * memfd_create system call and file sealing support
  *
  * Code was originally included in shmem.c, and broken out to facilitate
  * use by hugetlbfs as well as tmpfs.
- *
- * This file is released under the GPL.
  */
 
 #include <linux/fs.h>
@@ -87,7 +86,7 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 		gfp_mask &= ~(__GFP_HIGHMEM | __GFP_MOVABLE);
 		idx >>= huge_page_order(h);
 
-		nr_resv = hugetlb_reserve_pages(inode, idx, idx + 1, NULL, 0);
+		nr_resv = hugetlb_reserve_pages(inode, idx, idx + 1, NULL, EMPTY_VMA_FLAGS);
 		if (nr_resv < 0)
 			return ERR_PTR(nr_resv);
 
@@ -96,9 +95,36 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 						    NULL,
 						    gfp_mask);
 		if (folio) {
+			u32 hash;
+
+			/*
+			 * Zero the folio to prevent information leaks to userspace.
+			 * Use folio_zero_user() which is optimized for huge/gigantic
+			 * pages. Pass 0 as addr_hint since this is not a faulting path
+			 *  and we don't have a user virtual address yet.
+			 */
+			folio_zero_user(folio, 0);
+
+			/*
+			 * Mark the folio uptodate before adding to page cache,
+			 * as required by filemap.c and other hugetlb paths.
+			 */
+			__folio_mark_uptodate(folio);
+
+			/*
+			 * Serialize hugepage allocation and instantiation to prevent
+			 * races with concurrent allocations, as required by all other
+			 * callers of hugetlb_add_to_page_cache().
+			 */
+			hash = hugetlb_fault_mutex_hash(memfd->f_mapping, idx);
+			mutex_lock(&hugetlb_fault_mutex_table[hash]);
+
 			err = hugetlb_add_to_page_cache(folio,
 							memfd->f_mapping,
 							idx);
+
+			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
+
 			if (err) {
 				folio_put(folio);
 				goto err_unresv;
@@ -386,12 +412,12 @@ static int sanitize_flags(unsigned int *flags_ptr)
 
 	if (!(flags & MFD_HUGETLB)) {
 		/*没有指定大页标记*/
-		if (flags & ~(unsigned int)MFD_ALL_FLAGS)
+		if (flags & ~MFD_ALL_FLAGS)
 			/*指明了当前不支持的flags,报错*/
 			return -EINVAL;
 	} else {
 		/* Allow huge page size encoding in flags. */
-		if (flags & ~(unsigned int)(MFD_ALL_FLAGS |
+		if (flags & ~(MFD_ALL_FLAGS |
 				(MFD_HUGE_MASK << MFD_HUGE_SHIFT)))
 			/*指明了当前不支持的flags,报错（从这里可以知道huge标记存在时，
 			 * 部分掩码会指定大页尺寸）*/
@@ -435,29 +461,39 @@ err_name:
 	return ERR_PTR(error);
 }
 
-static struct file *alloc_file(const char *name, unsigned int flags)
+struct file *memfd_alloc_file(const char *name, unsigned int flags)
 {
 	unsigned int *file_seals;
 	struct file *file;
+	struct inode *inode;
+	int err = 0;
 
 	if (flags & MFD_HUGETLB) {
 		/*flags指明了hugetlb,则创建大页文件系统文件*/
-		file = hugetlb_file_setup(name, 0, VM_NORESERVE/*不预留仅创建文件*/,
+		file = hugetlb_file_setup(name, 0, mk_vma_flags(VMA_NORESERVE_BIT/*不预留仅创建文件*/),
 					HUGETLB_ANONHUGE_INODE,
 					(flags >> MFD_HUGE_SHIFT) &
 					MFD_HUGE_MASK);
 	} else {
 		/*指出普通文件（非大页）*/
-		file = shmem_file_setup(name, 0, VM_NORESERVE/*不预留内存，仅创建文件*/);
+		file = shmem_file_setup(name, 0, mk_vma_flags(VMA_NORESERVE_BIT)/*不预留内存，仅创建文件*/);
 	}
 	if (IS_ERR(file))
 		return file;
+
+	inode = file_inode(file);
+	err = security_inode_init_security_anon(inode,
+			&QSTR(MEMFD_ANON_NAME), NULL);
+	if (err) {
+		fput(file);
+		file = ERR_PTR(err);
+		return file;
+	}
+
 	file->f_mode |= FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE;
 	file->f_flags |= O_LARGEFILE;
 
 	if (flags & MFD_NOEXEC_SEAL) {
-		struct inode *inode = file_inode(file);
-
 		inode->i_mode &= ~0111;/*清除执行权限*/
 		file_seals = memfd_file_seals_ptr(file);
 		if (file_seals) {
@@ -479,9 +515,9 @@ SYSCALL_DEFINE2(memfd_create,
 		const char __user *, uname,
 		unsigned int, flags)
 {
-	struct file *file;
-	int fd, error;
-	char *name;
+	char *name __free(kfree) = NULL;
+	unsigned int fd_flags;
+	int error;
 
 	error = sanitize_flags(&flags);
 	if (error < 0)
@@ -491,26 +527,7 @@ SYSCALL_DEFINE2(memfd_create,
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
-	fd = get_unused_fd_flags((flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
-	if (fd < 0) {
-		error = fd;
-		goto err_free_name;
-	}
-
-	file = alloc_file(name, flags);
-	if (IS_ERR(file)) {
-		error = PTR_ERR(file);
-		goto err_free_fd;
-	}
-
+	fd_flags = (flags & MFD_CLOEXEC) ? O_CLOEXEC : 0;
 	/*返回关联此file的fd*/
-	fd_install(fd, file);
-	kfree(name);
-	return fd;
-
-err_free_fd:
-	put_unused_fd(fd);
-err_free_name:
-	kfree(name);
-	return error;
+	return FD_ADD(fd_flags, memfd_alloc_file(name, flags));
 }

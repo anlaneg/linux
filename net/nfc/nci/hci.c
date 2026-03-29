@@ -778,7 +778,7 @@ struct nci_hci_dev *nci_hci_allocate(struct nci_dev *ndev)
 {
 	struct nci_hci_dev *hdev;
 
-	hdev = kzalloc(sizeof(*hdev), GFP_KERNEL);
+	hdev = kzalloc_obj(*hdev);
 	if (!hdev)
 		return NULL;
 

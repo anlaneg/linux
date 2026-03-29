@@ -403,9 +403,7 @@ EXPORT_SYMBOL_GPL(eventfd_ctx_fileget);
 //实现eventfd,eventfd2系统调用,申请fd创建eventfd对应的file
 static int do_eventfd(unsigned int count, int flags)
 {
-	struct eventfd_ctx *ctx;
-	struct file *file;
-	int fd;
+	struct eventfd_ctx *ctx __free(kfree) = NULL;
 
 	/* Check the EFD_* constants for consistency.  */
 	BUILD_BUG_ON(EFD_CLOEXEC != O_CLOEXEC);
@@ -416,7 +414,7 @@ static int do_eventfd(unsigned int count, int flags)
 	if (flags & ~EFD_FLAGS_SET)
 		return -EINVAL;
 
-	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kmalloc_obj(*ctx);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -424,29 +422,21 @@ static int do_eventfd(unsigned int count, int flags)
 	init_waitqueue_head(&ctx->wqh);
 	ctx->count = count;/*指定初始事件数*/
 	ctx->flags = flags;
-	/*分配一个编号*/
-	ctx->id = ida_alloc(&eventfd_ida, GFP_KERNEL);
 
 	flags &= EFD_SHARED_FCNTL_FLAGS;
 	flags |= O_RDWR;
-	/*映射fd*/
-	fd = get_unused_fd_flags(flags);
-	if (fd < 0)
-		goto err;
 
 	/*申请一个匿名文件，指明eventfd文件对应的fops*/
-	file = anon_inode_getfile_fmode("[eventfd]", &eventfd_fops,
-					ctx, flags, FMODE_NOWAIT);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		fd = PTR_ERR(file);
-		goto err;
-	}
-	fd_install(fd, file);/*fd与文件关联*/
-	return fd;
-err:
-	eventfd_free_ctx(ctx);
-	return fd;
+	FD_PREPARE(fdf, flags,
+		   anon_inode_getfile_fmode("[eventfd]", &eventfd_fops, ctx,
+					    flags, FMODE_NOWAIT));
+	if (fdf.err)
+		return fdf.err;
+
+	/*分配一个编号*/
+	ctx->id = ida_alloc(&eventfd_ida, GFP_KERNEL);
+	retain_and_null_ptr(ctx);
+	return fd_publish(fdf);
 }
 
 /*定义系统调用eventfd2*/

@@ -45,6 +45,12 @@ enum {
 	UDP_FLAGS_UDPLITE_RECV_CC, /* set via udplite setsockopt */
 };
 
+/* per NUMA structure for lockless producer usage. */
+struct udp_prod_queue {
+	struct llist_head	ll_root ____cacheline_aligned_in_smp;
+	atomic_t		rmem_alloc;
+};
+
 struct udp_sock {
 	/* inet_sock has to be the first member */
 	struct inet_sock inet;
@@ -95,6 +101,8 @@ struct udp_sock {
 						struct sk_buff *skb,
 						int nhoff);
 
+	struct udp_prod_queue *udp_prod_queue;
+
 	/* udp_recvmsg try to use this before splicing sk_receive_queue */
 	//用户首先在此队列上收取报文(为了减少对sk_receive_queue的加锁次数）
 	struct sk_buff_head	reader_queue ____cacheline_aligned_in_smp;
@@ -114,6 +122,7 @@ struct udp_sock {
 	 * the last UDP socket cacheline.
 	 */
 	struct hlist_node	tunnel_list;
+	struct numa_drop_counters drop_counters;
 };
 
 #define udp_test_bit(nr, sk)			\
@@ -233,7 +242,7 @@ static inline void udp_allow_gso(struct sock *sk)
 	hlist_nulls_for_each_entry_rcu(__up, node, list, udp_lrpa_node)
 #endif
 
-#define IS_UDPLITE(__sk) (__sk->sk_protocol == IPPROTO_UDPLITE)
+#define IS_UDPLITE(__sk) (unlikely(__sk->sk_protocol == IPPROTO_UDPLITE))
 
 static inline struct sock *udp_tunnel_sk(const struct net *net, bool is_ipv6)
 {

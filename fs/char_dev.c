@@ -10,6 +10,7 @@
 #include <linux/kdev_t.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/cleanup.h>
 
 #include <linux/major.h>
 #include <linux/errno.h>
@@ -119,7 +120,8 @@ static struct char_device_struct *
 __register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned int baseminor/*字符设备的起始minor*/,
 			   int minorct/*字符设备的minor数目*/, const char *name/*字符设备名称*/)
 {
-	struct char_device_struct *cd, *curr, *prev = NULL;
+	struct char_device_struct *cd __free(kfree) = NULL;
+	struct char_device_struct *curr, *prev = NULL;
 	int ret;
 	int i;
 
@@ -138,11 +140,11 @@ __register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned in
 	}
 
 	//为char设备申请内存
-	cd = kzalloc(sizeof(struct char_device_struct), GFP_KERNEL);
+	cd = kzalloc_obj(struct char_device_struct);
 	if (cd == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	mutex_lock(&chrdevs_lock);
+	guard(mutex)(&chrdevs_lock);
 
 	//如果major为0，则选用动态的major
 	if (major == 0) {
@@ -151,7 +153,7 @@ __register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned in
 			//动态申请的dynamic均已用完，返回失败
 			pr_err("CHRDEV \"%s\" dynamic allocation region is full\n",
 			       name);
-			goto out;
+			return ERR_PTR(ret);
 		}
 		//为其申请一个空闲major
 		major = ret;
@@ -182,7 +184,7 @@ __register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned in
 			break;
 
 		/*链表上的minor范围与我们的minor范围有重叠，返回失败*/
-		goto out;
+		return ERR_PTR(ret);
 	}
 
 	/*确认当前申请的内容可插入，先填充cd结构体*/
@@ -201,12 +203,7 @@ __register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned in
 	}
 
 	/*解锁返回*/
-	mutex_unlock(&chrdevs_lock);
-	return cd;
-out:
-	mutex_unlock(&chrdevs_lock);
-	kfree(cd);
-	return ERR_PTR(ret);
+	return_ptr(cd);
 }
 
 //归还指定major的major（需保证其之前申请过的minor范围），自chrdevs中移除，但不释放对应的char_dev
@@ -402,7 +399,7 @@ void __unregister_chrdev(unsigned int major, unsigned int baseminor,
 	kfree(cd);
 }
 
-static DEFINE_SPINLOCK(cdev_lock);
+static __cacheline_aligned_in_smp DEFINE_SPINLOCK(cdev_lock);
 
 static struct kobject *cdev_get(struct cdev *p)
 {
@@ -721,7 +718,7 @@ static struct kobj_type ktype_cdev_dynamic = {
 //cdev结构申请
 struct cdev *cdev_alloc(void)
 {
-	struct cdev *p = kzalloc(sizeof(struct cdev), GFP_KERNEL);
+	struct cdev *p = kzalloc_obj(struct cdev);
 	if (p) {
 		INIT_LIST_HEAD(&p->list);
 		kobject_init(&p->kobj, &ktype_cdev_dynamic);

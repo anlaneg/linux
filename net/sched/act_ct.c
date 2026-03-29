@@ -13,9 +13,11 @@
 #include <linux/skbuff.h>
 #include <linux/rtnetlink.h>
 #include <linux/pkt_cls.h>
+#include <linux/if_tunnel.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/rhashtable.h>
+#include <net/gre.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
@@ -342,7 +344,7 @@ static int tcf_ct_flow_table_get(struct net *net, struct tcf_ct_params *params)
 		goto out_unlock;
 
 	/*申请ct flow table*/
-	ct_ft = kzalloc(sizeof(*ct_ft), GFP_KERNEL);
+	ct_ft = kzalloc_obj(*ct_ft);
 	if (!ct_ft)
 		goto err_alloc;
 	refcount_set(&ct_ft->ref, 1);
@@ -1015,9 +1017,9 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 		return err & NF_VERDICT_MASK;
 
 	if (action & BIT(NF_NAT_MANIP_SRC))
-		tc_skb_cb(skb)->post_ct_snat = 1;
+		qdisc_skb_cb(skb)->post_ct_snat = 1;
 	if (action & BIT(NF_NAT_MANIP_DST))
-		tc_skb_cb(skb)->post_ct_dnat = 1;
+		qdisc_skb_cb(skb)->post_ct_dnat = 1;
 
 	return err;
 #else
@@ -1062,7 +1064,7 @@ TC_INDIRECT_SCOPE int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tcf_action_update_bstats(&c->common, skb);
 
 	if (clear) {
-		tc_skb_cb(skb)->post_ct = false;
+		qdisc_skb_cb(skb)->post_ct = false;
 		//如果需要清除ct,则将skb中的ct清除掉
 		ct = nf_ct_get(skb, &ctinfo);
 		if (ct) {
@@ -1189,7 +1191,7 @@ out_push:
     /*还原到原来的skb->data*/
 	skb_push_rcsum(skb, nh_ofs);
 
-	tc_skb_cb(skb)->post_ct = true;
+	qdisc_skb_cb(skb)->post_ct = true;
 	tc_skb_cb(skb)->zone = p->zone;
 out_clear:
 	if (defrag)
@@ -1470,6 +1472,12 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	if (bind && !(flags & TCA_ACT_FLAGS_AT_INGRESS_OR_CLSACT)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Attaching ct to a non ingress/clsact qdisc is unsupported");
+		return -EOPNOTSUPP;
+	}
+
 	err = nla_parse_nested(tb, TCA_CT_MAX, nla, ct_policy, extack);
 	if (err < 0)
 		return err;
@@ -1508,7 +1516,7 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 	c = to_ct(*a);
 
 	/*申请并填充ct parameter*/
-	params = kzalloc(sizeof(*params), GFP_KERNEL);
+	params = kzalloc_obj(*params);
 	if (unlikely(!params)) {
 		err = -ENOMEM;
 		goto cleanup;

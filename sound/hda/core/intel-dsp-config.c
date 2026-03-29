@@ -116,6 +116,13 @@ static const struct config_entry config_table[] = {
 		.flags = FLAG_SST,
 		.device = PCI_DEVICE_ID_INTEL_HDA_FCL,
 	},
+#else /* AVS disabled; force to legacy as SOF doesn't work for SKL or KBL */
+	{
+		.device = PCI_DEVICE_ID_INTEL_HDA_SKL_LP,
+	},
+	{
+		.device = PCI_DEVICE_ID_INTEL_HDA_KBL_LP,
+	},
 #endif
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 	{
@@ -147,7 +154,7 @@ static const struct config_entry config_table[] = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_GEMINILAKE)
 	{
 		.flags = FLAG_SOF,
-		.device = PCI_DEVICE_ID_INTEL_HDA_GML,
+		.device = PCI_DEVICE_ID_INTEL_HDA_GLK,
 		.dmi_table = (const struct dmi_system_id []) {
 			{
 				.ident = "Google Chromebooks",
@@ -160,16 +167,16 @@ static const struct config_entry config_table[] = {
 	},
 	{
 		.flags = FLAG_SOF,
-		.device = PCI_DEVICE_ID_INTEL_HDA_GML,
+		.device = PCI_DEVICE_ID_INTEL_HDA_GLK,
 		.codec_hid =  &essx_83x6,
 	},
 #endif
 
 /*
  * CoffeeLake, CannonLake, CometLake, IceLake, TigerLake, AlderLake,
- * RaptorLake use legacy HDAudio driver except for Google Chromebooks
- * and when DMICs are present. Two cases are required since Coreboot
- * does not expose NHLT tables.
+ * RaptorLake, MeteorLake use legacy HDAudio driver except for Google
+ * Chromebooks and when DMICs are present. Two cases are required since
+ * Coreboot does not expose NHLT tables.
  *
  * When the Chromebook quirk is not present, it's based on information
  * that no such device exists. When the quirk is present, it could be
@@ -517,6 +524,19 @@ static const struct config_entry config_table[] = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_METEORLAKE)
 	/* Meteorlake-P */
 	{
+		.flags = FLAG_SOF,
+		.device = PCI_DEVICE_ID_INTEL_HDA_MTL,
+		.dmi_table = (const struct dmi_system_id []) {
+			{
+				.ident = "Google Chromebooks",
+				.matches = {
+					DMI_MATCH(DMI_SYS_VENDOR, "Google"),
+				}
+			},
+			{}
+		}
+	},
+	{
 		.flags = FLAG_SOF | FLAG_SOF_ONLY_IF_DMIC_OR_SOUNDWIRE,
 		.device = PCI_DEVICE_ID_INTEL_HDA_MTL,
 	},
@@ -556,6 +576,18 @@ static const struct config_entry config_table[] = {
 		.device = PCI_DEVICE_ID_INTEL_HDA_WCL,
 	},
 
+#endif
+
+	/* Nova Lake */
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_NOVALAKE)
+	{
+		.flags = FLAG_SOF | FLAG_SOF_ONLY_IF_DMIC_OR_SOUNDWIRE,
+		.device = PCI_DEVICE_ID_INTEL_HDA_NVL,
+	},
+	{
+		.flags = FLAG_SOF | FLAG_SOF_ONLY_IF_DMIC_OR_SOUNDWIRE,
+		.device = PCI_DEVICE_ID_INTEL_HDA_NVL_S,
+	},
 #endif
 
 };
@@ -630,6 +662,8 @@ static int snd_intel_dsp_check_soundwire(struct pci_dev *pci)
 	int ret;
 
 	handle = ACPI_HANDLE(&pci->dev);
+	if (!handle)
+		return -ENODEV;
 
 	ret = sdw_intel_acpi_scan(handle, &info);
 	if (ret < 0)
@@ -688,7 +722,8 @@ int snd_intel_dsp_driver_probe(struct pci_dev *pci)
 	/* find the configuration for the specific device */
 	cfg = snd_intel_dsp_find_config(pci, config_table, ARRAY_SIZE(config_table));
 	if (!cfg)
-		return SND_INTEL_DSP_DRIVER_ANY;
+		return IS_ENABLED(CONFIG_SND_HDA_INTEL) ?
+			SND_INTEL_DSP_DRIVER_LEGACY : SND_INTEL_DSP_DRIVER_ANY;
 
 	if (cfg->flags & FLAG_SOF) {
 		if (cfg->flags & FLAG_SOF_ONLY_IF_SOUNDWIRE &&

@@ -1592,7 +1592,7 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 		psmouse_deactivate(parent);
 	}
 
-	psmouse = kzalloc(sizeof(*psmouse), GFP_KERNEL);
+	psmouse = kzalloc_obj(*psmouse);
 	input_dev = input_allocate_device();
 	if (!psmouse || !input_dev)
 		goto err_free;

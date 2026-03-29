@@ -58,6 +58,12 @@ do {							\
 #define sysfs_attr_init(attr) do {} while (0)
 #endif
 
+#ifdef CONFIG_CFI
+#define __SYSFS_FUNCTION_ALTERNATIVE(MEMBERS...) struct { MEMBERS }
+#else
+#define __SYSFS_FUNCTION_ALTERNATIVE(MEMBERS...) union { MEMBERS }
+#endif
+
 /**
  * struct attribute_group - data structure used to declare an attribute group.
  * @name:	Optional: Attribute group name
@@ -98,20 +104,24 @@ do {							\
  */
 struct attribute_group {
 	const char		*name;//组名称（将被创建成目录）
+	__SYSFS_FUNCTION_ALTERNATIVE(
 	//通过此回调，决定此文件是否对外可见
-	umode_t			(*is_visible)(struct kobject *,
-					      struct attribute *, int);
+		umode_t			(*is_visible)(struct kobject *,
+						      struct attribute *, int);
+		umode_t			(*is_visible_const)(struct kobject *,
+							    const struct attribute *, int);
+	);
 	//通过此回调，决定此二进制文件是否对外可见
 	umode_t			(*is_bin_visible)(struct kobject *,
 						  const struct bin_attribute *, int);
 	size_t			(*bin_size)(struct kobject *,
 					    const struct bin_attribute *,
 					    int);
-	struct attribute	**attrs;//普通属性
 	union {
-		const struct bin_attribute	*const *bin_attrs;//二进制属性
-		const struct bin_attribute	*const *bin_attrs_new;
+		struct attribute	**attrs;//普通属性
+		const struct attribute	*const *attrs_const;
 	};
+	const struct bin_attribute	*const *bin_attrs;//二进制属性
 };
 
 #define SYSFS_PREALLOC		010000
@@ -245,29 +255,21 @@ struct attribute_group {
 }
 
 //设置只读属性回调,同时指定_$name_show回调
-#define __ATTR_RO(_name) {						\
-	.attr	= { .name = __stringify(_name), .mode = 0444 },		\
-	.show	= _name##_show,						\
-}
-
 #define __ATTR_RO_MODE(_name, _mode) {					\
 	.attr	= { .name = __stringify(_name),				\
 		    .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
 	.show	= _name##_show,						\
 }
 
-#define __ATTR_RW_MODE(_name, _mode) {					\
-	.attr	= { .name = __stringify(_name),				\
-		    .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
-	.show	= _name##_show,						\
-	.store	= _name##_store,					\
-}
+#define __ATTR_RO(_name)						\
+	__ATTR_RO_MODE(_name, 0444)
+
+#define __ATTR_RW_MODE(_name, _mode)					\
+	__ATTR(_name, _mode, _name##_show, _name##_store)
 
 /*设置只写属性回调,同时指定_$name_store回调*/
-#define __ATTR_WO(_name) {						\
-	.attr	= { .name = __stringify(_name), .mode = 0200 },		\
-	.store	= _name##_store,					\
-}
+#define __ATTR_WO(_name)						\
+	__ATTR(_name, 0200, NULL, _name##_store)
 
 /*定义读写权限的name属性,同时指定_$name_show，_$name_store两个回调*/
 #define __ATTR_RW(_name) __ATTR(_name, 0644, _name##_show, _name##_store)
@@ -294,14 +296,19 @@ static const struct attribute_group *_name##_groups[] = {	\
 #define ATTRIBUTE_GROUPS(_name)					\
 		/*设置group*/\
 static const struct attribute_group _name##_group = {		\
-	.attrs = _name##_attrs,					\
+	.attrs = _Generic(_name##_attrs,			\
+			  struct attribute **:			\
+				_name##_attrs,			\
+			  const struct attribute *const *:	\
+				(void *)_name##_attrs		\
+	),							\
 };								\
 	/*将_group设置为groups数组中的一个且唯一的成员*/\
 __ATTRIBUTE_GROUPS(_name)
 
 #define BIN_ATTRIBUTE_GROUPS(_name)				\
 static const struct attribute_group _name##_group = {		\
-	.bin_attrs_new = _name##_attrs,				\
+	.bin_attrs = _name##_attrs,				\
 };								\
 __ATTRIBUTE_GROUPS(_name)
 
@@ -317,13 +324,9 @@ struct bin_attribute {
 	//读属性
 	ssize_t (*read)(struct file *, struct kobject *, const struct bin_attribute *,
 			char *, loff_t, size_t);
-	ssize_t (*read_new)(struct file *, struct kobject *, const struct bin_attribute *,
-			    char *, loff_t, size_t);
 	//写属性
 	ssize_t (*write)(struct file *, struct kobject *, const struct bin_attribute *,
 			 char *, loff_t, size_t);
-	ssize_t (*write_new)(struct file *, struct kobject *,
-			     const struct bin_attribute *, char *, loff_t, size_t);
 	loff_t (*llseek)(struct file *, struct kobject *, const struct bin_attribute *,
 			 loff_t, int);
 	int (*mmap)(struct file *, struct kobject *, const struct bin_attribute *attr,
@@ -817,5 +820,20 @@ static inline void sysfs_put(struct kernfs_node *kn)
 {
 	kernfs_put(kn);
 }
+
+/* Permissions on a sysfs file: you didn't miss the 0 prefix did you? */
+#define VERIFY_OCTAL_PERMISSIONS(perms)						\
+    /*perms不得小于0*/\
+	(BUILD_BUG_ON_ZERO((perms) < 0) +					\
+	 /*perms不得大于0777*/\
+	 BUILD_BUG_ON_ZERO((perms) > 0777) +					\
+	 /* USER_READABLE >= GROUP_READABLE >= OTHER_READABLE */		\
+	 BUILD_BUG_ON_ZERO((((perms) >> 6) & 4) < (((perms) >> 3) & 4)) +	\
+	 BUILD_BUG_ON_ZERO((((perms) >> 3) & 4) < ((perms) & 4)) +		\
+	 /* USER_WRITABLE >= GROUP_WRITABLE */					\
+	 BUILD_BUG_ON_ZERO((((perms) >> 6) & 2) < (((perms) >> 3) & 2)) +	\
+	 /* OTHER_WRITABLE?  Generally considered a bad idea. */		\
+	 BUILD_BUG_ON_ZERO((perms) & 2) +					\
+	 (perms))
 
 #endif /* _SYSFS_H_ */

@@ -143,9 +143,9 @@ ssize_t kernfs_iop_listxattr(struct dentry *dentry, char *buf, size_t size)
 	struct kernfs_node *kn = kernfs_dentry_node(dentry);
 	struct kernfs_iattrs *attrs;
 
-	attrs = kernfs_iattrs_noalloc(kn);
+	attrs = kernfs_iattrs(kn);
 	if (!attrs)
-		return -ENODATA;
+		return -ENOMEM;
 
 	return simple_xattr_list(d_inode(dentry), &attrs->xattrs, buf, size);
 }
@@ -256,7 +256,7 @@ struct inode *kernfs_get_inode(struct super_block *sb, struct kernfs_node *kn)
 	struct inode *inode;
 
 	inode = iget_locked(sb, kernfs_ino(kn));
-	if (inode && (inode->i_state & I_NEW))
+	if (inode && (inode_state_read_once(inode) & I_NEW))
 		kernfs_init_inode(kn, inode);
 
 	return inode;

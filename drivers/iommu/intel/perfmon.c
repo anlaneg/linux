@@ -598,7 +598,7 @@ int alloc_iommu_pmu(struct intel_iommu *iommu)
 		/*针对性能监控计数器不支持部分操作*/
 		return -ENODEV;
 
-	iommu_pmu = kzalloc(sizeof(*iommu_pmu), GFP_KERNEL);
+	iommu_pmu = kzalloc_obj(*iommu_pmu);
 	if (!iommu_pmu)
 		return -ENOMEM;
 

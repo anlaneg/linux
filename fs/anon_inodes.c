@@ -131,7 +131,7 @@ struct inode *anon_inode_make_secure_inode(struct super_block *sb, const char *n
 	}
 	return inode;
 }
-EXPORT_SYMBOL_GPL_FOR_MODULES(anon_inode_make_secure_inode, "kvm");
+EXPORT_SYMBOL_FOR_MODULES(anon_inode_make_secure_inode, "kvm");
 
 /*申请匿名文件*/
 static struct file *__anon_inode_getfile(const char *name/*文件名称*/,
@@ -287,31 +287,8 @@ static int __anon_inode_getfd(const char *name,
 			      const struct inode *context_inode,
 			      bool make_inode)
 {
-	int error, fd;
-	struct file *file;
-
-	//申请未用的fd
-	error = get_unused_fd_flags(flags);
-	if (error < 0)
-		return error;
-	fd = error;
-
-	//创建虚假文件，并指定文件fops
-	file = __anon_inode_getfile(name, fops, priv, flags, context_inode,
-				    make_inode);
-	if (IS_ERR(file)) {
-		error = PTR_ERR(file);
-		goto err_put_unused_fd;
-	}
-
-	/*实现文件与fd之间的映射*/
-	fd_install(fd, file);
-
-	return fd;
-
-err_put_unused_fd:
-	put_unused_fd(fd);
-	return error;
+	return FD_ADD(flags, __anon_inode_getfile(name, fops, priv, flags,
+						  context_inode, make_inode));
 }
 
 /**

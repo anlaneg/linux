@@ -24,11 +24,11 @@ struct nft_lookup {
 	struct nft_set_binding		binding;
 };
 
-#ifdef CONFIG_MITIGATION_RETPOLINE
-const struct nft_set_ext *
-nft_set_do_lookup(const struct net *net, const struct nft_set *set,
-		  const u32 *key)
+static const struct nft_set_ext *
+__nft_set_do_lookup(const struct net *net, const struct nft_set *set,
+		    const u32 *key)
 {
+#ifdef CONFIG_MITIGATION_RETPOLINE
 	if (set->ops == &nft_set_hash_fast_type.ops)
 		return nft_hash_lookup_fast(net, set, key);
 	if (set->ops == &nft_set_hash_type.ops)
@@ -51,10 +51,46 @@ nft_set_do_lookup(const struct net *net, const struct nft_set *set,
 		return nft_rbtree_lookup(net, set, key);
 
 	WARN_ON_ONCE(1);
+#endif
 	return set->ops->lookup(net, set, key);
 }
+
+static unsigned int nft_base_seq(const struct net *net)
+{
+	/* pairs with smp_store_release() in nf_tables_commit() */
+	return smp_load_acquire(&net->nft.base_seq);
+}
+
+static bool nft_lookup_should_retry(const struct net *net, unsigned int seq)
+{
+	return unlikely(seq != nft_base_seq(net));
+}
+
+const struct nft_set_ext *
+nft_set_do_lookup(const struct net *net, const struct nft_set *set,
+		  const u32 *key)
+{
+	const struct nft_set_ext *ext;
+	unsigned int base_seq;
+
+	do {
+		base_seq = nft_base_seq(net);
+
+		ext = __nft_set_do_lookup(net, set, key);
+		if (ext)
+			break;
+		/* No match?  There is a small chance that lookup was
+		 * performed in the old generation, but nf_tables_commit()
+		 * already unlinked a (matching) element.
+		 *
+		 * We need to repeat the lookup to make sure that we didn't
+		 * miss a matching element in the new generation.
+		 */
+	} while (nft_lookup_should_retry(net, base_seq));
+
+	return ext;
+}
 EXPORT_SYMBOL_GPL(nft_set_do_lookup);
-#endif
 
 //基于set的lookup
 void nft_lookup_eval(const struct nft_expr *expr,
@@ -213,18 +249,15 @@ static int nft_lookup_validate(const struct nft_ctx *ctx,
 			       const struct nft_expr *expr)
 {
 	const struct nft_lookup *priv = nft_expr_priv(expr);
-	struct nft_set_iter iter;
+	struct nft_set_iter iter = {
+		.genmask	= nft_genmask_next(ctx->net),
+		.type		= NFT_ITER_UPDATE,
+		.fn		= nft_setelem_validate,
+	};
 
 	if (!(priv->set->flags & NFT_SET_MAP) ||
 	    priv->set->dtype != NFT_DATA_VERDICT)
 		return 0;
-
-	iter.genmask	= nft_genmask_next(ctx->net);
-	iter.type	= NFT_ITER_UPDATE;
-	iter.skip	= 0;
-	iter.count	= 0;
-	iter.err	= 0;
-	iter.fn		= nft_setelem_validate;
 
 	priv->set->ops->walk(ctx, priv->set, &iter);
 	if (!iter.err)

@@ -148,7 +148,8 @@ static int softnet_seq_show(struct seq_file *seq, void *v)
 	seq_printf(seq,
 		   "%08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x "
 		   "%08x %08x\n",
-		   READ_ONCE(sd->processed)/*处理数*/, atomic_read(&sd->dropped)/*丢包数*/,
+		   READ_ONCE(sd->processed)/*处理数*/,
+		   numa_drop_read(&sd->drop_counters)/*丢包数*/,
 		   READ_ONCE(sd->time_squeeze), 0,
 		   0, 0, 0, 0, /* was fastroute */
 		   0,	/* was cpu_collision */
@@ -172,9 +173,15 @@ static const struct seq_operations softnet_seq_ops = {
 	.show  = softnet_seq_show,
 };
 
+struct ptype_iter_state {
+	struct seq_net_private	p;
+	struct net_device	*dev;
+};
+
 //给一个偏移，查找对应的packet_type
 static void *ptype_get_idx(struct seq_file *seq, loff_t pos)
 {
+	struct ptype_iter_state *iter = seq->private;
 	struct list_head *ptype_list = NULL;
 	struct packet_type *pt = NULL;
 	struct net_device *dev;
@@ -184,11 +191,15 @@ static void *ptype_get_idx(struct seq_file *seq, loff_t pos)
 	for_each_netdev_rcu(seq_file_net(seq), dev) {
 		ptype_list = &dev->ptype_all;
 		list_for_each_entry_rcu(pt, ptype_list, list) {
-			if (i == pos)
+			if (i == pos) {
+				iter->dev = dev;
 				return pt;
+			}
 			++i;
 		}
 	}
+
+	iter->dev = NULL;
 
 	//每个ptype计一个数(先排ptype_all)
 	list_for_each_entry_rcu(pt, &seq_file_net(seq)->ptype_all, list) {
@@ -225,6 +236,7 @@ static void *ptype_seq_start(struct seq_file *seq, loff_t *pos)
 //返回v对应的下一个packet_type,出参pos,设置对应的偏移量
 static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
+	struct ptype_iter_state *iter = seq->private;
 	struct net *net = seq_file_net(seq);
 	struct net_device *dev;
 	struct packet_type *pt;
@@ -237,19 +249,21 @@ static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 		return ptype_get_idx(seq, 0);
 
 	pt = v;//取出传入的start情况
-	nxt = pt->list.next;//start的下一个
-	if (pt->dev) {
-		if (nxt != &pt->dev->ptype_all)
+	nxt = READ_ONCE(pt->list.next);//start的下一个
+	dev = iter->dev;
+	if (dev) {
+		if (nxt != &dev->ptype_all)
 			goto found;
 
-		dev = pt->dev;
 		for_each_netdev_continue_rcu(seq_file_net(seq), dev) {
-			if (!list_empty(&dev->ptype_all)) {
-				nxt = dev->ptype_all.next;
+			nxt = READ_ONCE(dev->ptype_all.next);
+			if (nxt != &dev->ptype_all) {
+				iter->dev = dev;
 				goto found;
 			}
 		}
-		nxt = net->ptype_all.next;
+		iter->dev = NULL;
+		nxt = READ_ONCE(net->ptype_all.next);
 		goto net_ptype_all;
 	}
 
@@ -260,14 +274,14 @@ net_ptype_all:
 
 		if (nxt == &net->ptype_all) {
 			/* continue with ->ptype_specific if it's not empty */
-			nxt = net->ptype_specific.next;
+			nxt = READ_ONCE(net->ptype_specific.next);
 			if (nxt != &net->ptype_specific)
 				goto found;
 		}
 
 		//已到达ptype_all的链表尾，跳ptype_base的首个
 		hash = 0;
-		nxt = ptype_base[0].next;
+		nxt = READ_ONCE(ptype_base[0].next);
 	} else
 		hash = ntohs(pt->type) & PTYPE_HASH_MASK;
 
@@ -275,7 +289,7 @@ net_ptype_all:
 	while (nxt == &ptype_base[hash]) {
 		if (++hash >= PTYPE_HASH_SIZE)
 			return NULL;
-		nxt = ptype_base[hash].next;//置为下一个樋的首个元素
+		nxt = READ_ONCE(ptype_base[hash].next);//置为下一个樋的首个元素
 	}
 found:
     //返回对应的packet_type
@@ -291,19 +305,24 @@ static void ptype_seq_stop(struct seq_file *seq, void *v)
 //显示ptype文件内容
 static int ptype_seq_show(struct seq_file *seq, void *v)
 {
+	struct ptype_iter_state *iter = seq->private;
 	struct packet_type *pt = v;
+	struct net_device *dev;
 
-	if (v == SEQ_START_TOKEN)
+	if (v == SEQ_START_TOKEN) {
 		seq_puts(seq, "Type Device      Function\n");
-	else if ((!pt->af_packet_net || net_eq(pt->af_packet_net, seq_file_net(seq))) &&
-		 (!pt->dev || net_eq(dev_net(pt->dev), seq_file_net(seq)))) {
+		return 0;
+	}
+	dev = iter->dev;
+	if ((!pt->af_packet_net || net_eq(pt->af_packet_net, seq_file_net(seq))) &&
+		 (!dev || net_eq(dev_net(dev), seq_file_net(seq)))) {
 		if (pt->type == htons(ETH_P_ALL))
 			seq_puts(seq, "ALL ");
 		else
 			seq_printf(seq, "%04x", ntohs(pt->type));
 
 		seq_printf(seq, " %-8s %ps\n",
-			   pt->dev ? pt->dev->name : "", pt->func);
+			   dev ? dev->name : "", pt->func);
 	}
 
 	return 0;
@@ -330,7 +349,7 @@ static int __net_init dev_proc_net_init(struct net *net)
 		goto out_dev;
 	//创建ptype文件
 	if (!proc_create_net("ptype", 0444, net->proc_net, &ptype_seq_ops,
-			sizeof(struct seq_net_private)))
+			sizeof(struct ptype_iter_state)))
 		goto out_softnet;
 
 	if (wext_proc_init(net))

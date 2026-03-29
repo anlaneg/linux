@@ -365,7 +365,7 @@ static void netlink_overrun(struct sock *sk)
 			sk_error_report(sk);
 		}
 	}
-	atomic_inc(&sk->sk_drops);
+	sk_drops_inc(sk);
 }
 
 static void netlink_rcv_wake(struct sock *sk)
@@ -613,10 +613,8 @@ static void netlink_remove(struct sock *sk)
 
 	table = &nl_table[sk->sk_protocol];
 	if (!rhashtable_remove_fast(&table->hash, &nlk_sk(sk)->node,
-				    netlink_rhashtable_params)) {
-		WARN_ON(refcount_read(&sk->sk_refcnt) == 1);
+				    netlink_rhashtable_params))
 		__sock_put(sk);
-	}
 
 	netlink_table_grab();
 	if (nlk_sk(sk)->subscriptions) {
@@ -1007,7 +1005,7 @@ static void netlink_undo_bind(int group, long unsigned int groups,
 }
 
 /*执行netlink bind指定地址*/
-static int netlink_bind(struct socket *sock, struct sockaddr *addr,
+static int netlink_bind(struct socket *sock, struct sockaddr_unsized *addr,
 			int addr_len)
 {
 	struct sock *sk = sock->sk;
@@ -1104,7 +1102,7 @@ unlock:
 	return err;
 }
 
-static int netlink_connect(struct socket *sock, struct sockaddr *addr,
+static int netlink_connect(struct socket *sock, struct sockaddr_unsized *addr,
 			   int alen, int flags)
 {
 	int err = 0;
@@ -1279,7 +1277,7 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 	nlk = nlk_sk(sk);
 	rmem = atomic_add_return(skb->truesize, &sk->sk_rmem_alloc);
 
-	if ((rmem == skb->truesize || rmem < READ_ONCE(sk->sk_rcvbuf)) &&
+	if ((rmem == skb->truesize || rmem <= READ_ONCE(sk->sk_rcvbuf)) &&
 	    !test_bit(NETLINK_S_CONGESTED, &nlk->state)) {
 		netlink_skb_set_owner_r(skb, sk);/*更新skb所属的socket*/
 		return 0;
@@ -2867,7 +2865,7 @@ static int netlink_native_seq_show(struct seq_file *seq, void *v)
 			   sk_wmem_alloc_get(s),
 			   READ_ONCE(nlk->cb_running),
 			   refcount_read(&s->sk_refcnt),
-			   atomic_read(&s->sk_drops),
+			   sk_drops_read(s),
 			   sock_i_ino(s)
 			);
 
@@ -3092,7 +3090,7 @@ static int __init netlink_proto_init(void)
 	BUILD_BUG_ON(sizeof(struct netlink_skb_parms) > sizeof_field(struct sk_buff, cb));
 
 	//申请nl_table，用于存放netlink支持的子protocol
-	nl_table = kcalloc(MAX_LINKS, sizeof(*nl_table), GFP_KERNEL);
+	nl_table = kzalloc_objs(*nl_table, MAX_LINKS);
 	if (!nl_table)
 		goto panic;
 

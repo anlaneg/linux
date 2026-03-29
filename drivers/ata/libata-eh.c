@@ -640,12 +640,29 @@ void ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
 		set_host_byte(scmd, DID_OK);
 
 		ata_qc_for_each_raw(ap, qc, i) {
-			if (qc->flags & ATA_QCFLAG_ACTIVE &&
-			    qc->scsicmd == scmd)
+			if (qc->scsicmd != scmd)
+				continue;
+			if ((qc->flags & ATA_QCFLAG_ACTIVE) ||
+			    qc == ap->deferred_qc)
 				break;
 		}
 
-		if (i < ATA_MAX_QUEUE) {
+		if (i < ATA_MAX_QUEUE && qc == ap->deferred_qc) {
+			/*
+			 * This is a deferred command that timed out while
+			 * waiting for the command queue to drain. Since the qc
+			 * is not active yet (deferred_qc is still set, so the
+			 * deferred qc work has not issued the command yet),
+			 * simply signal the timeout by finishing the SCSI
+			 * command and clear the deferred qc to prevent the
+			 * deferred qc work from issuing this qc.
+			 */
+			WARN_ON_ONCE(qc->flags & ATA_QCFLAG_ACTIVE);
+			ap->deferred_qc = NULL;
+			cancel_work(&ap->deferred_qc_work);
+			set_host_byte(scmd, DID_TIME_OUT);
+			scsi_eh_finish_cmd(scmd, &ap->eh_done_q);
+		} else if (i < ATA_MAX_QUEUE) {
 			/* the scmd has an associated qc */
 			if (!(qc->flags & ATA_QCFLAG_EH)) {
 				/* which hasn't failed yet, timeout */
@@ -736,7 +753,8 @@ void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap)
 	spin_unlock_irqrestore(ap->lock, flags);
 
 	/* invoke EH, skip if unloading or suspended */
-	if (!(ap->pflags & (ATA_PFLAG_UNLOADING | ATA_PFLAG_SUSPENDED)))
+	if (!(ap->pflags & (ATA_PFLAG_UNLOADING | ATA_PFLAG_SUSPENDED)) &&
+	    ata_adapter_is_online(ap))
 		ap->ops->error_handler(ap);
 	else {
 		/* if unloading, commence suicide */
@@ -916,6 +934,12 @@ static void ata_eh_set_pending(struct ata_port *ap, bool fastdrain)
 		return;
 
 	ap->pflags |= ATA_PFLAG_EH_PENDING;
+
+	/*
+	 * If we have a deferred qc, requeue it so that it is retried once EH
+	 * completes.
+	 */
+	ata_scsi_requeue_deferred_qc(ap);
 
 	if (!fastdrain)
 		return;
@@ -2075,7 +2099,7 @@ out:
  * Check if a link is established. This is a relaxed version of
  * ata_phys_link_online() which accounts for the fact that this is potentially
  * called after changing the link power management policy, which may not be
- * reflected immediately in the SSTAUS register (e.g., we may still be seeing
+ * reflected immediately in the SStatus register (e.g., we may still be seeing
  * the PHY in partial, slumber or devsleep Partial power management state.
  * So check that:
  * - A device is still present, that is, DET is 1h (Device presence detected
@@ -2089,8 +2113,13 @@ static bool ata_eh_link_established(struct ata_link *link)
 	u32 sstatus;
 	u8 det, ipm;
 
+	/*
+	 * For old IDE/PATA adapters that do not have a valid scr_read method,
+	 * or if reading the SStatus register fails, assume that the device is
+	 * present. Device probe will determine if that is really the case.
+	 */
 	if (sata_scr_read(link, SCR_STATUS, &sstatus))
-		return false;
+		return true;
 
 	det = sstatus & 0x0f;
 	ipm = (sstatus >> 8) & 0x0f;

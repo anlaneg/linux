@@ -377,10 +377,16 @@ static bool setup_engine(
 }
 
 /**
+ * cntl_stuck_hw_workaround - Workaround for I2C engine stuck state
+ * @dce_i2c_hw: Pointer to dce_i2c_hw structure
+ *
  * If we boot without an HDMI display, the I2C engine does not get initialized
  * correctly. One of its symptoms is that SW_USE_I2C does not get cleared after
- * acquire, so that after setting SW_DONE_USING_I2C on release, the engine gets
+ * acquire. After setting SW_DONE_USING_I2C on release, the engine gets
  * immediately reacquired by SW, preventing DMUB from using it.
+ *
+ * This function checks the I2C arbitration status and applies a release
+ * workaround if necessary.
  */
 static void cntl_stuck_hw_workaround(struct dce_i2c_hw *dce_i2c_hw)
 {
@@ -585,7 +591,7 @@ static bool dce_i2c_hw_engine_submit_payload(struct dce_i2c_hw *dce_i2c_hw,
 			DCE_I2C_TRANSACTION_ACTION_I2C_WRITE;
 
 
-	request.address = (uint8_t) ((payload->address << 1) | !payload->write);
+	request.address = (uint8_t) ((payload->address << 1) | (payload->write ? 0 : 1));
 	request.length = payload->length;
 	request.data = payload->data;
 

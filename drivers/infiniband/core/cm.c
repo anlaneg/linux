@@ -34,7 +34,6 @@ MODULE_AUTHOR("Sean Hefty");
 MODULE_DESCRIPTION("InfiniBand CM");
 MODULE_LICENSE("Dual BSD/GPL");
 
-#define CM_DESTROY_ID_WAIT_TIMEOUT 10000 /* msecs */
 #define CM_DIRECT_RETRY_CTX ((void *) 1UL)
 #define CM_MRA_SETTING 24 /* 4.096us * 2^24 = ~68.7 seconds */
 
@@ -846,7 +845,7 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 	int ret;
 
 	/*申请cm_id_private结构体*/
-	cm_id_priv = kzalloc(sizeof *cm_id_priv, GFP_KERNEL);
+	cm_id_priv = kzalloc_obj(*cm_id_priv);
 	if (!cm_id_priv)
 		return ERR_PTR(-ENOMEM);
 
@@ -1002,7 +1001,7 @@ static struct cm_timewait_info *cm_create_timewait_info(__be32 local_id)
 {
 	struct cm_timewait_info *timewait_info;
 
-	timewait_info = kzalloc(sizeof *timewait_info, GFP_KERNEL);
+	timewait_info = kzalloc_obj(*timewait_info);
 	if (!timewait_info)
 		return ERR_PTR(-ENOMEM);
 
@@ -1075,14 +1074,15 @@ static noinline void cm_destroy_id_wait_timeout(struct ib_cm_id *cm_id,
 	struct cm_id_private *cm_id_priv;
 
 	cm_id_priv = container_of(cm_id, struct cm_id_private, id);
-	pr_err("%s: cm_id=%p timed out. state %d -> %d, refcnt=%d\n", __func__,
-	       cm_id, old_state, cm_id->state, refcount_read(&cm_id_priv->refcount));
+	pr_err_ratelimited("%s: cm_id=%p timed out. state %d -> %d, refcnt=%d\n", __func__,
+			   cm_id, old_state, cm_id->state, refcount_read(&cm_id_priv->refcount));
 }
 
 static void cm_destroy_id(struct ib_cm_id *cm_id, int err)
 {
 	struct cm_id_private *cm_id_priv;
 	enum ib_cm_state old_state;
+	unsigned long timeout;
 	struct cm_work *work;
 	int ret;
 
@@ -1193,10 +1193,9 @@ retest:
 
 	xa_erase(&cm.local_id_table, cm_local_id(cm_id->local_id));
 	cm_deref_id(cm_id_priv);
+	timeout = msecs_to_jiffies((cm_id_priv->max_cm_retries * cm_id_priv->timeout_ms * 5) / 4);
 	do {
-		ret = wait_for_completion_timeout(&cm_id_priv->comp,
-						  msecs_to_jiffies(
-						  CM_DESTROY_ID_WAIT_TIMEOUT));
+		ret = wait_for_completion_timeout(&cm_id_priv->comp, timeout);
 		if (!ret) /* timeout happened */
 			cm_destroy_id_wait_timeout(cm_id, old_state);
 	} while (!ret);
@@ -3963,7 +3962,7 @@ static int cm_establish(struct ib_cm_id *cm_id)
 	if (!cm_dev)
 		return -ENODEV;
 
-	work = kmalloc(sizeof *work, GFP_ATOMIC);
+	work = kmalloc_obj(*work, GFP_ATOMIC);
 	if (!work)
 		return -ENOMEM;
 
@@ -4119,7 +4118,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	atomic_long_inc(&port->counters[CM_RECV][attr_id - CM_ATTR_ID_OFFSET]);
 
 	/*申请work(需要paths个path成员),填充event*/
-	work = kmalloc(struct_size(work, path, paths), GFP_KERNEL);
+	work = kmalloc_flex(*work, path, paths);
 	if (!work) {
 		ib_free_recv_mad(mad_recv_wc);
 		return;
@@ -4423,8 +4422,7 @@ static int cm_add_one(struct ib_device *ib_device)
 	u32 i;
 
 	/*申请cm设备*/
-	cm_dev = kzalloc(struct_size(cm_dev, port, ib_device->phys_port_cnt),
-			 GFP_KERNEL);
+	cm_dev = kzalloc_flex(*cm_dev, port, ib_device->phys_port_cnt);
 	if (!cm_dev)
 		return -ENOMEM;
 
@@ -4445,7 +4443,7 @@ static int cm_add_one(struct ib_device *ib_device)
 			continue;
 
 		/*创建cm port*/
-		port = kzalloc(sizeof *port, GFP_KERNEL);
+		port = kzalloc_obj(*port);
 		if (!port) {
 			ret = -ENOMEM;
 			goto error1;
@@ -4598,7 +4596,7 @@ static int __init ib_cm_init(void)
 	INIT_LIST_HEAD(&cm.timewait_list);
 
 	/*创建cm对应的wq*/
-	cm.wq = alloc_workqueue("ib_cm", 0, 1);
+	cm.wq = alloc_workqueue("ib_cm", WQ_PERCPU, 1);
 	if (!cm.wq) {
 		ret = -ENOMEM;
 		goto error2;

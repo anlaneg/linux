@@ -69,7 +69,7 @@ struct amdgpu_bo_va_mapping {
 	uint64_t			last;
 	uint64_t			__subtree_last;
 	uint64_t			offset;
-	uint64_t			flags;
+	uint32_t			flags;
 };
 
 /* User space allocated BO in a VM */
@@ -96,6 +96,7 @@ struct amdgpu_bo_va {
 	 * if non-zero, cannot unmap from GPU because user queues may still access it
 	 */
 	unsigned int			queue_refcount;
+	atomic_t			userq_va_mapped;
 };
 
 struct amdgpu_bo {

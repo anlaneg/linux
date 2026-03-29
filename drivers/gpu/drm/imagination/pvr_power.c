@@ -10,6 +10,7 @@
 
 #include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_print.h>
 #include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/interrupt.h>
@@ -18,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/pwrseq/consumer.h>
 #include <linux/reset.h>
 #include <linux/timer.h>
 #include <linux/types.h>
@@ -88,11 +90,11 @@ pvr_power_request_pwr_off(struct pvr_device *pvr_dev)
 }
 
 static int
-pvr_power_fw_disable(struct pvr_device *pvr_dev, bool hard_reset)
+pvr_power_fw_disable(struct pvr_device *pvr_dev, bool hard_reset, bool rpm_suspend)
 {
-	if (!hard_reset) {
-		int err;
+	int err;
 
+	if (!hard_reset) {
 		cancel_delayed_work_sync(&pvr_dev->watchdog.work);
 
 		err = pvr_power_request_idle(pvr_dev);
@@ -104,29 +106,47 @@ pvr_power_fw_disable(struct pvr_device *pvr_dev, bool hard_reset)
 			return err;
 	}
 
-	return pvr_fw_stop(pvr_dev);
+	if (rpm_suspend) {
+		/* This also waits for late processing of GPU or firmware IRQs in other cores */
+		disable_irq(pvr_dev->irq);
+	}
+
+	err = pvr_fw_stop(pvr_dev);
+	if (err && rpm_suspend)
+		enable_irq(pvr_dev->irq);
+
+	return err;
 }
 
 static int
-pvr_power_fw_enable(struct pvr_device *pvr_dev)
+pvr_power_fw_enable(struct pvr_device *pvr_dev, bool rpm_resume)
 {
 	int err;
 
+	if (rpm_resume)
+		enable_irq(pvr_dev->irq);
+
 	err = pvr_fw_start(pvr_dev);
 	if (err)
-		return err;
+		goto out;
 
 	err = pvr_wait_for_fw_boot(pvr_dev);
 	if (err) {
 		drm_err(from_pvr_device(pvr_dev), "Firmware failed to boot\n");
 		pvr_fw_stop(pvr_dev);
-		return err;
+		goto out;
 	}
 
 	queue_delayed_work(pvr_dev->sched_wq, &pvr_dev->watchdog.work,
 			   msecs_to_jiffies(WATCHDOG_TIME_MS));
 
 	return 0;
+
+out:
+	if (rpm_resume)
+		disable_irq(pvr_dev->irq);
+
+	return err;
 }
 
 bool
@@ -234,51 +254,28 @@ pvr_watchdog_init(struct pvr_device *pvr_dev)
 	return 0;
 }
 
-int
-pvr_power_device_suspend(struct device *dev)
+static int pvr_power_init_manual(struct pvr_device *pvr_dev)
 {
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int err = 0;
-	int idx;
+	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
+	struct reset_control *reset;
 
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
+	reset = devm_reset_control_get_optional_exclusive(drm_dev->dev, NULL);
+	if (IS_ERR(reset))
+		return dev_err_probe(drm_dev->dev, PTR_ERR(reset),
+				     "failed to get gpu reset line\n");
 
-	if (pvr_dev->fw_dev.booted) {
-		err = pvr_power_fw_disable(pvr_dev, false);
-		if (err)
-			goto err_drm_dev_exit;
-	}
+	pvr_dev->reset = reset;
 
-	clk_disable_unprepare(pvr_dev->mem_clk);
-	clk_disable_unprepare(pvr_dev->sys_clk);
-	clk_disable_unprepare(pvr_dev->core_clk);
-
-	err = reset_control_assert(pvr_dev->reset);
-
-err_drm_dev_exit:
-	drm_dev_exit(idx);
-
-	return err;
+	return 0;
 }
 
-int
-pvr_power_device_resume(struct device *dev)
+static int pvr_power_on_sequence_manual(struct pvr_device *pvr_dev)
 {
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int idx;
 	int err;
-
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
 
 	err = clk_prepare_enable(pvr_dev->core_clk);
 	if (err)
-		goto err_drm_dev_exit;
+		return err;
 
 	err = clk_prepare_enable(pvr_dev->sys_clk);
 	if (err)
@@ -302,18 +299,7 @@ pvr_power_device_resume(struct device *dev)
 	if (err)
 		goto err_mem_clk_disable;
 
-	if (pvr_dev->fw_dev.booted) {
-		err = pvr_power_fw_enable(pvr_dev);
-		if (err)
-			goto err_reset_assert;
-	}
-
-	drm_dev_exit(idx);
-
 	return 0;
-
-err_reset_assert:
-	reset_control_assert(pvr_dev->reset);
 
 err_mem_clk_disable:
 	clk_disable_unprepare(pvr_dev->mem_clk);
@@ -323,6 +309,117 @@ err_sys_clk_disable:
 
 err_core_clk_disable:
 	clk_disable_unprepare(pvr_dev->core_clk);
+
+	return err;
+}
+
+static int pvr_power_off_sequence_manual(struct pvr_device *pvr_dev)
+{
+	int err;
+
+	err = reset_control_assert(pvr_dev->reset);
+
+	clk_disable_unprepare(pvr_dev->mem_clk);
+	clk_disable_unprepare(pvr_dev->sys_clk);
+	clk_disable_unprepare(pvr_dev->core_clk);
+
+	return err;
+}
+
+const struct pvr_power_sequence_ops pvr_power_sequence_ops_manual = {
+	.init = pvr_power_init_manual,
+	.power_on = pvr_power_on_sequence_manual,
+	.power_off = pvr_power_off_sequence_manual,
+};
+
+static int pvr_power_init_pwrseq(struct pvr_device *pvr_dev)
+{
+	struct device *dev = from_pvr_device(pvr_dev)->dev;
+
+	pvr_dev->pwrseq = devm_pwrseq_get(dev, "gpu-power");
+	if (IS_ERR(pvr_dev->pwrseq)) {
+		/*
+		 * This platform requires a sequencer. If we can't get it, we
+		 * must return the error (including -EPROBE_DEFER to wait for
+		 * the provider to appear)
+		 */
+		return dev_err_probe(dev, PTR_ERR(pvr_dev->pwrseq),
+				     "Failed to get required power sequencer\n");
+	}
+
+	return 0;
+}
+
+static int pvr_power_on_sequence_pwrseq(struct pvr_device *pvr_dev)
+{
+	return pwrseq_power_on(pvr_dev->pwrseq);
+}
+
+static int pvr_power_off_sequence_pwrseq(struct pvr_device *pvr_dev)
+{
+	return pwrseq_power_off(pvr_dev->pwrseq);
+}
+
+const struct pvr_power_sequence_ops pvr_power_sequence_ops_pwrseq = {
+	.init = pvr_power_init_pwrseq,
+	.power_on = pvr_power_on_sequence_pwrseq,
+	.power_off = pvr_power_off_sequence_pwrseq,
+};
+
+int
+pvr_power_device_suspend(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
+	int err = 0;
+	int idx;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -EIO;
+
+	if (pvr_dev->fw_dev.booted) {
+		err = pvr_power_fw_disable(pvr_dev, false, true);
+		if (err)
+			goto err_drm_dev_exit;
+	}
+
+	err = pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
+
+err_drm_dev_exit:
+	drm_dev_exit(idx);
+
+	return err;
+}
+
+int
+pvr_power_device_resume(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
+	int idx;
+	int err;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -EIO;
+
+	err = pvr_dev->device_data->pwr_ops->power_on(pvr_dev);
+	if (err)
+		goto err_drm_dev_exit;
+
+	if (pvr_dev->fw_dev.booted) {
+		err = pvr_power_fw_enable(pvr_dev, true);
+		if (err)
+			goto err_power_off;
+	}
+
+	drm_dev_exit(idx);
+
+	return 0;
+
+err_power_off:
+	pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
 
 err_drm_dev_exit:
 	drm_dev_exit(idx);
@@ -431,7 +528,16 @@ pvr_power_reset(struct pvr_device *pvr_dev, bool hard_reset)
 	}
 
 	/* Disable IRQs for the duration of the reset. */
-	disable_irq(pvr_dev->irq);
+	if (hard_reset) {
+		disable_irq(pvr_dev->irq);
+	} else {
+		/*
+		 * Soft reset is triggered as a response to a FW command to the Host and is
+		 * processed from the threaded IRQ handler. This code cannot (nor needs to)
+		 * wait for any IRQ processing to complete.
+		 */
+		disable_irq_nosync(pvr_dev->irq);
+	}
 
 	do {
 		if (hard_reset) {
@@ -439,7 +545,7 @@ pvr_power_reset(struct pvr_device *pvr_dev, bool hard_reset)
 			queues_disabled = true;
 		}
 
-		err = pvr_power_fw_disable(pvr_dev, hard_reset);
+		err = pvr_power_fw_disable(pvr_dev, hard_reset, false);
 		if (!err) {
 			if (hard_reset) {
 				pvr_dev->fw_dev.booted = false;
@@ -462,7 +568,7 @@ pvr_power_reset(struct pvr_device *pvr_dev, bool hard_reset)
 
 			pvr_fw_irq_clear(pvr_dev);
 
-			err = pvr_power_fw_enable(pvr_dev);
+			err = pvr_power_fw_enable(pvr_dev, false);
 		}
 
 		if (err && hard_reset)
@@ -535,11 +641,11 @@ int pvr_power_domains_init(struct pvr_device *pvr_dev)
 
 	link_count = domain_count + (domain_count - 1);
 
-	domain_devs = kcalloc(domain_count, sizeof(*domain_devs), GFP_KERNEL);
+	domain_devs = kzalloc_objs(*domain_devs, domain_count);
 	if (!domain_devs)
 		return -ENOMEM;
 
-	domain_links = kcalloc(link_count, sizeof(*domain_links), GFP_KERNEL);
+	domain_links = kzalloc_objs(*domain_links, link_count);
 	if (!domain_links)
 		return -ENOMEM;
 

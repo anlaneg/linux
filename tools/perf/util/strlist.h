@@ -14,8 +14,6 @@ struct str_node {
 
 struct strlist {
 	struct rblist rblist;
-	/*需要使用strdup函数进行复制*/
-	bool	      dupstr;
 	bool	      file_only;
 };
 
@@ -25,7 +23,6 @@ struct strlist {
  *             found
  */
 struct strlist_config {
-	bool dont_dupstr;
 	bool file_only;
 	const char *dirname;
 };

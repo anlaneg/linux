@@ -380,7 +380,7 @@ struct page *pfn_to_online_page(unsigned long pfn)
 	 * the section may be 'offline' but 'valid'. Only
 	 * get_dev_pagemap() can determine sub-section online status.
 	 */
-	pgmap = get_dev_pagemap(pfn, NULL);
+	pgmap = get_dev_pagemap(pfn);
 	put_dev_pagemap(pgmap);
 
 	/* The presence of a pgmap indicates ZONE_DEVICE offline pfn */
@@ -932,7 +932,7 @@ static struct zone *default_kernel_zone_for_pfn(int nid, unsigned long start_pfn
  *
  *   MOVABLE : KERNEL_EARLY
  *
- * Whereby KERNEL_EARLY is memory in one of the kernel zones, available sinze
+ * Whereby KERNEL_EARLY is memory in one of the kernel zones, available since
  * boot. We base our calculation on KERNEL_EARLY internally, because:
  *
  * a) Hotplugged memory in one of the kernel zones can sometimes still get
@@ -952,8 +952,8 @@ static struct zone *default_kernel_zone_for_pfn(int nid, unsigned long start_pfn
  * We rely on "present pages" instead of "managed pages", as the latter is
  * highly unreliable and dynamic in virtualized environments, and does not
  * consider boot time allocations. For example, memory ballooning adjusts the
- * managed pages when inflating/deflating the balloon, and balloon compaction
- * can even migrate inflated pages between zones.
+ * managed pages when inflating/deflating the balloon, and balloon page
+ * migration can even migrate inflated pages between zones.
  *
  * Using "present pages" is better but some things to keep in mind are:
  *
@@ -961,7 +961,7 @@ static struct zone *default_kernel_zone_for_pfn(int nid, unsigned long start_pfn
  *    effectively unused by the kernel, yet they account to "present pages".
  *    Fortunately, these allocations are comparatively small in relevant setups
  *    (e.g., fraction of system memory).
- * b) Some hotplugged memory blocks in virtualized environments, esecially
+ * b) Some hotplugged memory blocks in virtualized environments, especially
  *    hotplugged by virtio-mem, look like they are completely present, however,
  *    only parts of the memory block are actually currently usable.
  *    "present pages" is an upper limit that can get reached at runtime. As
@@ -1094,7 +1094,7 @@ void adjust_present_page_count(struct page *page, struct memory_group *group,
 }
 
 int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
-			      struct zone *zone, bool mhp_off_inaccessible)
+			      struct zone *zone)
 {
 	unsigned long end_pfn = pfn + nr_pages;
 	int ret, i;
@@ -1102,15 +1102,6 @@ int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
 	ret = kasan_add_zero_shadow(__va(PFN_PHYS(pfn)), PFN_PHYS(nr_pages));
 	if (ret)
 		return ret;
-
-	/*
-	 * Memory block is accessible at this stage and hence poison the struct
-	 * pages now.  If the memory block is accessible during memory hotplug
-	 * addition phase, then page poisining is already performed in
-	 * sparse_add_section().
-	 */
-	if (mhp_off_inaccessible)
-		page_init_poison(pfn_to_page(pfn), sizeof(struct page) * nr_pages);
 
 	move_pfn_range_to_zone(zone, pfn, nr_pages, NULL, MIGRATE_UNMOVABLE,
 			       false);
@@ -1273,7 +1264,7 @@ static pg_data_t *hotadd_init_pgdat(int nid)
 	 * NODE_DATA is preallocated (free_area_init) but its internal
 	 * state is not allocated completely. Add missing pieces.
 	 * Completely offline nodes stay around and they just need
-	 * reintialization.
+	 * reinitialization.
 	 */
 	pgdat = NODE_DATA(nid);
 
@@ -1317,7 +1308,7 @@ static int __try_online_node(int nid, bool set_node_online)
 
 	if (set_node_online) {
 		node_set_online(nid);
-		ret = register_one_node(nid);
+		ret = register_node(nid);
 		BUG_ON(ret);
 	}
 out:
@@ -1450,7 +1441,7 @@ static void remove_memory_blocks_and_altmaps(u64 start, u64 size)
 }
 
 static int create_altmaps_and_memory_blocks(int nid, struct memory_group *group,
-					    u64 start, u64 size, mhp_t mhp_flags)
+					    u64 start, u64 size)
 {
 	unsigned long memblock_size = memory_block_size_bytes();
 	u64 cur_start;
@@ -1466,8 +1457,6 @@ static int create_altmaps_and_memory_blocks(int nid, struct memory_group *group,
 		};
 
 		mhp_altmap.free = memory_block_memmap_on_memory_pages();
-		if (mhp_flags & MHP_OFFLINE_INACCESSIBLE)
-			mhp_altmap.inaccessible = true;
 		params.altmap = kmemdup(&mhp_altmap, sizeof(struct vmem_altmap),
 					GFP_KERNEL);
 		if (!params.altmap) {
@@ -1483,7 +1472,7 @@ static int create_altmaps_and_memory_blocks(int nid, struct memory_group *group,
 		}
 
 		/* create memory block devices after memory was added */
-		ret = create_memory_block_devices(cur_start, memblock_size,
+		ret = create_memory_block_devices(cur_start, memblock_size, nid,
 						  params.altmap, group);
 		if (ret) {
 			arch_remove_memory(cur_start, memblock_size, NULL);
@@ -1547,15 +1536,23 @@ int add_memory_resource(int nid/*numa node编号*/, struct resource *res/*内存
 
 	ret = __try_online_node(nid, false);
 	if (ret < 0)
-		goto error;
-	new_node = ret;
+		goto error_memblock_remove;
+	if (ret) {
+		node_set_online(nid);
+		ret = register_node(nid);
+		if (WARN_ON(ret)) {
+			node_set_offline(nid);
+			goto error_memblock_remove;
+		}
+		new_node = true;
+	}
 
 	/*
 	 * Self hosted memmap array
 	 */
 	if ((mhp_flags & MHP_MEMMAP_ON_MEMORY) &&
 	    mhp_supports_memmap_on_memory()) {
-		ret = create_altmaps_and_memory_blocks(nid, group, start, size, mhp_flags);
+		ret = create_altmaps_and_memory_blocks(nid, group, start, size);
 		if (ret)
 			goto error;
 	} else {
@@ -1564,22 +1561,11 @@ int add_memory_resource(int nid/*numa node编号*/, struct resource *res/*内存
 			goto error;
 
 		/* create memory block devices after memory was added */
-		ret = create_memory_block_devices(start, size, NULL, group);
+		ret = create_memory_block_devices(start, size, nid, NULL, group);
 		if (ret) {
 			arch_remove_memory(start, size, params.altmap);
 			goto error;
 		}
-	}
-
-	if (new_node) {
-		/* If sysfs file of new node can't be created, cpu on the node
-		 * can't be hot-added. There is no rollback way now.
-		 * So, check by BUG_ON() to catch it reluctantly..
-		 * We online node here. We can't roll back from here.
-		 */
-		node_set_online(nid);
-		ret = register_one_node(nid);
-		BUG_ON(ret);
 	}
 
 	register_memory_blocks_under_node_hotplug(nid, PFN_DOWN(start),
@@ -1605,6 +1591,11 @@ int add_memory_resource(int nid/*numa node编号*/, struct resource *res/*内存
 
 	return ret;
 error:
+	if (new_node) {
+		node_set_offline(nid);
+		unregister_node(nid);
+	}
+error_memblock_remove:
 	if (IS_ENABLED(CONFIG_ARCH_KEEP_MEMBLOCK))
 		memblock_remove(start, size);
 error_mem_hotplug_end:
@@ -1826,8 +1817,14 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 			pfn = folio_pfn(folio) + folio_nr_pages(folio) - 1;
 
 		if (folio_contain_hwpoisoned_page(folio)) {
-			if (WARN_ON(folio_test_lru(folio)))
-				folio_isolate_lru(folio);
+			/*
+			 * unmap_poisoned_folio() cannot handle large folios
+			 * in all cases yet.
+			 */
+			if (folio_test_large(folio) && !folio_test_hugetlb(folio))
+				goto put_folio;
+			if (folio_test_lru(folio) && !folio_isolate_lru(folio))
+				goto put_folio;
 			if (folio_mapped(folio)) {
 				folio_lock(folio);
 				unmap_poisoned_folio(folio, pfn, false);
@@ -2204,7 +2201,7 @@ void try_offline_node(int nid)
 	 * node now.
 	 */
 	node_set_offline(nid);
-	unregister_one_node(nid);
+	unregister_node(nid);
 }
 EXPORT_SYMBOL(try_offline_node);
 
@@ -2330,7 +2327,7 @@ static int try_offline_memory_block(struct memory_block *mem, void *arg)
 	 * by offlining code ... so we don't care about that.
 	 */
 	page = pfn_to_online_page(section_nr_to_pfn(mem->start_section_nr));
-	if (page && zone_idx(page_zone(page)) == ZONE_MOVABLE)
+	if (page && page_zonenum(page) == ZONE_MOVABLE)
 		online_type = MMOP_ONLINE_MOVABLE;
 
 	rc = device_offline(&mem->dev);

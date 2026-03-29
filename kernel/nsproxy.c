@@ -26,6 +26,7 @@
 #include <linux/syscalls.h>
 #include <linux/cgroup.h>
 #include <linux/perf_event.h>
+#include <linux/nstree.h>
 
 static struct kmem_cache *nsproxy_cachep;
 
@@ -60,13 +61,32 @@ static inline struct nsproxy *create_nsproxy(void)
 	return nsproxy;
 }
 
+static inline void nsproxy_free(struct nsproxy *ns)
+{
+	put_mnt_ns(ns->mnt_ns);
+	put_uts_ns(ns->uts_ns);
+	put_ipc_ns(ns->ipc_ns);
+	put_pid_ns(ns->pid_ns_for_children);
+	put_time_ns(ns->time_ns);
+	put_time_ns(ns->time_ns_for_children);
+	put_cgroup_ns(ns->cgroup_ns);
+	put_net(ns->net_ns);
+	kmem_cache_free(nsproxy_cachep, ns);
+}
+
+void deactivate_nsproxy(struct nsproxy *ns)
+{
+	nsproxy_ns_active_put(ns);
+	nsproxy_free(ns);
+}
+
 /*
  * Create new nsproxy and all of its the associated namespaces.
  * Return the newly created nsproxy.  Do not attach this to the task,
  * leave it to the caller to do proper locking and attach it to task.
  */
 //按flags创建对应的nsproxy
-static struct nsproxy *create_new_namespaces(unsigned long flags,
+static struct nsproxy *create_new_namespaces(u64 flags,
 	struct task_struct *tsk, struct user_namespace *user_ns,
 	struct fs_struct *new_fs)
 {
@@ -149,7 +169,7 @@ out_ns:
  * called from clone.  This now handles copy for nsproxy and all
  * namespaces therein.
  */
-int copy_namespaces(unsigned long flags, struct task_struct *tsk)
+int copy_namespaces(u64 flags, struct task_struct *tsk)
 {
 	struct nsproxy *old_ns = tsk->nsproxy;
 	struct user_namespace *user_ns = task_cred_xxx(tsk, user_ns);
@@ -184,21 +204,9 @@ int copy_namespaces(unsigned long flags, struct task_struct *tsk)
 	if ((flags & CLONE_VM) == 0)
 		timens_on_fork(new_ns, tsk);
 
+	nsproxy_ns_active_get(new_ns);
 	tsk->nsproxy = new_ns;
 	return 0;
-}
-
-void free_nsproxy(struct nsproxy *ns)
-{
-	put_mnt_ns(ns->mnt_ns);
-	put_uts_ns(ns->uts_ns);
-	put_ipc_ns(ns->ipc_ns);
-	put_pid_ns(ns->pid_ns_for_children);
-	put_time_ns(ns->time_ns);
-	put_time_ns(ns->time_ns_for_children);
-	put_cgroup_ns(ns->cgroup_ns);
-	put_net(ns->net_ns);
-	kmem_cache_free(nsproxy_cachep, ns);
 }
 
 /*
@@ -238,6 +246,9 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 
 	might_sleep();
 
+	if (new)
+		nsproxy_ns_active_get(new);
+
 	task_lock(p);
 	//替换进程的nsproxy
 	ns = p->nsproxy;
@@ -248,9 +259,25 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 		put_nsproxy(ns);
 }
 
-void exit_task_namespaces(struct task_struct *p)
+void exit_nsproxy_namespaces(struct task_struct *p)
 {
 	switch_task_namespaces(p, NULL);
+}
+
+void switch_cred_namespaces(const struct cred *old, const struct cred *new)
+{
+	ns_ref_active_get(new->user_ns);
+	ns_ref_active_put(old->user_ns);
+}
+
+void get_cred_namespaces(struct task_struct *tsk)
+{
+	ns_ref_active_get(tsk->real_cred->user_ns);
+}
+
+void exit_cred_namespaces(struct task_struct *tsk)
+{
+	ns_ref_active_put(tsk->real_cred->user_ns);
 }
 
 int exec_task_namespaces(void)
@@ -322,7 +349,7 @@ static void put_nsset(struct nsset *nsset)
 	if (nsset->fs && (flags & CLONE_NEWNS) && (flags & ~CLONE_NEWNS))
 		free_fs_struct(nsset->fs);
 	if (nsset->nsproxy)
-		free_nsproxy(nsset->nsproxy);
+		nsproxy_free(nsset->nsproxy);
 }
 
 static int prepare_nsset(unsigned flags, struct nsset *nsset)
@@ -556,10 +583,10 @@ SYSCALL_DEFINE2(setns, int, fd, int, flags)
 	if (proc_ns_file(fd_file(f))) {
 		//针对ns文件拿到ns_common
 		ns = get_proc_ns(file_inode(fd_file(f)));
-		if (flags && (ns->ops->type != flags))
-		    /*文件必须与flags相一致*/
+		if (flags && (ns->ns_type != flags))
+			/*文件必须与flags相一致*/
 			err = -EINVAL;
-		flags = ns->ops->type;
+		flags = ns->ns_type;
 	} else if (!IS_ERR(pidfd_pid(fd_file(f)))) {
 		err = check_setns_flags(flags);
 	} else {

@@ -291,7 +291,7 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode)
 	j += i * bits_per_zone;/*更新j到逻辑位置*/
 	if (!j || j > sbi->s_ninodes) {
 		iput(inode);
-		return ERR_PTR(-ENOSPC);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino = j;/*指明此inode编号*/

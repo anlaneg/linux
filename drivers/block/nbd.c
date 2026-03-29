@@ -317,11 +317,11 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 {
 	if (!nsock->dead && notify && !nbd_disconnected(nbd->config)) {
 		struct link_dead_args *args;
-		args = kmalloc(sizeof(struct link_dead_args), GFP_NOIO);
+		args = kmalloc_obj(struct link_dead_args, GFP_NOIO);
 		if (args) {
 			INIT_WORK(&args->work, nbd_dead_link_work);
 			args->index = nbd->index;
-			queue_work(system_wq, &args->work);
+			queue_work(system_percpu_wq, &args->work);
 		}
 	}
 	if (!nsock->dead) {
@@ -579,28 +579,31 @@ static int __sock_xmit(struct nbd_device *nbd, struct socket *sock/*socket索引
 	msg.msg_iter = *iter;
 
 	noreclaim_flag = memalloc_noreclaim_save();
-	do {
-		sock->sk->sk_allocation = GFP_NOIO | __GFP_MEMALLOC;
-		sock->sk->sk_use_task_frag = false;
-		msg.msg_flags = msg_flags | MSG_NOSIGNAL;
 
-		if (send)
-		    /*向socket发送消息*/
-			result = sock_sendmsg(sock, &msg);
-		else
-		    /*自socket收取消息*/
-			result = sock_recvmsg(sock, &msg, msg.msg_flags);
+	scoped_with_kernel_creds() {
+		do {
+			sock->sk->sk_allocation = GFP_NOIO | __GFP_MEMALLOC;
+			sock->sk->sk_use_task_frag = false;
+			msg.msg_flags = msg_flags | MSG_NOSIGNAL;
 
-		if (result <= 0) {
-			if (result == 0)
-				/*收/写返回0，认为epipe*/
-				result = -EPIPE; /* short read */
-			break;/*出错*/
-		}
-		if (sent)
-		    /*记录发送的字节数*/
-			*sent += result;
-	} while (msg_data_left(&msg));/*如果仍有数据，则继续发送或读取*/
+			if (send)
+				/*向socket发送消息*/
+				result = sock_sendmsg(sock, &msg);
+			else
+				/*自socket收取消息*/
+				result = sock_recvmsg(sock, &msg, msg.msg_flags);
+
+			if (result <= 0) {
+				if (result == 0)
+					/*收/写返回0，认为epipe*/
+					result = -EPIPE; /* short read */
+				break;/*出错*/
+			}
+			if (sent)
+		    		/*记录发送的字节数*/
+				*sent += result;
+		} while (msg_data_left(&msg));/*如果仍有数据，则继续发送或读取*/
+	}
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
@@ -1076,9 +1079,9 @@ static void recv_work(struct work_struct *work)
 	nbd_mark_nsock_dead(nbd, nsock, 1);
 	mutex_unlock(&nsock->tx_lock);
 
-	nbd_config_put(nbd);
 	atomic_dec(&config->recv_threads);
 	wake_up(&config->recv_wq);
+	nbd_config_put(nbd);
 	kfree(args);
 }
 
@@ -1292,6 +1295,14 @@ static struct socket *nbd_get_socket(struct nbd_device *nbd, unsigned long fd,
 	if (!sock)
 		return NULL;
 
+	if (!sk_is_tcp(sock->sk) &&
+	    !sk_is_stream_unix(sock->sk)) {
+		dev_err(disk_to_dev(nbd->disk), "Unsupported socket: should be TCP or UNIX.\n");
+		*err = -EINVAL;
+		sockfd_put(sock);
+		return NULL;
+	}
+
 	if (sock->ops->shutdown == sock_no_shutdown) {
 	    /*此socket不支持shutdown,报错*/
 		dev_err(disk_to_dev(nbd->disk), "Unsupported socket: shutdown callout must be supported.\n");
@@ -1341,7 +1352,7 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg/*socket fd*/
 	}
 
 	/*申请nbd_sock结构体*/
-	nsock = kzalloc(sizeof(*nsock), GFP_KERNEL);
+	nsock = kzalloc_obj(*nsock);
 	if (!nsock) {
 		err = -ENOMEM;
 		goto put_socket;
@@ -1393,7 +1404,7 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 	if (!sock)
 		return err;
 
-	args = kzalloc(sizeof(*args), GFP_KERNEL);
+	args = kzalloc_obj(*args);
 	if (!args) {
 		sockfd_put(sock);
 		return -ENOMEM;
@@ -1594,7 +1605,7 @@ retry:
 		struct recv_thread_args *args;
 
 		/*针对每个连接，申请一个recv_thread_args*/
-		args = kzalloc(sizeof(*args), GFP_KERNEL);
+		args = kzalloc_obj(*args);
 		if (!args) {
 		    /*申请线程参数失败*/
 			sock_shutdown(nbd);
@@ -1776,7 +1787,7 @@ static int nbd_alloc_and_init_config(struct nbd_device *nbd)
 	if (!try_module_get(THIS_MODULE))
 		return -ENODEV;
 
-	config = kzalloc(sizeof(struct nbd_config), GFP_NOFS);
+	config = kzalloc_obj(struct nbd_config, GFP_NOFS);
 	if (!config) {
 		module_put(THIS_MODULE);
 		return -ENOMEM;
@@ -2020,7 +2031,7 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 	int err = -ENOMEM;
 
 	/*创建nbd设备*/
-	nbd = kzalloc(sizeof(struct nbd_device), GFP_KERNEL);
+	nbd = kzalloc_obj(struct nbd_device);
 	if (!nbd)
 		goto out;
 
@@ -2357,12 +2368,13 @@ again:
 	//使能nbd设备
 	ret = nbd_start_device(nbd);
 out:
-	mutex_unlock(&nbd->config_lock);
 	if (!ret) {
 		set_bit(NBD_RT_HAS_CONFIG_REF, &config->runtime_flags);
 		refcount_inc(&nbd->config_refs);
 		nbd_connect_reply(info, nbd->index);
 	}
+	mutex_unlock(&nbd->config_lock);
+
 	nbd_config_put(nbd);
 	if (put_dev)
 		nbd_put(nbd);

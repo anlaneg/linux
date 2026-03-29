@@ -120,6 +120,25 @@ static void __amdgpu_xcp_add_block(struct amdgpu_xcp_mgr *xcp_mgr, int xcp_id,
 	xcp->valid = true;
 }
 
+static void __amdgpu_xcp_set_unique_id(struct amdgpu_xcp_mgr *xcp_mgr,
+				       int xcp_id)
+{
+	struct amdgpu_xcp *xcp = &xcp_mgr->xcp[xcp_id];
+	struct amdgpu_device *adev = xcp_mgr->adev;
+	uint32_t inst_mask;
+	uint64_t uid;
+	int i;
+
+	if (!amdgpu_xcp_get_inst_details(xcp, AMDGPU_XCP_GFX, &inst_mask) &&
+	    inst_mask) {
+		i = GET_INST(GC, (ffs(inst_mask) - 1));
+		uid = amdgpu_device_get_uid(xcp_mgr->adev->uid_info,
+					    AMDGPU_UID_TYPE_XCD, i);
+		if (uid)
+			xcp->unique_id = uid;
+	}
+}
+
 int amdgpu_xcp_init(struct amdgpu_xcp_mgr *xcp_mgr, int num_xcps, int mode)
 {
 	struct amdgpu_device *adev = xcp_mgr->adev;
@@ -158,6 +177,7 @@ int amdgpu_xcp_init(struct amdgpu_xcp_mgr *xcp_mgr, int num_xcps, int mode)
 			else
 				xcp_mgr->xcp[i].mem_id = mem_id;
 		}
+		__amdgpu_xcp_set_unique_id(xcp_mgr, i);
 	}
 
 	xcp_mgr->num_xcps = num_xcps;
@@ -314,7 +334,7 @@ int amdgpu_xcp_mgr_init(struct amdgpu_device *adev, int init_mode,
 	if (!xcp_funcs || !xcp_funcs->get_ip_details)
 		return -EINVAL;
 
-	xcp_mgr = kzalloc(sizeof(*xcp_mgr), GFP_KERNEL);
+	xcp_mgr = kzalloc_obj(*xcp_mgr);
 
 	if (!xcp_mgr)
 		return -ENOMEM;
@@ -406,6 +426,7 @@ void amdgpu_xcp_dev_unplug(struct amdgpu_device *adev)
 		p_ddev->primary->dev = adev->xcp_mgr->xcp[i].pdev;
 		p_ddev->driver =  adev->xcp_mgr->xcp[i].driver;
 		p_ddev->vma_offset_manager = adev->xcp_mgr->xcp[i].vma_offset_manager;
+		amdgpu_xcp_drm_dev_free(p_ddev);
 	}
 }
 
@@ -519,6 +540,7 @@ static void amdgpu_set_xcp_id(struct amdgpu_device *adev,
 	case AMDGPU_HW_IP_GFX:
 	case AMDGPU_RING_TYPE_COMPUTE:
 	case AMDGPU_RING_TYPE_KIQ:
+	case AMDGPU_RING_TYPE_MES:
 		ip_blk = AMDGPU_XCP_GFX;
 		break;
 	case AMDGPU_RING_TYPE_SDMA:
@@ -885,7 +907,7 @@ static void amdgpu_xcp_cfg_sysfs_init(struct amdgpu_device *adev)
 	if (!adev->xcp_mgr)
 		return;
 
-	xcp_cfg = kzalloc(sizeof(*xcp_cfg), GFP_KERNEL);
+	xcp_cfg = kzalloc_obj(*xcp_cfg);
 	if (!xcp_cfg)
 		return;
 	xcp_cfg->xcp_mgr = adev->xcp_mgr;

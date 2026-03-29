@@ -180,7 +180,7 @@ void acpi_processor_ppc_init(struct cpufreq_policy *policy)
 		struct acpi_processor *pr = per_cpu(processors, cpu);
 		int ret;
 
-		if (!pr || !pr->performance)
+		if (!pr)
 			continue;
 
 		/*
@@ -196,6 +196,9 @@ void acpi_processor_ppc_init(struct cpufreq_policy *policy)
 		if (ret < 0)
 			pr_err("Failed to add freq constraint for CPU%d (%d)\n",
 			       cpu, ret);
+
+		if (!pr->performance)
+			continue;
 
 		ret = acpi_processor_get_platform_limit(pr);
 		if (ret)
@@ -338,9 +341,7 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 
 	pr->performance->state_count = pss->package.count;
 	pr->performance->states =
-	    kmalloc_array(pss->package.count,
-			  sizeof(struct acpi_processor_px),
-			  GFP_KERNEL);
+	    kmalloc_objs(struct acpi_processor_px, pss->package.count);
 	if (!pr->performance->states) {
 		result = -ENOMEM;
 		goto end;

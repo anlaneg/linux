@@ -69,7 +69,6 @@ struct ipvl_dev {
 	DECLARE_BITMAP(mac_filters, IPVLAN_MAC_FILTER_SIZE);
 	netdev_features_t	sfeatures;
 	u32			msg_enable;
-	spinlock_t		addrs_lock;
 };
 
 struct ipvl_addr {
@@ -93,6 +92,7 @@ struct ipvl_port {
 	possible_net_t		pnet;
 	/*与此port关联的所有ip（struct ipvl_addr结构），用于是否需要处理此报文*/
 	struct hlist_head	hlhead[IPVLAN_HASH_SIZE];
+	spinlock_t		addrs_lock; /* guards hash-table and addrs */
 	/*串连从属于此netdev的所有ipvlan设备*/
 	struct list_head	ipvlans;
 	u16			mode;

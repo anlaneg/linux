@@ -70,7 +70,7 @@ static void bdev_write_inode(struct block_device *bdev)
 	int ret;
 
 	spin_lock(&inode->i_lock);
-	while (inode->i_state & I_DIRTY) {
+	while (inode_state_read(inode) & I_DIRTY) {
 		spin_unlock(&inode->i_lock);
 		/*将此inode信息写到磁盘*/
 		ret = write_inode_now(inode, true);
@@ -212,7 +212,6 @@ int set_blocksize(struct file *file, int size)
 
 		inode->i_blkbits = blksize_bits(size);
 		mapping_set_folio_min_order(inode->i_mapping, get_order(size));
-		kill_bdev(bdev);
 		filemap_invalidate_unlock(inode->i_mapping);
 		inode_unlock(inode);
 	}
@@ -221,10 +220,27 @@ int set_blocksize(struct file *file, int size)
 
 EXPORT_SYMBOL(set_blocksize);
 
+static int sb_validate_large_blocksize(struct super_block *sb, int size)
+{
+	const char *err_str = NULL;
+
+	if (!(sb->s_type->fs_flags & FS_LBS))
+		err_str = "not supported by filesystem";
+	else if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		err_str = "is only supported with CONFIG_TRANSPARENT_HUGEPAGE";
+
+	if (!err_str)
+		return 0;
+
+	pr_warn_ratelimited("%s: block size(%d) > page size(%lu) %s\n",
+				sb->s_type->name, size, PAGE_SIZE, err_str);
+	return -EINVAL;
+}
+
 //设置sb对应的块大小
 int sb_set_blocksize(struct super_block *sb, int size)
 {
-	if (!(sb->s_type->fs_flags & FS_LBS) && size > PAGE_SIZE)
+	if (size > PAGE_SIZE && sb_validate_large_blocksize(sb, size))
 		return 0;
 	if (set_blocksize(sb->s_bdev_file, size))
 		return 0;
@@ -236,7 +252,7 @@ int sb_set_blocksize(struct super_block *sb, int size)
 
 EXPORT_SYMBOL(sb_set_blocksize);
 
-int sb_min_blocksize(struct super_block *sb, int size)
+int __must_check sb_min_blocksize(struct super_block *sb, int size)
 {
 	int minsize = bdev_logical_block_size(sb->s_bdev);
 	if (size < minsize)
@@ -1312,7 +1328,7 @@ void sync_bdevs(bool wait)
 		struct block_device *bdev;
 
 		spin_lock(&inode->i_lock);
-		if (inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW) ||
+		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE | I_NEW) ||
 		    mapping->nrpages == 0) {
 			spin_unlock(&inode->i_lock);
 			continue;

@@ -5,7 +5,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (C) 2017     Intel Deutschland GmbH
- * Copyright (C) 2018-2025 Intel Corporation
+ * Copyright (C) 2018-2026 Intel Corporation
  */
 
 #include <net/mac80211.h>
@@ -356,8 +356,7 @@ void ieee80211_bss_info_change_notify(struct ieee80211_sub_if_data *sdata,
 	if (WARN_ON_ONCE(sdata->vif.type == NL80211_IFTYPE_P2P_DEVICE ||
 			 sdata->vif.type == NL80211_IFTYPE_NAN ||
 			 (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
-			  !sdata->vif.bss_conf.mu_mimo_owner &&
-			  !(changed & BSS_CHANGED_TXPOWER))))
+			  changed & ~BSS_CHANGED_TXPOWER)))
 		return;
 
 	if (!check_sdata_in_driver(sdata))
@@ -747,6 +746,11 @@ ieee80211_default_mgmt_stypes[NUM_NL80211_IFTYPES] = {
 			BIT(IEEE80211_STYPE_PROBE_REQ >> 4) |
 			BIT(IEEE80211_STYPE_AUTH >> 4),
 	},
+	[NL80211_IFTYPE_NAN] = {
+		.tx = 0xffff,
+		.rx = BIT(IEEE80211_STYPE_ACTION >> 4) |
+			BIT(IEEE80211_STYPE_AUTH >> 4),
+	},
 };
 
 static const struct ieee80211_ht_cap mac80211_ht_capa_mod_mask = {
@@ -864,6 +868,14 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 	if (emulate_chanctx || ops->remain_on_channel)
 		wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
 
+	wiphy->bss_param_support = WIPHY_BSS_PARAM_CTS_PROT |
+				   WIPHY_BSS_PARAM_SHORT_PREAMBLE |
+				   WIPHY_BSS_PARAM_SHORT_SLOT_TIME |
+				   WIPHY_BSS_PARAM_BASIC_RATES |
+				   WIPHY_BSS_PARAM_AP_ISOLATE |
+				   WIPHY_BSS_PARAM_HT_OPMODE |
+				   WIPHY_BSS_PARAM_P2P_CTWINDOW |
+				   WIPHY_BSS_PARAM_P2P_OPPPS;
 	wiphy->features |= NL80211_FEATURE_SK_TX_STATUS |
 			   NL80211_FEATURE_SAE |
 			   NL80211_FEATURE_HT_IBSS |
@@ -1118,7 +1130,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	int result, i;
 	enum nl80211_band band;
 	int channels, max_bitrates;
-	bool supp_ht, supp_vht, supp_he, supp_eht;
+	bool supp_ht, supp_vht, supp_he, supp_eht, supp_s1g, supp_uhr;
 	struct cfg80211_chan_def dflt_chandef = {};
 
 	if (ieee80211_hw_check(hw, QUEUE_CONTROL) &&
@@ -1169,9 +1181,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			return -EINVAL;
 
 		if (WARN_ON(!ieee80211_hw_check(hw, MFP_CAPABLE)))
-			return -EINVAL;
-
-		if (WARN_ON(!ieee80211_hw_check(hw, CONNECTION_MONITOR)))
 			return -EINVAL;
 
 		if (WARN_ON(ieee80211_hw_check(hw, NEED_DTIM_BEFORE_ASSOC)))
@@ -1234,6 +1243,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	supp_vht = false;
 	supp_he = false;
 	supp_eht = false;
+	supp_s1g = false;
+	supp_uhr = false;
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
 		const struct ieee80211_sband_iftype_data *iftd;
 		struct ieee80211_supported_band *sband;
@@ -1245,11 +1256,13 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		if (!dflt_chandef.chan) {
 			/*
 			 * Assign the first enabled channel to dflt_chandef
-			 * from the list of channels
+			 * from the list of channels. For S1G interfaces
+			 * ensure it can be used as a primary.
 			 */
 			for (i = 0; i < sband->n_channels; i++)
 				if (!(sband->channels[i].flags &
-						IEEE80211_CHAN_DISABLED))
+				      (IEEE80211_CHAN_DISABLED |
+				       IEEE80211_CHAN_S1G_NO_PRIMARY)))
 					break;
 			/* if none found then use the first anyway */
 			if (i == sband->n_channels)
@@ -1281,12 +1294,14 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			max_bitrates = sband->n_bitrates;
 		supp_ht = supp_ht || sband->ht_cap.ht_supported;
 		supp_vht = supp_vht || sband->vht_cap.vht_supported;
+		supp_s1g = supp_s1g || sband->s1g_cap.s1g;
 
 		for_each_sband_iftype_data(sband, i, iftd) {
 			u8 he_40_mhz_cap;
 
 			supp_he = supp_he || iftd->he_cap.has_he;
 			supp_eht = supp_eht || iftd->eht_cap.has_eht;
+			supp_uhr = supp_uhr || iftd->uhr_cap.has_uhr;
 
 			if (band == NL80211_BAND_2GHZ)
 				he_40_mhz_cap =
@@ -1319,6 +1334,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		if (WARN_ON(supp_eht && !supp_he))
 			return -EINVAL;
 
+		/* UHR requires EHT support */
+		if (WARN_ON(supp_uhr && !supp_eht))
+			return -EINVAL;
+
 		if (!sband->ht_cap.ht_supported)
 			continue;
 
@@ -1347,9 +1366,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	hw->wiphy->software_iftypes |= BIT(NL80211_IFTYPE_MONITOR);
 
 
-	local->int_scan_req = kzalloc(struct_size(local->int_scan_req,
-						  channels, channels),
-				      GFP_KERNEL);
+	local->int_scan_req = kzalloc_flex(*local->int_scan_req, channels,
+					   channels);
 	if (!local->int_scan_req)
 		return -ENOMEM;
 
@@ -1413,6 +1431,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		local->scan_ies_len +=
 			2 + sizeof(struct ieee80211_vht_cap);
 
+	if (supp_s1g)
+		local->scan_ies_len += 2 + sizeof(struct ieee80211_s1g_cap);
+
 	/*
 	 * HE cap element is variable in size - set len to allow max size */
 	if (supp_he) {
@@ -1427,6 +1448,11 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 				sizeof(struct ieee80211_eht_mcs_nss_supp) +
 				IEEE80211_EHT_PPE_THRES_MAX_LEN;
 	}
+
+	if (supp_uhr)
+		local->scan_ies_len +=
+			3 + sizeof(struct ieee80211_uhr_cap) +
+			sizeof(struct ieee80211_uhr_cap_phy);
 
 	if (!local->ops->hw_scan) {
 		/* For hw_scan, driver needs to set these up. */

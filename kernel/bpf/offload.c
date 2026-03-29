@@ -1,16 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2017-2018 Netronome Systems, Inc.
- *
- * This software is licensed under the GNU General License Version 2,
- * June 1991 as shown in the file COPYING in the top-level directory of this
- * source tree.
- *
- * THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS"
- * WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE
- * OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME
- * THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
  */
 
 #include <linux/bpf.h>
@@ -83,7 +73,7 @@ static int __bpf_offload_dev_netdev_register(struct bpf_offload_dev *offdev,
 	struct bpf_offload_netdev *ondev;
 	int err;
 
-	ondev = kzalloc(sizeof(*ondev), GFP_KERNEL);
+	ondev = kzalloc_obj(*ondev);
 	if (!ondev)
 		return -ENOMEM;
 
@@ -193,7 +183,7 @@ static int __bpf_prog_dev_bound_init(struct bpf_prog *prog, struct net_device *n
 	struct bpf_prog_offload *offload;
 	int err;
 
-	offload = kzalloc(sizeof(*offload), GFP_USER);
+	offload = kzalloc_obj(*offload, GFP_USER);
 	if (!offload)
 		return -ENOMEM;
 
@@ -788,7 +778,7 @@ bpf_offload_dev_create(const struct bpf_prog_offload_ops *ops, void *priv)
 {
 	struct bpf_offload_dev *offdev;
 
-	offdev = kzalloc(sizeof(*offdev), GFP_KERNEL);
+	offdev = kzalloc_obj(*offdev);
 	if (!offdev)
 		return ERR_PTR(-ENOMEM);
 

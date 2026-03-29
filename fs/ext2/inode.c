@@ -1408,7 +1408,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 	//如果inode非new状态，则直接返回
-	if (!(inode->i_state & I_NEW))
+	if (!(inode_state_read_once(inode) & I_NEW))
 		return inode;
 
 	//inode处于new状态，自文件系统获取数据并填充

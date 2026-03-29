@@ -84,7 +84,7 @@ int vhost_iotlb_add_range_ctx(struct vhost_iotlb *iotlb,
 	}
 
 	/*申请并填充map*/
-	map = kmalloc(sizeof(*map), GFP_ATOMIC);
+	map = kmalloc_obj(*map, GFP_ATOMIC);
 	if (!map)
 		return -ENOMEM;
 
@@ -160,8 +160,8 @@ EXPORT_SYMBOL_GPL(vhost_iotlb_init);
  */
 struct vhost_iotlb *vhost_iotlb_alloc(unsigned int limit, unsigned int flags)
 {
-    /*创建一个vhost iotlb*/
-	struct vhost_iotlb *iotlb = kzalloc(sizeof(*iotlb), GFP_KERNEL);
+	/*创建一个vhost iotlb*/
+	struct vhost_iotlb *iotlb = kzalloc_obj(*iotlb);
 
 	if (!iotlb)
 		return NULL;

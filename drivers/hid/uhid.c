@@ -115,7 +115,7 @@ static int uhid_queue_event(struct uhid_device *uhid, __u32 event)
 	unsigned long flags;
 	struct uhid_event *ev;
 
-	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+	ev = kzalloc_obj(*ev);
 	if (!ev)
 		return -ENOMEM;
 
@@ -134,7 +134,7 @@ static int uhid_hid_start(struct hid_device *hid)
 	struct uhid_event *ev;
 	unsigned long flags;
 
-	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+	ev = kzalloc_obj(*ev);
 	if (!ev)
 		return -ENOMEM;
 
@@ -250,7 +250,7 @@ static int uhid_hid_get_report(struct hid_device *hid, unsigned char rnum,
 	if (!READ_ONCE(uhid->running))
 		return -EIO;/*未运行*/
 
-	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+	ev = kzalloc_obj(*ev);
 	if (!ev)
 		return -ENOMEM;
 
@@ -296,7 +296,7 @@ static int uhid_hid_set_report(struct hid_device *hid, unsigned char rnum,
 	if (!READ_ONCE(uhid->running) || count > UHID_DATA_MAX)
 		return -EIO;
 
-	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+	ev = kzalloc_obj(*ev);
 	if (!ev)
 		return -ENOMEM;
 
@@ -383,7 +383,7 @@ static int uhid_hid_output_raw(struct hid_device *hid, __u8 *buf, size_t count,
 	if (count < 1 || count > UHID_DATA_MAX)
 		return -EINVAL;
 
-	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
+	ev = kzalloc_obj(*ev);
 	if (!ev)
 		return -ENOMEM;
 
@@ -454,7 +454,7 @@ static int uhid_event_from_user(const char __user *buffer, size_t len,
 			 */
 			struct uhid_create_req_compat *compat;
 
-			compat = kzalloc(sizeof(*compat), GFP_KERNEL);
+			compat = kzalloc_obj(*compat);
 			if (!compat)
 				return -ENOMEM;
 
@@ -660,7 +660,7 @@ static int uhid_char_open(struct inode *inode, struct file *file)
 {
 	struct uhid_device *uhid;
 
-	uhid = kzalloc(sizeof(*uhid), GFP_KERNEL);
+	uhid = kzalloc_obj(*uhid);
 	if (!uhid)
 		return -ENOMEM;
 

@@ -195,7 +195,7 @@ int class_register(const struct class *cls)
 		return -EINVAL;
 	}
 
-	cp = kzalloc(sizeof(*cp), GFP_KERNEL);
+	cp = kzalloc_obj(*cp);
 	if (!cp)
 		return -ENOMEM;
 
@@ -273,7 +273,7 @@ struct class *class_create(const char *name/*class名称*/)
 	struct class *cls;
 	int retval;
 
-	cls = kzalloc(sizeof(*cls), GFP_KERNEL);
+	cls = kzalloc_obj(*cls);
 	if (!cls) {
 		retval = -ENOMEM;
 		goto error;
@@ -580,7 +580,7 @@ struct class_compat *class_compat_register(const char *name)
 {
 	struct class_compat *cls;
 
-	cls = kmalloc(sizeof(struct class_compat), GFP_KERNEL);
+	cls = kmalloc_obj(struct class_compat);
 	if (!cls)
 		return NULL;
 

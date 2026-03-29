@@ -153,9 +153,8 @@ isert_alloc_rx_descriptors(struct isert_conn *isert_conn)
 	u64 dma_addr;
 	int i, j;
 
-	isert_conn->rx_descs = kcalloc(ISERT_QP_MAX_RECV_DTOS,
-				       sizeof(struct iser_rx_desc),
-				       GFP_KERNEL);
+	isert_conn->rx_descs = kzalloc_objs(struct iser_rx_desc,
+					    ISERT_QP_MAX_RECV_DTOS);
 	if (!isert_conn->rx_descs)
 		return -ENOMEM;
 
@@ -278,7 +277,7 @@ isert_device_get(struct rdma_cm_id *cma_id)
 	}
 
 	/*创建isert设备*/
-	device = kzalloc(sizeof(struct isert_device), GFP_KERNEL);
+	device = kzalloc_obj(struct isert_device);
 	if (!device) {
 		mutex_unlock(&device_list_mutex);
 		return ERR_PTR(-ENOMEM);
@@ -337,8 +336,7 @@ isert_alloc_login_buf(struct isert_conn *isert_conn,
 {
 	int ret;
 
-	isert_conn->login_desc = kzalloc(sizeof(*isert_conn->login_desc),
-			GFP_KERNEL);
+	isert_conn->login_desc = kzalloc_obj(*isert_conn->login_desc);
 	if (!isert_conn->login_desc)
 		return -ENOMEM;
 
@@ -434,7 +432,7 @@ isert_connect_request(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 		 cma_id, cma_id->context);
 
 	/*申请内存*/
-	isert_conn = kzalloc(sizeof(struct isert_conn), GFP_KERNEL);
+	isert_conn = kzalloc_obj(struct isert_conn);
 	if (!isert_conn)
 		return -ENOMEM;
 
@@ -2277,7 +2275,7 @@ isert_setup_np(struct iscsi_np *np,
 	struct rdma_cm_id *isert_lid;
 	int ret;
 
-	isert_np = kzalloc(sizeof(struct isert_np), GFP_KERNEL);
+	isert_np = kzalloc_obj(struct isert_np);
 	if (!isert_np)
 		return -ENOMEM;
 
@@ -2623,7 +2621,7 @@ static struct iscsit_transport iser_target_transport = {
 
 static int __init isert_init(void)
 {
-	isert_login_wq = alloc_workqueue("isert_login_wq", 0, 0);
+	isert_login_wq = alloc_workqueue("isert_login_wq", WQ_PERCPU, 0);
 	if (!isert_login_wq) {
 		isert_err("Unable to allocate isert_login_wq\n");
 		return -ENOMEM;

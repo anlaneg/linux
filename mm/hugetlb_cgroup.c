@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-2.1
 /*
  *
  * Copyright IBM Corporation, 2012
@@ -6,14 +7,6 @@
  * Cgroup v2
  * Copyright (C) 2019 Red Hat, Inc.
  * Author: Giuseppe Scrivano <gscrivan@redhat.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of version 2.1 of the GNU Lesser General Public License
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it would be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *
  */
 
@@ -154,8 +147,7 @@ hugetlb_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	struct hugetlb_cgroup *h_cgroup;
 	int node;
 
-	h_cgroup = kzalloc(struct_size(h_cgroup, nodeinfo, nr_node_ids),
-			   GFP_KERNEL);
+	h_cgroup = kzalloc_flex(*h_cgroup, nodeinfo, nr_node_ids);
 
 	if (!h_cgroup)
 		/*申请内存失败*/
@@ -840,7 +832,7 @@ hugetlb_cgroup_cfttypes_init(struct hstate *h, struct cftype *cft,
 	for (i = 0; i < tmpl_size; cft++, tmpl++, i++) {
 		*cft = *tmpl;
 		/* rebuild the name */
-		snprintf(cft->name, MAX_CFTYPE_NAME, "%s.%s", buf, tmpl->name);
+		scnprintf(cft->name, MAX_CFTYPE_NAME, "%s.%s", buf, tmpl->name);
 		/* rebuild the private */
 		cft->private = MEMFILE_PRIVATE(idx, tmpl->private);
 		/* rebuild the file_offset */
@@ -882,10 +874,10 @@ static void __init __hugetlb_cgroup_file_pre_init(void)
 	int cft_count;
 
 	cft_count = hugetlb_max_hstate * DFL_TMPL_SIZE + 1; /* add terminator */
-	dfl_files = kcalloc(cft_count, sizeof(struct cftype), GFP_KERNEL);
+	dfl_files = kzalloc_objs(struct cftype, cft_count);
 	BUG_ON(!dfl_files);
 	cft_count = hugetlb_max_hstate * LEGACY_TMPL_SIZE + 1; /* add terminator */
-	legacy_files = kcalloc(cft_count, sizeof(struct cftype), GFP_KERNEL);
+	legacy_files = kzalloc_objs(struct cftype, cft_count);
 	BUG_ON(!legacy_files);
 }
 

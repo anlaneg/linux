@@ -11,7 +11,7 @@
  */
 
 //找最高位'１'的bit编号，自１开始编号，０表示没有‘１’
-static __always_inline int generic_fls(unsigned int x)
+static __always_inline __attribute_const__ int generic_fls(unsigned int x)
 {
 	int r = 32;
 

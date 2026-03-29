@@ -17,7 +17,13 @@
 // the unstable features in use.
 //
 // Stable since Rust 1.79.0.
+#![feature(generic_nonzero)]
 #![feature(inline_const)]
+#![feature(pointer_is_aligned)]
+#![feature(slice_ptr_len)]
+//
+// Stable since Rust 1.80.0.
+#![feature(slice_flatten)]
 //
 // Stable since Rust 1.81.0.
 #![feature(lint_reasons)]
@@ -28,8 +34,12 @@
 // Stable since Rust 1.83.0.
 #![feature(const_maybe_uninit_as_mut_ptr)]
 #![feature(const_mut_refs)]
+#![feature(const_option)]
 #![feature(const_ptr_write)]
 #![feature(const_refs_to_cell)]
+//
+// Stable since Rust 1.84.0.
+#![feature(strict_provenance)]
 //
 // Expected to become stable.
 #![feature(arbitrary_self_types)]
@@ -62,8 +72,11 @@ pub mod acpi;
 pub mod alloc;
 #[cfg(CONFIG_AUXILIARY_BUS)]
 pub mod auxiliary;
+pub mod bitmap;
+pub mod bits;
 #[cfg(CONFIG_BLOCK)]
 pub mod block;
+pub mod bug;
 #[doc(hidden)]
 pub mod build_assert;
 pub mod clk;
@@ -74,6 +87,7 @@ pub mod cpu;
 pub mod cpufreq;
 pub mod cpumask;
 pub mod cred;
+pub mod debugfs;
 pub mod device;
 pub mod device_id;
 pub mod devres;
@@ -85,18 +99,30 @@ pub mod error;
 pub mod faux;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
+pub mod fmt;
 pub mod fs;
+#[cfg(CONFIG_I2C = "y")]
+pub mod i2c;
+pub mod id_pool;
+#[doc(hidden)]
+pub mod impl_flags;
 pub mod init;
 pub mod io;
 pub mod ioctl;
+pub mod iommu;
+pub mod iov;
+pub mod irq;
 pub mod jump_label;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 pub mod list;
+pub mod maple_tree;
 pub mod miscdevice;
 pub mod mm;
+pub mod module_param;
 #[cfg(CONFIG_NET)]
 pub mod net;
+pub mod num;
 pub mod of;
 #[cfg(CONFIG_PM_OPP)]
 pub mod opp;
@@ -107,12 +133,21 @@ pub mod pid_namespace;
 pub mod platform;
 pub mod prelude;
 pub mod print;
+pub mod processor;
+pub mod ptr;
+#[cfg(CONFIG_RUST_PWM_ABSTRACTIONS)]
+pub mod pwm;
 pub mod rbtree;
 pub mod regulator;
 pub mod revocable;
+pub mod safety;
+pub mod scatterlist;
 pub mod security;
 pub mod seq_file;
 pub mod sizes;
+pub mod slice;
+#[cfg(CONFIG_SOC_BUS)]
+pub mod soc;
 mod static_assert;
 #[doc(hidden)]
 pub mod std_vendor;
@@ -124,6 +159,8 @@ pub mod tracepoint;
 pub mod transmute;
 pub mod types;
 pub mod uaccess;
+#[cfg(CONFIG_USB = "y")]
+pub mod usb;
 pub mod workqueue;
 pub mod xarray;
 
@@ -203,7 +240,7 @@ impl ThisModule {
     }
 }
 
-#[cfg(not(any(testlib, test)))]
+#[cfg(not(testlib))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     pr_emerg!("{}\n", info);
@@ -212,6 +249,13 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 }
 
 /// Produces a pointer to an object from a pointer to one of its fields.
+///
+/// If you encounter a type mismatch due to the [`Opaque`] type, then use [`Opaque::cast_into`] or
+/// [`Opaque::cast_from`] to resolve the mismatch.
+///
+/// [`Opaque`]: crate::types::Opaque
+/// [`Opaque::cast_into`]: crate::types::Opaque::cast_into
+/// [`Opaque::cast_from`]: crate::types::Opaque::cast_from
 ///
 /// # Safety
 ///
@@ -286,7 +330,7 @@ macro_rules! asm {
 
 /// Gets the C string file name of a [`Location`].
 ///
-/// If `file_with_nul()` is not available, returns a string that warns about it.
+/// If `Location::file_as_c_str()` is not available, returns a string that warns about it.
 ///
 /// [`Location`]: core::panic::Location
 ///
@@ -300,8 +344,8 @@ macro_rules! asm {
 ///     let caller = core::panic::Location::caller();
 ///
 ///     // Output:
-///     // - A path like "rust/kernel/example.rs" if file_with_nul() is available.
-///     // - "<Location::file_with_nul() not supported>" otherwise.
+///     // - A path like "rust/kernel/example.rs" if `file_as_c_str()` is available.
+///     // - "<Location::file_as_c_str() not supported>" otherwise.
 ///     let caller_file = file_from_location(caller);
 ///
 ///     // Prints out the message with caller's file name.
@@ -316,7 +360,12 @@ macro_rules! asm {
 /// ```
 #[inline]
 pub fn file_from_location<'a>(loc: &'a core::panic::Location<'a>) -> &'a core::ffi::CStr {
-    #[cfg(CONFIG_RUSTC_HAS_FILE_WITH_NUL)]
+    #[cfg(CONFIG_RUSTC_HAS_FILE_AS_C_STR)]
+    {
+        loc.file_as_c_str()
+    }
+
+    #[cfg(all(CONFIG_RUSTC_HAS_FILE_WITH_NUL, not(CONFIG_RUSTC_HAS_FILE_AS_C_STR)))]
     {
         loc.file_with_nul()
     }
@@ -324,6 +373,6 @@ pub fn file_from_location<'a>(loc: &'a core::panic::Location<'a>) -> &'a core::f
     #[cfg(not(CONFIG_RUSTC_HAS_FILE_WITH_NUL))]
     {
         let _ = loc;
-        c"<Location::file_with_nul() not supported>"
+        c"<Location::file_as_c_str() not supported>"
     }
 }

@@ -151,7 +151,6 @@ typedef struct {
 
 struct vm_area_struct;
 struct page;
-struct sockaddr;
 struct msghdr;
 struct module;
 struct sk_buff;
@@ -172,11 +171,11 @@ struct proto_ops {
 	int		(*release)   (struct socket *sock);
 	//对应bind系统调用具体实现
 	int		(*bind)	     (struct socket *sock/*待操作的socket*/,
-				      struct sockaddr *myaddr/*要绑定的地址*/,
+				      struct sockaddr_unsized *myaddr/*要绑定的地址*/,
 				      int sockaddr_len/*要绑定的地址长度*/);
 	/*与远端建立连接*/
 	int		(*connect)   (struct socket *sock/*待操作的socket*/,
-				      struct sockaddr *vaddr/*要连接的远端地址*/,
+				      struct sockaddr_unsized *vaddr/*要连接的远端地址*/,
 				      int sockaddr_len/*地址长度*/, int flags);
 	/*将sock1,sock2进行连接，建立成一组pair*/
 	int		(*socketpair)(struct socket *sock1,
@@ -379,10 +378,10 @@ int kernel_sendmsg(struct socket *sock, struct msghdr *msg, struct kvec *vec,
 int kernel_recvmsg(struct socket *sock, struct msghdr *msg, struct kvec *vec,
 		   size_t num, size_t len, int flags);
 
-int kernel_bind(struct socket *sock, struct sockaddr *addr, int addrlen);
+int kernel_bind(struct socket *sock, struct sockaddr_unsized *addr, int addrlen);
 int kernel_listen(struct socket *sock, int backlog);
 int kernel_accept(struct socket *sock, struct socket **newsock, int flags);
-int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
+int kernel_connect(struct socket *sock, struct sockaddr_unsized *addr, int addrlen,
 		   int flags);
 int kernel_getsockname(struct socket *sock, struct sockaddr *addr);
 int kernel_getpeername(struct socket *sock, struct sockaddr *addr);

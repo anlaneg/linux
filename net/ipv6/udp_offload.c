@@ -133,7 +133,6 @@ static struct sock *udp6_gro_lookup_skb(struct sk_buff *skb, __be16 sport,
 				 sdif, net->ipv4.udp_table, NULL);
 }
 
-INDIRECT_CALLABLE_SCOPE
 struct sk_buff *udp6_gro_receive(struct list_head *head, struct sk_buff *skb)
 {
 	struct udphdr *uh = udp_gro_udphdr(skb);
@@ -155,8 +154,6 @@ struct sk_buff *udp6_gro_receive(struct list_head *head, struct sk_buff *skb)
 					     ip6_gro_compute_pseudo);
 
 skip:
-	NAPI_GRO_CB(skb)->is_ipv6 = 1;
-
 	if (static_branch_unlikely(&udpv6_encap_needed_key))
 		/*以上开关打开时，查询此udp对应的socket*/
 		sk = udp6_gro_lookup_skb(skb, uh->source, uh->dest);
@@ -169,7 +166,7 @@ flush:
 	return NULL;
 }
 
-INDIRECT_CALLABLE_SCOPE int udp6_gro_complete(struct sk_buff *skb, int nhoff)
+int udp6_gro_complete(struct sk_buff *skb, int nhoff)
 {
 	const u16 offset = NAPI_GRO_CB(skb)->network_offsets[skb->encapsulation];
 	const struct ipv6hdr *ipv6h = (struct ipv6hdr *)(skb->data + offset);

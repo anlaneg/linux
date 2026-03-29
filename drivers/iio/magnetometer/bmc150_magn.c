@@ -257,22 +257,17 @@ static int bmc150_magn_set_power_mode(struct bmc150_magn_data *data,
 
 static int bmc150_magn_set_power_state(struct bmc150_magn_data *data, bool on)
 {
-#ifdef CONFIG_PM
-	int ret;
+	int ret = 0;
 
-	if (on) {
+	if (on)
 		ret = pm_runtime_resume_and_get(data->dev);
-	} else {
-		pm_runtime_mark_last_busy(data->dev);
-		ret = pm_runtime_put_autosuspend(data->dev);
-	}
-
+	else
+		pm_runtime_put_autosuspend(data->dev);
 	if (ret < 0) {
 		dev_err(data->dev,
 			"failed to change power state to %d\n", on);
 		return ret;
 	}
-#endif
 
 	return 0;
 }
@@ -911,12 +906,9 @@ int bmc150_magn_probe(struct device *dev, struct regmap *regmap,
 			goto err_poweroff;
 		}
 
-		ret = request_threaded_irq(irq,
-					   iio_trigger_generic_data_rdy_poll,
-					   NULL,
-					   IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					   "bmc150_magn_event",
-					   data->dready_trig);
+		ret = request_irq(irq, iio_trigger_generic_data_rdy_poll,
+				  IRQF_TRIGGER_RISING | IRQF_NO_THREAD,
+				  "bmc150_magn_event", data->dready_trig);
 		if (ret < 0) {
 			dev_err(dev, "request irq %d failed\n", irq);
 			goto err_trigger_unregister;

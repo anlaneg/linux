@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- *  Copyright(C) 2005-2006, Thomas Gleixner <tglx@linutronix.de>
+ *  Copyright(C) 2005-2006, Linutronix GmbH, Thomas Gleixner <tglx@kernel.org>
  *  Copyright(C) 2005-2007, Red Hat, Inc., Ingo Molnar
  *  Copyright(C) 2006-2007  Timesys Corp., Thomas Gleixner
  *
@@ -50,6 +50,14 @@
 #include "tick-internal.h"
 
 /*
+ * The resolution of the clocks. The resolution value is returned in
+ * the clock_getres() system call to give application programmers an
+ * idea of the (in)accuracy of timers. Timer values are rounded up to
+ * this resolution values.
+ */
+#define HIGH_RES_NSEC		1
+
+/*
  * Masks for selecting the soft and hard context timers from
  * cpu_base->active
  */
@@ -62,6 +70,7 @@
 #define HRTIMER_ACTIVE_ALL	(HRTIMER_ACTIVE_SOFT | HRTIMER_ACTIVE_HARD)
 
 static void retrigger_next_event(void *arg);
+static ktime_t __hrtimer_cb_get_time(clockid_t clock_id);
 
 /*
  * The timer bases:
@@ -79,42 +88,34 @@ DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 		{
 			.index = HRTIMER_BASE_MONOTONIC,
 			.clockid = CLOCK_MONOTONIC,
-			.get_time = &ktime_get,
 		},
 		{
 			.index = HRTIMER_BASE_REALTIME,
 			.clockid = CLOCK_REALTIME,
-			.get_time = &ktime_get_real,
 		},
 		{
 			.index = HRTIMER_BASE_BOOTTIME,
 			.clockid = CLOCK_BOOTTIME,
-			.get_time = &ktime_get_boottime,
 		},
 		{
 			.index = HRTIMER_BASE_TAI,
 			.clockid = CLOCK_TAI,
-			.get_time = &ktime_get_clocktai,
 		},
 		{
 			.index = HRTIMER_BASE_MONOTONIC_SOFT,
 			.clockid = CLOCK_MONOTONIC,
-			.get_time = &ktime_get,
 		},
 		{
 			.index = HRTIMER_BASE_REALTIME_SOFT,
 			.clockid = CLOCK_REALTIME,
-			.get_time = &ktime_get_real,
 		},
 		{
 			.index = HRTIMER_BASE_BOOTTIME_SOFT,
 			.clockid = CLOCK_BOOTTIME,
-			.get_time = &ktime_get_boottime,
 		},
 		{
 			.index = HRTIMER_BASE_TAI_SOFT,
 			.clockid = CLOCK_TAI,
-			.get_time = &ktime_get_clocktai,
 		},
 	},
 	.csd = CSD_INIT(retrigger_next_event, NULL)
@@ -211,7 +212,7 @@ static bool hrtimer_suitable_target(struct hrtimer *timer, struct hrtimer_clock_
 	/*
 	 * The offline local CPU can't be the default target if the
 	 * next remote target event is after this timer. Keep the
-	 * elected new base. An IPI will we issued to reprogram
+	 * elected new base. An IPI will be issued to reprogram
 	 * it as a last resort.
 	 */
 	if (!hrtimer_base_is_online(this_cpu_base))
@@ -792,10 +793,10 @@ static void retrigger_next_event(void *arg)
 	 * of the next expiring timer is enough. The return from the SMP
 	 * function call will take care of the reprogramming in case the
 	 * CPU was in a NOHZ idle sleep.
+	 *
+	 * In periodic low resolution mode, the next softirq expiration
+	 * must also be updated.
 	 */
-	if (!hrtimer_hres_active(base) && !tick_nohz_active)
-		return;
-
 	raw_spin_lock(&base->lock);
 	hrtimer_update_base(base);
 	if (hrtimer_hres_active(base))
@@ -818,7 +819,7 @@ static void hrtimer_reprogram(struct hrtimer *timer, bool reprogram)
 	struct hrtimer_clock_base *base = timer->base;
 	ktime_t expires = ktime_sub(hrtimer_get_expires(timer), base->offset);
 
-	WARN_ON_ONCE(hrtimer_get_expires_tv64(timer) < 0);
+	WARN_ON_ONCE(hrtimer_get_expires(timer) < 0);
 
 	/*
 	 * CLOCK_REALTIME timer might be requested with an absolute
@@ -925,7 +926,7 @@ static bool update_needs_ipi(struct hrtimer_cpu_base *cpu_base,
 			return true;
 
 		/* Extra check for softirq clock bases */
-		if (base->clockid < HRTIMER_BASE_MONOTONIC_SOFT)
+		if (base->index < HRTIMER_BASE_MONOTONIC_SOFT)
 			continue;
 		if (cpu_base->softirq_activated)
 			continue;
@@ -955,7 +956,7 @@ void clock_was_set(unsigned int bases)
 	cpumask_var_t mask;
 	int cpu;
 
-	if (!hrtimer_hres_active(cpu_base) && !tick_nohz_active)
+	if (!hrtimer_hres_active(cpu_base) && !tick_nohz_is_active())
 		goto out_timerfd;
 
 	if (!zalloc_cpumask_var(&mask, GFP_KERNEL)) {
@@ -1065,7 +1066,7 @@ u64 hrtimer_forward(struct hrtimer *timer, ktime_t now, ktime_t interval)
 
 		orun = ktime_divns(delta, incr);
 		hrtimer_add_expires_ns(timer, incr * orun);
-		if (hrtimer_get_expires_tv64(timer) > now)
+		if (hrtimer_get_expires(timer) > now)
 			return orun;
 		/*
 		 * This (and the ktime_add() below) is the
@@ -1261,7 +1262,7 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	remove_hrtimer(timer, base, true, force_local);
 
 	if (mode & HRTIMER_MODE_REL)
-		tim = ktime_add_safe(tim, base->get_time());
+		tim = ktime_add_safe(tim, __hrtimer_cb_get_time(base->clockid));
 
 	tim = hrtimer_update_lowres(timer, tim, mode);
 
@@ -1582,10 +1583,10 @@ u64 hrtimer_next_event_without(const struct hrtimer *exclude)
 static inline int hrtimer_clockid_to_base(clockid_t clock_id)
 {
 	switch (clock_id) {
-	case CLOCK_REALTIME:
-		return HRTIMER_BASE_REALTIME;
 	case CLOCK_MONOTONIC:
 		return HRTIMER_BASE_MONOTONIC;
+	case CLOCK_REALTIME:
+		return HRTIMER_BASE_REALTIME;
 	case CLOCK_BOOTTIME:
 		return HRTIMER_BASE_BOOTTIME;
 	case CLOCK_TAI:
@@ -1595,6 +1596,29 @@ static inline int hrtimer_clockid_to_base(clockid_t clock_id)
 		return HRTIMER_BASE_MONOTONIC;
 	}
 }
+
+static ktime_t __hrtimer_cb_get_time(clockid_t clock_id)
+{
+	switch (clock_id) {
+	case CLOCK_MONOTONIC:
+		return ktime_get();
+	case CLOCK_REALTIME:
+		return ktime_get_real();
+	case CLOCK_BOOTTIME:
+		return ktime_get_boottime();
+	case CLOCK_TAI:
+		return ktime_get_clocktai();
+	default:
+		WARN(1, "Invalid clockid %d. Using MONOTONIC\n", clock_id);
+		return ktime_get();
+	}
+}
+
+ktime_t hrtimer_cb_get_time(const struct hrtimer *timer)
+{
+	return __hrtimer_cb_get_time(timer->base->clockid);
+}
+EXPORT_SYMBOL_GPL(hrtimer_cb_get_time);
 
 static void __hrtimer_setup(struct hrtimer *timer,
 			    enum hrtimer_restart (*function)(struct hrtimer *),
@@ -1734,7 +1758,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 
 	lockdep_assert_held(&cpu_base->lock);
 
-	debug_deactivate(timer);
+	debug_hrtimer_deactivate(timer);
 	/*指明当前正在运行的timer*/
 	base->running = timer;
 
@@ -1832,7 +1856,7 @@ static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
 			 * are right-of a not yet expired timer, because that
 			 * timer will have to trigger a wakeup anyway.
 			 */
-			if (basenow < hrtimer_get_softexpires_tv64(timer))
+			if (basenow < hrtimer_get_softexpires(timer))
 			    /*不再有过期的timer,退出*/
 				break;
 
@@ -2147,7 +2171,7 @@ static long __sched hrtimer_nanosleep_restart(struct restart_block *restart)
 	int ret;
 
 	hrtimer_setup_sleeper_on_stack(&t, restart->nanosleep.clockid, HRTIMER_MODE_ABS);
-	hrtimer_set_expires_tv64(&t.timer, restart->nanosleep.expires);
+	hrtimer_set_expires(&t.timer, restart->nanosleep.expires);
 	ret = do_nanosleep(&t, HRTIMER_MODE_ABS);
 	destroy_hrtimer_on_stack(&t.timer);
 	return ret;
@@ -2174,7 +2198,7 @@ long hrtimer_nanosleep(ktime_t rqtp, const enum hrtimer_mode mode,
 
 	restart = &current->restart_block;
 	restart->nanosleep.clockid = t.timer.base->clockid;
-	restart->nanosleep.expires = hrtimer_get_expires_tv64(&t.timer);
+	restart->nanosleep.expires = hrtimer_get_expires(&t.timer);
 	set_restart_fn(restart, hrtimer_nanosleep_restart);
 out:
 	destroy_hrtimer_on_stack(&t.timer);
@@ -2314,11 +2338,6 @@ int hrtimers_cpu_dying(unsigned int dying_cpu)
 				     &new_base->clock_base[i]);
 	}
 
-	/*
-	 * The migration might have changed the first expiring softirq
-	 * timer on this CPU. Update it.
-	 */
-	__hrtimer_get_next_event(new_base, HRTIMER_ACTIVE_SOFT);
 	/* Tell the other CPU to retrigger the next event */
 	smp_call_function_single(ncpu, retrigger_next_event, NULL, 0);
 

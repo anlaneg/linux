@@ -33,7 +33,7 @@ cgrp_css_alloc(struct cgroup_subsys_state *parent_css)
 {
 	struct cgroup_cls_state *cs;
 
-	cs = kzalloc(sizeof(*cs), GFP_KERNEL);
+	cs = kzalloc_obj(*cs);
 	if (!cs)
 		return ERR_PTR(-ENOMEM);
 
@@ -97,7 +97,7 @@ static void update_classid_task(struct task_struct *p, u32 classid)
 	/* Only update the leader task, when many threads in this task,
 	 * so it can avoid the useless traversal.
 	 */
-	if (p != p->group_leader)
+	if (!thread_group_leader(p))
 		return;
 
 	do {

@@ -10,6 +10,7 @@
 #include <linux/bitmap.h>
 #include <linux/device.h>
 #include <linux/gpio/driver.h>
+#include <linux/hex.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/macsmc.h>
 
@@ -261,7 +262,7 @@ static int macsmc_gpio_probe(struct platform_device *pdev)
 	smcgp->gc.label = "macsmc-pmu-gpio";
 	smcgp->gc.owner = THIS_MODULE;
 	smcgp->gc.get = macsmc_gpio_get;
-	smcgp->gc.set_rv = macsmc_gpio_set;
+	smcgp->gc.set = macsmc_gpio_set;
 	smcgp->gc.get_direction = macsmc_gpio_get_direction;
 	smcgp->gc.init_valid_mask = macsmc_gpio_init_valid_mask;
 	smcgp->gc.can_sleep = true;

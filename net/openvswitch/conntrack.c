@@ -977,8 +977,8 @@ static u32 ct_limit_get(const struct ovs_ct_limit_info *info, u16 zone)
 
 /*openvswitch ct limit检查*/
 static int ovs_ct_check_limit(struct net *net,
-			      const struct ovs_conntrack_info *info,
-			      const struct nf_conntrack_tuple *tuple)
+			      const struct sk_buff *skb,
+			      const struct ovs_conntrack_info *info)
 {
 	struct ovs_net *ovs_net = net_generic(net, ovs_net_id);
 	const struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
@@ -994,8 +994,9 @@ static int ovs_ct_check_limit(struct net *net,
 		return 0;
 
 	/*取当前ct在此zone下的计数，如大于ct limit规定的连接数，报错。*/
-	connections = nf_conncount_count(net, ct_limit_info->data,
-					 &conncount_key/*zone id号*/, tuple, &info->zone);
+	connections = nf_conncount_count_skb(net, skb, info->family,
+					     ct_limit_info->data,
+					     &conncount_key/*zone id号*/);
 	if (connections > per_zone_limit)
 		return -ENOMEM;
 
@@ -1027,8 +1028,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 	if (static_branch_unlikely(&ovs_ct_limit_enabled)) {
 		if (!nf_ct_is_confirmed(ct)) {
 		    /*正在创建ct,执行对ct的limit检查*/
-			err = ovs_ct_check_limit(net, info,
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
+			err = ovs_ct_check_limit(net, skb, info);
 			if (err) {
 				net_warn_ratelimited("openvswitch: zone: %u "
 					"exceeds conntrack limit\n",
@@ -1658,15 +1658,13 @@ static int ovs_ct_limit_init(struct net *net, struct ovs_net *ovs_net)
 {
 	int i, err;
 
-	ovs_net->ct_limit_info = kmalloc(sizeof(*ovs_net->ct_limit_info),
-					 GFP_KERNEL);
+	ovs_net->ct_limit_info = kmalloc_obj(*ovs_net->ct_limit_info);
 	if (!ovs_net->ct_limit_info)
 		return -ENOMEM;
 
 	ovs_net->ct_limit_info->default_limit = OVS_CT_LIMIT_DEFAULT;
 	ovs_net->ct_limit_info->limits =
-		kmalloc_array(CT_LIMIT_HASH_BUCKETS, sizeof(struct hlist_head),
-			      GFP_KERNEL);
+		kmalloc_objs(struct hlist_head, CT_LIMIT_HASH_BUCKETS);
 	if (!ovs_net->ct_limit_info->limits) {
 		kfree(ovs_net->ct_limit_info);
 		return -ENOMEM;
@@ -1769,8 +1767,7 @@ static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
 		    /*构造对此zone的ct limit配置*/
 			struct ovs_ct_limit *ct_limit;
 
-			ct_limit = kmalloc(sizeof(*ct_limit),
-					   GFP_KERNEL_ACCOUNT);
+			ct_limit = kmalloc_obj(*ct_limit, GFP_KERNEL_ACCOUNT);
 			if (!ct_limit)
 				return -ENOMEM;
 
@@ -1856,8 +1853,8 @@ static int __ovs_ct_limit_get_zone_limit(struct net *net,
 	nf_ct_zone_init(&ct_zone, zone_id, NF_CT_DEFAULT_ZONE_DIR, 0);
 
 	/*返回当前zone ct计数*/
-	zone_limit.count = nf_conncount_count(net, data, &conncount_key/*查询用的key*/, NULL,
-					      &ct_zone);
+	zone_limit.count = nf_conncount_count_skb(net, NULL, 0, data,
+						  &conncount_key/*查询用的key*/);
 	return nla_put_nohdr(reply, sizeof(zone_limit), &zone_limit);
 }
 

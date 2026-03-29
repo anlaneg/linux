@@ -1068,15 +1068,24 @@ static void usbmisc_imx7d_pullup(struct imx_usbmisc_data *data, bool on)
 	unsigned long flags;
 	u32 val;
 
+	if (on)
+		return;
+
 	spin_lock_irqsave(&usbmisc->lock, flags);
 	val = readl(usbmisc->base + MX7D_USBNC_USB_CTRL2);
-	if (!on) {
-		val &= ~MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_MASK;
-		val |= MX7D_USBNC_USB_CTRL2_OPMODE(1);
-		val |= MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_EN;
-	} else {
-		val &= ~MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_EN;
-	}
+	val &= ~MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_MASK;
+	val |= MX7D_USBNC_USB_CTRL2_OPMODE(1);
+	val |= MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_EN;
+	writel(val, usbmisc->base + MX7D_USBNC_USB_CTRL2);
+	spin_unlock_irqrestore(&usbmisc->lock, flags);
+
+	/* Last for at least 1 micro-frame to let host see disconnect signal */
+	usleep_range(125, 150);
+
+	spin_lock_irqsave(&usbmisc->lock, flags);
+	val &= ~MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_MASK;
+	val |= MX7D_USBNC_USB_CTRL2_OPMODE(0);
+	val &= ~MX7D_USBNC_USB_CTRL2_OPMODE_OVERRIDE_EN;
 	writel(val, usbmisc->base + MX7D_USBNC_USB_CTRL2);
 	spin_unlock_irqrestore(&usbmisc->lock, flags);
 }
@@ -1213,6 +1222,14 @@ static const struct usbmisc_ops imx7ulp_usbmisc_ops = {
 	.hsic_set_connect = usbmisc_imx6_hsic_set_connect,
 	.hsic_set_clk = usbmisc_imx6_hsic_set_clk,
 	.power_lost_check = usbmisc_imx7d_power_lost_check,
+};
+
+static const struct usbmisc_ops imx94_usbmisc_ops = {
+	.init = usbmisc_imx7d_init,
+	.set_wakeup = usbmisc_imx95_set_wakeup,
+	.charger_detection = imx7d_charger_detection,
+	.power_lost_check = usbmisc_imx7d_power_lost_check,
+	.vbus_comparator_on = usbmisc_imx7d_vbus_comparator_on,
 };
 
 static const struct usbmisc_ops imx95_usbmisc_ops = {
@@ -1471,6 +1488,10 @@ static const struct of_device_id usbmisc_imx_dt_ids[] = {
 	{
 		.compatible = "fsl,imx8ulp-usbmisc",
 		.data = &imx7ulp_usbmisc_ops,
+	},
+	{
+		.compatible = "fsl,imx94-usbmisc",
+		.data = &imx94_usbmisc_ops,
 	},
 	{
 		.compatible = "fsl,imx95-usbmisc",

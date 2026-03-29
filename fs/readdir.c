@@ -318,6 +318,7 @@ SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	struct getdents_callback buf = {
 		.ctx.actor = filldir,
 		.ctx.count = count,
+		.ctx.dt_flags_mask = FILLDIR_FLAG_NOINTR,
 		.current_dir = dirent
 	};
 	int error;
@@ -402,6 +403,7 @@ SYSCALL_DEFINE3(getdents64, unsigned int, fd,
 	struct getdents_callback64 buf = {
 		.ctx.actor = filldir64,
 		.ctx.count = count,
+		.ctx.dt_flags_mask = FILLDIR_FLAG_NOINTR,
 		.current_dir = dirent
 	};
 	int error;
@@ -571,6 +573,7 @@ COMPAT_SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	struct compat_getdents_callback buf = {
 		.ctx.actor = compat_filldir,
 		.ctx.count = count,
+		.ctx.dt_flags_mask = FILLDIR_FLAG_NOINTR,
 		.current_dir = dirent,
 	};
 	int error;

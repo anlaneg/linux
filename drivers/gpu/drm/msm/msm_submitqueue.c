@@ -40,6 +40,10 @@ int msm_context_set_sysprof(struct msm_context *ctx, struct msm_gpu *gpu, int sy
 		break;
 	}
 
+	/* Some gpu families require additional setup for sysprof */
+	if (gpu->funcs->sysprof_setup)
+		gpu->funcs->sysprof_setup(gpu);
+
 	ctx->sysprof = sysprof;
 
 	return 0;
@@ -147,7 +151,7 @@ get_sched_entity(struct msm_context *ctx, struct msm_ringbuffer *ring,
 		struct drm_gpu_scheduler *sched = &ring->sched;
 		int ret;
 
-		entity = kzalloc(sizeof(*ctx->entities[idx]), GFP_KERNEL);
+		entity = kzalloc_obj(*ctx->entities[idx]);
 
 		ret = drm_sched_entity_init(entity, sched_prio, &sched, 1, NULL);
 		if (ret) {
@@ -203,7 +207,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		if (ret)
 			return ret;
 
-		queue = kzalloc(sizeof(*queue), GFP_KERNEL);
+		queue = kzalloc_obj(*queue);
 	}
 
 	if (!queue)

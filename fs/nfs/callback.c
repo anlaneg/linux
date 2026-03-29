@@ -82,13 +82,12 @@ nfs4_callback_svc(void *vrqstp)
 
 	while (!svc_thread_should_stop(rqstp))
 		/*没有stop标记，继续执行recv*/
-		svc_recv(rqstp);
+		svc_recv(rqstp, 0);
 
 	svc_exit_thread(rqstp);
 	return 0;
 }
 
-#if defined(CONFIG_NFS_V4_1)
 static inline void nfs_callback_bc_serv(u32 minorversion, struct rpc_xprt *xprt,
 		struct svc_serv *serv)
 {
@@ -99,12 +98,6 @@ static inline void nfs_callback_bc_serv(u32 minorversion, struct rpc_xprt *xprt,
 		 */
 		xprt->bc_serv = serv;
 }
-#else
-static inline void nfs_callback_bc_serv(u32 minorversion, struct rpc_xprt *xprt,
-		struct svc_serv *serv)
-{
-}
-#endif /* CONFIG_NFS_V4_1 */
 
 static int nfs_callback_start_svc(int minorversion, struct rpc_xprt *xprt,
 				  struct svc_serv *serv)
@@ -120,9 +113,9 @@ static int nfs_callback_start_svc(int minorversion, struct rpc_xprt *xprt,
 	if (serv->sv_nrthreads == nrservs)
 		return 0;
 
-	ret = svc_set_num_threads(serv, NULL, nrservs);
+	ret = svc_set_num_threads(serv, 0, nrservs);
 	if (ret) {
-		svc_set_num_threads(serv, NULL, 0);
+		svc_set_num_threads(serv, 0, 0);
 		return ret;
 	}
 	dprintk("nfs_callback_up: service started\n");
@@ -137,7 +130,7 @@ static void nfs_callback_down_net(u32 minorversion, struct svc_serv *serv, struc
 		return;
 
 	dprintk("NFS: destroy per-net callback data; net=%x\n", net->ns.inum);
-	svc_xprt_destroy_all(serv, net);
+	svc_xprt_destroy_all(serv, net, false);
 }
 
 static int nfs_callback_up_net(int minorversion, struct svc_serv *serv,
@@ -154,11 +147,11 @@ static int nfs_callback_up_net(int minorversion, struct svc_serv *serv,
 	ret = svc_bind(serv, net);
 	if (ret < 0) {
 		printk(KERN_WARNING "NFS: bind callback service failed\n");
-		goto err_bind;
+		goto err;
 	}
 
 	ret = 0;
-	if (!IS_ENABLED(CONFIG_NFS_V4_1) || minorversion == 0)
+	if (minorversion == 0)
 		ret = nfs4_callback_up_net(serv, net);
 	else if (xprt->ops->bc_setup)
 		set_bc_enabled(serv);
@@ -167,13 +160,11 @@ static int nfs_callback_up_net(int minorversion, struct svc_serv *serv,
 
 	if (ret < 0) {
 		printk(KERN_ERR "NFS: callback service start failed\n");
-		goto err_socks;
+		goto err;
 	}
 	return 0;
 
-err_socks:
-	svc_rpcb_cleanup(serv, net);
-err_bind:
+err:
 	nn->cb_users[minorversion]--;
 	dprintk("NFS: Couldn't create callback socket: err = %d; "
 			"net = %x\n", ret, net->ns.inum);
@@ -201,10 +192,6 @@ static struct svc_serv *nfs_callback_create_svc(int minorversion)
 			cb_info->users);
 
 	threadfn = nfs4_callback_svc;
-#if !defined(CONFIG_NFS_V4_1)
-	if (minorversion)
-		return ERR_PTR(-ENOTSUPP);
-#endif
 	serv = svc_create(&nfs4_callback_program, NFS4_CALLBACK_BUFSIZE,
 			  threadfn);
 	if (!serv) {
@@ -245,7 +232,7 @@ int nfs_callback_up(u32 minorversion, struct rpc_xprt *xprt)
 	cb_info->users++;
 err_net:
 	if (!cb_info->users) {
-		svc_set_num_threads(cb_info->serv, NULL, 0);
+		svc_set_num_threads(cb_info->serv, 0, 0);
 		svc_destroy(&cb_info->serv);
 	}
 err_create:
@@ -261,7 +248,7 @@ err_start:
 /*
  * Kill the callback thread if it's no longer being used.
  */
-void nfs_callback_down(int minorversion, struct net *net)
+void nfs_callback_down(int minorversion, struct net *net, struct rpc_xprt *xprt)
 {
 	struct nfs_callback_data *cb_info = &nfs_callback_info[minorversion];
 	struct svc_serv *serv;
@@ -271,9 +258,9 @@ void nfs_callback_down(int minorversion, struct net *net)
 	nfs_callback_down_net(minorversion, serv, net);
 	cb_info->users--;
 	if (cb_info->users == 0) {
-		svc_set_num_threads(serv, NULL, 0);
+		svc_set_num_threads(serv, 0, 0);
 		dprintk("nfs_callback_down: service destroyed\n");
-		svc_destroy(&cb_info->serv);
+		xprt_svc_destroy_nullify_bc(xprt, &cb_info->serv);
 	}
 	mutex_unlock(&nfs_callback_mutex);
 }

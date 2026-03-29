@@ -101,7 +101,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 		return -EINVAL;
 
 	/*申请vfio iommu driver*/
-	driver = kzalloc(sizeof(*driver), GFP_KERNEL);
+	driver = kzalloc_obj(*driver);
 	if (!driver)
 		return -ENOMEM;
 
@@ -380,7 +380,7 @@ static int vfio_fops_open(struct inode *inode, struct file *filep)
 {
 	struct vfio_container *container;
 
-	container = kzalloc(sizeof(*container), GFP_KERNEL_ACCOUNT);
+	container = kzalloc_obj(*container, GFP_KERNEL_ACCOUNT);
 	if (!container)
 		return -ENOMEM;
 

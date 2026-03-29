@@ -133,7 +133,7 @@ static int mdp5_global_obj_init(struct mdp5_kms *mdp5_kms)
 {
 	struct mdp5_global_state *state;
 
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	state = kzalloc_obj(*state);
 	if (!state)
 		return -ENOMEM;
 
@@ -534,7 +534,7 @@ static int mdp5_kms_init(struct drm_device *dev)
 	}
 	mdelay(16);
 
-	vm = msm_kms_init_vm(mdp5_kms->dev);
+	vm = msm_kms_init_vm(mdp5_kms->dev, pdev->dev.parent);
 	if (IS_ERR(vm)) {
 		ret = PTR_ERR(vm);
 		goto fail;

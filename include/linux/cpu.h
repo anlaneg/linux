@@ -84,6 +84,7 @@ extern ssize_t cpu_show_old_microcode(struct device *dev,
 extern ssize_t cpu_show_indirect_target_selection(struct device *dev,
 						  struct device_attribute *attr, char *buf);
 extern ssize_t cpu_show_tsa(struct device *dev, struct device_attribute *attr, char *buf);
+extern ssize_t cpu_show_vmscape(struct device *dev, struct device_attribute *attr, char *buf);
 
 extern __printf(4, 5)
 struct device *cpu_device_create(struct device *parent, void *drvdata,
@@ -228,5 +229,9 @@ static inline bool cpu_attack_vector_mitigated(enum cpu_attack_vectors v)
 }
 #define smt_mitigations SMT_MITIGATIONS_OFF
 #endif
+
+int arch_get_indir_br_lp_status(struct task_struct *t, unsigned long __user *status);
+int arch_set_indir_br_lp_status(struct task_struct *t, unsigned long status);
+int arch_lock_indir_br_lp_status(struct task_struct *t, unsigned long status);
 
 #endif /* _LINUX_CPU_H_ */

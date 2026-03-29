@@ -55,7 +55,7 @@ struct backing_file {
 
 #define backing_file(f) container_of(f, struct backing_file, file)
 
-struct path *backing_file_user_path(const struct file *f)
+const struct path *backing_file_user_path(const struct file *f)
 {
 	return &backing_file(f)->user_path;
 }
@@ -173,11 +173,16 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	 * the respective member when opening the file.
 	 */
 	mutex_init(&f->f_pos_lock);
-	memset(&f->f_path, 0, sizeof(f->f_path));
+	memset(&f->__f_path, 0, sizeof(f->f_path));
 	memset(&f->f_ra, 0, sizeof(f->f_ra));
 
 	f->f_flags	= flags;
 	f->f_mode	= OPEN_FMODE(flags);
+	/*
+	 * Disable permission and pre-content events for all files by default.
+	 * They may be enabled later by fsnotify_open_perm_and_set_mode().
+	 */
+	file_set_fsnotify_mode(f, FMODE_NONOTIFY_PERM);
 
 	f->f_op		= NULL;
 	f->f_mapping	= NULL;
@@ -194,16 +199,11 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	f->f_sb_err	= 0;
 
 	/*
-	 * We're SLAB_TYPESAFE_BY_RCU so initialize f_count last. While
+	 * We're SLAB_TYPESAFE_BY_RCU so initialize f_ref last. While
 	 * fget-rcu pattern users need to be able to handle spurious
 	 * refcount bumps we should reinitialize the reused file first.
 	 */
 	file_ref_init(&f->f_ref, 1);
-	/*
-	 * Disable permission and pre-content events for all files by default.
-	 * They may be enabled later by fsnotify_open_perm_and_set_mode().
-	 */
-	file_set_fsnotify_mode(f, FMODE_NONOTIFY_PERM);
 	return 0;
 }
 
@@ -311,6 +311,7 @@ struct file *alloc_empty_backing_file(int flags, const struct cred *cred)
 	ff->file.f_mode |= FMODE_BACKING | FMODE_NOACCOUNT;
 	return &ff->file;
 }
+EXPORT_SYMBOL_GPL(alloc_empty_backing_file);
 
 /**
  * file_init_path - initialize a 'struct file' based on path
@@ -322,7 +323,7 @@ struct file *alloc_empty_backing_file(int flags, const struct cred *cred)
 static void file_init_path(struct file *file, const struct path *path/*文件路径*/,
 			   const struct file_operations *fop/*文件对应的fop*/)
 {
-	file->f_path = *path;
+	file->__f_path = *path;
 	file->f_inode = path->dentry->d_inode;
 	file->f_mapping = path->dentry->d_inode->i_mapping;
 	file->f_wb_err = filemap_sample_wb_err(file->f_mapping);

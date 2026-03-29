@@ -34,8 +34,9 @@
 
 #define CONNCOUNT_SLOTS		256U
 
-#define CONNCOUNT_GC_MAX_NODES	8
-#define MAX_KEYLEN		5
+#define CONNCOUNT_GC_MAX_NODES		8
+#define CONNCOUNT_GC_MAX_COLLECT	64
+#define MAX_KEYLEN			5
 
 /* we will save the tuples of all connections we care about */
 struct nf_conncount_tuple {
@@ -133,23 +134,85 @@ find_or_evict(struct net *net, struct nf_conncount_list *list,
 	return ERR_PTR(-EAGAIN);
 }
 
-static int __nf_conncount_add(struct net *net,
-			      struct nf_conncount_list *list,
-			      const struct nf_conntrack_tuple *tuple,
-			      const struct nf_conntrack_zone *zone)
+static bool get_ct_or_tuple_from_skb(struct net *net,
+				     const struct sk_buff *skb,
+				     u16 l3num,
+				     struct nf_conn **ct,
+				     struct nf_conntrack_tuple *tuple,
+				     const struct nf_conntrack_zone **zone,
+				     bool *refcounted)
 {
+	const struct nf_conntrack_tuple_hash *h;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *found_ct;
+
+	found_ct = nf_ct_get(skb, &ctinfo);
+	if (found_ct && !nf_ct_is_template(found_ct)) {
+		*tuple = found_ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+		*zone = nf_ct_zone(found_ct);
+		*ct = found_ct;
+		return true;
+	}
+
+	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb), l3num, net, tuple))
+		return false;
+
+	if (found_ct)
+		*zone = nf_ct_zone(found_ct);
+
+	h = nf_conntrack_find_get(net, *zone, tuple);
+	if (!h)
+		return true;
+
+	found_ct = nf_ct_tuplehash_to_ctrack(h);
+	*refcounted = true;
+	*ct = found_ct;
+
+	return true;
+}
+
+static int __nf_conncount_add(struct net *net,
+			      const struct sk_buff *skb,
+			      u16 l3num,
+			      struct nf_conncount_list *list)
+{
+	const struct nf_conntrack_zone *zone = &nf_ct_zone_dflt;
 	const struct nf_conntrack_tuple_hash *found;
 	struct nf_conncount_tuple *conn, *conn_n;
+	struct nf_conntrack_tuple tuple;
+	struct nf_conn *ct = NULL;
 	struct nf_conn *found_ct;
 	unsigned int collect = 0;
+	bool refcounted = false;
+	int err = 0;
 
-	if ((u32)jiffies == list->last_gc)
+	if (!get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &refcounted))
+		return -ENOENT;
+
+	if (ct && nf_ct_is_confirmed(ct)) {
+		/* local connections are confirmed in postrouting so confirmation
+		 * might have happened before hitting connlimit
+		 */
+		if (skb->skb_iif != LOOPBACK_IFINDEX) {
+			err = -EEXIST;
+			goto out_put;
+		}
+
+		/* this is likely a local connection, skip optimization to avoid
+		 * adding duplicates from a 'packet train'
+		 */
+		goto check_connections;
+	}
+
+	if ((u32)jiffies == list->last_gc &&
+	    (list->count - list->last_gc_count) < CONNCOUNT_GC_MAX_COLLECT)
 		goto add_new_node;
 
-	/*当前我们需要添加给定的tuple,在添加之前我们检查下list中保存的ct还在连接跟踪表中存在（这个实现太难受了）*/
+check_connections:
 	/* check the saved connections */
+	/*当前我们需要添加给定的tuple,在添加之前我们检查下list中保存的ct还在连接跟踪表中存在（这个实现太难受了）*/
 	list_for_each_entry_safe(conn, conn_n, &list->head, node) {
-		if (collect > CONNCOUNT_GC_MAX_NODES)
+		if (collect > CONNCOUNT_GC_MAX_COLLECT)
 		    /*本次维护数量超限，退出（bug:如果这样直接退出，则添加的内容可能会重复）*/
 			break;
 
@@ -158,11 +221,11 @@ static int __nf_conncount_add(struct net *net,
 		    /*conn在连接跟踪表上已不存在*/
 			/* Not found, but might be about to be confirmed */
 			if (PTR_ERR(found) == -EAGAIN) {
-				if (nf_ct_tuple_equal(&conn->tuple, tuple) &&
+				if (nf_ct_tuple_equal(&conn->tuple, &tuple) &&
 				    nf_ct_zone_id(&conn->zone, conn->zone.dir) ==
 				    nf_ct_zone_id(zone, zone->dir))
 				    /*连接表里没有，但我们接下来要填加的恰好是它，故直接返回认为添加成功*/
-					return 0; /* already exists */
+					goto out_put; /* already exists */
 			} else {
 			    /*这种我们已经删除了*/
 				collect++;
@@ -172,7 +235,7 @@ static int __nf_conncount_add(struct net *net,
 
 		found_ct = nf_ct_tuplehash_to_ctrack(found);
 
-		if (nf_ct_tuple_equal(&conn->tuple, tuple) &&
+		if (nf_ct_tuple_equal(&conn->tuple, &tuple) &&
 		    nf_ct_zone_equal(found_ct, zone, zone->dir)) {
 		    /*这种ct已存在，不再重复加入*/
 			/*
@@ -182,7 +245,7 @@ static int __nf_conncount_add(struct net *net,
 			 * Attempt to avoid a re-add in this case.
 			 */
 			nf_ct_put(found_ct);
-			return 0;
+			goto out_put;
 		} else if (already_closed(found_ct)) {
 		    /*这种ct已关闭，不计入，减少计数，释放found_ct*/
 			/*
@@ -198,18 +261,24 @@ static int __nf_conncount_add(struct net *net,
 
 		nf_ct_put(found_ct);
 	}
+	list->last_gc = (u32)jiffies;
+	list->last_gc_count = list->count;
 
 add_new_node:
 	/*计数overflow,跳过*/
-	if (WARN_ON_ONCE(list->count > INT_MAX))
-		return -EOVERFLOW;
+	if (WARN_ON_ONCE(list->count > INT_MAX)) {
+		err = -EOVERFLOW;
+		goto out_put;
+	}
 
 	/*增加此conn，并将其加入到list中*/
 	conn = kmem_cache_alloc(conncount_conn_cachep, GFP_ATOMIC);
-	if (conn == NULL)
-		return -ENOMEM;
+	if (conn == NULL) {
+		err = -ENOMEM;
+		goto out_put;
+	}
 
-	conn->tuple = *tuple;
+	conn->tuple = tuple;
 	conn->zone = *zone;
 	conn->cpu = raw_smp_processor_id();
 	conn->jiffies32 = (u32)jiffies;
@@ -217,40 +286,44 @@ add_new_node:
 	list_add_tail(&conn->node, &list->head);
 	/*总数增加*/
 	list->count++;
-	list->last_gc = (u32)jiffies;
-	return 0;
+
+out_put:
+	if (refcounted)
+		nf_ct_put(ct);
+	return err;
 }
 
 /*向list添加此tuple*/
-int nf_conncount_add(struct net *net,
-		     struct nf_conncount_list *list,
-		     const struct nf_conntrack_tuple *tuple,
-		     const struct nf_conntrack_zone *zone)
+int nf_conncount_add_skb(struct net *net,
+			 const struct sk_buff *skb,
+			 u16 l3num,
+			 struct nf_conncount_list *list)
 {
 	int ret;
 
 	/* check the saved connections */
 	spin_lock_bh(&list->list_lock);
 	/*执行tuple添加*/
-	ret = __nf_conncount_add(net, list, tuple, zone);
+	ret = __nf_conncount_add(net, skb, l3num, list);
 	spin_unlock_bh(&list->list_lock);
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(nf_conncount_add);
+EXPORT_SYMBOL_GPL(nf_conncount_add_skb);
 
 void nf_conncount_list_init(struct nf_conncount_list *list)
 {
 	spin_lock_init(&list->list_lock);
 	INIT_LIST_HEAD(&list->head);
 	list->count = 0;
+	list->last_gc_count = 0;
 	list->last_gc = (u32)jiffies;
 }
 EXPORT_SYMBOL_GPL(nf_conncount_list_init);
 
 /* Return true if the list is empty. Must be called with BH disabled. */
-bool nf_conncount_gc_list(struct net *net,
-			  struct nf_conncount_list *list)
+static bool __nf_conncount_gc_list(struct net *net,
+				   struct nf_conncount_list *list)
 {
 	const struct nf_conntrack_tuple_hash *found;
 	struct nf_conncount_tuple *conn, *conn_n;
@@ -260,10 +333,6 @@ bool nf_conncount_gc_list(struct net *net,
 
 	/* don't bother if we just did GC */
 	if ((u32)jiffies == READ_ONCE(list->last_gc))
-		return false;
-
-	/* don't bother if other cpu is already doing GC */
-	if (!spin_trylock(&list->list_lock))
 		return false;
 
 	list_for_each_entry_safe(conn, conn_n, &list->head, node) {
@@ -289,7 +358,7 @@ bool nf_conncount_gc_list(struct net *net,
 		}
 
 		nf_ct_put(found_ct);
-		if (collected > CONNCOUNT_GC_MAX_NODES)
+		if (collected > CONNCOUNT_GC_MAX_COLLECT)
 		    /*有较多的node需要释放，跳出检查*/
 			break;
 	}
@@ -297,7 +366,22 @@ bool nf_conncount_gc_list(struct net *net,
 	if (!list->count)
 		ret = true;
 	list->last_gc = (u32)jiffies;
-	spin_unlock(&list->list_lock);
+	list->last_gc_count = list->count;
+
+	return ret;
+}
+
+bool nf_conncount_gc_list(struct net *net,
+			  struct nf_conncount_list *list)
+{
+	bool ret;
+
+	/* don't bother if other cpu is already doing GC */
+	if (!spin_trylock_bh(&list->list_lock))
+		return false;
+
+	ret = __nf_conncount_gc_list(net, list);
+	spin_unlock_bh(&list->list_lock);
 
 	return ret;
 }
@@ -339,19 +423,22 @@ static void schedule_gc_worker(struct nf_conncount_data *data, int tree)
 /*向data对应的树上添加指定tuple节点*/
 static unsigned int
 insert_tree(struct net *net,
+	    const struct sk_buff *skb,
+	    u16 l3num,
 	    struct nf_conncount_data *data,
 	    struct rb_root *root,/*红黑树根节点*/
 	    unsigned int hash,/*key对应的hashcode*/
-	    const u32 *key,/*tuple对应的key*/
-	    const struct nf_conntrack_tuple *tuple,/*待加入的tuple*/
-	    const struct nf_conntrack_zone *zone)
+	    const u32 *key/*tuple对应的key*/)
 {
 	struct nf_conncount_rb *gc_nodes[CONNCOUNT_GC_MAX_NODES];
-	struct rb_node **rbnode, *parent;
-	struct nf_conncount_rb *rbconn;
-	struct nf_conncount_tuple *conn;
+	const struct nf_conntrack_zone *zone = &nf_ct_zone_dflt;
+	bool do_gc = true, refcounted = false;
 	unsigned int count = 0, gc_count = 0;
-	bool do_gc = true;
+	struct rb_node **rbnode, *parent;
+	struct nf_conntrack_tuple tuple;
+	struct nf_conncount_tuple *conn;
+	struct nf_conncount_rb *rbconn;
+	struct nf_conn *ct = NULL;
 
 	/*锁此key对应的桶*/
 	spin_lock_bh(&nf_conncount_locks[hash]);
@@ -373,8 +460,8 @@ restart:
 		    /*查找到合适的添加位置，将tuple添加到rbconn->list*/
 			int ret;
 
-			ret = nf_conncount_add(net, &rbconn->list, tuple, zone);
-			if (ret)
+			ret = nf_conncount_add_skb(net, skb, l3num, &rbconn->list);
+			if (ret && ret != -EEXIST)
 			    /*添加失败*/
 				count = 0; /* hotdrop */
 			else
@@ -404,31 +491,35 @@ restart:
 	}
 
 	/*rbnode节点为空，在此位置初始化，并添加首个元素*/
-	/* expected case: match, insert new node */
-	rbconn = kmem_cache_alloc(conncount_rb_cachep, GFP_ATOMIC);
-	if (rbconn == NULL)
-		goto out_unlock;
+	if (get_ct_or_tuple_from_skb(net, skb, l3num, &ct, &tuple, &zone, &refcounted)) {
+		/* expected case: match, insert new node */
+		rbconn = kmem_cache_alloc(conncount_rb_cachep, GFP_ATOMIC);
+		if (rbconn == NULL)
+			goto out_unlock;
 
-	conn = kmem_cache_alloc(conncount_conn_cachep, GFP_ATOMIC);
-	if (conn == NULL) {
-		kmem_cache_free(conncount_rb_cachep, rbconn);
-		goto out_unlock;
+		conn = kmem_cache_alloc(conncount_conn_cachep, GFP_ATOMIC);
+		if (conn == NULL) {
+			kmem_cache_free(conncount_rb_cachep, rbconn);
+			goto out_unlock;
+		}
+
+		conn->tuple = tuple;
+		conn->zone = *zone;
+		conn->cpu = raw_smp_processor_id();
+		conn->jiffies32 = (u32)jiffies;
+		memcpy(rbconn->key, key, sizeof(u32) * data->keylen);
+
+		nf_conncount_list_init(&rbconn->list);
+		list_add(&conn->node, &rbconn->list.head);
+		count = 1;/*首次添加计数为1*/
+		rbconn->list.count = count;
+
+		rb_link_node_rcu(&rbconn->node, parent, rbnode);
+		rb_insert_color(&rbconn->node, root);
 	}
-
-	conn->tuple = *tuple;
-	conn->zone = *zone;
-	conn->cpu = raw_smp_processor_id();
-	conn->jiffies32 = (u32)jiffies;
-	memcpy(rbconn->key, key, sizeof(u32) * data->keylen);
-
-	nf_conncount_list_init(&rbconn->list);
-	list_add(&conn->node, &rbconn->list.head);
-	count = 1;/*首次添加计数为1*/
-	rbconn->list.count = count;
-
-	rb_link_node_rcu(&rbconn->node, parent, rbnode);
-	rb_insert_color(&rbconn->node, root);
 out_unlock:
+	if (refcounted)
+		nf_ct_put(ct);
 	spin_unlock_bh(&nf_conncount_locks[hash]);
 	return count;
 }
@@ -436,10 +527,10 @@ out_unlock:
 /*获取链接跟踪计数*/
 static unsigned int
 count_tree(struct net *net,
+	   const struct sk_buff *skb,
+	   u16 l3num,
 	   struct nf_conncount_data *data,
-	   const u32 *key/*查询用的key*/,
-	   const struct nf_conntrack_tuple *tuple/*要添加的元组*/,
-	   const struct nf_conntrack_zone *zone)
+	   const u32 *key)
 {
 	struct rb_root *root;
 	struct rb_node *parent;
@@ -469,8 +560,8 @@ count_tree(struct net *net,
 		    /*遇到与待查询的key相等的情况*/
 			int ret;
 
-			if (!tuple) {
-			    /*没有指定要匹配的tuple,直接计算count*/
+			if (!skb) {
+			    	/*没有指定要匹配的tuple,直接计算count*/
 				nf_conncount_gc_list(net, &rbconn->list);
 				return rbconn->list.count;
 			}
@@ -488,21 +579,25 @@ count_tree(struct net *net,
 
 			/* same source network -> be counted! */
 			/*执行加入*/
-			ret = __nf_conncount_add(net, &rbconn->list, tuple, zone);
+			ret = __nf_conncount_add(net, skb, l3num, &rbconn->list);
 			spin_unlock_bh(&rbconn->list.list_lock);
-			if (ret)
+			if (ret && ret != -EEXIST) {
 				return 0; /* hotdrop */
-			else
+			} else {
+				/* -EEXIST means add was skipped, update the list */
+				if (ret == -EEXIST)
+					nf_conncount_gc_list(net, &rbconn->list);
 				return rbconn->list.count;
+			}
 		}
 	}
 
-	if (!tuple)
+	if (!skb)
 	    /*没有查找到此key,也未指定tuple,不进行添加，直接返回0*/
 		return 0;
 
 	/*没有查询到此key,但指定了tuple,向树上添加此tuple*/
-	return insert_tree(net, data, root, hash, key, tuple, zone);
+	return insert_tree(net, skb, l3num, data, root, hash, key);
 }
 
 /*此work的gc流程*/
@@ -565,18 +660,19 @@ next:
 }
 
 /* Count and return number of conntrack entries in 'net' with particular 'key'.
- * If 'tuple' is not null, insert it into the accounting data structure.
- * Call with RCU read lock.
+ * If 'skb' is not null, insert the corresponding tuple into the accounting
+ * data structure. Call with RCU read lock.
  */
-unsigned int nf_conncount_count(struct net *net,
-				struct nf_conncount_data *data,
-				const u32 *key/*查询用的Key*/,
-				const struct nf_conntrack_tuple *tuple/*匹配用的元组*/,
-				const struct nf_conntrack_zone *zone/*匹配用的zone*/)
+unsigned int nf_conncount_count_skb(struct net *net,
+				    const struct sk_buff *skb,
+				    u16 l3num,
+				    struct nf_conncount_data *data,
+				    const u32 *key/*查询用的Key*/)
 {
-	return count_tree(net, data, key, tuple, zone);
+	return count_tree(net, skb, l3num, data, key);
+
 }
-EXPORT_SYMBOL_GPL(nf_conncount_count);
+EXPORT_SYMBOL_GPL(nf_conncount_count_skb);
 
 struct nf_conncount_data *nf_conncount_init(struct net *net, unsigned int keylen)
 {
@@ -593,7 +689,7 @@ struct nf_conncount_data *nf_conncount_init(struct net *net, unsigned int keylen
 	net_get_random_once(&conncount_rnd, sizeof(conncount_rnd));
 
 	/*申请conncount_data空间*/
-	data = kmalloc(sizeof(*data), GFP_KERNEL);
+	data = kmalloc_obj(*data);
 	if (!data)
 		return ERR_PTR(-ENOMEM);
 

@@ -338,10 +338,12 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 
 	/* Add the dev mac and count the vlan only if it's usable */
 	if (br_vlan_should_use(v)) {
-		err = br_fdb_add_local(br, p, dev->dev_addr, v->vid);
-		if (err) {
-			br_err(br, "failed insert local address into bridge forwarding table\n");
-			goto out_filt;
+		if (!br_opt_get(br, BROPT_FDB_LOCAL_VLAN_0)) {
+			err = br_fdb_add_local(br, p, dev->dev_addr, v->vid);
+			if (err) {
+				br_err(br, "failed insert local address into bridge forwarding table\n");
+				goto out_filt;
+			}
 		}
 		vg->num_vlans++;
 	}
@@ -811,7 +813,7 @@ int br_vlan_add(struct net_bridge *br, u16 vid/*vlan id*/, u16 flags, bool *chan
 					    extack);
 
 	/*此vlan在bridge上不存在，申请bridge vlan并初始化*/
-	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
+	vlan = kzalloc_obj(*vlan);
 	if (!vlan)
 		return -ENOMEM;
 
@@ -1250,7 +1252,7 @@ int br_vlan_init(struct net_bridge *br)
 	struct net_bridge_vlan_group *vg;
 	int ret = -ENOMEM;
 
-	vg = kzalloc(sizeof(*vg), GFP_KERNEL);
+	vg = kzalloc_obj(*vg);
 	if (!vg)
 		goto out;
 	ret = rhashtable_init(&vg->vlan_hash, &br_vlan_rht_params);
@@ -1286,7 +1288,7 @@ int nbp_vlan_init(struct net_bridge_port *p, struct netlink_ext_ack *extack)
 	struct net_bridge_vlan_group *vg;
 	int ret = -ENOMEM;
 
-	vg = kzalloc(sizeof(struct net_bridge_vlan_group), GFP_KERNEL);
+	vg = kzalloc_obj(struct net_bridge_vlan_group);
 	if (!vg)
 		goto out;
 
@@ -1362,7 +1364,7 @@ int nbp_vlan_add(struct net_bridge_port *port, u16 vid, u16 flags,
 	}
 
 	/*此vlan在此port上不存在，申请vlan并加入*/
-	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
+	vlan = kzalloc_obj(*vlan);
 	if (!vlan)
 		return -ENOMEM;
 
@@ -1485,7 +1487,7 @@ void br_vlan_fill_forward_path_pvid(struct net_bridge *br,
 	if (!br_opt_get(br, BROPT_VLAN_ENABLED))
 		return;
 
-	vg = br_vlan_group(br);
+	vg = br_vlan_group_rcu(br);
 
 	if (idx >= 0 &&
 	    ctx->vlan[idx].proto == br->vlan_proto) {

@@ -144,7 +144,7 @@ static struct psample_group *psample_group_create(struct net *net,
 {
 	struct psample_group *group;
 
-	group = kzalloc(sizeof(*group), GFP_ATOMIC);
+	group = kzalloc_obj(*group, GFP_ATOMIC);
 	if (!group)
 		return NULL;
 

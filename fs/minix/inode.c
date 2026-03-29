@@ -26,6 +26,22 @@ static int minix_write_inode(struct inode *inode,
 		struct writeback_control *wbc);
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf);
 
+void __minix_error_inode(struct inode *inode, const char *function,
+			 unsigned int line, const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	printk(KERN_CRIT "minix-fs error (device %s): %s:%d: "
+	       "inode #%lu: comm %s: %pV\n",
+	       inode->i_sb->s_id, function, line, inode->i_ino,
+	       current->comm, &vaf);
+	va_end(args);
+}
+
 static void minix_evict_inode(struct inode *inode)
 {
 	truncate_inode_pages_final(&inode->i_data);
@@ -159,9 +175,37 @@ static int minix_reconfigure(struct fs_context *fc)
 static bool minix_check_superblock(struct super_block *sb)
 {
 	struct minix_sb_info *sbi = minix_sb(sb);
+	unsigned long block;
 
-	if (sbi->s_imap_blocks == 0 || sbi->s_zmap_blocks == 0)
+	if (sbi->s_log_zone_size != 0) {
+		printk("minix-fs error: zone size must equal block size. "
+		       "s_log_zone_size > 0 is not supported.\n");
 		return false;
+	}
+
+	if (sbi->s_ninodes < 1 || sbi->s_firstdatazone <= 4 ||
+	    sbi->s_firstdatazone >= sbi->s_nzones)
+		return false;
+
+	/* Apparently minix can create filesystems that allocate more blocks for
+	 * the bitmaps than needed.  We simply ignore that, but verify it didn't
+	 * create one with not enough blocks and bail out if so.
+	 */
+	block = minix_blocks_needed(sbi->s_ninodes, sb->s_blocksize);
+	if (sbi->s_imap_blocks < block) {
+		printk("MINIX-fs: file system does not have enough "
+		       "imap blocks allocated. Refusing to mount.\n");
+		return false;
+	}
+
+	block = minix_blocks_needed(
+			(sbi->s_nzones - sbi->s_firstdatazone + 1),
+			sb->s_blocksize);
+	if (sbi->s_zmap_blocks < block) {
+		printk("MINIX-fs: file system does not have enough "
+		       "zmap blocks allocated. Refusing to mount.\n");
+		return false;
+	}
 
 	/*
 	 * s_max_size must not exceed the block mapping limitation.  This check
@@ -189,7 +233,7 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	int silent = fc->sb_flags & SB_SILENT;
 
 	/*申请minix_sb_info结构体*/
-	sbi = kzalloc(sizeof(struct minix_sb_info), GFP_KERNEL);
+	sbi = kzalloc_obj(struct minix_sb_info);
 	if (!sbi)
 		return -ENOMEM;
 	s->s_fs_info = sbi;
@@ -295,29 +339,6 @@ static int minix_fill_super(struct super_block *s/*待填充的超级块*/, stru
 	/*0号inode为root,0号block为super block,均置为‘0’，表示占用*/
 	minix_set_bit(0,sbi->s_imap[0]->b_data);
 	minix_set_bit(0,sbi->s_zmap[0]->b_data);
-
-	/* Apparently minix can create filesystems that allocate more blocks for
-	 * the bitmaps than needed.  We simply ignore that, but verify it didn't
-	 * create one with not enough blocks and bail out if so.
-	 */
-	block = minix_blocks_needed(sbi->s_ninodes, s->s_blocksize);
-	if (sbi->s_imap_blocks < block) {
-	    /*sbi->s_ninodes为此文件系统总inode数目，通过上面计算imap占用的block总数，这里imap_blocks
-	     * 更小，则说明当前总数计算的bitmap不足以表示imap_blocks宣称的，内容有误*/
-		printk("MINIX-fs: file system does not have enough "
-				"imap blocks allocated.  Refusing to mount.\n");
-		goto out_no_bitmap;
-	}
-
-	block = minix_blocks_needed(
-			(sbi->s_nzones - sbi->s_firstdatazone + 1),
-			s->s_blocksize);
-	if (sbi->s_zmap_blocks < block) {
-		/*同上*/
-		printk("MINIX-fs: file system does not have enough "
-				"zmap blocks allocated.  Refusing to mount.\n");
-		goto out_no_bitmap;
-	}
 
 	/* set up enough so that it can read an inode */
 	s->s_op = &minix_sops;
@@ -536,9 +557,15 @@ void minix_set_inode(struct inode *inode, dev_t rdev)
 		inode->i_op = &minix_symlink_inode_operations;
 		inode_nohighmem(inode);
 		inode->i_mapping->a_ops = &minix_aops;
-	} else
-	    /*其它特殊文件类型*/
+	} else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
+		   S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
+	    	/*其它特殊文件类型*/
 		init_special_inode(inode, inode->i_mode, rdev);
+	} else {
+		printk(KERN_DEBUG "MINIX-fs: Invalid file type 0%04o for inode %lu.\n",
+		       inode->i_mode, inode->i_ino);
+		make_bad_inode(inode);
+	}
 }
 
 /*
@@ -635,8 +662,8 @@ struct inode *minix_iget(struct super_block *sb, unsigned long ino/*inode编号*
 	if (!inode)
 	    /*未查找到此inode,返错*/
 		return ERR_PTR(-ENOMEM);
-	if (!(inode->i_state & I_NEW))
-	    /*无new标记，则此inode之前已存在，直接返回*/
+	if (!(inode_state_read_once(inode) & I_NEW))
+		/*无new标记，则此inode之前已存在，直接返回*/
 		return inode;
 
 	/*inode有I_NEW标记，需要加载/新建？*/

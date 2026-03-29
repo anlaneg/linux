@@ -138,7 +138,8 @@ static int misc_open(struct inode *inode, struct file *file)
 		break;
 	}
 
-	if (!new_fops) {
+	/* Only request module for fixed minor code */
+	if (!new_fops && minor < MISC_DYNAMIC_MINOR) {
 		/*没有查找到设备，动态请求加载模块*/
 		mutex_unlock(&misc_mtx);
 		request_module("char-major-%d-%d", MISC_MAJOR, minor);
@@ -152,9 +153,10 @@ static int misc_open(struct inode *inode, struct file *file)
 			new_fops = fops_get(iter->fops);
 			break;
 		}
-		if (!new_fops)
-			goto fail;
 	}
+
+	if (!new_fops)
+		goto fail;
 
 	/*
 	 * Place the miscdevice in the file's
@@ -219,6 +221,12 @@ int misc_register(struct miscdevice *misc)
 	int err = 0;
 	//是否使用动态编号
 	bool is_dynamic = (misc->minor == MISC_DYNAMIC_MINOR);
+
+	if (misc->minor > MISC_DYNAMIC_MINOR) {
+		pr_err("Invalid fixed minor %d for miscdevice '%s'\n",
+		       misc->minor, misc->name);
+		return -EINVAL;
+	}
 
 	/*初始化list*/
 	INIT_LIST_HEAD(&misc->list);
@@ -292,14 +300,12 @@ EXPORT_SYMBOL(misc_register);
 //解注册misc类设备
 void misc_deregister(struct miscdevice *misc)
 {
-	//检查是否已被解注册
-	if (WARN_ON(list_empty(&misc->list)))
-		return;
-
 	mutex_lock(&misc_mtx);
-	list_del(&misc->list);/*移除注册*/
+	list_del_init(&misc->list);/*移除注册*/
 	device_destroy(&misc_class, MKDEV(MISC_MAJOR, misc->minor));
 	misc_minor_free(misc->minor);
+	if (misc->minor > MISC_DYNAMIC_MINOR)
+		misc->minor = MISC_DYNAMIC_MINOR;
 	mutex_unlock(&misc_mtx);
 }
 EXPORT_SYMBOL(misc_deregister);

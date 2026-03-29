@@ -49,14 +49,12 @@ TC_INDIRECT_SCOPE int tcf_bpf_act(struct sk_buff *skb,
 	if (at_ingress) {
 	    //回退指向mac头，并运行epbf程序，运行结束后，还原data指针
 		__skb_push(skb, skb->mac_len);
-		bpf_compute_data_pointers(skb);
 		/*运行bpf程序*/
-		filter_res = bpf_prog_run(filter, skb);
+		filter_res = bpf_prog_run_data_pointers(filter, skb);
 		/*跳过mac头*/
 		__skb_pull(skb, skb->mac_len);
 	} else {
-		bpf_compute_data_pointers(skb);
-		filter_res = bpf_prog_run(filter, skb);
+		filter_res = bpf_prog_run_data_pointers(filter, skb);
 	}
 	if (unlikely(!skb->tstamp && skb->tstamp_type))
 		skb->tstamp_type = SKB_CLOCK_REALTIME;

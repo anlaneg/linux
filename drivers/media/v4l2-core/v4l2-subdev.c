@@ -26,6 +26,30 @@
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ioctl.h>
 
+/**
+ * struct v4l2_subdev_stream_config - Used for storing stream configuration.
+ *
+ * @pad: pad number
+ * @stream: stream number
+ * @enabled: has the stream been enabled with v4l2_subdev_enable_streams()
+ * @fmt: &struct v4l2_mbus_framefmt
+ * @crop: &struct v4l2_rect to be used for crop
+ * @compose: &struct v4l2_rect to be used for compose
+ * @interval: frame interval
+ *
+ * This structure stores configuration for a stream.
+ */
+struct v4l2_subdev_stream_config {
+	u32 pad;
+	u32 stream;
+	bool enabled;
+
+	struct v4l2_mbus_framefmt fmt;
+	struct v4l2_rect crop;
+	struct v4l2_rect compose;
+	struct v4l2_fract interval;
+};
+
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 /*
  * The Streams API is an experimental feature. To use the Streams API, set
@@ -75,7 +99,7 @@ static int subdev_open(struct file *file)
 	struct v4l2_subdev_fh *subdev_fh;
 	int ret;
 
-	subdev_fh = kzalloc(sizeof(*subdev_fh), GFP_KERNEL);
+	subdev_fh = kzalloc_obj(*subdev_fh);
 	if (subdev_fh == NULL)
 		return -ENOMEM;
 
@@ -86,8 +110,7 @@ static int subdev_open(struct file *file)
 	}
 
 	v4l2_fh_init(&subdev_fh->vfh, vdev);
-	v4l2_fh_add(&subdev_fh->vfh);
-	file->private_data = &subdev_fh->vfh;
+	v4l2_fh_add(&subdev_fh->vfh, file);
 
 	if (sd->v4l2_dev->mdev && sd->entity.graph_obj.mdev->dev) {
 		struct module *owner;
@@ -110,7 +133,7 @@ static int subdev_open(struct file *file)
 
 err:
 	module_put(subdev_fh->owner);
-	v4l2_fh_del(&subdev_fh->vfh);
+	v4l2_fh_del(&subdev_fh->vfh, file);
 	v4l2_fh_exit(&subdev_fh->vfh);
 	subdev_fh_free(subdev_fh);
 	kfree(subdev_fh);
@@ -122,17 +145,16 @@ static int subdev_close(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
-	struct v4l2_fh *vfh = file->private_data;
+	struct v4l2_fh *vfh = file_to_v4l2_fh(file);
 	struct v4l2_subdev_fh *subdev_fh = to_v4l2_subdev_fh(vfh);
 
 	if (sd->internal_ops && sd->internal_ops->close)
 		sd->internal_ops->close(sd, subdev_fh);
 	module_put(subdev_fh->owner);
-	v4l2_fh_del(vfh);
+	v4l2_fh_del(vfh, file);
 	v4l2_fh_exit(vfh);
 	subdev_fh_free(subdev_fh);
 	kfree(subdev_fh);
-	file->private_data = NULL;
 
 	return 0;
 }
@@ -612,7 +634,7 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 {
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
-	struct v4l2_fh *vfh = file->private_data;
+	struct v4l2_fh *vfh = file_to_v4l2_fh(file);
 	struct v4l2_subdev_fh *subdev_fh = to_v4l2_subdev_fh(vfh);
 	bool ro_subdev = test_bit(V4L2_FL_SUBDEV_RO_DEVNODE, &vdev->flags);
 	bool streams_subdev = sd->flags & V4L2_SUBDEV_FL_STREAMS;
@@ -1135,7 +1157,7 @@ static long subdev_do_ioctl_lock(struct file *file, unsigned int cmd, void *arg)
 
 	if (video_is_registered(vdev)) {
 		struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
-		struct v4l2_fh *vfh = file->private_data;
+		struct v4l2_fh *vfh = file_to_v4l2_fh(file);
 		struct v4l2_subdev_fh *subdev_fh = to_v4l2_subdev_fh(vfh);
 		struct v4l2_subdev_state *state;
 
@@ -1192,7 +1214,7 @@ static __poll_t subdev_poll(struct file *file, poll_table *wait)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
-	struct v4l2_fh *fh = file->private_data;
+	struct v4l2_fh *fh = file_to_v4l2_fh(file);
 
 	if (!(sd->flags & V4L2_SUBDEV_FL_HAS_EVENTS))
 		return EPOLLERR;
@@ -1584,7 +1606,7 @@ __v4l2_subdev_state_alloc(struct v4l2_subdev *sd, const char *lock_name,
 	struct v4l2_subdev_state *state;
 	int ret;
 
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	state = kzalloc_obj(*state);
 	if (!state)
 		return ERR_PTR(-ENOMEM);
 
@@ -1598,8 +1620,7 @@ __v4l2_subdev_state_alloc(struct v4l2_subdev *sd, const char *lock_name,
 
 	/* Drivers that support streams do not need the legacy pad config */
 	if (!(sd->flags & V4L2_SUBDEV_FL_STREAMS) && sd->entity.num_pads) {
-		state->pads = kvcalloc(sd->entity.num_pads,
-				       sizeof(*state->pads), GFP_KERNEL);
+		state->pads = kvzalloc_objs(*state->pads, sd->entity.num_pads);
 		if (!state->pads) {
 			ret = -ENOMEM;
 			goto err;
@@ -1867,9 +1888,8 @@ v4l2_subdev_init_stream_configs(struct v4l2_subdev_stream_configs *stream_config
 	}
 
 	if (new_configs.num_configs) {
-		new_configs.configs = kvcalloc(new_configs.num_configs,
-					       sizeof(*new_configs.configs),
-					       GFP_KERNEL);
+		new_configs.configs = kvzalloc_objs(*new_configs.configs,
+						    new_configs.num_configs);
 
 		if (!new_configs.configs)
 			return -ENOMEM;
@@ -2090,7 +2110,7 @@ int v4l2_subdev_routing_validate(struct v4l2_subdev *sd,
 {
 	u32 *remote_pads = NULL;
 	unsigned int i, j;
-	int ret = -EINVAL;
+	int ret = -ENXIO;
 
 	if (disallow & (V4L2_SUBDEV_ROUTING_NO_STREAM_MIX |
 			V4L2_SUBDEV_ROUTING_NO_MULTIPLEXING)) {
@@ -2586,7 +2606,7 @@ EXPORT_SYMBOL_GPL(v4l2_subdev_is_streaming);
 int v4l2_subdev_get_privacy_led(struct v4l2_subdev *sd)
 {
 #if IS_REACHABLE(CONFIG_LEDS_CLASS)
-	sd->privacy_led = led_get(sd->dev, "privacy-led");
+	sd->privacy_led = led_get(sd->dev, "privacy");
 	if (IS_ERR(sd->privacy_led) && PTR_ERR(sd->privacy_led) != -ENOENT)
 		return dev_err_probe(sd->dev, PTR_ERR(sd->privacy_led),
 				     "getting privacy LED\n");

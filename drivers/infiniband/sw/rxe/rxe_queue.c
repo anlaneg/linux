@@ -68,7 +68,7 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参�
 		return NULL;
 
 	/*申请rxe queue*/
-	q = kzalloc(sizeof(*q), GFP_KERNEL);
+	q = kzalloc_obj(*q);
 	if (!q)
 		return NULL;
 

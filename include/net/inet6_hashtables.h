@@ -41,7 +41,6 @@ static inline unsigned int __inet6_ehashfn(const u32 lhash,
  * The sockhash lock must be held as a reader here.
  */
 struct sock *__inet6_lookup_established(const struct net *net,
-					struct inet_hashinfo *hashinfo,
 					const struct in6_addr *saddr,
 					const __be16 sport,
 					const struct in6_addr *daddr,
@@ -65,7 +64,6 @@ struct sock *inet6_lookup_reuseport(const struct net *net, struct sock *sk,
 				    inet6_ehashfn_t *ehashfn);
 
 struct sock *inet6_lookup_listener(const struct net *net,
-				   struct inet_hashinfo *hashinfo,
 				   struct sk_buff *skb, int doff,
 				   const struct in6_addr *saddr,
 				   const __be16 sport,
@@ -83,7 +81,6 @@ struct sock *inet6_lookup_run_sk_lookup(const struct net *net,
 					inet6_ehashfn_t *ehashfn);
 
 static inline struct sock *__inet6_lookup(const struct net *net,
-					  struct inet_hashinfo *hashinfo,
 					  struct sk_buff *skb, int doff,
 					  const struct in6_addr *saddr,
 					  const __be16 sport,
@@ -92,9 +89,9 @@ static inline struct sock *__inet6_lookup(const struct net *net,
 					  const int dif, const int sdif,
 					  bool *refcounted)
 {
-    /*先查est状态的socket*/
-	struct sock *sk = __inet6_lookup_established(net, hashinfo, saddr,
-						     sport, daddr, hnum,
+	/*先查est状态的socket*/
+	struct sock *sk = __inet6_lookup_established(net, saddr, sport,
+						     daddr, hnum,
 						     dif, sdif);
 	*refcounted = true;
 	if (sk)
@@ -102,7 +99,7 @@ static inline struct sock *__inet6_lookup(const struct net *net,
 
 	/*再查listener状态的socket*/
 	*refcounted = false;
-	return inet6_lookup_listener(net, hashinfo, skb, doff, saddr, sport,
+	return inet6_lookup_listener(net, skb, doff, saddr, sport,
 				     daddr, hnum, dif, sdif);
 }
 
@@ -146,8 +143,7 @@ struct sock *inet6_steal_sock(struct net *net, struct sk_buff *skb, int doff,
 	return reuse_sk;
 }
 
-static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
-					      struct sk_buff *skb, int doff/*data offset*/,
+static inline struct sock *__inet6_lookup_skb(struct sk_buff *skb, int doff/*data offset*/,
 					      const __be16 sport/*源端口*/,
 					      const __be16 dport/*目的端口*/,
 					      int iif, int sdif,
@@ -164,19 +160,15 @@ static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
 	if (sk)
 		return sk;
 
-	return __inet6_lookup(net, hashinfo, skb,
-			      doff, &ip6h->saddr, sport,
+	return __inet6_lookup(net, skb, doff, &ip6h->saddr, sport,
 			      &ip6h->daddr, ntohs(dport)/*转为主机序*/,
 			      iif, sdif, refcounted);
 }
 
-struct sock *inet6_lookup(const struct net *net, struct inet_hashinfo *hashinfo,
-			  struct sk_buff *skb, int doff,
+struct sock *inet6_lookup(const struct net *net, struct sk_buff *skb, int doff,
 			  const struct in6_addr *saddr, const __be16 sport,
 			  const struct in6_addr *daddr, const __be16 dport,
 			  const int dif);
-
-int inet6_hash(struct sock *sk);
 
 static inline bool inet6_match(const struct net *net, const struct sock *sk,
 			       const struct in6_addr *saddr,
@@ -186,7 +178,7 @@ static inline bool inet6_match(const struct net *net, const struct sock *sk,
 {
 	if (!net_eq(sock_net(sk), net) ||
 	    sk->sk_family != AF_INET6 ||
-	    sk->sk_portpair != ports ||
+	    READ_ONCE(sk->sk_portpair) != ports ||
 	    !ipv6_addr_equal(&sk->sk_v6_daddr, saddr) ||
 	    !ipv6_addr_equal(&sk->sk_v6_rcv_saddr, daddr))
 		/*五元组不同，返回false*/

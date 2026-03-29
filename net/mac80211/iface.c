@@ -8,7 +8,7 @@
  * Copyright 2008, Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (c) 2016        Intel Deutschland GmbH
- * Copyright (C) 2018-2025 Intel Corporation
+ * Copyright (C) 2018-2026 Intel Corporation
  */
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -107,6 +107,7 @@ static u32 __ieee80211_recalc_idle(struct ieee80211_local *local,
 {
 	bool working, scanning, active;
 	unsigned int led_trig_start = 0, led_trig_stop = 0;
+	struct ieee80211_sub_if_data *iter;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -116,6 +117,14 @@ static u32 __ieee80211_recalc_idle(struct ieee80211_local *local,
 
 	working = !local->ops->remain_on_channel &&
 		  !list_empty(&local->roc_list);
+
+	list_for_each_entry(iter, &local->interfaces, list) {
+		if (iter->vif.type == NL80211_IFTYPE_NAN &&
+		    iter->u.nan.started) {
+			working = true;
+			break;
+		}
+	}
 
 	scanning = test_bit(SCAN_SW_SCANNING, &local->scanning) ||
 		   test_bit(SCAN_ONCHANNEL_SCANNING, &local->scanning);
@@ -214,6 +223,10 @@ static int ieee80211_can_powered_addr_change(struct ieee80211_sub_if_data *sdata
 	if (netif_carrier_ok(sdata->dev))
 		return -EBUSY;
 
+	/* if any stations are set known (so they know this vif too), reject */
+	if (sta_info_get_by_idx(sdata, 0))
+		return -EBUSY;
+
 	/* First check no ROC work is happening on this iface */
 	list_for_each_entry(roc, &local->roc_list, list) {
 		if (roc->sdata != sdata)
@@ -233,12 +246,16 @@ static int ieee80211_can_powered_addr_change(struct ieee80211_sub_if_data *sdata
 			ret = -EBUSY;
 	}
 
+	/*
+	 * More interface types could be added here but changing the
+	 * address while powered makes the most sense in client modes.
+	 */
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
 	case NL80211_IFTYPE_P2P_CLIENT:
-		/* More interface types could be added here but changing the
-		 * address while powered makes the most sense in client modes.
-		 */
+		/* refuse while connecting */
+		if (sdata->u.mgd.auth_data || sdata->u.mgd.assoc_data)
+			return -EBUSY;
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -333,6 +350,8 @@ static int ieee80211_check_concurrent_iface(struct ieee80211_sub_if_data *sdata,
 	/* we hold the RTNL here so can safely walk the list */
 	list_for_each_entry(nsdata, &local->interfaces, list) {
 		if (nsdata != sdata && ieee80211_sdata_running(nsdata)) {
+			struct ieee80211_link_data *link;
+
 			/*
 			 * Only OCB and monitor mode may coexist
 			 */
@@ -359,8 +378,10 @@ static int ieee80211_check_concurrent_iface(struct ieee80211_sub_if_data *sdata,
 			 * will not add another interface while any channel
 			 * switch is active.
 			 */
-			if (nsdata->vif.bss_conf.csa_active)
-				return -EBUSY;
+			for_each_link_data(nsdata, link) {
+				if (link->conf->csa_active)
+					return -EBUSY;
+			}
 
 			/*
 			 * The remaining checks are only performed for interfaces
@@ -545,7 +566,7 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 	wiphy_work_cancel(local->hw.wiphy, &sdata->deflink.csa.finalize_work);
 	wiphy_work_cancel(local->hw.wiphy,
 			  &sdata->deflink.color_change_finalize_work);
-	wiphy_delayed_work_cancel(local->hw.wiphy,
+	wiphy_hrtimer_work_cancel(local->hw.wiphy,
 				  &sdata->deflink.dfs_cac_timer_work);
 
 	if (sdata->wdev.links[0].cac_started) {
@@ -612,10 +633,6 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 
 		spin_unlock_bh(&sdata->u.nan.func_lock);
 		break;
-	case NL80211_IFTYPE_P2P_DEVICE:
-		/* relies on synchronize_rcu() below */
-		RCU_INIT_POINTER(local->p2p_sdata, NULL);
-		fallthrough;
 	default:
 		wiphy_work_cancel(sdata->local->hw.wiphy, &sdata->work);
 		/*
@@ -729,8 +746,9 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 	ieee80211_configure_filter(local);
 	ieee80211_hw_config(local, -1, hw_reconf_flags);
 
+	/* Passing NULL means an interface is picked for configuration */
 	if (local->virt_monitors == local->open_count)
-		ieee80211_add_virtual_monitor(local);
+		ieee80211_add_virtual_monitor(local, NULL);
 }
 
 void ieee80211_stop_mbssid(struct ieee80211_sub_if_data *sdata)
@@ -1164,7 +1182,8 @@ static void ieee80211_sdata_init(struct ieee80211_local *local,
 	ieee80211_link_init(sdata, -1, &sdata->deflink, &sdata->vif.bss_conf);
 }
 
-int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
+int ieee80211_add_virtual_monitor(struct ieee80211_local *local,
+				  struct ieee80211_sub_if_data *creator_sdata)
 {
 	struct ieee80211_sub_if_data *sdata;
 	int ret;
@@ -1172,9 +1191,13 @@ int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
 	ASSERT_RTNL();
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (local->monitor_sdata ||
-	    ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR))
+	if (ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR))
 		return 0;
+
+	/* Already have a monitor set up, configure it */
+	sdata = wiphy_dereference(local->hw.wiphy, local->monitor_sdata);
+	if (sdata)
+		goto configure_monitor;
 
 	sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size, GFP_KERNEL);
 	if (!sdata)
@@ -1227,6 +1250,32 @@ int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
 	skb_queue_head_init(&sdata->skb_queue);
 	skb_queue_head_init(&sdata->status_queue);
 	wiphy_work_init(&sdata->work, ieee80211_iface_work);
+
+configure_monitor:
+	/* Copy in the MU-MIMO configuration if set */
+	if (!creator_sdata) {
+		struct ieee80211_sub_if_data *other;
+
+		list_for_each_entry_rcu(other, &local->mon_list, u.mntr.list) {
+			if (!other->vif.bss_conf.mu_mimo_owner)
+				continue;
+
+			creator_sdata = other;
+			break;
+		}
+	}
+
+	if (creator_sdata && creator_sdata->vif.bss_conf.mu_mimo_owner) {
+		sdata->vif.bss_conf.mu_mimo_owner = true;
+		memcpy(&sdata->vif.bss_conf.mu_group,
+		       &creator_sdata->vif.bss_conf.mu_group,
+		       sizeof(sdata->vif.bss_conf.mu_group));
+		memcpy(&sdata->u.mntr.mu_follow_addr,
+		       creator_sdata->u.mntr.mu_follow_addr, ETH_ALEN);
+
+		ieee80211_link_info_change_notify(sdata, &sdata->deflink,
+						  BSS_CHANGED_MU_GROUPS);
+	}
 
 	return 0;
 }
@@ -1386,11 +1435,13 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 			if (res)
 				goto err_stop;
 		} else {
-			if (local->virt_monitors == 0 && local->open_count == 0) {
-				res = ieee80211_add_virtual_monitor(local);
+			/* add/configure if there is no non-monitor interface */
+			if (local->virt_monitors == local->open_count) {
+				res = ieee80211_add_virtual_monitor(local, sdata);
 				if (res)
 					goto err_stop;
 			}
+
 			local->virt_monitors++;
 
 			/* must be before the call to ieee80211_configure_filter */
@@ -1408,6 +1459,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		ieee80211_recalc_idle(local);
 
 		netif_carrier_on(dev);
+		list_add_tail_rcu(&sdata->u.mntr.list, &local->mon_list);
 		break;
 	default:
 		if (coming_up) {
@@ -1469,17 +1521,6 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		 */
 		ieee80211_set_wmm_default(&sdata->deflink, true,
 			sdata->vif.type != NL80211_IFTYPE_STATION);
-	}
-
-	switch (sdata->vif.type) {
-	case NL80211_IFTYPE_P2P_DEVICE:
-		rcu_assign_pointer(local->p2p_sdata, sdata);
-		break;
-	case NL80211_IFTYPE_MONITOR:
-		list_add_tail_rcu(&sdata->u.mntr.list, &local->mon_list);
-		break;
-	default:
-		break;
 	}
 
 	/*
@@ -1630,7 +1671,15 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 		}
 	} else if (ieee80211_is_action(mgmt->frame_control) &&
 		   mgmt->u.action.category == WLAN_CATEGORY_PROTECTED_EHT) {
-		if (sdata->vif.type == NL80211_IFTYPE_STATION) {
+		if (sdata->vif.type == NL80211_IFTYPE_AP) {
+			switch (mgmt->u.action.u.eml_omn.action_code) {
+			case WLAN_PROTECTED_EHT_ACTION_EML_OP_MODE_NOTIF:
+				ieee80211_rx_eml_op_mode_notif(sdata, skb);
+				break;
+			default:
+				break;
+			}
+		} else if (sdata->vif.type == NL80211_IFTYPE_STATION) {
 			switch (mgmt->u.action.u.ttlm_req.action_code) {
 			case WLAN_PROTECTED_EHT_ACTION_TTLM_REQ:
 				ieee80211_process_neg_ttlm_req(sdata, mgmt,
@@ -1755,7 +1804,7 @@ static void ieee80211_iface_work(struct wiphy *wiphy, struct wiphy_work *work)
 		else
 			ieee80211_iface_process_skb(local, sdata, skb);
 
-		kfree_skb(skb);
+		consume_skb(skb);
 		kcov_remote_stop();
 	}
 
@@ -1764,7 +1813,7 @@ static void ieee80211_iface_work(struct wiphy *wiphy, struct wiphy_work *work)
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		ieee80211_iface_process_status(sdata, skb);
-		kfree_skb(skb);
+		consume_skb(skb);
 
 		kcov_remote_stop();
 	}

@@ -10,8 +10,10 @@
 #include <linux/shmem_fs.h>
 #include <linux/dma-buf.h>
 
+#include <drm/drm_dumb_buffers.h>
 #include <drm/drm_prime.h>
 #include <drm/drm_file.h>
+#include <drm/drm_fourcc.h>
 
 #include <trace/events/gpu_mem.h>
 
@@ -95,7 +97,6 @@ void msm_gem_vma_get(struct drm_gem_object *obj)
 void msm_gem_vma_put(struct drm_gem_object *obj)
 {
 	struct msm_drm_private *priv = obj->dev->dev_private;
-	struct drm_exec exec;
 
 	if (atomic_dec_return(&to_msm_bo(obj)->vma_ref))
 		return;
@@ -103,9 +104,13 @@ void msm_gem_vma_put(struct drm_gem_object *obj)
 	if (!priv->kms)
 		return;
 
+#ifdef CONFIG_DRM_MSM_KMS
+	struct drm_exec exec;
+
 	msm_gem_lock_vm_and_obj(&exec, obj, priv->kms->vm);
 	put_iova_spaces(obj, priv->kms->vm, true, "vma_put");
 	drm_exec_fini(&exec);     /* drop locks */
+#endif
 }
 
 /*
@@ -188,7 +193,7 @@ static struct page **get_pages(struct drm_gem_object *obj)
 	if (!msm_obj->pages) {
 		struct drm_device *dev = obj->dev;
 		struct page **p;
-		int npages = obj->size >> PAGE_SHIFT;
+		size_t npages = obj->size >> PAGE_SHIFT;
 
 		p = drm_gem_get_pages(obj);
 
@@ -370,34 +375,6 @@ out:
 	return ret;
 }
 
-/** get mmap offset */
-static uint64_t mmap_offset(struct drm_gem_object *obj)
-{
-	struct drm_device *dev = obj->dev;
-	int ret;
-
-	msm_gem_assert_locked(obj);
-
-	/* Make it mmapable */
-	ret = drm_gem_create_mmap_offset(obj);
-
-	if (ret) {
-		DRM_DEV_ERROR(dev->dev, "could not allocate mmap offset\n");
-		return 0;
-	}
-
-	return drm_vma_node_offset_addr(&obj->vma_node);
-}
-
-uint64_t msm_gem_mmap_offset(struct drm_gem_object *obj)
-{
-	uint64_t offset;
-
-	msm_gem_lock(obj);
-	offset = mmap_offset(obj);
-	msm_gem_unlock(obj);
-	return offset;
-}
 
 static struct drm_gpuva *lookup_vma(struct drm_gem_object *obj,
 				    struct drm_gpuvm *vm)
@@ -663,9 +640,13 @@ int msm_gem_set_iova(struct drm_gem_object *obj,
 
 static bool is_kms_vm(struct drm_gpuvm *vm)
 {
+#ifdef CONFIG_DRM_MSM_KMS
 	struct msm_drm_private *priv = vm->drm->dev_private;
 
 	return priv->kms && (priv->kms->vm == vm);
+#else
+	return false;
+#endif
 }
 
 /*
@@ -691,31 +672,34 @@ void msm_gem_unpin_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm)
 int msm_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 		struct drm_mode_create_dumb *args)
 {
-	args->pitch = align_pitch(args->width, args->bpp);
-	args->size  = PAGE_ALIGN(args->pitch * args->height);
+	u32 fourcc;
+	u64 pitch_align;
+	int ret;
+
+	/*
+	 * Adreno needs pitch aligned to 32 pixels. Compute the number
+	 * of bytes for a block of 32 pixels at the given color format.
+	 * Use the result as pitch alignment.
+	 */
+	fourcc = drm_driver_color_mode_format(dev, args->bpp);
+	if (fourcc != DRM_FORMAT_INVALID) {
+		const struct drm_format_info *info;
+
+		info = drm_format_info(fourcc);
+		if (!info)
+			return -EINVAL;
+		pitch_align = drm_format_info_min_pitch(info, 0, 32);
+	} else {
+		pitch_align = round_up(args->width, 32) * DIV_ROUND_UP(args->bpp, SZ_8);
+	}
+	if (!pitch_align || pitch_align > U32_MAX)
+		return -EINVAL;
+	ret = drm_mode_size_dumb(dev, args, pitch_align, 0);
+	if (ret)
+		return ret;
+
 	return msm_gem_new_handle(dev, file, args->size,
 			MSM_BO_SCANOUT | MSM_BO_WC, &args->handle, "dumb");
-}
-
-int msm_gem_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
-		uint32_t handle, uint64_t *offset)
-{
-	struct drm_gem_object *obj;
-	int ret = 0;
-
-	/* GEM does all our handle to object mapping */
-	obj = drm_gem_object_lookup(file, handle);
-	if (obj == NULL) {
-		ret = -ENOENT;
-		goto fail;
-	}
-
-	*offset = msm_gem_mmap_offset(obj);
-
-	drm_gem_object_put(obj);
-
-fail:
-	return ret;
 }
 
 static void *get_vaddr(struct drm_gem_object *obj, unsigned madv)
@@ -1113,7 +1097,13 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
 		put_pages(obj);
 	}
 
-	if (msm_obj->flags & MSM_BO_NO_SHARE) {
+	/*
+	 * In error paths, we could end up here before msm_gem_new_handle()
+	 * has changed obj->resv to point to the shared resv.  In this case,
+	 * we don't want to drop a ref to the shared r_obj that we haven't
+	 * taken yet.
+	 */
+	if ((msm_obj->flags & MSM_BO_NO_SHARE) && (obj->resv != &obj->_resv)) {
 		struct drm_gem_object *r_obj =
 			container_of(obj->resv, struct drm_gem_object, _resv);
 
@@ -1139,7 +1129,7 @@ static int msm_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct
 
 /* convenience method to construct a GEM buffer object, and userspace handle */
 int msm_gem_new_handle(struct drm_device *dev, struct drm_file *file,
-		uint32_t size, uint32_t flags, uint32_t *handle,
+		size_t size, uint32_t flags, uint32_t *handle,
 		char *name)
 {
 	struct drm_gem_object *obj;
@@ -1205,9 +1195,8 @@ static const struct drm_gem_object_funcs msm_gem_object_funcs = {
 	.vm_ops = &vm_ops,
 };
 
-static int msm_gem_new_impl(struct drm_device *dev,
-		uint32_t size, uint32_t flags,
-		struct drm_gem_object **obj)
+static int msm_gem_new_impl(struct drm_device *dev, uint32_t flags,
+			    struct drm_gem_object **obj)
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_gem_object *msm_obj;
@@ -1226,7 +1215,7 @@ static int msm_gem_new_impl(struct drm_device *dev,
 		return -EINVAL;
 	}
 
-	msm_obj = kzalloc(sizeof(*msm_obj), GFP_KERNEL);
+	msm_obj = kzalloc_obj(*msm_obj);
 	if (!msm_obj)
 		return -ENOMEM;
 
@@ -1241,7 +1230,7 @@ static int msm_gem_new_impl(struct drm_device *dev,
 	return 0;
 }
 
-struct drm_gem_object *msm_gem_new(struct drm_device *dev, uint32_t size, uint32_t flags)
+struct drm_gem_object *msm_gem_new(struct drm_device *dev, size_t size, uint32_t flags)
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_gem_object *msm_obj;
@@ -1256,7 +1245,7 @@ struct drm_gem_object *msm_gem_new(struct drm_device *dev, uint32_t size, uint32
 	if (size == 0)
 		return ERR_PTR(-EINVAL);
 
-	ret = msm_gem_new_impl(dev, size, flags, &obj);
+	ret = msm_gem_new_impl(dev, flags, &obj);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -1296,12 +1285,12 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_gem_object *msm_obj;
 	struct drm_gem_object *obj;
-	uint32_t size;
-	int ret, npages;
+	size_t size, npages;
+	int ret;
 
 	size = PAGE_ALIGN(dmabuf->size);
 
-	ret = msm_gem_new_impl(dev, size, MSM_BO_WC, &obj);
+	ret = msm_gem_new_impl(dev, MSM_BO_WC, &obj);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -1312,7 +1301,7 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	msm_obj = to_msm_bo(obj);
 	msm_gem_lock(obj);
 	msm_obj->sgt = sgt;
-	msm_obj->pages = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
+	msm_obj->pages = kvmalloc_objs(struct page *, npages);
 	if (!msm_obj->pages) {
 		msm_gem_unlock(obj);
 		ret = -ENOMEM;
@@ -1344,7 +1333,7 @@ fail:
 	return ERR_PTR(ret);
 }
 
-void *msm_gem_kernel_new(struct drm_device *dev, uint32_t size, uint32_t flags,
+void *msm_gem_kernel_new(struct drm_device *dev, size_t size, uint32_t flags,
 			 struct drm_gpuvm *vm, struct drm_gem_object **bo,
 			 uint64_t *iova)
 {

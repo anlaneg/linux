@@ -265,7 +265,7 @@ lpfc_new_scsi_buf_s3(struct lpfc_vport *vport, int num_to_alloc)
 			 (int)sizeof(struct fcp_rsp), bpl_size);
 
 	for (bcnt = 0; bcnt < num_to_alloc; bcnt++) {
-		psb = kzalloc(sizeof(struct lpfc_io_buf), GFP_KERNEL);
+		psb = kzalloc_obj(struct lpfc_io_buf);
 		if (!psb)
 			break;
 
@@ -5233,8 +5233,8 @@ static char *lpfc_is_command_vm_io(struct scsi_cmnd *cmd)
  *   0 - Success
  *   SCSI_MLQUEUE_HOST_BUSY - Block all devices served by this host temporarily.
  **/
-static int
-lpfc_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *cmnd)
+static enum scsi_qc_status lpfc_queuecommand(struct Scsi_Host *shost,
+					     struct scsi_cmnd *cmnd)
 {
 	struct lpfc_vport *vport = (struct lpfc_vport *) shost->hostdata;
 	struct lpfc_hba   *phba = vport->phba;
@@ -5935,7 +5935,7 @@ lpfc_chk_tgt_mapped(struct lpfc_vport *vport, struct fc_rport *rport)
 /**
  * lpfc_reset_flush_io_context -
  * @vport: The virtual port (scsi_host) for the flush context
- * @tgt_id: If aborting by Target contect - specifies the target id
+ * @tgt_id: If aborting by Target context - specifies the target id
  * @lun_id: If aborting by Lun context - specifies the lun id
  * @context: specifies the context level to flush at.
  *
@@ -6109,8 +6109,14 @@ lpfc_target_reset_handler(struct scsi_cmnd *cmnd)
 			pnode->nlp_fcp_info &= ~NLP_FCP_2_DEVICE;
 			spin_unlock_irqrestore(&pnode->lock, flags);
 		}
-		lpfc_reset_flush_io_context(vport, tgt_id, lun_id,
-					  LPFC_CTX_TGT);
+		status = lpfc_reset_flush_io_context(vport, tgt_id, lun_id,
+						     LPFC_CTX_TGT);
+		if (status != SUCCESS) {
+			lpfc_printf_vlog(vport, KERN_ERR, LOG_FCP,
+					 "0726 Target Reset flush status x%x\n",
+					 status);
+			return status;
+		}
 		return FAST_IO_FAIL;
 	}
 
@@ -6202,7 +6208,7 @@ lpfc_host_reset_handler(struct scsi_cmnd *cmnd)
 	int rc, ret = SUCCESS;
 
 	lpfc_printf_vlog(vport, KERN_ERR, LOG_FCP,
-			 "3172 SCSI layer issued Host Reset Data:\n");
+			 "3172 SCSI layer issued Host Reset\n");
 
 	lpfc_offline_prep(phba, LPFC_MBX_WAIT);
 	lpfc_offline(phba);
@@ -6737,8 +6743,8 @@ lpfc_disable_oas_lun(struct lpfc_hba *phba, struct lpfc_name *vport_wwpn,
 	return false;
 }
 
-static int
-lpfc_no_command(struct Scsi_Host *shost, struct scsi_cmnd *cmnd)
+static enum scsi_qc_status lpfc_no_command(struct Scsi_Host *shost,
+					   struct scsi_cmnd *cmnd)
 {
 	return SCSI_MLQUEUE_HOST_BUSY;
 }

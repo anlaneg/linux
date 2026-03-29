@@ -5,7 +5,7 @@
 #include "ice.h"
 #include "ice_lib.h"
 #include "ice_fltr.h"
-#include "ice_virtchnl_allowlist.h"
+#include "virt/allowlist.h"
 
 /* Public functions which may be accessed by all driver files */
 
@@ -1112,7 +1112,7 @@ static int ice_cfg_mac_antispoof(struct ice_vsi *vsi, bool enable)
 	struct ice_vsi_ctx *ctx;
 	int err;
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kzalloc_obj(*ctx);
 	if (!ctx)
 		return -ENOMEM;
 

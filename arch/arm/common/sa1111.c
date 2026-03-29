@@ -617,8 +617,8 @@ static int sa1111_setup_gpios(struct sa1111 *sachip)
 	sachip->gc.direction_input = sa1111_gpio_direction_input;
 	sachip->gc.direction_output = sa1111_gpio_direction_output;
 	sachip->gc.get = sa1111_gpio_get;
-	sachip->gc.set_rv = sa1111_gpio_set;
-	sachip->gc.set_multiple_rv = sa1111_gpio_set_multiple;
+	sachip->gc.set = sa1111_gpio_set;
+	sachip->gc.set_multiple = sa1111_gpio_set_multiple;
 	sachip->gc.to_irq = sa1111_gpio_to_irq;
 	sachip->gc.base = -1;
 	sachip->gc.ngpio = 18;
@@ -737,7 +737,7 @@ sa1111_init_one_child(struct sa1111 *sachip, struct resource *parent,
 	unsigned i;
 	int ret;
 
-	dev = kzalloc(sizeof(struct sa1111_dev), GFP_KERNEL);
+	dev = kzalloc_obj(struct sa1111_dev);
 	if (!dev) {
 		ret = -ENOMEM;
 		goto err_alloc;
@@ -969,7 +969,7 @@ static int sa1111_suspend_noirq(struct device *dev)
 	unsigned int val;
 	void __iomem *base;
 
-	save = kmalloc(sizeof(struct sa1111_save_data), GFP_KERNEL);
+	save = kmalloc_obj(struct sa1111_save_data);
 	if (!save)
 		return -ENOMEM;
 	sachip->saved_state = save;
@@ -1371,7 +1371,7 @@ static void sa1111_bus_remove(struct device *dev)
 		drv->remove(sadev);
 }
 
-struct bus_type sa1111_bus_type = {
+const struct bus_type sa1111_bus_type = {
 	.name		= "sa1111-rab",
 	.match		= sa1111_match,
 	.probe		= sa1111_bus_probe,

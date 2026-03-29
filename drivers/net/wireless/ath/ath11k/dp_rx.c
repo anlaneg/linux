@@ -772,7 +772,7 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 		return;
 	}
 
-	elem = kzalloc(sizeof(*elem), GFP_ATOMIC);
+	elem = kzalloc_obj(*elem, GFP_ATOMIC);
 	if (!elem)
 		goto free_desc;
 
@@ -1542,7 +1542,7 @@ struct htt_ppdu_stats_info *ath11k_dp_htt_get_ppdu_desc(struct ath11k *ar,
 		}
 	}
 
-	ppdu_info = kzalloc(sizeof(*ppdu_info), GFP_ATOMIC);
+	ppdu_info = kzalloc_obj(*ppdu_info, GFP_ATOMIC);
 	if (!ppdu_info)
 		return NULL;
 
@@ -4615,7 +4615,6 @@ static void ath11k_hal_rx_msdu_list_get(struct ath11k *ar,
 			      msdu_details[i].buf_addr_info.info0) == 0) {
 			msdu_desc_info = &msdu_details[i - 1].rx_msdu_info;
 			msdu_desc_info->info0 |= last;
-			;
 			break;
 		}
 		msdu_desc_info = &msdu_details[i].rx_msdu_info;
@@ -5486,7 +5485,7 @@ static int ath11k_dp_rx_full_mon_prepare_mpdu(struct ath11k_dp *dp,
 					      struct sk_buff *head,
 					      struct sk_buff *tail)
 {
-	mon_mpdu = kzalloc(sizeof(*mon_mpdu), GFP_ATOMIC);
+	mon_mpdu = kzalloc_obj(*mon_mpdu, GFP_ATOMIC);
 	if (!mon_mpdu)
 		return -ENOMEM;
 

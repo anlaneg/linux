@@ -14,7 +14,9 @@
 struct msm_iommu {
 	struct msm_mmu base;
 	struct iommu_domain *domain;
-	atomic_t pagetables;
+
+	struct mutex init_lock;  /* protects pagetables counter and prr_page */
+	int pagetables;
 	struct page *prr_page;
 
 	struct kmem_cache *pt_cache;
@@ -227,7 +229,8 @@ static void msm_iommu_pagetable_destroy(struct msm_mmu *mmu)
 	 * If this is the last attached pagetable for the parent,
 	 * disable TTBR0 in the arm-smmu driver
 	 */
-	if (atomic_dec_return(&iommu->pagetables) == 0) {
+	mutex_lock(&iommu->init_lock);
+	if (--iommu->pagetables == 0) {
 		adreno_smmu->set_ttbr0_cfg(adreno_smmu->cookie, NULL);
 
 		if (adreno_smmu->set_prr_bit) {
@@ -236,6 +239,7 @@ static void msm_iommu_pagetable_destroy(struct msm_mmu *mmu)
 			iommu->prr_page = NULL;
 		}
 	}
+	mutex_unlock(&iommu->init_lock);
 
 	free_io_pgtable_ops(pagetable->pgtbl_ops);
 	kfree(pagetable);
@@ -328,12 +332,14 @@ msm_iommu_pagetable_prealloc_allocate(struct msm_mmu *mmu, struct msm_mmu_preall
 	struct kmem_cache *pt_cache = get_pt_cache(mmu);
 	int ret;
 
-	p->pages = kvmalloc_array(p->count, sizeof(p->pages), GFP_KERNEL);
+	p->pages = kvmalloc_objs(*p->pages, p->count);
 	if (!p->pages)
 		return -ENOMEM;
 
 	ret = kmem_cache_alloc_bulk(pt_cache, GFP_KERNEL, p->count, p->pages);
 	if (ret != p->count) {
+		kfree(p->pages);
+		p->pages = NULL;
 		p->count = ret;
 		return -ENOMEM;
 	}
@@ -347,6 +353,9 @@ msm_iommu_pagetable_prealloc_cleanup(struct msm_mmu *mmu, struct msm_mmu_preallo
 	struct kmem_cache *pt_cache = get_pt_cache(mmu);
 	uint32_t remaining_pt_count = p->count - p->ptr;
 
+	if (!p->pages)
+		return;
+
 	if (p->count > 0)
 		trace_msm_mmu_prealloc_cleanup(p->count, remaining_pt_count);
 
@@ -355,7 +364,7 @@ msm_iommu_pagetable_prealloc_cleanup(struct msm_mmu *mmu, struct msm_mmu_preallo
 }
 
 /**
- * alloc_pt() - Custom page table allocator
+ * msm_iommu_pagetable_alloc_pt() - Custom page table allocator
  * @cookie: Cookie passed at page table allocation time.
  * @size: Size of the page table. This size should be fixed,
  * and determined at creation time based on the granule size.
@@ -407,7 +416,7 @@ msm_iommu_pagetable_alloc_pt(void *cookie, size_t size, gfp_t gfp)
 
 
 /**
- * free_pt() - Custom page table free function
+ * msm_iommu_pagetable_free_pt() - Custom page table free function
  * @cookie: Cookie passed at page table allocation time.
  * @data: Page table to free.
  * @size: Size of the page table. This size should be fixed,
@@ -512,7 +521,7 @@ struct msm_mmu *msm_iommu_pagetable_create(struct msm_mmu *parent, bool kernel_m
 	if (WARN_ONCE(!ttbr1_cfg, "No per-process page tables"))
 		return ERR_PTR(-ENODEV);
 
-	pagetable = kzalloc(sizeof(*pagetable), GFP_KERNEL);
+	pagetable = kzalloc_obj(*pagetable);
 	if (!pagetable)
 		return ERR_PTR(-ENOMEM);
 
@@ -568,9 +577,12 @@ struct msm_mmu *msm_iommu_pagetable_create(struct msm_mmu *parent, bool kernel_m
 	 * If this is the first pagetable that we've allocated, send it back to
 	 * the arm-smmu driver as a trigger to set up TTBR0
 	 */
-	if (atomic_inc_return(&iommu->pagetables) == 1) {
+	mutex_lock(&iommu->init_lock);
+	if (iommu->pagetables++ == 0) {
 		ret = adreno_smmu->set_ttbr0_cfg(adreno_smmu->cookie, &ttbr0_cfg);
 		if (ret) {
+			iommu->pagetables--;
+			mutex_unlock(&iommu->init_lock);
 			free_io_pgtable_ops(pagetable->pgtbl_ops);
 			kfree(pagetable);
 			return ERR_PTR(ret);
@@ -595,6 +607,7 @@ struct msm_mmu *msm_iommu_pagetable_create(struct msm_mmu *parent, bool kernel_m
 			adreno_smmu->set_prr_bit(adreno_smmu->cookie, true);
 		}
 	}
+	mutex_unlock(&iommu->init_lock);
 
 	/* Needed later for TLB flush */
 	pagetable->parent = parent;
@@ -713,7 +726,7 @@ struct msm_mmu *msm_iommu_new(struct device *dev, unsigned long quirks)
 	int ret;
 
 	if (!device_iommu_mapped(dev))
-		return NULL;
+		return ERR_PTR(-ENODEV);
 
 	domain = iommu_paging_domain_alloc(dev);
 	if (IS_ERR(domain))
@@ -721,7 +734,7 @@ struct msm_mmu *msm_iommu_new(struct device *dev, unsigned long quirks)
 
 	iommu_set_pgtable_quirks(domain, quirks);
 
-	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
+	iommu = kzalloc_obj(*iommu);
 	if (!iommu) {
 		iommu_domain_free(domain);
 		return ERR_PTR(-ENOMEM);
@@ -730,7 +743,7 @@ struct msm_mmu *msm_iommu_new(struct device *dev, unsigned long quirks)
 	iommu->domain = domain;
 	msm_mmu_init(&iommu->base, dev, &funcs, MSM_MMU_IOMMU);
 
-	atomic_set(&iommu->pagetables, 0);
+	mutex_init(&iommu->init_lock);
 
 	ret = iommu_attach_device(iommu->domain, dev);
 	if (ret) {
@@ -748,7 +761,7 @@ struct msm_mmu *msm_iommu_disp_new(struct device *dev, unsigned long quirks)
 	struct msm_mmu *mmu;
 
 	mmu = msm_iommu_new(dev, quirks);
-	if (IS_ERR_OR_NULL(mmu))
+	if (IS_ERR(mmu))
 		return mmu;
 
 	iommu = to_msm_iommu(mmu);
@@ -764,11 +777,11 @@ struct msm_mmu *msm_iommu_gpu_new(struct device *dev, struct msm_gpu *gpu, unsig
 	struct msm_mmu *mmu;
 
 	mmu = msm_iommu_new(dev, quirks);
-	if (IS_ERR_OR_NULL(mmu))
+	if (IS_ERR(mmu))
 		return mmu;
 
 	iommu = to_msm_iommu(mmu);
-	if (adreno_smmu && adreno_smmu->cookie) {
+	if (adreno_smmu->cookie) {
 		const struct io_pgtable_cfg *cfg =
 			adreno_smmu->get_ttbr1_cfg(adreno_smmu->cookie);
 		size_t tblsz = get_tblsz(cfg);

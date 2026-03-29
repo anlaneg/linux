@@ -57,7 +57,7 @@ static int kernfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 const struct super_operations kernfs_sops = {
 	.statfs		= kernfs_statfs,
-	.drop_inode	= generic_delete_inode,
+	.drop_inode	= inode_just_drop,
 	.evict_inode	= kernfs_evict_inode,
 
 	.show_options	= kernfs_sop_show_options,
@@ -298,6 +298,7 @@ static int kernfs_fill_super(struct super_block *sb, struct kernfs_fs_context *k
 	if (info->root->flags & KERNFS_ROOT_SUPPORT_EXPORTOP)
 		sb->s_export_op = &kernfs_export_ops;
 	sb->s_time_gran = 1;
+	sb->s_maxbytes  = MAX_LFS_FILESIZE;
 
 	/* sysfs dentries and inodes don't require IO to create */
 	sb->s_shrink->seeks = 0;
@@ -374,7 +375,7 @@ int kernfs_get_tree(struct fs_context *fc)
 	struct kernfs_super_info *info;
 	int error;
 
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc_obj(*info);
 	if (!info)
 		return -ENOMEM;
 
@@ -456,7 +457,7 @@ static void __init kernfs_mutex_init(void)
 
 static void __init kernfs_lock_init(void)
 {
-	kernfs_locks = kmalloc(sizeof(struct kernfs_global_locks), GFP_KERNEL);
+	kernfs_locks = kmalloc_obj(struct kernfs_global_locks);
 	WARN_ON(!kernfs_locks);
 
 	kernfs_mutex_init();

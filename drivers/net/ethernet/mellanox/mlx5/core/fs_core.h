@@ -103,24 +103,6 @@ enum fs_node_type {
 	FS_TYPE_FLOW_DEST//flow的目的地
 };
 
-enum fs_flow_table_type {
-	FS_FT_NIC_RX          = 0x0,
-	FS_FT_NIC_TX          = 0x1,
-	FS_FT_ESW_EGRESS_ACL  = 0x2,
-	FS_FT_ESW_INGRESS_ACL = 0x3,
-	FS_FT_FDB             = 0X4,
-	FS_FT_SNIFFER_RX	= 0X5,
-	FS_FT_SNIFFER_TX	= 0X6,
-	FS_FT_RDMA_RX		= 0X7,
-	FS_FT_RDMA_TX		= 0X8,
-	FS_FT_PORT_SEL		= 0X9,
-	FS_FT_FDB_RX		= 0xa,
-	FS_FT_FDB_TX		= 0xb,
-	FS_FT_RDMA_TRANSPORT_RX	= 0xd,
-	FS_FT_RDMA_TRANSPORT_TX	= 0xe,
-	FS_FT_MAX_TYPE = FS_FT_RDMA_TRANSPORT_TX,
-};
-
 enum fs_flow_table_op_mod {
 	FS_FT_OP_MOD_NORMAL,
 	FS_FT_OP_MOD_LAG_DEMUX,
@@ -155,17 +137,15 @@ struct mlx5_flow_steering {
 	struct mlx5_flow_root_namespace *fdb_root_ns;
 	struct mlx5_flow_namespace	**fdb_sub_ns;
 	//针对每个vport有一个egress_root_ns
-	struct mlx5_flow_root_namespace **esw_egress_root_ns;
+	struct xarray			esw_egress_root_ns;
 	//针对每个vport有一个ingress_root_ns
-	struct mlx5_flow_root_namespace **esw_ingress_root_ns;
+	struct xarray			esw_ingress_root_ns;
 	struct mlx5_flow_root_namespace	*sniffer_tx_root_ns;
 	struct mlx5_flow_root_namespace	*sniffer_rx_root_ns;
 	struct mlx5_flow_root_namespace	*rdma_rx_root_ns;
 	struct mlx5_flow_root_namespace	*rdma_tx_root_ns;
 	struct mlx5_flow_root_namespace	*egress_root_ns;
 	struct mlx5_flow_root_namespace	*port_sel_root_ns;
-	int esw_egress_acl_vports;
-	int esw_ingress_acl_vports;
 	struct mlx5_flow_root_namespace **rdma_transport_rx_root_ns;
 	struct mlx5_flow_root_namespace **rdma_transport_tx_root_ns;
 	int rdma_transport_rx_vports;
@@ -216,6 +196,7 @@ struct mlx5_flow_table {
 	//表号，用于指代
 	u32				id;
 	u16				vport;
+	u16				esw_owner_vhca_id;
 	//支持的fte最大数
 	unsigned int			max_fte;
 	//flow table的level,flow table会被组织成层次式
@@ -356,7 +337,8 @@ struct mlx5_flow_root_namespace {
 };
 
 enum mlx5_fc_type {
-	MLX5_FC_TYPE_ACQUIRED = 0,
+	MLX5_FC_TYPE_POOL_ACQUIRED = 0,
+	MLX5_FC_TYPE_SINGLE,
 	MLX5_FC_TYPE_LOCAL,
 };
 
@@ -372,6 +354,7 @@ struct mlx5_fc {
 	enum mlx5_fc_type type;
 	struct mlx5_fc_bulk *bulk;/*所属的flow counter批组*/
 	struct mlx5_fc_cache cache;
+	refcount_t fc_local_refcount;
 	/* last{packets,bytes} are used for calculating deltas since last reading. */
 	u64 lastpackets;
 	u64 lastbytes;
@@ -407,10 +390,14 @@ void mlx5_fs_core_free(struct mlx5_core_dev *dev);
 int mlx5_fs_core_init(struct mlx5_core_dev *dev);
 void mlx5_fs_core_cleanup(struct mlx5_core_dev *dev);
 
-int mlx5_fs_egress_acls_init(struct mlx5_core_dev *dev, int total_vports);
-void mlx5_fs_egress_acls_cleanup(struct mlx5_core_dev *dev);
-int mlx5_fs_ingress_acls_init(struct mlx5_core_dev *dev, int total_vports);
-void mlx5_fs_ingress_acls_cleanup(struct mlx5_core_dev *dev);
+int mlx5_fs_vport_egress_acl_ns_add(struct mlx5_flow_steering *steering,
+				    u16 vport_idx);
+int mlx5_fs_vport_ingress_acl_ns_add(struct mlx5_flow_steering *steering,
+				     u16 vport_idx);
+void mlx5_fs_vport_egress_acl_ns_remove(struct mlx5_flow_steering *steering,
+					int vport_idx);
+void mlx5_fs_vport_ingress_acl_ns_remove(struct mlx5_flow_steering *steering,
+					 int vport_idx);
 
 u32 mlx5_fs_get_capabilities(struct mlx5_core_dev *dev, enum mlx5_flow_namespace_type type);
 

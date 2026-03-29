@@ -17,8 +17,11 @@
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/pci.h>
+#include <linux/iommufd.h>
 #include <linux/irqreturn.h>
-#include <linux/io-pgtable.h>
+#include <linux/generic_pt/iommu.h>
+
+#include <uapi/linux/iommufd.h>
 
 /*
  * Maximum number of IOMMUs supported
@@ -108,6 +111,8 @@
 
 
 /* Extended Feature 2 Bits */
+#define FEATURE_SEVSNPIO_SUP	BIT_ULL(1)
+#define FEATURE_GCR3TRPMODE	BIT_ULL(3)
 #define FEATURE_SNPAVICSUP	GENMASK_ULL(7, 5)
 #define FEATURE_SNPAVICSUP_GAM(x) \
 	(FIELD_GET(FEATURE_SNPAVICSUP, x) == 0x1)
@@ -187,6 +192,7 @@
 #define CONTROL_EPH_EN		45
 #define CONTROL_XT_EN		50
 #define CONTROL_INTCAPXT_EN	51
+#define CONTROL_GCR3TRPMODE	58
 #define CONTROL_IRTCACHEDIS	59
 #define CONTROL_SNPAVIC_EN	61
 
@@ -250,6 +256,10 @@
 #define CMD_BUFFER_ENTRIES 512
 #define MMIO_CMD_SIZE_SHIFT 56
 #define MMIO_CMD_SIZE_512 (0x9ULL << MMIO_CMD_SIZE_SHIFT)
+#define MMIO_CMD_HEAD_MASK	GENMASK_ULL(18, 4)	/* Command buffer head ptr field [18:4] */
+#define MMIO_CMD_BUFFER_HEAD(x) FIELD_GET(MMIO_CMD_HEAD_MASK, (x))
+#define MMIO_CMD_TAIL_MASK	GENMASK_ULL(18, 4)	/* Command buffer tail ptr field [18:4] */
+#define MMIO_CMD_BUFFER_TAIL(x) FIELD_GET(MMIO_CMD_TAIL_MASK, (x))
 
 /* constants for event buffer handling */
 #define EVT_BUFFER_SIZE		8192 /* 512 entries */
@@ -340,112 +350,7 @@
 #define GUEST_PGTABLE_4_LEVEL	0x00
 #define GUEST_PGTABLE_5_LEVEL	0x01
 
-/* level=0, 为1<<12, 即最大可表示地址为4K;
- * level=1，为1<<21, 即最大可表示地址为2M;
- * level=2, 为1<<30, 即最大可表示地址为1G;
- * level=3, 为1<<39, 即最大可表示地址为512G
- * level=4, 为1<<48, 即最大可表示地址为256T
- * level=5, 为1<<57, 即最大可表示地址为128P*/
-#define PM_LEVEL_SHIFT(x)	(12 + ((x) * 9))
-
-/*此level可表示的地址最大值*/
-#define PM_LEVEL_SIZE(x)	(((x) < 6) ? \
-				  ((1ULL << PM_LEVEL_SHIFT((x))) - 1): \
-				   (0xffffffffffffffffULL))
-/*
- * 获取地址在指定level下对应的pte索引。
- * 每一层占用一个物理页，共4096字节，每个pte占用8字节，则有512个pte项，对应的是9bits.
- * 故每个地址实际上是按9bit划分成一个一个连续的level,如下示
- * |预留位|level5(48-56)|level4(39-47）|level3(30-38)|level2(21-29)｜level1(12-20）|page(12bits)|
- * 因此，本宏只需要按level将地址向右移对应位数（level*9+12),然后取9bits即可。
- * */
-#define PM_LEVEL_INDEX(x, a)	(((a) >> PM_LEVEL_SHIFT((x))) & 0x1ffULL)
-/*与0xe,即取x的0，1，2bit位(由于仅占3位，故x最多支持到7级，实际上只需要支持到<6），并将结果向左移动9位
- * （由于pte地址中低12位不保存数据，即有12位可用，这里占用9，10，11位来存放level)
- * 其它9位做标记位，例如IOMMU_PTE_PR等
- * 同时由于最多支持4-7级（均需要占用3bit)，每一级占用9位（一页有4096字节，一个pte占用8字节，可以存放512个，故占用9位）
- * 假设支持7级:7*9+12=75>64 故7级实际不会使用到。（实现中7被做了特殊处理，见iommu_v1_map_pages）
- * 假设支持6级：6*9+12=66>64 故6级已经是理论最高级别。（但不会使用，高位已有标记位占用）
- * 5*9+12=57 可以使用 (可表示128P内存，且高位有6个bit位可用)
- * 4*9+12=48 可以使用 （可表示256T内存，且高位有15个bit位可用）
- * 由以上可知pte高位也有一些bit是可以存数据的，例如58-63位，所以IOMMU_PTE_HD定义在这些位上。
- * */
-#define PM_LEVEL_ENC(x)		(((x) << 9) & 0xe00ULL)
-#define PM_LEVEL_PDE(x/*level*/, a/*地址*/)	((a) | PM_LEVEL_ENC((x)/*在pte中保存level*/) | \
-				 IOMMU_PTE_PR/*此pte有效，占0号位*/ | IOMMU_PTE_IR/*读权限，占61号位*/ | IOMMU_PTE_IW/*写权限，占62号位*/)
-/*我们通过PM_LEVEL_ENC在pte中存入了level值，通过此宏提供存入的level值*/
-#define PM_PTE_LEVEL(pte)	(((pte) >> 9) & 0x7ULL)
-
-#define PM_MAP_4k		0
 #define PM_ADDR_MASK		0x000ffffffffff000ULL
-#define PM_MAP_MASK(lvl)	(PM_ADDR_MASK & \
-				(~((1ULL << (12 + ((lvl) * 9))) - 1)))
-#define PM_ALIGNED(lvl, addr)	((PM_MAP_MASK(lvl) & (addr)) == (addr))
-
-/*
- * Returns the page table level to use for a given page size
- * Pagesize is expected to be a power-of-two
- */
-/*假设pagesize=4K,则level=0
- * 假设pagesize=2M,则level=1
- * 假设pagesize=1G,则level=2*/
-#define PAGE_SIZE_LEVEL(pagesize) \
-		((__ffs(pagesize) - 12) / 9)
-/*
- * Returns the number of ptes to use for a given page size
- * Pagesize is expected to be a power-of-two
- */
-/*假设pagesize=4K,即pte=1
- * 假设pagesize=2M,即((21-12）%9）,即pte=1*/
-#define PAGE_SIZE_PTE_COUNT(pagesize) \
-		(1ULL << ((__ffs(pagesize) - 12) % 9))
-
-/*
- * Aligns a given io-virtual address to a given page size
- * Pagesize is expected to be a power-of-two
- */
-#define PAGE_SIZE_ALIGN(address, pagesize) \
-		((address) & ~((pagesize) - 1))
-/*
- * Creates an IOMMU PTE for an address and a given pagesize
- * The PTE has no permission bits set
- * Pagesize is expected to be a power-of-two larger than 4096
- */
-#define PAGE_SIZE_PTE(address, pagesize)		\
-		(((address) | ((pagesize) - 1)) &	\
-		 (~(pagesize >> 1)) & PM_ADDR_MASK)
-
-/*
- * Takes a PTE value with mode=0x07 and returns the page size it maps
- */
-#define PTE_PAGE_SIZE(pte) \
-	(1ULL << (1 + ffz(((pte) | 0xfffULL))))
-
-/*
- * Takes a page-table level and returns the default page-size for this level
- */
-#define PTE_LEVEL_PAGE_SIZE(level)			\
-	/*此level对应的页大小*/\
-	(1ULL << (12 + (9 * (level))))
-
-/*
- * The IOPTE dirty bit
- */
-#define IOMMU_PTE_HD_BIT (6)
-
-/*
- * Bit value definition for I/O PTE fields
- */
-/*标记此pte有效，占0号位*/
-#define IOMMU_PTE_PR	BIT_ULL(0)
-/*标记此pte已被修改（dirty)，占第6位*/
-#define IOMMU_PTE_HD	BIT_ULL(IOMMU_PTE_HD_BIT)
-#define IOMMU_PTE_U	BIT_ULL(59)
-#define IOMMU_PTE_FC	BIT_ULL(60)
-/*标记此pte有读权限，占61号位*/
-#define IOMMU_PTE_IR	BIT_ULL(61)
-/*标记此pte有写权限，占62号位*/
-#define IOMMU_PTE_IW	BIT_ULL(62)
 
 /*
  * Bit value definition for DTE fields
@@ -453,6 +358,9 @@
 #define DTE_FLAG_V	BIT_ULL(0)
 #define DTE_FLAG_TV	BIT_ULL(1)
 #define DTE_FLAG_HAD	(3ULL << 7)
+#define DTE_MODE_MASK	GENMASK_ULL(11, 9)
+#define DTE_HOST_TRP	GENMASK_ULL(51, 12)
+#define DTE_FLAG_PPR	BIT_ULL(52)
 #define DTE_FLAG_GIOV	BIT_ULL(54)
 #define DTE_FLAG_GV	BIT_ULL(55)
 #define DTE_GLX		GENMASK_ULL(57, 56)
@@ -461,7 +369,7 @@
 
 #define DTE_FLAG_IOTLB	BIT_ULL(32)
 #define DTE_FLAG_MASK	(0x3ffULL << 32)
-#define DEV_DOMID_MASK	0xffffULL
+#define DTE_DOMID_MASK	GENMASK_ULL(15, 0)
 
 #define DTE_GCR3_14_12	GENMASK_ULL(60, 58)
 #define DTE_GCR3_30_15	GENMASK_ULL(31, 16)
@@ -474,17 +382,6 @@
 
 /* DTE[128:179] | DTE[184:191] */
 #define DTE_DATA2_INTR_MASK	~GENMASK_ULL(55, 52)
-
-/*丢弃掉低12bit(4095)恰好是忽略页内的数值；丢弃到52-63之前的数值
- * 现代64位处理器（包括AMD64架构）通常支持40到52位的物理地址线，*/
-#define IOMMU_PAGE_MASK (((1ULL << 52) - 1) & ~0xfffULL)
-/*检查此pte是否有效*/
-#define IOMMU_PTE_PRESENT(pte) ((pte) & IOMMU_PTE_PR)
-#define IOMMU_PTE_DIRTY(pte) ((pte) & IOMMU_PTE_HD)
-/*取pte中保存的page地址（虚拟地址）*/
-#define IOMMU_PTE_PAGE(pte) (iommu_phys_to_virt((pte) & IOMMU_PAGE_MASK))
-/*取pte中存放的level数据，当前占用3bit,看宏PM_LEVEL_ENC*/
-#define IOMMU_PTE_MODE(pte) (((pte) >> 9) & 0x07)
 
 /*权限掩码*/
 #define IOMMU_PROT_MASK 0x03
@@ -580,35 +477,11 @@ struct amd_irte_ops;
 
 #define AMD_IOMMU_FLAG_TRANS_PRE_ENABLED      (1 << 0)
 
-/*由amd_io_pgtable->iop获取amd_io_pgtable*/
-#define io_pgtable_to_data(x) \
-	container_of((x), struct amd_io_pgtable, pgtbl)
-
-/*由amd_io_pgtable.iop.ops获取amd_io_pgtable*/
-#define io_pgtable_ops_to_data(x) \
-	io_pgtable_to_data(io_pgtable_ops_to_pgtable(x))
-
-/*由protection_domain.iop.iop.ops获取protection_domain*/
-#define io_pgtable_ops_to_domain(x) \
-	container_of(io_pgtable_ops_to_data(x), \
-		     struct protection_domain, iop)
-
-/*利用io_pgtable_cfg地址获得amd_io_pgtable结构体*/
-#define io_pgtable_cfg_to_data(x) \
-	container_of((x), struct amd_io_pgtable, pgtbl.cfg)
-
 struct gcr3_tbl_info {
 	u64	*gcr3_tbl;	/* Guest CR3 table */
 	int	glx;		/* Number of levels for GCR3 table */
 	u32	pasid_cnt;	/* Track attached PASIDs */
 	u16	domid;		/* Per device domain ID */
-};
-
-struct amd_io_pgtable {
-	struct io_pgtable	pgtbl;
-	int			mode;/*顶层level(root的level为mode-1)，例如DEFAULT_PGTABLE_LEVEL，也可根据存放内容自动调整*/
-	u64			*root;/*初始化为一个全零页,用于存放pte（u64大小，故可以存入4096/8=512个),见fetch_pte函数用法*/
-	u64			*pgd;		/* v2 pgtable pgd pointer */
 };
 
 enum protection_domain_mode {
@@ -633,15 +506,50 @@ struct pdom_iommu_info {
 	u32 refcnt;	/* Count of attached dev/pasid per domain/IOMMU */
 };
 
+struct amd_iommu_viommu {
+	struct iommufd_viommu core;
+	struct protection_domain *parent; /* nest parent domain for this viommu */
+	struct list_head pdom_list;	  /* For protection_domain->viommu_list */
+
+	/*
+	 * Per-vIOMMU guest domain ID to host domain ID mapping.
+	 * Indexed by guest domain ID.
+	 */
+	struct xarray gdomid_array;
+};
+
+/*
+ * Contains guest domain ID mapping info,
+ * which is stored in the struct xarray gdomid_array.
+ */
+struct guest_domain_mapping_info {
+	refcount_t users;
+	u32 hdom_id;		/* Host domain ID */
+};
+
+/*
+ * Nested domain is specifically used for nested translation
+ */
+struct nested_domain {
+	struct iommu_domain domain; /* generic domain handle used by iommu core code */
+	u16 gdom_id;                /* domain ID from gDTE */
+	struct guest_domain_mapping_info *gdom_info;
+	struct iommu_hwpt_amd_guest gdte; /* Guest vIOMMU DTE */
+	struct amd_iommu_viommu *viommu;  /* AMD hw-viommu this nested domain belong to */
+};
+
 /*
  * This structure contains generic data for  IOMMU protection domains
  * independent of their use.
  */
 struct protection_domain {
+	union {
+		struct iommu_domain domain;
+		struct pt_iommu iommu;
+		struct pt_iommu_amdv1 amdv1;
+		struct pt_iommu_x86_64 amdv2;
+	};
 	struct list_head dev_list; /* List of all devices in this domain */
-	struct iommu_domain domain; /* generic domain handle used by
-				       iommu core code */
-	struct amd_io_pgtable iop;
 	spinlock_t lock;	/* mostly used to lock the page table*/
 	u16 id;			/* the domain id written to the device table */
 	enum protection_domain_mode pd_mode; /* Track page table type */
@@ -650,7 +558,16 @@ struct protection_domain {
 
 	struct mmu_notifier mn;	/* mmu notifier for the SVA domain */
 	struct list_head dev_data_list; /* List of pdom_dev_data */
+
+	/*
+	 * Store reference to list of vIOMMUs, which use this protection domain.
+	 * This will be used to look up host domain ID when flushing this domain.
+	 */
+	struct list_head viommu_list;
 };
+PT_IOMMU_CHECK_DOMAIN(struct protection_domain, iommu, domain);
+PT_IOMMU_CHECK_DOMAIN(struct protection_domain, amdv1.iommu, domain);
+PT_IOMMU_CHECK_DOMAIN(struct protection_domain, amdv2.iommu, domain);
 
 /*
  * This structure contains information about one PCI segment in the system.
@@ -842,7 +759,12 @@ struct amd_iommu {
 
 	u32 flags;
 	volatile u64 *cmd_sem;
-	atomic64_t cmd_sem_val;
+	u64 cmd_sem_val;
+	/*
+	 * Track physical address to directly use it in build_completion_wait()
+	 * and avoid adding any special checks and handling for kdump.
+	 */
+	u64 cmd_sem_paddr;
 
 #ifdef CONFIG_AMD_IOMMU_DEBUGFS
 	/* DebugFS Info */

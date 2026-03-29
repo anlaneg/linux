@@ -335,7 +335,7 @@ static int jpeg_v4_0_disable_static_power_gating(struct amdgpu_device *adev)
 			UVD_PGFSM_STATUS__UVDJ_PWR_STATUS_MASK);
 
 		if (r) {
-			DRM_DEV_ERROR(adev->dev, "amdgpu: JPEG disable power gating failed\n");
+			drm_err(adev_to_drm(adev), "failed to disable JPEG power gating\n");
 			return r;
 		}
 	}
@@ -370,7 +370,7 @@ static int jpeg_v4_0_enable_static_power_gating(struct amdgpu_device *adev)
 			UVD_PGFSM_STATUS__UVDJ_PWR_STATUS_MASK);
 
 		if (r) {
-			DRM_DEV_ERROR(adev->dev, "amdgpu: JPEG enable power gating failed\n");
+			drm_err(adev_to_drm(adev), "failed to enable JPEG power gating\n");
 			return r;
 		}
 	}
@@ -762,7 +762,7 @@ static const struct amdgpu_ring_funcs jpeg_v4_0_dec_ring_vm_funcs = {
 	.get_rptr = jpeg_v4_0_dec_ring_get_rptr,
 	.get_wptr = jpeg_v4_0_dec_ring_get_wptr,
 	.set_wptr = jpeg_v4_0_dec_ring_set_wptr,
-	.parse_cs = jpeg_v2_dec_ring_parse_cs,
+	.parse_cs = amdgpu_jpeg_dec_parse_cs,
 	.emit_frame_size =
 		SOC15_FLUSH_GPU_TLB_NUM_WREG * 6 +
 		SOC15_FLUSH_GPU_TLB_NUM_REG_WAIT * 8 +

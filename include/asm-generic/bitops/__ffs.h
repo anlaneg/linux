@@ -11,7 +11,7 @@
  * Undefined if no bit exists, so code should check against 0 first.
  */
 //找word中第一个'1'所在的位号
-static __always_inline unsigned int generic___ffs(unsigned long word)
+static __always_inline __attribute_const__ unsigned int generic___ffs(unsigned long word)
 {
 	unsigned int num = 0;
 

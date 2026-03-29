@@ -34,7 +34,7 @@ struct xsk_queue *xskq_create(u32 nentries/*队列长度*/, bool umem_queue/*是
 	size_t size;
 
 	/*申请xsk_queue*/
-	q = kzalloc(sizeof(*q), GFP_KERNEL);
+	q = kzalloc_obj(*q);
 	if (!q)
 		return NULL;
 

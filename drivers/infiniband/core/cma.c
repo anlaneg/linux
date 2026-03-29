@@ -498,7 +498,7 @@ static int cma_add_id_to_tree(struct rdma_id_private *node_id_priv)
 	unsigned long flags;
 	int result;
 
-	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	node = kzalloc_obj(*node);
 	if (!node)
 		return -ENOMEM;
 
@@ -819,6 +819,9 @@ static int cma_acquire_dev_by_src_ip(struct rdma_id_private *id_priv)
 	mutex_lock(&lock);
 	/*遍历所有cma设备*/
 	list_for_each_entry(cma_dev, &dev_list, list) {
+		if (id_priv->restricted_node_type != RDMA_NODE_UNSPECIFIED &&
+		    id_priv->restricted_node_type != cma_dev->device->node_type)
+			continue;
 		/*遍历一个cma设备的所有port*/
 		rdma_for_each_port (cma_dev->device, port) {
 			gidp = rdma_protocol_roce(cma_dev->device, port) ?
@@ -1039,11 +1042,12 @@ __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler/*cm事件�
 {
 	struct rdma_id_private *id_priv;
 
-	id_priv = kzalloc(sizeof *id_priv, GFP_KERNEL);
+	id_priv = kzalloc_obj(*id_priv);
 	if (!id_priv)
 		return ERR_PTR(-ENOMEM);
 
 	id_priv->state = RDMA_CM_IDLE;/*设置初始化状态*/
+	id_priv->restricted_node_type = RDMA_NODE_UNSPECIFIED;
 	id_priv->id.context = context;
 	/*设置event在kernel中的交付函数*/
 	id_priv->id.event_handler = event_handler;
@@ -2059,6 +2063,7 @@ static void destroy_mc(struct rdma_id_private *id_priv,
 		ib_sa_free_multicast(mc->sa_mc);
 
 	if (rdma_protocol_roce(id_priv->id.device, id_priv->id.port_num)) {
+		struct rdma_cm_event *event = &mc->iboe_join.event;
 		struct rdma_dev_addr *dev_addr =
 			&id_priv->id.route.addr.dev_addr;
 		struct net_device *ndev = NULL;
@@ -2081,6 +2086,8 @@ static void destroy_mc(struct rdma_id_private *id_priv,
 		dev_put(ndev);
 
 		cancel_work_sync(&mc->iboe_join.work);
+		if (event->event == RDMA_CM_EVENT_MULTICAST_JOIN)
+			rdma_destroy_ah_attr(&event->param.ud.ah_attr);
 	}
 	kfree(mc);
 }
@@ -2126,6 +2133,7 @@ static void _destroy_id(struct rdma_id_private *id_priv,
 	kfree(id_priv->id.route.path_rec);
 	kfree(id_priv->id.route.path_rec_inbound);
 	kfree(id_priv->id.route.path_rec_outbound);
+	kfree(id_priv->id.route.service_recs);
 
 	put_net(id_priv->id.route.addr.dev_addr.net);
 	kfree(id_priv);
@@ -2346,8 +2354,7 @@ cma_ib_new_conn_id(const struct rdma_cm_id *listen_id,
 
 	rt = &id->route;
 	rt->num_pri_alt_paths = ib_event->param.req_rcvd.alternate_path ? 2 : 1;
-	rt->path_rec = kmalloc_array(rt->num_pri_alt_paths,
-				     sizeof(*rt->path_rec), GFP_KERNEL);
+	rt->path_rec = kmalloc_objs(*rt->path_rec, rt->num_pri_alt_paths);
 	if (!rt->path_rec)
 		goto err;
 
@@ -2782,6 +2789,9 @@ static int cma_listen_on_dev(struct rdma_id_private *id_priv,
 	*to_destroy = NULL;
 	if (cma_family(id_priv) == AF_IB && !rdma_cap_ib_cm(cma_dev->device, 1))
 		return 0;
+	if (id_priv->restricted_node_type != RDMA_NODE_UNSPECIFIED &&
+	    id_priv->restricted_node_type != cma_dev->device->node_type)
+		return 0;
 
 	dev_id_priv =
 		__rdma_create_id(net, cma_listen_handler, id_priv,
@@ -2789,6 +2799,7 @@ static int cma_listen_on_dev(struct rdma_id_private *id_priv,
 	if (IS_ERR(dev_id_priv))
 		return PTR_ERR(dev_id_priv);
 
+	dev_id_priv->restricted_node_type = id_priv->restricted_node_type;
 	dev_id_priv->state = RDMA_CM_ADDR_BOUND;
 	memcpy(cma_src_addr(dev_id_priv), cma_src_addr(id_priv),
 	       rdma_addr_size(cma_src_addr(id_priv)));
@@ -2933,8 +2944,7 @@ static int route_set_path_rec_inbound(struct cma_work *work,
 	struct rdma_route *route = &work->id->id.route;
 
 	if (!route->path_rec_inbound) {
-		route->path_rec_inbound =
-			kzalloc(sizeof(*route->path_rec_inbound), GFP_KERNEL);
+		route->path_rec_inbound = kzalloc_obj(*route->path_rec_inbound);
 		if (!route->path_rec_inbound)
 			return -ENOMEM;
 	}
@@ -2949,8 +2959,7 @@ static int route_set_path_rec_outbound(struct cma_work *work,
 	struct rdma_route *route = &work->id->id.route;
 
 	if (!route->path_rec_outbound) {
-		route->path_rec_outbound =
-			kzalloc(sizeof(*route->path_rec_outbound), GFP_KERNEL);
+		route->path_rec_outbound = kzalloc_obj(*route->path_rec_outbound);
 		if (!route->path_rec_outbound)
 			return -ENOMEM;
 	}
@@ -3141,14 +3150,14 @@ static int cma_resolve_ib_route(struct rdma_id_private *id_priv,
 	struct cma_work *work;
 	int ret;
 
-	work = kzalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc_obj(*work);
 	if (!work)
 		return -ENOMEM;
 
 	cma_init_resolve_route_work(work, id_priv);
 
 	if (!route->path_rec)
-		route->path_rec = kmalloc(sizeof *route->path_rec, GFP_KERNEL);
+		route->path_rec = kmalloc_obj(*route->path_rec);
 	if (!route->path_rec) {
 		ret = -ENOMEM;
 		goto err1;
@@ -3263,7 +3272,7 @@ static int cma_resolve_iw_route(struct rdma_id_private *id_priv)
 {
 	struct cma_work *work;
 
-	work = kzalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc_obj(*work);
 	if (!work)
 		return -ENOMEM;
 
@@ -3374,12 +3383,12 @@ static int cma_resolve_iboe_route(struct rdma_id_private *id_priv)
 	mutex_unlock(&id_priv->qp_mutex);
 
 	/*申请work结构体*/
-	work = kzalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc_obj(*work);
 	if (!work)
 		return -ENOMEM;
 
 	/*申请结构体*/
-	route->path_rec = kzalloc(sizeof *route->path_rec, GFP_KERNEL);
+	route->path_rec = kzalloc_obj(*route->path_rec);
 	if (!route->path_rec) {
 		ret = -ENOMEM;
 		goto err1;
@@ -3456,6 +3465,7 @@ err1:
 int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms/*超时时间*/)
 {
 	struct rdma_id_private *id_priv;
+	enum rdma_cm_state state;
 	int ret;
 
 	if (!timeout_ms)
@@ -3463,7 +3473,11 @@ int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms/*超时�
 		return -EINVAL;
 
 	id_priv = container_of(id, struct rdma_id_private, id);/*取得rdma_id_private*/
-	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_RESOLVED, RDMA_CM_ROUTE_QUERY))
+	state = id_priv->state;
+	if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_RESOLVED,
+			   RDMA_CM_ROUTE_QUERY) &&
+	    !cma_comp_exch(id_priv, RDMA_CM_ADDRINFO_RESOLVED,
+			   RDMA_CM_ROUTE_QUERY))
 		return -EINVAL;/*状态不为addr_resolved*/
 
 	/*上一个状态为RDMA_CM_ADDR_RESOLVED,且已切换至RDMA_CM_ROUTE_QUERY*/
@@ -3487,7 +3501,7 @@ int rdma_resolve_route(struct rdma_cm_id *id, unsigned long timeout_ms/*超时�
 
 	return 0;
 err:
-	cma_comp_exch(id_priv, RDMA_CM_ROUTE_QUERY, RDMA_CM_ADDR_RESOLVED);
+	cma_comp_exch(id_priv, RDMA_CM_ROUTE_QUERY, state);
 	cma_id_put(id_priv);
 	return ret;
 }
@@ -3632,7 +3646,7 @@ static int cma_resolve_loopback(struct rdma_id_private *id_priv)
 	union ib_gid gid;
 	int ret;
 
-	work = kzalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc_obj(*work);
 	if (!work)
 		return -ENOMEM;
 
@@ -3657,7 +3671,7 @@ static int cma_resolve_ib_addr(struct rdma_id_private *id_priv)
 	struct cma_work *work;
 	int ret;
 
-	work = kzalloc(sizeof *work, GFP_KERNEL);
+	work = kzalloc_obj(*work);
 	if (!work)
 		return -ENOMEM;
 
@@ -3760,7 +3774,7 @@ static int cma_alloc_port(enum rdma_ucm_port_space ps,
 
 	lockdep_assert_held(&lock);
 
-	bind_list = kzalloc(sizeof *bind_list, GFP_KERNEL);
+	bind_list = kzalloc_obj(*bind_list);
 	if (!bind_list)
 		return -ENOMEM;
 
@@ -4297,6 +4311,32 @@ err:
 }
 EXPORT_SYMBOL(rdma_resolve_addr);
 
+int rdma_restrict_node_type(struct rdma_cm_id *id, u8 node_type)
+{
+	struct rdma_id_private *id_priv =
+		container_of(id, struct rdma_id_private, id);
+	int ret = 0;
+
+	switch (node_type) {
+	case RDMA_NODE_UNSPECIFIED:
+	case RDMA_NODE_IB_CA:
+	case RDMA_NODE_RNIC:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	mutex_lock(&lock);
+	if (READ_ONCE(id_priv->state) != RDMA_CM_IDLE)
+		ret = -EALREADY;
+	else
+		id_priv->restricted_node_type = node_type;
+	mutex_unlock(&lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(rdma_restrict_node_type);
+
 int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr/*要绑定的地址*/)
 {
 	struct rdma_id_private *id_priv =
@@ -4602,6 +4642,8 @@ int rdma_connect_locked(struct rdma_cm_id *id,
 	struct rdma_id_private *id_priv =
 		container_of(id, struct rdma_id_private, id);
 	int ret;
+
+	lockdep_assert_held(&id_priv->handler_mutex);
 
 	if (!cma_comp_exch(id_priv, RDMA_CM_ROUTE_RESOLVED, RDMA_CM_CONNECT))
 		return -EINVAL;/*当前状态不为RDMA_CM_ROUTE_RESOLVED,报错*/
@@ -5201,7 +5243,7 @@ int rdma_join_multicast(struct rdma_cm_id *id, struct sockaddr *addr,
 	if (id_priv->id.qp_type != IB_QPT_UD)
 		return -EINVAL;
 
-	mc = kzalloc(sizeof(*mc), GFP_KERNEL);
+	mc = kzalloc_obj(*mc);
 	if (!mc)
 		return -ENOMEM;
 
@@ -5267,7 +5309,7 @@ static int cma_netdev_change(struct net_device *ndev, struct rdma_id_private *id
 	    memcmp(dev_addr->src_dev_addr, ndev->dev_addr, ndev->addr_len)) {
 		pr_info("RDMA CM addr change for ndev %s used by id %p\n",
 			ndev->name, &id_priv->id);
-		work = kzalloc(sizeof *work, GFP_KERNEL);
+		work = kzalloc_obj(*work);
 		if (!work)
 			return -ENOMEM;
 
@@ -5481,14 +5523,13 @@ static int cma_add_one(struct ib_device *device/*要增加的ib设备*/)
 	if (!cma_supported(device))
 		return -EOPNOTSUPP;
 
-	cma_dev = kmalloc(sizeof(*cma_dev), GFP_KERNEL);
+	cma_dev = kmalloc_obj(*cma_dev);
 	if (!cma_dev)
 		return -ENOMEM;
 
 	cma_dev->device = device;
-	cma_dev->default_gid_type = kcalloc(device->phys_port_cnt,
-					    sizeof(*cma_dev->default_gid_type),
-					    GFP_KERNEL);
+	cma_dev->default_gid_type = kzalloc_objs(*cma_dev->default_gid_type,
+						 device->phys_port_cnt);
 	if (!cma_dev->default_gid_type) {
 		ret = -ENOMEM;
 		goto free_cma_dev;
@@ -5656,3 +5697,129 @@ static void __exit cma_cleanup(void)
 
 module_init(cma_init);
 module_exit(cma_cleanup);
+
+static void cma_query_ib_service_handler(int status,
+					 struct sa_service_rec *recs,
+					 unsigned int num_recs, void *context)
+{
+	struct cma_work *work = context;
+	struct rdma_id_private *id_priv = work->id;
+	struct sockaddr_ib *addr;
+
+	if (status)
+		goto fail;
+
+	if (!num_recs) {
+		status = -ENOENT;
+		goto fail;
+	}
+
+	if (id_priv->id.route.service_recs) {
+		status = -EALREADY;
+		goto fail;
+	}
+
+	id_priv->id.route.service_recs =
+		kmalloc_objs(*recs, num_recs);
+	if (!id_priv->id.route.service_recs) {
+		status = -ENOMEM;
+		goto fail;
+	}
+
+	id_priv->id.route.num_service_recs = num_recs;
+	memcpy(id_priv->id.route.service_recs, recs, sizeof(*recs) * num_recs);
+
+	addr = (struct sockaddr_ib *)&id_priv->id.route.addr.dst_addr;
+	addr->sib_family = AF_IB;
+	addr->sib_addr = *(struct ib_addr *)&recs->gid;
+	addr->sib_pkey = recs->pkey;
+	addr->sib_sid = recs->id;
+	rdma_addr_set_dgid(&id_priv->id.route.addr.dev_addr,
+			   (union ib_gid *)&addr->sib_addr);
+	ib_addr_set_pkey(&id_priv->id.route.addr.dev_addr,
+			 ntohs(addr->sib_pkey));
+
+	queue_work(cma_wq, &work->work);
+	return;
+
+fail:
+	work->old_state = RDMA_CM_ADDRINFO_QUERY;
+	work->new_state = RDMA_CM_ADDR_BOUND;
+	work->event.event = RDMA_CM_EVENT_ADDRINFO_ERROR;
+	work->event.status = status;
+	pr_debug_ratelimited(
+		"RDMA CM: SERVICE_ERROR: failed to query service record. status %d\n",
+		status);
+	queue_work(cma_wq, &work->work);
+}
+
+static int cma_resolve_ib_service(struct rdma_id_private *id_priv,
+				  struct rdma_ucm_ib_service *ibs)
+{
+	struct sa_service_rec sr = {};
+	ib_sa_comp_mask mask = 0;
+	struct cma_work *work;
+
+	work = kzalloc_obj(*work);
+	if (!work)
+		return -ENOMEM;
+
+	cma_id_get(id_priv);
+
+	work->id = id_priv;
+	INIT_WORK(&work->work, cma_work_handler);
+	work->old_state = RDMA_CM_ADDRINFO_QUERY;
+	work->new_state = RDMA_CM_ADDRINFO_RESOLVED;
+	work->event.event = RDMA_CM_EVENT_ADDRINFO_RESOLVED;
+
+	if (ibs->flags & RDMA_USER_CM_IB_SERVICE_FLAG_ID) {
+		sr.id = cpu_to_be64(ibs->service_id);
+		mask |= IB_SA_SERVICE_REC_SERVICE_ID;
+	}
+	if (ibs->flags & RDMA_USER_CM_IB_SERVICE_FLAG_NAME) {
+		strscpy(sr.name, ibs->service_name, sizeof(sr.name));
+		mask |= IB_SA_SERVICE_REC_SERVICE_NAME;
+	}
+
+	id_priv->query_id = ib_sa_service_rec_get(&sa_client,
+						  id_priv->id.device,
+						  id_priv->id.port_num,
+						  &sr, mask,
+						  2000, GFP_KERNEL,
+						  cma_query_ib_service_handler,
+						  work, &id_priv->query);
+
+	if (id_priv->query_id < 0) {
+		cma_id_put(id_priv);
+		kfree(work);
+		return id_priv->query_id;
+	}
+
+	return 0;
+}
+
+int rdma_resolve_ib_service(struct rdma_cm_id *id,
+			    struct rdma_ucm_ib_service *ibs)
+{
+	struct rdma_id_private *id_priv;
+	int ret;
+
+	id_priv = container_of(id, struct rdma_id_private, id);
+	if (!id_priv->cma_dev ||
+	    !cma_comp_exch(id_priv, RDMA_CM_ADDR_BOUND, RDMA_CM_ADDRINFO_QUERY))
+		return -EINVAL;
+
+	if (rdma_cap_ib_sa(id->device, id->port_num))
+		ret = cma_resolve_ib_service(id_priv, ibs);
+	else
+		ret = -EOPNOTSUPP;
+
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	cma_comp_exch(id_priv, RDMA_CM_ADDRINFO_QUERY, RDMA_CM_ADDR_BOUND);
+	return ret;
+}
+EXPORT_SYMBOL(rdma_resolve_ib_service);

@@ -12,6 +12,7 @@ struct pseudo_fs_context {
 	/*对pseudo-fs而言，此dentry ops将被赋给dentry*/
 	const struct dentry_operations *dops;
 	unsigned long magic;/*文件系统magic*/
+	unsigned int s_d_flags;
 };
 
 struct pseudo_fs_context *init_pseudo(struct fs_context *fc,

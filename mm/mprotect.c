@@ -29,9 +29,7 @@
 #include <linux/uaccess.h>
 #include <linux/mm_inline.h>
 #include <linux/pgtable.h>
-#include <linux/sched/sysctl.h>
 #include <linux/userfaultfd_k.h>
-#include <linux/memory-tiers.h>
 #include <uapi/linux/mman.h>
 #include <asm/cacheflush.h>
 #include <asm/mmu_context.h>
@@ -118,65 +116,6 @@ static int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
 	return folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr_ptes, flags);
 }
 
-static bool prot_numa_skip(struct vm_area_struct *vma, unsigned long addr,
-			   pte_t oldpte, pte_t *pte, int target_node,
-			   struct folio **foliop)
-{
-	struct folio *folio = NULL;
-	bool ret = true;
-	bool toptier;
-	int nid;
-
-	/* Avoid TLB flush if possible */
-	if (pte_protnone(oldpte))
-		goto skip;
-
-	folio = vm_normal_folio(vma, addr, oldpte);
-	if (!folio)
-		goto skip;
-
-	if (folio_is_zone_device(folio) || folio_test_ksm(folio))
-		goto skip;
-
-	/* Also skip shared copy-on-write pages */
-	if (is_cow_mapping(vma->vm_flags) &&
-	    (folio_maybe_dma_pinned(folio) || folio_maybe_mapped_shared(folio)))
-		goto skip;
-
-	/*
-	 * While migration can move some dirty pages,
-	 * it cannot move them all from MIGRATE_ASYNC
-	 * context.
-	 */
-	if (folio_is_file_lru(folio) && folio_test_dirty(folio))
-		goto skip;
-
-	/*
-	 * Don't mess with PTEs if page is already on the node
-	 * a single-threaded process is running on.
-	 */
-	nid = folio_nid(folio);
-	if (target_node == nid)
-		goto skip;
-
-	toptier = node_is_toptier(nid);
-
-	/*
-	 * Skip scanning top tier node if normal numa
-	 * balancing is disabled
-	 */
-	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) && toptier)
-		goto skip;
-
-	ret = false;
-	if (folio_use_access_time(folio))
-		folio_xchg_access_time(folio, jiffies_to_msecs(jiffies));
-
-skip:
-	*foliop = folio;
-	return ret;
-}
-
 /* Set nr_ptes number of ptes, starting from idx */
 static void prot_commit_flush_ptes(struct vm_area_struct *vma, unsigned long addr,
 		pte_t *ptep, pte_t oldpte, pte_t ptent, int nr_ptes,
@@ -231,10 +170,9 @@ static int page_anon_exclusive_sub_batch(int start_idx, int max_len,
  * retrieve sub-batches.
  */
 static void commit_anon_folio_batch(struct vm_area_struct *vma,
-		struct folio *folio, unsigned long addr, pte_t *ptep,
+		struct folio *folio, struct page *first_page, unsigned long addr, pte_t *ptep,
 		pte_t oldpte, pte_t ptent, int nr_ptes, struct mmu_gather *tlb)
 {
-	struct page *first_page = folio_page(folio, 0);
 	bool expected_anon_exclusive;
 	int sub_batch_idx = 0;
 	int len;
@@ -251,7 +189,7 @@ static void commit_anon_folio_batch(struct vm_area_struct *vma,
 }
 
 static void set_write_prot_commit_flush_ptes(struct vm_area_struct *vma,
-		struct folio *folio, unsigned long addr, pte_t *ptep,
+		struct folio *folio, struct page *page, unsigned long addr, pte_t *ptep,
 		pte_t oldpte, pte_t ptent, int nr_ptes, struct mmu_gather *tlb)
 {
 	bool set_write;
@@ -270,7 +208,7 @@ static void set_write_prot_commit_flush_ptes(struct vm_area_struct *vma,
 				       /* idx = */ 0, set_write, tlb);
 		return;
 	}
-	commit_anon_folio_batch(vma, folio, addr, ptep, oldpte, ptent, nr_ptes, tlb);
+	commit_anon_folio_batch(vma, folio, page, addr, ptep, oldpte, ptent, nr_ptes, tlb);
 }
 
 static long change_pte_range(struct mmu_gather *tlb,
@@ -280,7 +218,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 	pte_t *pte, oldpte;
 	spinlock_t *ptl;
 	long pages = 0;
-	int target_node = NUMA_NO_NODE;
+	bool is_private_single_threaded;
 	bool prot_numa = cp_flags & MM_CP_PROT_NUMA;
 	bool uffd_wp = cp_flags & MM_CP_UFFD_WP;
 	bool uffd_wp_resolve = cp_flags & MM_CP_UFFD_WP_RESOLVE;
@@ -291,13 +229,11 @@ static long change_pte_range(struct mmu_gather *tlb,
 	if (!pte)
 		return -EAGAIN;
 
-	/* Get target node for single threaded private VMAs */
-	if (prot_numa && !(vma->vm_flags & VM_SHARED) &&
-	    atomic_read(&vma->vm_mm->mm_users) == 1)
-		target_node = numa_node_id();
+	if (prot_numa)
+		is_private_single_threaded = vma_is_single_threaded_private(vma);
 
 	flush_tlb_batched_pending(vma->vm_mm);
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_mode_enable();
 	do {
 		nr_ptes = 1;
 		oldpte = ptep_get(pte);
@@ -305,26 +241,30 @@ static long change_pte_range(struct mmu_gather *tlb,
 			const fpb_t flags = FPB_RESPECT_SOFT_DIRTY | FPB_RESPECT_WRITE;
 			int max_nr_ptes = (end - addr) >> PAGE_SHIFT;
 			struct folio *folio = NULL;
+			struct page *page;
 			pte_t ptent;
+
+			/* Already in the desired state. */
+			if (prot_numa && pte_protnone(oldpte))
+				continue;
+
+			page = vm_normal_page(vma, addr, oldpte);
+			if (page)
+				folio = page_folio(page);
 
 			/*
 			 * Avoid trapping faults against the zero or KSM
 			 * pages. See similar comment in change_huge_pmd.
 			 */
-			if (prot_numa) {
-				int ret = prot_numa_skip(vma, addr, oldpte, pte,
-							 target_node, &folio);
-				if (ret) {
+			if (prot_numa &&
+			    !folio_can_map_prot_numa(folio, vma,
+						is_private_single_threaded)) {
 
-					/* determine batch to skip */
-					nr_ptes = mprotect_folio_pte_batch(folio,
-						  pte, oldpte, max_nr_ptes, /* flags = */ 0);
-					continue;
-				}
+				/* determine batch to skip */
+				nr_ptes = mprotect_folio_pte_batch(folio,
+					  pte, oldpte, max_nr_ptes, /* flags = */ 0);
+				continue;
 			}
-
-			if (!folio)
-				folio = vm_normal_folio(vma, addr, oldpte);
 
 			nr_ptes = mprotect_folio_pte_batch(folio, pte, oldpte, max_nr_ptes, flags);
 
@@ -351,18 +291,37 @@ static long change_pte_range(struct mmu_gather *tlb,
 			 */
 			if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) &&
 			     !pte_write(ptent))
-				set_write_prot_commit_flush_ptes(vma, folio,
+				set_write_prot_commit_flush_ptes(vma, folio, page,
 				addr, pte, oldpte, ptent, nr_ptes, tlb);
 			else
 				prot_commit_flush_ptes(vma, addr, pte, oldpte, ptent,
 					nr_ptes, /* idx = */ 0, /* set_write = */ false, tlb);
 			pages += nr_ptes;
-		} else if (is_swap_pte(oldpte)) {
-			swp_entry_t entry = pte_to_swp_entry(oldpte);
+		} else if (pte_none(oldpte)) {
+			/*
+			 * Nobody plays with any none ptes besides
+			 * userfaultfd when applying the protections.
+			 */
+			if (likely(!uffd_wp))
+				continue;
+
+			if (userfaultfd_wp_use_markers(vma)) {
+				/*
+				 * For file-backed mem, we need to be able to
+				 * wr-protect a none pte, because even if the
+				 * pte is none, the page/swap cache could
+				 * exist.  Doing that by install a marker.
+				 */
+				set_pte_at(vma->vm_mm, addr, pte,
+					   make_pte_marker(PTE_MARKER_UFFD_WP));
+				pages++;
+			}
+		} else  {
+			softleaf_t entry = softleaf_from_pte(oldpte);
 			pte_t newpte;
 
-			if (is_writable_migration_entry(entry)) {
-				struct folio *folio = pfn_swap_entry_folio(entry);
+			if (softleaf_is_migration_write(entry)) {
+				const struct folio *folio = softleaf_to_folio(entry);
 
 				/*
 				 * A protection check is difficult so
@@ -376,7 +335,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				newpte = swp_entry_to_pte(entry);
 				if (pte_swp_soft_dirty(oldpte))
 					newpte = pte_swp_mksoft_dirty(newpte);
-			} else if (is_writable_device_private_entry(entry)) {
+			} else if (softleaf_is_device_private_write(entry)) {
 				/*
 				 * We do not preserve soft-dirtiness. See
 				 * copy_nonpresent_pte() for explanation.
@@ -386,14 +345,14 @@ static long change_pte_range(struct mmu_gather *tlb,
 				newpte = swp_entry_to_pte(entry);
 				if (pte_swp_uffd_wp(oldpte))
 					newpte = pte_swp_mkuffd_wp(newpte);
-			} else if (is_pte_marker_entry(entry)) {
+			} else if (softleaf_is_marker(entry)) {
 				/*
 				 * Ignore error swap entries unconditionally,
 				 * because any access should sigbus/sigsegv
 				 * anyway.
 				 */
-				if (is_poisoned_swp_entry(entry) ||
-				    is_guard_swp_entry(entry))
+				if (softleaf_is_poison_marker(entry) ||
+				    softleaf_is_guard_marker(entry))
 					continue;
 				/*
 				 * If this is uffd-wp pte marker and we'd like
@@ -418,31 +377,9 @@ static long change_pte_range(struct mmu_gather *tlb,
 				set_pte_at(vma->vm_mm, addr, pte, newpte);
 				pages++;
 			}
-		} else {
-			/* It must be an none page, or what else?.. */
-			WARN_ON_ONCE(!pte_none(oldpte));
-
-			/*
-			 * Nobody plays with any none ptes besides
-			 * userfaultfd when applying the protections.
-			 */
-			if (likely(!uffd_wp))
-				continue;
-
-			if (userfaultfd_wp_use_markers(vma)) {
-				/*
-				 * For file-backed mem, we need to be able to
-				 * wr-protect a none pte, because even if the
-				 * pte is none, the page/swap cache could
-				 * exist.  Doing that by install a marker.
-				 */
-				set_pte_at(vma->vm_mm, addr, pte,
-					   make_pte_marker(PTE_MARKER_UFFD_WP));
-				pages++;
-			}
 		}
 	} while (pte += nr_ptes, addr += nr_ptes * PAGE_SIZE, addr != end);
-	arch_leave_lazy_mmu_mode();
+	lazy_mmu_mode_disable();
 	pte_unmap_unlock(pte - 1, ptl);
 
 	return pages;
@@ -537,7 +474,7 @@ again:
 			goto next;
 
 		_pmd = pmdp_get_lockless(pmd);
-		if (is_swap_pmd(_pmd) || pmd_trans_huge(_pmd)) {
+		if (pmd_is_huge(_pmd)) {
 			if ((next - addr != HPAGE_PMD_SIZE) ||
 			    pgtable_split_needed(vma, cp_flags)) {
 				__split_huge_pmd(vma, pmd, addr, false);
@@ -602,7 +539,7 @@ again:
 			break;
 		}
 
-		pud = READ_ONCE(*pudp);
+		pud = pudp_get(pudp);
 		if (pud_none(pud))
 			continue;
 
@@ -766,7 +703,7 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 	unsigned long charged = 0;
 	int error;
 
-	if (!can_modify_vma(vma))
+	if (vma_is_sealed(vma))
 		return -EPERM;
 
 	if (newflags == oldflags) {
@@ -816,7 +753,7 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 		newflags &= ~VM_ACCOUNT;
 	}
 
-	vma = vma_modify_flags(vmi, *pprev, vma, start, end, newflags);
+	vma = vma_modify_flags(vmi, *pprev, vma, start, end, &newflags);
 	if (IS_ERR(vma)) {
 		error = PTR_ERR(vma);
 		goto fail;

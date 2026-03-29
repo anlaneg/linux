@@ -2,7 +2,7 @@
 /* Copyright (c) 2014 Mahesh Bandewar <maheshb@google.com>
  */
 
-#include <net/inet_dscp.h>
+#include <net/flow.h>
 #include <net/ip.h>
 
 #include "ipvlan.h"
@@ -49,12 +49,10 @@ static u8 ipvlan_get_v6_hash(const void *iaddr)
 }
 #endif
 
-static u8 ipvlan_get_v4_hash(const void *iaddr)
+static u8 ipvlan_get_v4_hash(__be32 addr)
 {
-	const struct in_addr *ip4_addr = iaddr;
-
-	return jhash_1word(ip4_addr->s_addr, ipvlan_jhash_secret) &
-	       IPVLAN_HASH_MASK;
+	return jhash_1word((__force u32)addr, ipvlan_jhash_secret) &
+			   IPVLAN_HASH_MASK;
 }
 
 /*检查ip地址是否相等*/
@@ -75,18 +73,32 @@ static bool addr_equal(bool is_v6, struct ipvl_addr *addr, const void *iaddr)
 	return false;
 }
 
-static struct ipvl_addr *ipvlan_ht_addr_lookup(const struct ipvl_port *port,
-					       const void *iaddr, bool is_v6)
+#if IS_ENABLED(CONFIG_IPV6)
+static struct ipvl_addr *ipvlan_ht_addr_lookup6(const struct ipvl_port *port,
+						const void *iaddr)
 {
 	struct ipvl_addr *addr;
 	u8 hash;
 
 	/*取hash*/
-	hash = is_v6 ? ipvlan_get_v6_hash(iaddr) :
-	       ipvlan_get_v4_hash(iaddr);
+	hash = ipvlan_get_v6_hash(iaddr);
 	/*在list上遍历，查找是否有对应的ipvl_addr*/
 	hlist_for_each_entry_rcu(addr, &port->hlhead[hash], hlnode)
-		if (addr_equal(is_v6, addr, iaddr))
+		if (addr_equal(true, addr, iaddr))
+			return addr;
+	return NULL;
+}
+#endif
+
+static struct ipvl_addr *ipvlan_ht_addr_lookup4(const struct ipvl_port *port,
+						__be32 addr4)
+{
+	struct ipvl_addr *addr;
+	u8 hash;
+
+	hash = ipvlan_get_v4_hash(addr4);
+	hlist_for_each_entry_rcu(addr, &port->hlhead[hash], hlnode)
+		if (addr->atype == IPVL_IPV4 && addr->ip4addr.s_addr == addr4)
 			return addr;
 	return NULL;
 }
@@ -99,7 +111,7 @@ void ipvlan_ht_addr_add(struct ipvl_dev *ipvlan, struct ipvl_addr *addr)
 
 	hash = (addr->atype == IPVL_IPV6) ?
 	       ipvlan_get_v6_hash(&addr->ip6addr) :
-	       ipvlan_get_v4_hash(&addr->ip4addr);
+	       ipvlan_get_v4_hash(addr->ip4addr.s_addr);
 	if (hlist_unhashed(&addr->hlnode))
 		hlist_add_head_rcu(&addr->hlnode, &port->hlhead[hash]);
 }
@@ -114,17 +126,15 @@ void ipvlan_ht_addr_del(struct ipvl_addr *addr)
 struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 				   const void *iaddr, bool is_v6)
 {
-	struct ipvl_addr *addr, *ret = NULL;
+	struct ipvl_addr *addr;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(addr, &ipvlan->addrs, anode) {
-		if (addr_equal(is_v6, addr, iaddr)) {
-			ret = addr;
-			break;
-		}
+	assert_spin_locked(&ipvlan->port->addrs_lock);
+
+	list_for_each_entry(addr, &ipvlan->addrs, anode) {
+		if (addr_equal(is_v6, addr, iaddr))
+			return addr;
 	}
-	rcu_read_unlock();
-	return ret;
+	return NULL;
 }
 
 bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
@@ -380,21 +390,24 @@ struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h/*三层
 				     int addr_type/*三层协议类型*/, bool use_dest/*是否使用目的地址*/)
 {
 	struct ipvl_addr *addr = NULL;
+#if IS_ENABLED(CONFIG_IPV6)
+	struct in6_addr *i6addr;
+#endif
+	__be32 addr4;
 
 	switch (addr_type) {
 #if IS_ENABLED(CONFIG_IPV6)
 	case IPVL_IPV6: {
 		struct ipv6hdr *ip6h;
-		struct in6_addr *i6addr;
 
 		ip6h = (struct ipv6hdr *)lyr3h;
 		i6addr = use_dest ? &ip6h->daddr : &ip6h->saddr;
-		addr = ipvlan_ht_addr_lookup(port, i6addr, true);
+lookup6:
+		addr = ipvlan_ht_addr_lookup6(port, i6addr);
 		break;
 	}
 	case IPVL_ICMPV6: {
 		struct nd_msg *ndmh;
-		struct in6_addr *i6addr;
 
 		/* Make sure that the NeighborSolicitation ICMPv6 packets
 		 * are handled to avoid DAD issue.
@@ -402,25 +415,24 @@ struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h/*三层
 		ndmh = (struct nd_msg *)lyr3h;
 		if (ndmh->icmph.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION) {
 			i6addr = &ndmh->target;
-			addr = ipvlan_ht_addr_lookup(port, i6addr, true);
+			goto lookup6;
 		}
 		break;
 	}
 #endif
 	case IPVL_IPV4: {
 		struct iphdr *ip4h;
-		__be32 *i4addr;
 
 		ip4h = (struct iphdr *)lyr3h;
-		i4addr = use_dest ? &ip4h->daddr : &ip4h->saddr;
+		addr4 = use_dest ? ip4h->daddr : ip4h->saddr;
+lookup4:
 		//查找接口上是否有与此i4addr相同的ipv4地址,如果有则返回，如果无，返回NULL
-		addr = ipvlan_ht_addr_lookup(port, i4addr, false);
+		addr = ipvlan_ht_addr_lookup4(port, addr4);
 		break;
 	}
 	case IPVL_ARP: {
 		struct arphdr *arph;
 		unsigned char *arp_ptr;
-		__be32 dip;
 
 		arph = (struct arphdr *)lyr3h;
 		arp_ptr = (unsigned char *)(arph + 1);
@@ -429,9 +441,8 @@ struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h/*三层
 		else
 			arp_ptr += port->dev->addr_len;
 
-		memcpy(&dip, arp_ptr, 4);
-		addr = ipvlan_ht_addr_lookup(port, &dip, false);
-		break;
+		addr4 = get_unaligned((__be32 *)arp_ptr);
+		goto lookup4;
 	}
 	}
 
@@ -457,7 +468,7 @@ static noinline_for_stack int ipvlan_process_v4_outbound(struct sk_buff *skb)
 	ip4h = ip_hdr(skb);
 	fl4.daddr = ip4h->daddr;
 	fl4.saddr = ip4h->saddr;
-	fl4.flowi4_tos = inet_dscp_to_dsfield(ip4h_dscp(ip4h));
+	fl4.flowi4_dscp = ip4h_dscp(ip4h);
 
 	rt = ip_route_output_flow(net, &fl4, NULL);
 	if (IS_ERR(rt))
@@ -776,6 +787,9 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 	struct sk_buff *skb = *pskb;
 	struct ethhdr *eth = eth_hdr(skb);
 	rx_handler_result_t ret = RX_HANDLER_PASS;
+
+	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
+		return RX_HANDLER_PASS;
 
 	if (is_multicast_ether_addr(eth->h_dest)) {
 		/*遇到组播，广播报文,检查这个报文是否为外部过来的报文*/

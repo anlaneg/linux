@@ -470,7 +470,7 @@ alloc_begin_fd_uobject(const struct uverbs_api_object *obj,
 	/*由obj->type_attrs获得uverbs_obj_fd_type指针*/
 	fd_type =
 		container_of(obj->type_attrs, struct uverbs_obj_fd_type, type);
-	if (WARN_ON(fd_type->fops->release != &uverbs_uobject_fd_release &&
+	if (WARN_ON(fd_type->fops && fd_type->fops->release != &uverbs_uobject_fd_release &&
 		    fd_type->fops->release != &uverbs_async_event_release)) {
 		/*只支持以上两种release回调（校验fd_type指针）*/
 		ret = ERR_PTR(-EINVAL);
@@ -483,14 +483,16 @@ alloc_begin_fd_uobject(const struct uverbs_api_object *obj,
 		goto err_fd;
 	}
 
-	/* Note that uverbs_uobject_fd_release() is called during abort */
-	filp = anon_inode_getfile(fd_type->name, fd_type->fops, NULL/*无私有数据*/,
-				  fd_type->flags);/*利用fd_type申请匿名文件*/
-	if (IS_ERR(filp)) {
-		ret = ERR_CAST(filp);
-		goto err_getfile;
+	if (fd_type->fops) {
+		/* Note that uverbs_uobject_fd_release() is called during abort */
+		filp = anon_inode_getfile(fd_type->name, fd_type->fops, NULL/*无私有数据*/,
+					  fd_type->flags);/*利用fd_type申请匿名文件*/
+		if (IS_ERR(filp)) {
+			ret = ERR_CAST(filp);
+			goto err_getfile;
+		}
+		uobj->object = filp;/*指向此文件*/
 	}
-	uobj->object = filp;/*指向此文件*/
 
 	uobj->id = new_fd;/*为其关联的fd*/
 	return uobj;
@@ -568,7 +570,9 @@ static void alloc_abort_fd_uobject(struct ib_uobject *uobj)
 {
 	struct file *filp = uobj->object;
 
-	fput(filp);/*释放此filep*/
+	if (filp)
+		fput(filp);/*释放此filep*/
+
 	put_unused_fd(uobj->id);/*回收占用的fd*/
 }
 
@@ -635,11 +639,14 @@ static void alloc_commit_fd_uobject(struct ib_uobject *uobj)
 	/* This shouldn't be used anymore. Use the file object instead */
 	uobj->id = 0;/*不再使用了，清零*/
 
-	/*
-	 * NOTE: Once we install the file we loose ownership of our kref on
-	 * uobj. It will be put by uverbs_uobject_fd_release()
-	 */
-	filp->private_data = uobj;/*记录私有数据为uobj*/
+	if (!filp->private_data) {
+		/*
+		 * NOTE: Once we install the file we loose ownership of our kref on
+		 * uobj. It will be put by uverbs_uobject_fd_release()
+		 */
+		filp->private_data = uobj;/*记录私有数据为uobj*/
+	}
+
 	fd_install(fd, filp);/*使fd与file关联*/
 }
 
@@ -809,21 +816,10 @@ const struct uverbs_obj_type_class uverbs_idr_class = {
 };
 EXPORT_SYMBOL(uverbs_idr_class);
 
-/*
- * Users of UVERBS_TYPE_ALLOC_FD should set this function as the struct
- * file_operations release method.
- */
-int uverbs_uobject_fd_release(struct inode *inode, struct file *filp)
+int uverbs_uobject_release(struct ib_uobject *uobj)
 {
 	struct ib_uverbs_file *ufile;
-	struct ib_uobject *uobj;
 
-	/*
-	 * This can only happen if the fput came from alloc_abort_fd_uobject()
-	 */
-	if (!filp->private_data)
-		return 0;
-	uobj = filp->private_data;
 	ufile = uobj->ufile;
 
 	if (down_read_trylock(&ufile->hw_destroy_rwsem)) {
@@ -849,6 +845,21 @@ int uverbs_uobject_fd_release(struct inode *inode, struct file *filp)
 	/* Pairs with filp->private_data in alloc_begin_fd_uobject */
 	uverbs_uobject_put(uobj);
 	return 0;
+}
+
+/*
+ * Users of UVERBS_TYPE_ALLOC_FD should set this function as the struct
+ * file_operations release method.
+ */
+int uverbs_uobject_fd_release(struct inode *inode, struct file *filp)
+{
+	/*
+	 * This can only happen if the fput came from alloc_abort_fd_uobject()
+	 */
+	if (!filp->private_data)
+		return 0;
+
+	return uverbs_uobject_release(filp->private_data);
 }
 EXPORT_SYMBOL(uverbs_uobject_fd_release);
 

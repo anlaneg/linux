@@ -720,7 +720,7 @@ static int genl_sk_privs_alloc(struct genl_family *family)
 	if (!family->sock_priv_size)
 		return 0;/*无私有数据，直接返回*/
 
-	family->sock_privs = kzalloc(sizeof(*family->sock_privs), GFP_KERNEL);
+	family->sock_privs = kzalloc_obj(*family->sock_privs);
 	if (!family->sock_privs)
 		return -ENOMEM;
 	xa_init(family->sock_privs);
@@ -980,7 +980,7 @@ EXPORT_SYMBOL(genlmsg_put);
 
 static struct genl_dumpit_info *genl_dumpit_info_alloc(void)
 {
-	return kmalloc(sizeof(struct genl_dumpit_info), GFP_KERNEL);
+	return kmalloc_obj(struct genl_dumpit_info);
 }
 
 static void genl_dumpit_info_free(const struct genl_dumpit_info *info)
@@ -1006,8 +1006,7 @@ genl_family_rcv_msg_attrs_parse(const struct genl_family *family,
 		return NULL;
 
 	/*申请各属性值占用的数组*/
-	attrbuf = kmalloc_array(ops->maxattr + 1,
-				sizeof(struct nlattr *), GFP_KERNEL);
+	attrbuf = kmalloc_objs(struct nlattr *, ops->maxattr + 1);
 	if (!attrbuf)
 		return ERR_PTR(-ENOMEM);
 
@@ -1703,7 +1702,7 @@ static int ctrl_dumppolicy_start(struct netlink_callback *cb)
 		return 0;
 	}
 
-	ctx->op_iter = kmalloc(sizeof(*ctx->op_iter), GFP_KERNEL);
+	ctx->op_iter = kmalloc_obj(*ctx->op_iter);
 	if (!ctx->op_iter)
 		return -ENOMEM;
 
@@ -1951,6 +1950,9 @@ static int genl_bind(struct net *net, int group)
 		if ((grp->flags & GENL_MCAST_CAP_SYS_ADMIN) &&
 		    !ns_capable(net->user_ns, CAP_SYS_ADMIN))
 			ret = -EPERM;
+
+		if (ret)
+			break;
 
 		/*通过回调绑定组播组*/
 		if (family->bind)

@@ -1260,7 +1260,7 @@ static int hci_sock_compat_ioctl(struct socket *sock, unsigned int cmd,
 }
 #endif
 
-static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 			 int addr_len)
 {
 	struct sockaddr_hci haddr;
@@ -1397,7 +1397,9 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 			goto done;
 		}
 
+		hci_dev_lock(hdev);
 		mgmt_index_removed(hdev);
+		hci_dev_unlock(hdev);
 
 		err = hci_dev_open(hdev->id);
 		if (err) {
@@ -2300,6 +2302,7 @@ static void hci_sock_destruct(struct sock *sk)
 	mgmt_cleanup(sk);
 	skb_queue_purge(&sk->sk_receive_queue);
 	skb_queue_purge(&sk->sk_write_queue);
+	skb_queue_purge(&sk->sk_error_queue);
 }
 
 /*hci协议对应的socket ops,直接与蓝牙控制器（硬件）交互，发送 HCI 命令或接收事件，用于低层级的蓝牙控制。*/

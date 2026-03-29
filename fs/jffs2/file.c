@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
+#include <linux/filelock.h>
 #include <linux/time.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
@@ -60,6 +61,7 @@ const struct file_operations jffs2_file_operations =
 	.fsync =	jffs2_fsync,
 	.splice_read =	filemap_splice_read,
 	.splice_write = iter_file_splice_write,
+	.setlease =	generic_setlease,
 };
 
 /* jffs2_file_inode_operations */
@@ -230,7 +232,7 @@ static int jffs2_write_begin(const struct kiocb *iocb,
 			goto release_sem;
 		}
 	}
-	jffs2_dbg(1, "end write_begin(). folio->flags %lx\n", folio->flags);
+	jffs2_dbg(1, "end write_begin(). folio->flags %lx\n", folio->flags.f);
 
 release_sem:
 	mutex_unlock(&c->alloc_sem);
@@ -259,7 +261,7 @@ static int jffs2_write_end(const struct kiocb *iocb,
 
 	jffs2_dbg(1, "%s(): ino #%lu, page at 0x%llx, range %d-%d, flags %lx\n",
 		  __func__, inode->i_ino, folio_pos(folio),
-		  start, end, folio->flags);
+		  start, end, folio->flags.f);
 
 	/* We need to avoid deadlock with page_cache_read() in
 	   jffs2_garbage_collect_pass(). So the folio must be

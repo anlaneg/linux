@@ -4,7 +4,7 @@
  * paths in the kernel.
  */
 
-#include "../kselftest_harness.h"
+#include "kselftest_harness.h"
 #include "thp_settings.h"
 
 #include <strings.h>
@@ -110,7 +110,7 @@ void *access_mem(void *ptr)
 		 * the memory access actually happens and prevents the compiler
 		 * from optimizing away this entire loop.
 		 */
-		FORCE_READ((uint64_t *)ptr);
+		FORCE_READ(*(uint64_t *)ptr);
 	}
 
 	return NULL;

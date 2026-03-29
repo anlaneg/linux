@@ -1069,7 +1069,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 
 	/* Extract key. */
 	//解析并注入key,mask
-	key = kzalloc(sizeof(*key), GFP_KERNEL);
+	key = kzalloc_obj(*key);
 	if (!key) {
 		error = -ENOMEM;
 		goto err_kfree_flow;
@@ -1855,9 +1855,7 @@ static int ovs_dp_vport_init(struct datapath *dp)
 {
 	int i;
 
-	dp->ports = kmalloc_array(DP_VPORT_HASH_BUCKETS,
-				  sizeof(struct hlist_head),
-				  GFP_KERNEL);
+	dp->ports = kmalloc_objs(struct hlist_head, DP_VPORT_HASH_BUCKETS);
 	if (!dp->ports)
 		return -ENOMEM;
 
@@ -1889,7 +1887,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 
 	err = -ENOMEM;
 	//为datapath申请空间
-	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
+	dp = kzalloc_obj(*dp);
 	if (dp == NULL)
 		goto err_destroy_reply;
 

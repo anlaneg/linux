@@ -123,11 +123,19 @@ static int parse(FILE *input, FILE *csource, FILE *cheader, char *prefix)
 	return 0;
 }
 
+/* Avoid GNU vs POSIX basename() discrepancy, just use our own */
+static const char *xbasename(const char *s)
+{
+	const char *p = strrchr(s, '/');
+
+	return p ? p + 1 : s;
+}
+
 static int fn_to_prefix(const char *fn, char *prefix, size_t size)
 {
 	size_t len;
 
-	fn = basename(fn);
+	fn = xbasename(fn);
 	len = strlen(fn);
 
 	if (len > size - 1)
@@ -187,7 +195,8 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	fprintf(args[ARGS_CHEADER].f, HEADER, args[ARGS_INPUT].fn, prefix, prefix);
+	fprintf(args[ARGS_CHEADER].f, HEADER, xbasename(args[ARGS_INPUT].fn),
+		prefix, prefix);
 
 	ret = parse(args[ARGS_INPUT].f, args[ARGS_CSOURCE].f,
 		    args[ARGS_CHEADER].f, prefix);
