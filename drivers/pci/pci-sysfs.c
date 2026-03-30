@@ -1453,6 +1453,7 @@ static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 
 	pm_runtime_get_sync(dev);
+	/*执行reset函数*/
 	result = pci_reset_function(pdev);
 	pm_runtime_put(dev);
 	if (result < 0)

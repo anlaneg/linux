@@ -838,7 +838,7 @@ static void resolve_cb(int status, struct sockaddr *src_addr,
 
 int rdma_addr_find_l2_eth_by_grh(const union ib_gid *sgid/*源地址*/,
 				 const union ib_gid *dgid/*目的地址*/,
-				 u8 *dmac/*目的地址*/, const struct ib_gid_attr *sgid_attr,
+				 u8 *dmac/*出参，目的mac地址*/, const struct ib_gid_attr *sgid_attr,
 				 int *hoplimit)
 {
 	struct rdma_dev_addr dev_addr;
@@ -849,7 +849,7 @@ int rdma_addr_find_l2_eth_by_grh(const union ib_gid *sgid/*源地址*/,
 	} sgid_addr, dgid_addr;
 	int ret;
 
-	/*源地址，目的地址设置*/
+	/*由gid转源地址，目的地址并设置*/
 	rdma_gid2ip((struct sockaddr *)&sgid_addr, sgid);
 	rdma_gid2ip((struct sockaddr *)&dgid_addr, dgid);
 

@@ -246,11 +246,11 @@ struct ib_unpacked_vlan {
 };
 
 struct ib_ud_header {
-	int                     lrh_present;
+	int                     lrh_present;/*指明lrh头是否存在*/
 	struct ib_unpacked_lrh  lrh;
-	int			eth_present;
+	int			eth_present;/*指明eth头是否存在*/
 	struct ib_unpacked_eth	eth;
-	int                     vlan_present;
+	int                     vlan_present;/*指明vlan头是否存在*/
 	struct ib_unpacked_vlan vlan;
 	int			grh_present;
 	struct ib_unpacked_grh	grh;

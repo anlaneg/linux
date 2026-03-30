@@ -813,13 +813,13 @@ struct ib_event_handler {
 	} while (0)
 
 struct ib_global_route {
-	const struct ib_gid_attr *sgid_attr;/*源地址*/
+	const struct ib_gid_attr *sgid_attr;/*源地址相关信息*/
 	union ib_gid	dgid;/*目的地址*/
-	u32		flow_label;
+	u32		flow_label;/*flow label取值*/
 	u8		sgid_index;
 	/*hop 跳数*/
 	u8		hop_limit;
-	u8		traffic_class;
+	u8		traffic_class;/*dscp取值*/
 };
 
 struct ib_grh {
@@ -997,10 +997,10 @@ struct rdma_ah_attr {
 	u8			static_rate;
 	u32			port_num;/*port编号*/
 	u8			ah_flags;
-	enum rdma_ah_attr_type type;
+	enum rdma_ah_attr_type type;/*使用哪种类型*/
 	union {
 		struct ib_ah_attr ib;
-		struct roce_ah_attr roce;
+		struct roce_ah_attr roce;/*目的mac值*/
 		struct opa_ah_attr opa;
 	};
 };
@@ -1292,6 +1292,7 @@ enum ib_rnr_timeout {
 	IB_RNR_TIMER_491_52 = 31
 };
 
+/*描述属性id*/
 enum ib_qp_attr_mask {
 	IB_QP_STATE			= 1,
 	IB_QP_CUR_STATE			= (1<<1),
@@ -1344,9 +1345,10 @@ enum ib_mw_type {
 	IB_MW_TYPE_2 = 2
 };
 
+/*qp属性值*/
 struct ib_qp_attr {
-	enum ib_qp_state	qp_state;
-	enum ib_qp_state	cur_qp_state;
+	enum ib_qp_state	qp_state;/*qp的目标状态*/
+	enum ib_qp_state	cur_qp_state;/*当前qp状态*/
 	enum ib_mtu		path_mtu;
 	enum ib_mig_state	path_mig_state;
 	u32			qkey;
@@ -1356,18 +1358,22 @@ struct ib_qp_attr {
 	/*qp的访问属性，例如IB_ACCESS_REMOTE_READ等*/
 	int			qp_access_flags;
 	struct ib_qp_cap	cap;
-	struct rdma_ah_attr	ah_attr;
-	struct rdma_ah_attr	alt_ah_attr;
+	struct rdma_ah_attr	ah_attr;/*ah属性*/
+	struct rdma_ah_attr	alt_ah_attr;/*备选的ah属性*/
 	u16			pkey_index;
 	u16			alt_pkey_index;
 	u8			en_sqd_async_notify;
 	u8			sq_draining;
 	u8			max_rd_atomic;
 	u8			max_dest_rd_atomic;
-	u8			min_rnr_timer;
+	u8			min_rnr_timer;/*rnr nak超时时间（即静默对方多久）*/
 	u32			port_num;
-	u8			timeout;
-	u8			retry_cnt;
+	u8			timeout;/*超时时间*/
+	u8			retry_cnt;/*重传最大次数*/
+	/*RNR重传最大次数
+	 * （RNR= Receiver Not Ready ）
+	 * 即当发送端（Requester）速度太快，而接收端（Responder）的接收队列（RQ）里没有可用的接收描述符
+	 * （WQE/Receive Buffer）时，硬件就会返回一个 RNR NAK 报文）*/
 	u8			rnr_retry;
 	u32			alt_port_num;
 	u8			alt_timeout;

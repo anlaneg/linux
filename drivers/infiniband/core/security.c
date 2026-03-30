@@ -577,6 +577,7 @@ int ib_security_modify_qp(struct ib_qp *qp,
 	struct ib_ports_pkeys *tmp_pps;
 	struct ib_ports_pkeys *new_pps = NULL;
 	struct ib_qp *real_qp = qp->real_qp;
+	/*是否特殊qp*/
 	bool special_qp = (real_qp->qp_type == IB_QPT_SMI ||
 			   real_qp->qp_type == IB_QPT_GSI ||
 			   real_qp->qp_type >= IB_QPT_RESERVED1);
@@ -621,6 +622,7 @@ int ib_security_modify_qp(struct ib_qp *qp,
 							  real_qp->qp_sec);
 	}
 
+	/*利用设备提供的modify_qp回调执行qp修改*/
 	if (!ret)
 		ret = real_qp->device->ops.modify_qp(real_qp,
 						     qp_attr,

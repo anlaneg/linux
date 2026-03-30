@@ -329,7 +329,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 		hlimit = ip6_dst_hoplimit(dst);
 
 	ip6_flow_hdr(hdr, tclass, ip6_make_flowlabel(net, skb, fl6->flowlabel,
-				ip6_autoflowlabel(net, sk), fl6)/*设置flow label*/);
+				ip6_autoflowlabel(net, sk), fl6)/*生成并设置flow label，以便中间路由器可据此按流转发*/);
 
 	hdr->payload_len = htons(seg_len);
 	hdr->nexthdr = proto;

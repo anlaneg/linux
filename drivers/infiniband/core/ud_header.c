@@ -312,14 +312,14 @@ EXPORT_SYMBOL(ib_ud_ip4_csum);
  * @immediate_present: specify if immediate data is present
  * @header:Structure to initialize
  */
-int ib_ud_header_init(int     payload_bytes,
+int ib_ud_header_init(int     payload_bytes/*负载长度*/,
 		      int    lrh_present,
-		      int    eth_present,
-		      int    vlan_present,
+		      int    eth_present/*eth头是否存在*/,
+		      int    vlan_present/*vlan是否存在*/,
 		      int    grh_present,
-		      int    ip_version,
-		      int    udp_present,
-		      int    immediate_present,
+		      int    ip_version/*ip协议版本，v4或者v6*/,
+		      int    udp_present/*udp头是否存在*/,
+		      int    immediate_present/*是否有立即数*/,
 		      struct ib_ud_header *header)
 {
 	size_t udp_bytes = udp_present ? IB_UDP_BYTES : 0;
@@ -331,7 +331,7 @@ int ib_ud_header_init(int     payload_bytes,
 	 * UDP header without IP header doesn't make sense
 	 */
 	if (udp_present && ip_version != 4 && ip_version != 6)
-		return -EINVAL;
+		return -EINVAL;/*udp只支持在v4/v6中存在*/
 
 	if (lrh_present) {
 		u16 packet_length;

@@ -107,7 +107,7 @@ struct rxe_srq {
 
 struct rxe_req_info {
 	int			wqe_index;/*指向待发送的WQE*/
-	u32			psn;/*packet对应的唯一编号*/
+	u32			psn;/*记录packet对应的唯一编号*/
 	int			opcode;/*记录上次报文发送时使用的OPCODE,如果不知道上次是哪个,置为-1*/
 	atomic_t		rd_atomic;
 	int			wait_fence;

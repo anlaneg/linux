@@ -112,6 +112,7 @@ static inline int rdma_addr_gid_offset(struct rdma_dev_addr *dev_addr)
 
 static inline u16 rdma_vlan_dev_vlan_id(const struct net_device *dev)
 {
+	/*如果vlan设备，取其对应的vlan,否则返回0xffff*/
 	return is_vlan_dev(dev) ? vlan_dev_vlan_id(dev) : 0xffff;
 }
 

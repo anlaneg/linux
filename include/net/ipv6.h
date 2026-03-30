@@ -940,7 +940,7 @@ static inline __be32 ip6_make_flowlabel(const struct net *net,
 		/*如果开启，则flowlable被强制变更在高位为1的区间*/
 		flowlabel |= IPV6_FLOWLABEL_STATELESS_FLAG;
 
-	return flowlabel;
+	return flowlabel;/*生成flowlabel*/
 }
 
 static inline int ip6_default_np_autolabel(const struct net *net)

@@ -128,7 +128,7 @@ struct net_device *rdma_lag_get_ah_roce_slave(struct ib_device *device,
 	rcu_read_unlock();
 
 	if (!netif_is_bond_master(master))
-		/*netdev不是bond,直接返回*/
+		/*netdev不是bond,直接返回NULL*/
 		goto put;
 
 	slave = rdma_get_xmit_slave_udp(device, master, ah_attr, flags);/*取此QP发包时选取的slave设备*/

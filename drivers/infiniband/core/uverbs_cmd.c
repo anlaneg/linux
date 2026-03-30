@@ -1936,7 +1936,8 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		/*设置sq psn*/
 		attr->sq_psn = cmd->base.sq_psn;
 	if (cmd->base.attr_mask & IB_QP_DEST_QPN)
-		attr->dest_qp_num = cmd->base.dest_qp_num;/*设置目标qp对应的qpn*/
+		/*设置目标qp对应的qpn*/
+		attr->dest_qp_num = cmd->base.dest_qp_num;
 	if (cmd->base.attr_mask & IB_QP_ACCESS_FLAGS)
 		attr->qp_access_flags = cmd->base.qp_access_flags;
 	if (cmd->base.attr_mask & IB_QP_PKEY_INDEX)
@@ -4018,6 +4019,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 					     struct ib_uverbs_create_qp,
 					     struct ib_uverbs_create_qp_resp),
 				     UAPI_DEF_METHOD_NEEDS_FN(create_qp)),
+			/*修改qp*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_DESTROY_QP,
 			ib_uverbs_destroy_qp,

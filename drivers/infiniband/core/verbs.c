@@ -830,8 +830,8 @@ static int ib_resolve_unicast_gid_dmac(struct ib_device *device,
 	}
 
 	ret = rdma_addr_find_l2_eth_by_grh(&sgid_attr->gid/*源地址*/, &grh->dgid/*目的地址*/,
-					   ah_attr->roce.dmac/*出叁，目的mac*/,
-					   sgid_attr, &hop_limit);
+					   ah_attr->roce.dmac/*出叁，获得的目的mac*/,
+					   sgid_attr, &hop_limit/*出参,limit*/);
 
 	grh->hop_limit = hop_limit;
 	return ret;
@@ -1807,22 +1807,25 @@ EXPORT_SYMBOL(ib_modify_qp_is_ok);
  * necessary ah_attr fields when call is successful.
  */
 static int ib_resolve_eth_dmac(struct ib_device *device,
-			       struct rdma_ah_attr *ah_attr)
+			       struct rdma_ah_attr *ah_attr/*出参，目的mac*/)
 {
 	int ret = 0;
 
 	if (rdma_is_multicast_addr((struct in6_addr *)ah_attr->grh.dgid.raw)) {
 		if (ipv6_addr_v4mapped((struct in6_addr *)ah_attr->grh.dgid.raw)) {
+			/*v4映射的v6地址*/
 			__be32 addr = 0;
 
 			memcpy(&addr, ah_attr->grh.dgid.raw + 12, 4);
+			/*由ipv4组播地址映射mac地址*/
 			ip_eth_mc_map(addr, (char *)ah_attr->roce.dmac);
 		} else {
+			/*由ipv6组播地址映射mac地址*/
 			ipv6_eth_mc_map((struct in6_addr *)ah_attr->grh.dgid.raw,
 					(char *)ah_attr->roce.dmac);
 		}
 	} else {
-	    /*ipv4地址*/
+	    /*单播gid地址转目的Mac*/
 		ret = ib_resolve_unicast_gid_dmac(device, ah_attr);
 	}
 	return ret;
@@ -1842,6 +1845,7 @@ static bool is_qp_type_connected(const struct ib_qp *qp)
 static int _ib_modify_qp(struct ib_qp *qp, struct ib_qp_attr *attr,
 			 int attr_mask, struct ib_udata *udata)
 {
+	/*按属性修改qp*/
 	u32 port = attr_mask & IB_QP_PORT ? attr->port_num : qp->port;
 	const struct ib_gid_attr *old_sgid_attr_av;
 	const struct ib_gid_attr *old_sgid_attr_alt_av;
@@ -1864,11 +1868,13 @@ static int _ib_modify_qp(struct ib_qp *qp, struct ib_qp_attr *attr,
 			 * resolved rdma_ah_attr's.
 			 */
 			if (udata) {
+				/*解析目的mac*/
 				ret = ib_resolve_eth_dmac(qp->device,
 							  &attr->ah_attr);
 				if (ret)
 					goto out_av;
 			}
+			/*取lag slave接口*/
 			slave = rdma_lag_get_ah_roce_slave(qp->device,
 							   &attr->ah_attr,
 							   GFP_KERNEL);
@@ -1876,7 +1882,7 @@ static int _ib_modify_qp(struct ib_qp *qp, struct ib_qp_attr *attr,
 				ret = PTR_ERR(slave);
 				goto out_av;
 			}
-			attr->xmit_slave = slave;
+			attr->xmit_slave = slave;/*设置发送用slave*/
 		}
 	}
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -1928,6 +1934,7 @@ static int _ib_modify_qp(struct ib_qp *qp, struct ib_qp_attr *attr,
 	    ((attr_mask & IB_QP_STATE) && attr->qp_state == IB_QPS_INIT))
 		rdma_counter_bind_qp_auto(qp, attr->port_num);
 
+	/*执行modify qp回调*/
 	ret = ib_security_modify_qp(qp, attr, attr_mask, udata);
 	if (ret)
 		goto out;
@@ -1966,6 +1973,7 @@ out_av:
 int ib_modify_qp_with_udata(struct ib_qp *ib_qp, struct ib_qp_attr *attr,
 			    int attr_mask, struct ib_udata *udata)
 {
+	/*按属性修改qp*/
 	return _ib_modify_qp(ib_qp->real_qp, attr, attr_mask, udata);
 }
 EXPORT_SYMBOL(ib_modify_qp_with_udata);

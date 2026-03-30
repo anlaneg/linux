@@ -227,6 +227,7 @@ struct inet6_dev {
 	unsigned int		ra_mtu;
 };
 
+/*ipv6组播地址映射mac地址*/
 static inline void ipv6_eth_mc_map(const struct in6_addr *addr, char *buf)
 {
 	/*

@@ -103,6 +103,7 @@ static void req_retry(struct rxe_qp *qp)
 	}
 }
 
+/*rnr nak报文约定的超时时间到期后此函数将被触发，此时标明重传，尝试发送*/
 void rnr_nak_timer(struct timer_list *t)
 {
 	struct rxe_qp *qp = timer_container_of(qp, t, rnr_nak_timer);
@@ -739,7 +740,7 @@ int rxe_requester(struct rxe_qp *qp)
 	 * until the rnr timer has fired before starting the
 	 * retry flow
 	 */
-	if (unlikely(qp->req.need_retry && !qp->req.wait_for_rnr_timer)) {
+	if (unlikely(qp->req.need_retry && !qp->req.wait_for_rnr_timer/*如遇rnr等待，则不重传*/)) {
 		req_retry(qp);/*处理重传*/
 		qp->req.need_retry = 0;/*简单设置重传位置,后面会和正常发送一样,重传处理结束,置为0*/
 	}

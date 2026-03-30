@@ -312,6 +312,7 @@ static inline enum comp_state check_ack(struct rxe_qp *qp,
 			return COMPST_WRITE_SEND;
 
 		case AETH_RNR_NAK:
+			/*记录收到RNR NAK报文*/
 			rxe_counter_inc(rxe, RXE_CNT_RCV_RNR);
 			return COMPST_RNR_RETRY;
 
@@ -835,14 +836,15 @@ int rxe_completer(struct rxe_qp *qp)
 			/* we come here if we received an RNR NAK */
 			if (qp->comp.rnr_retry > 0) {
 				if (qp->comp.rnr_retry != 7)
-					qp->comp.rnr_retry--;/*次数减少*/
+					qp->comp.rnr_retry--;/*rnr重传次数减少*/
 
 				/* don't start a retry flow until the
 				 * rnr timer has fired
 				 */
-				qp->req.wait_for_rnr_timer = 1;
+				qp->req.wait_for_rnr_timer = 1;/*标记正在因收到rnr nak而避让，待发送中*/
 				rxe_dbg_qp(qp, "set rnr nak timer\n");
 				// TODO who protects from destroy_qp??
+				/*取得rnr nak需等待的秒数，启动timer,等超时后再发送*/
 				mod_timer(&qp->rnr_nak_timer,
 					  jiffies + rnrnak_jiffies(aeth_syn(pkt)
 						& ~AETH_TYPE_MASK));

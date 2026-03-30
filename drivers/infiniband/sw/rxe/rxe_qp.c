@@ -603,7 +603,7 @@ static void rxe_qp_reset(struct rxe_qp *qp)
 	atomic_set(&qp->ssn, 0);
 	qp->req.opcode = -1;
 	qp->req.need_retry = 0;
-	qp->req.wait_for_rnr_timer = 0;
+	qp->req.wait_for_rnr_timer = 0;/*清除因收到rnr nak而不发送报文的标记*/
 	qp->req.noack_pkts = 0;
 	qp->resp.msn = 0;
 	qp->resp.opcode = -1;
@@ -688,6 +688,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 	int err;
 
 	if (mask & IB_QP_CUR_STATE)
+		/*设置qp当前状态为设置的状态*/
 		qp->attr.cur_qp_state = attr->qp_state;
 
 	if (mask & IB_QP_STATE) {
@@ -705,6 +706,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 		if (err)
 			return err;
 
+		/*按要设置的状态进行处理*/
 		switch (attr->qp_state) {
 		case IB_QPS_RESET:
 			rxe_qp_reset(qp);
@@ -784,12 +786,14 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 	}
 
 	if (mask & IB_QP_RETRY_CNT) {
+		/*记录配置的重传次数*/
 		qp->attr.retry_cnt = attr->retry_cnt;
 		qp->comp.retry_cnt = attr->retry_cnt;
 		rxe_dbg_qp(qp, "set retry count = %d\n", attr->retry_cnt);
 	}
 
 	if (mask & IB_QP_RNR_RETRY) {
+		/*设置rnr 重传次数*/
 		qp->attr.rnr_retry = attr->rnr_retry;
 		qp->comp.rnr_retry = attr->rnr_retry;
 		rxe_dbg_qp(qp, "set rnr retry count = %d\n", attr->rnr_retry);
@@ -797,7 +801,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 
 	if (mask & IB_QP_RQ_PSN) {
 		qp->attr.rq_psn = (attr->rq_psn & BTH_PSN_MASK);
-		qp->resp.psn = qp->attr.rq_psn;/*设置协商的psn*/
+		qp->resp.psn = qp->attr.rq_psn;/*设置(协商的)response psn*/
 		rxe_dbg_qp(qp, "set resp psn = 0x%x\n", qp->resp.psn);
 	}
 
@@ -808,6 +812,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 	}
 
 	if (mask & IB_QP_SQ_PSN) {
+		/*设置req psn*/
 		qp->attr.sq_psn = (attr->sq_psn & BTH_PSN_MASK);
 		qp->req.psn = qp->attr.sq_psn;
 		qp->comp.psn = qp->attr.sq_psn;
@@ -849,7 +854,7 @@ int rxe_qp_to_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask)
 	 * Yield the processor
 	 */
 	spin_lock_irqsave(&qp->state_lock, flags);
-	attr->cur_qp_state = qp_state(qp);
+	attr->cur_qp_state = qp_state(qp);/*取qp当前状态*/
 	if (qp->attr.sq_draining) {
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		cond_resched();

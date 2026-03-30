@@ -1734,8 +1734,10 @@ int rxe_receiver(struct rxe_qp *qp)
 			break;
 		case RESPST_ERR_RNR:
 			if (qp_type(qp) == IB_QPT_RC) {
+				/*RNR NAK发送计数增加*/
 				rxe_counter_inc(rxe, RXE_CNT_SND_RNR);
 				/* RC - class B */
+				/*发送RNR NAK*/
 				send_ack(qp, AETH_RNR_NAK |
 					 (~AETH_TYPE_MASK &
 					 qp->attr.min_rnr_timer),

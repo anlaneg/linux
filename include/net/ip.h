@@ -629,7 +629,7 @@ static inline void iph_to_flow_copy_v4addrs(struct flow_keys *flow,
 /*
  *	Map a multicast IP onto multicast MAC for type ethernet.
  */
-//由组播ip地址映射mac地址
+//由组播ipv4地址映射mac地址
 static inline void ip_eth_mc_map(__be32 naddr, char *buf)
 {
 	__u32 addr=ntohl(naddr);
