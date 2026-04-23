@@ -32,7 +32,7 @@ struct ionic_sge {
 	__be64				va;
 	__be32				len;
 	__be32				lkey;
-};
+};/*8+4+4=16字节*/
 
 /* admin queue mr type */
 enum ionic_mr_flags {
@@ -315,9 +315,9 @@ static inline int to_ionic_qp_modify_state(enum ib_qp_state to_state,
 
 /* data payload part of v1 wqe */
 union ionic_v1_pld {
-	struct ionic_sge	sgl[2];
-	__be32			spec32[8];
-	__be16			spec16[16];
+	struct ionic_sge	sgl[2];/*32字节*/
+	__be32			spec32[8];/*32字节*/
+	__be16			spec16[16];/*32字节*/
 	__u8			data[32];
 };
 
@@ -423,10 +423,10 @@ static inline u32 ionic_v1_cqe_qtf_qid(u32 qtf)
 
 /* v1 base wqe header */
 struct ionic_v1_base_hdr {
-	__u64				wqe_id;
-	__u8				op;
-	__u8				num_sge_key;
-	__be16				flags;
+	__u64				wqe_id;/*记录wqe在队列中（sq/rq)中的生产者指针*/
+	__u8				op;/*指明操作码，例如IONIC_V2_OP_SEND*/
+	__u8				num_sge_key;/*sge最数*/
+	__be16				flags;/*指定标记*/
 	__be32				imm_data_key;
 };
 
@@ -522,7 +522,9 @@ enum ionic_v1_op {
 	IONIC_V1_FLAG_SIG		= BIT(3),
 
 	/* flags last four bits for sgl spec format */
+	/*标记sge数目大于IONIC_V1_SPEC_FIRST_SGE，小于8*/
 	IONIC_V1_FLAG_SPEC32		= (1u << 12),
+	/*标记sge数目大于8*/
 	IONIC_V1_FLAG_SPEC16		= (2u << 12),
 	IONIC_V1_SPEC_FIRST_SGE		= 2,
 };
@@ -578,18 +580,24 @@ static inline size_t ionic_v1_send_wqe_min_size(int min_sge, int min_data,
 static inline int ionic_v1_send_wqe_max_sge(u8 stride_log2, int spec,
 					    bool expdb)
 {
+	/*wqe可用总大小*/
 	struct ionic_sge *sge = (void *)(1ull << stride_log2);
 	struct ionic_v1_wqe *wqe = (void *)0;
 	int num_sge = 0;
 
+	/*支持expdb减少一个sge大小*/
 	if (expdb)
 		sge -= 1;
 
+	/*支持的spec大于2，则先跳过2个*/
 	if (spec > IONIC_V1_SPEC_FIRST_SGE)
 		num_sge = IONIC_V1_SPEC_FIRST_SGE;
 
+	/*这里是两个指针的差，
+	 * 故获得的是sge与num_seg之间可以存入多少个struct ionic_sge结构体*/
 	num_sge = sge - &wqe->common.pld.sgl[num_sge];
 
+	/*如超过spec,以spec为准*/
 	if (spec && num_sge > spec)
 		num_sge = spec;
 

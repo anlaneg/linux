@@ -309,17 +309,17 @@ static inline __attribute_const__ u32 uapi_bkey_to_key_attr(u32 attr_bkey)
  */
 
 struct uverbs_attr_def {
-	u16                           id;
+	u16                           id;/*属性编号，例如UVERBS_ATTR_GET_CONTEXT_NUM_COMP_VECTORS*/
 	struct uverbs_attr_spec       attr;
 };
 
 struct uverbs_method_def {
-	u16                                  id;
+	u16                                  id;/*指定method id*/
 	/* Combination of bits from enum UVERBS_ACTION_FLAG_XXXX */
 	u32				     flags;
-	size_t				     num_attrs;
-	const struct uverbs_attr_def * const (*attrs)[];
-	int (*handler)(struct uverbs_attr_bundle *attrs);
+	size_t				     num_attrs;/*属性数目*/
+	const struct uverbs_attr_def * const (*attrs)[];/*属性值*/
+	int (*handler)(struct uverbs_attr_bundle *attrs);/*此method处理回调*/
 };
 
 struct uverbs_object_def {

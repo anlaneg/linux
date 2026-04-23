@@ -34,9 +34,9 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 
 //定义pci操作函数(读，写指定大小字节）
 //通过执行pci的操作集中写义的read,write函数来完成
-#define PCI_OP_READ(size, type, len) \
-int noinline pci_bus_read_config_##size \
-	(struct pci_bus *bus, unsigned int devfn, int pos, type *value)	\
+#define PCI_OP_READ(size/*字长名称，例如byte/word/dword*/, type/*数据类型名称*/, len/*数据类型对应的字节长度*/) \
+int noinline pci_bus_read_config_##size/*读操作函数名称*/ \
+	(struct pci_bus *bus/*设备bus*/, unsigned int devfn/*设备function*/, int pos/*偏移量*/, type *value/*出叁，读取到的内容*/)	\
 {									\
 	unsigned long flags;						\
 	u32 data = 0;							\
@@ -396,6 +396,7 @@ bool pcie_cap_has_rtctl(const struct pci_dev *dev)
 static bool pcie_capability_reg_implemented(struct pci_dev *dev, int pos)
 {
 	if (!pci_is_pcie(dev))
+		/*非pcie设备*/
 		return false;
 
 	switch (pos) {
@@ -425,7 +426,7 @@ static bool pcie_capability_reg_implemented(struct pci_dev *dev, int pos)
 	case PCI_EXP_LNKSTA2:
 		return pcie_cap_has_lnkctl2(dev);
 	default:
-		return false;
+		return false;/*不支持此扩展*/
 	}
 }
 
@@ -475,9 +476,11 @@ int pcie_capability_read_dword(struct pci_dev *dev, int pos, u32 *val)
 
 	*val = 0;
 	if (pos & 3)
+		/*位置不对齐*/
 		return PCIBIOS_BAD_REGISTER_NUMBER;
 
 	if (pcie_capability_reg_implemented(dev, pos)) {
+		/*读取此设备pos位置处的u32*/
 		ret = pci_read_config_dword(dev, pci_pcie_cap(dev) + pos, val);
 		/*
 		 * Reset *val to 0 if pci_read_config_dword() fails; it may
@@ -485,6 +488,7 @@ int pcie_capability_read_dword(struct pci_dev *dev, int pos, u32 *val)
 		 * the config read failed on PCI.
 		 */
 		if (ret)
+			/*读出错，置为0*/
 			*val = 0;
 		return ret;
 	}
@@ -591,7 +595,8 @@ int pci_read_config_word(const struct pci_dev *dev, int where, u16 *val)
 }
 EXPORT_SYMBOL(pci_read_config_word);
 
-int pci_read_config_dword(const struct pci_dev *dev, int where,
+/*读取配置空间where位置处的u32*/
+int pci_read_config_dword(const struct pci_dev *dev, int where/*偏移量*/,
 					u32 *val)
 {
 	if (pci_dev_is_disconnected(dev)) {
@@ -610,6 +615,7 @@ int pci_write_config_byte(const struct pci_dev *dev, int where, u8 val)
 }
 EXPORT_SYMBOL(pci_write_config_byte);
 
+/*写配置空间where位置处的word(u16)*/
 int pci_write_config_word(const struct pci_dev *dev, int where, u16 val)
 {
 	if (pci_dev_is_disconnected(dev))

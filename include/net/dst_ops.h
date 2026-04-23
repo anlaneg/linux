@@ -25,6 +25,7 @@ struct dst_ops {
 	void			(*ifdown)(struct dst_entry *,
 					  struct net_device *dev);
 	void			(*negative_advice)(struct sock *sk, struct dst_entry *);
+	/*链路失效时调用，例如此报文之前挂接在neighbour表项上，此neighbour表项探测失败，引发link failure*/
 	void			(*link_failure)(struct sk_buff *);
 	void			(*update_pmtu)(struct dst_entry *dst, struct sock *sk,
 					       struct sk_buff *skb, u32 mtu,

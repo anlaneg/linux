@@ -334,6 +334,7 @@ int rdma_user_mmap_entry_insert_range(struct ib_ucontext *ucontext,
 			break;
 	}
 
+	/*尝试插入*/
 	for (i = xa_first; i < xa_last; i++) {
 		err = __xa_insert(&ucontext->mmap_xa, i, entry, GFP_KERNEL);
 		if (err)

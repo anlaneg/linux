@@ -14,7 +14,9 @@
 
 /* Supported devices */
 static const struct pci_device_id ionic_id_table[] = {
+	/*PF驱动*/
 	{ PCI_VDEVICE(PENSANDO, PCI_DEVICE_ID_PENSANDO_IONIC_ETH_PF) },
+	/*VF驱动*/
 	{ PCI_VDEVICE(PENSANDO, PCI_DEVICE_ID_PENSANDO_IONIC_ETH_VF) },
 	{ 0, }	/* end of table */
 };
@@ -25,6 +27,7 @@ int ionic_bus_get_irq(struct ionic *ionic, unsigned int num)
 	return pci_irq_vector(ionic->pdev, num);
 }
 
+/*取pci设备名称，例如：0000:4c:00.0*/
 const char *ionic_bus_info(struct ionic *ionic)
 {
 	return pci_name(ionic->pdev);
@@ -54,15 +57,20 @@ static int ionic_map_bars(struct ionic *ionic)
 	bars = ionic->bars;
 	ionic->num_bars = 0;
 
+	/*遍历所有bar*/
 	for (i = 0, j = 0; i < IONIC_BARS_MAX; i++) {
 		if (!(pci_resource_flags(pdev, i) & IORESOURCE_MEM))
+			/*不考虑非mem space的bar*/
 			continue;
+		/*获知此bar访问需要多大地址空间*/
 		bars[j].len = pci_resource_len(pdev, i);
 
 		/* only map the whole bar 0 */
 		if (j > 0) {
+			/*其它bar空间不分配地址*/
 			bars[j].vaddr = NULL;
 		} else {
+			/*为首个非0长度的bar分配地址空间*/
 			bars[j].vaddr = pci_iomap(pdev, i, bars[j].len);
 			if (!bars[j].vaddr) {
 				dev_err(dev,
@@ -181,7 +189,7 @@ out:
 	return err;
 }
 
-static int ionic_sriov_configure(struct pci_dev *pdev, int num_vfs)
+static int ionic_sriov_configure(struct pci_dev *pdev, int num_vfs/*要设置的vf数量*/)
 {
 	struct ionic *ionic = pci_get_drvdata(pdev);
 	struct device *dev = ionic->dev;
@@ -192,6 +200,7 @@ static int ionic_sriov_configure(struct pci_dev *pdev, int num_vfs)
 		return -EBUSY;
 
 	if (num_vfs > 0) {
+		/*开启sriov*/
 		ret = pci_enable_sriov(pdev, num_vfs);
 		if (ret) {
 			dev_err(dev, "Cannot enable SRIOV: %d\n", ret);
@@ -207,6 +216,7 @@ static int ionic_sriov_configure(struct pci_dev *pdev, int num_vfs)
 
 		ret = num_vfs;
 	} else {
+		/*禁用sriov*/
 		pci_disable_sriov(pdev);
 		ionic_vf_dealloc(ionic);
 	}
@@ -237,22 +247,25 @@ static int ionic_setup_one(struct ionic *ionic)
 	struct device *dev = ionic->dev;
 	int err;
 
-	ionic_debugfs_add_dev(ionic);
+	ionic_debugfs_add_dev(ionic);/*debugfs增加此设备名称，例如0000:4c:00.0*/
 
 	/* Setup PCI device */
-	err = pci_enable_device_mem(pdev);
+	err = pci_enable_device_mem(pdev);/*采用mmio方式访问设备*/
 	if (err) {
 		dev_err(dev, "Cannot enable PCI device: %d, aborting\n", err);
 		goto err_out_debugfs_del_dev;
 	}
 
+	/*登记占用标准bar*/
 	err = pci_request_regions(pdev, IONIC_DRV_NAME);
 	if (err) {
 		dev_err(dev, "Cannot request PCI regions: %d, aborting\n", err);
 		goto err_out_clear_pci;
 	}
+	/*显示设备带宽情况*/
 	pcie_print_link_status(pdev);
 
+	/*映射bar0*/
 	err = ionic_map_bars(ionic);
 	if (err)
 		goto err_out_clear_pci;
@@ -378,6 +391,7 @@ static int ionic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_out_deregister_devlink;
 	}
 
+	/*尝试注册辅助设备，以便发现rdma设备*/
 	ionic_auxbus_register(ionic->lif);
 
 	mod_timer(&ionic->watchdog_timer,
@@ -525,12 +539,13 @@ static struct pci_driver ionic_driver = {
 	.id_table = ionic_id_table,
 	.probe = ionic_probe,
 	.remove = ionic_remove,
-	.sriov_configure = ionic_sriov_configure,
+	.sriov_configure = ionic_sriov_configure,/*负责sriov处理*/
 	.err_handler = &ionic_err_handler
 };
 
 int ionic_bus_register_driver(void)
 {
+	/*注册pci驱动*/
 	return pci_register_driver(&ionic_driver);
 }
 

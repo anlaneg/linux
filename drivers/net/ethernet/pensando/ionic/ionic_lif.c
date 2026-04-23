@@ -3735,6 +3735,7 @@ int ionic_lif_init(struct ionic_lif *lif)
 
 	mutex_lock(&lif->ionic->dev_cmd_lock);
 	ionic_dev_cmd_lif_init(idev, lif->index, lif->info_pa);
+	/*等待fw响应*/
 	err = ionic_dev_cmd_wait(lif->ionic, DEVCMD_TIMEOUT);
 	ionic_dev_cmd_comp(idev, (union ionic_dev_cmd_comp *)&comp);
 	mutex_unlock(&lif->ionic->dev_cmd_lock);
@@ -3988,13 +3989,17 @@ int ionic_lif_identify(struct ionic *ionic, u8 lif_type,
 	sz = min(sizeof(*lid), sizeof(idev->dev_cmd_regs->data));
 
 	mutex_lock(&ionic->dev_cmd_lock);
+	/*发送IONIC_CMD_LIF_IDENTIFY dev cmd,网卡handle_ionic_cmd_lif_identify将被触发*/
 	ionic_dev_cmd_lif_identify(idev, lif_type, IONIC_IDENTITY_VERSION_1);
+	/*等待响应*/
 	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
+	/*复制响应内容*/
 	memcpy_fromio(lid, &idev->dev_cmd_regs->data, sz);
 	mutex_unlock(&ionic->dev_cmd_lock);
 	if (err)
 		return (err);
 
+	/*显示以太信息*/
 	dev_dbg(ionic->dev, "capabilities 0x%llx\n",
 		le64_to_cpu(lid->capabilities));
 

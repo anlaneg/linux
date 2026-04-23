@@ -89,6 +89,9 @@ static int __init nopat(char *str)
 }
 early_param("nopat", nopat);
 
+/*是否开启pat,PAT = Page Attribute Table
+ * 页属性表，x86 里专门用来给每一页物理内存设置缓存类型的硬件机制。
+ * */
 bool pat_enabled(void)
 {
 	return !pat_disabled;
@@ -518,7 +521,7 @@ static u64 sanitize_phys(u64 address)
  * available type in new_type in case of no error. In case of any error
  * it will return a negative return value.
  */
-int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
+int memtype_reserve(u64 start/*起始地址*/, u64 end/*终止地址*/, enum page_cache_mode req_type,
 		    enum page_cache_mode *new_type)
 {
 	struct memtype *entry_new;
@@ -534,6 +537,7 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 	 */
 	end = sanitize_phys(end - 1) + 1;
 	if (start >= end) {
+		/*参数有误*/
 		WARN(1, "%s failed: [mem %#010Lx-%#010Lx], req %s\n", __func__,
 				start, end - 1, cattr_name(req_type));
 		return -EINVAL;
@@ -542,7 +546,7 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 	if (!pat_enabled()) {
 		/* This is identical to page table setting without PAT */
 		if (new_type)
-			*new_type = req_type;
+			*new_type = req_type;/*pat未开启，以请求为准*/
 		return 0;
 	}
 
@@ -559,7 +563,7 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 	 * tools and ACPI tools). Use WB request for WB memory and use
 	 * UC_MINUS otherwise.
 	 */
-	actual_type = pat_x_mtrr_type(start, end, req_type);
+	actual_type = pat_x_mtrr_type(start, end, req_type);/*自pat中查询实际类型*/
 
 	if (new_type)
 		*new_type = actual_type;
@@ -578,12 +582,13 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 	if (!entry_new)
 		return -ENOMEM;
 
-	entry_new->start = start;
-	entry_new->end	 = end;
-	entry_new->type	 = actual_type;
+	entry_new->start = start;/*起始地址*/
+	entry_new->end	 = end;/*终止地址*/
+	entry_new->type	 = actual_type;/*其对应的page cache mode*/
 
 	spin_lock(&memtype_lock);
 
+	/*加入链表（防止对同一段地址设置不一致的page cache mode)*/
 	err = memtype_check_insert(entry_new, new_type);
 	if (err) {
 		pr_info("x86/PAT: memtype_reserve failed [mem %#010Lx-%#010Lx], track %s, req %s\n",
@@ -597,6 +602,7 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 
 	spin_unlock(&memtype_lock);
 
+	/*添加此段内存属性到pat*/
 	dprintk("memtype_reserve added [mem %#010Lx-%#010Lx], track %s, req %s, ret %s\n",
 		start, end - 1, cattr_name(entry_new->type), cattr_name(req_type),
 		new_type ? cattr_name(*new_type) : "-");

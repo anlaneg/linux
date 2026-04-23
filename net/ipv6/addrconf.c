@@ -2096,7 +2096,7 @@ int ipv6_chk_prefix(const struct in6_addr *addr, struct net_device *dev)
 	if (idev) {
 		list_for_each_entry_rcu(ifa, &idev->addr_list, if_list) {
 			onlink = ipv6_prefix_equal(addr, &ifa->addr,
-						   ifa->prefix_len);
+						   ifa->prefix_len);/*addr是否与idex上某一个地址同网段*/
 			if (onlink)
 				break;
 		}
@@ -7173,7 +7173,7 @@ static const struct ctl_table addrconf_sysctl[] = {
 	},
 #endif
 	{
-			/*禁止ipv6*/
+		/*禁止ipv6*/
 		.procname	= "disable_ipv6",
 		.data		= &ipv6_devconf.disable_ipv6,
 		.maxlen		= sizeof(int),
@@ -7355,6 +7355,7 @@ static const struct ctl_table addrconf_sysctl[] = {
 		.extra2		= (void *)SYSCTL_ONE,
 	},
 	{
+		/*允许接受 “没主动请求、也不在邻居缓存里” 的 NA 响应。*/
 		.procname	= "accept_untracked_na",
 		.data		= &ipv6_devconf.accept_untracked_na,
 		.maxlen		= sizeof(int),

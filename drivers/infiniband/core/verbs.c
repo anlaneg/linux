@@ -2103,6 +2103,7 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 }
 EXPORT_SYMBOL(ib_get_eth_speed);
 
+/*qp属性变更*/
 int ib_modify_qp(struct ib_qp *qp,
 		 struct ib_qp_attr *qp_attr,
 		 int qp_attr_mask)

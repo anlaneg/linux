@@ -343,8 +343,9 @@ int vmap_page_range(unsigned long addr, unsigned long end,
 	return err;
 }
 
-int ioremap_page_range(unsigned long addr, unsigned long end,
-		phys_addr_t phys_addr, pgprot_t prot)
+/*完成虚拟地址与物理地址的映射*/
+int ioremap_page_range(unsigned long addr/*虚拟地址起始*/, unsigned long end/*虚拟地址结束*/,
+		phys_addr_t phys_addr/*物理地址*/, pgprot_t prot)
 {
 	struct vm_struct *area;
 
@@ -3289,6 +3290,7 @@ struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
 				  __builtin_return_address(0));
 }
 
+//分配一段内核虚拟地址空间
 struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
 				const void *caller)
 {

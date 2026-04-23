@@ -224,6 +224,7 @@ err_event_file:
 	return ret;
 };
 
+/*通过ib_uverbs_handler_UVERBS_METHOD_CQ_CREATE响应cq创建命令*/
 DECLARE_UVERBS_NAMED_METHOD(
 	UVERBS_METHOD_CQ_CREATE,
 	UVERBS_ATTR_IDR(UVERBS_ATTR_CREATE_CQ_HANDLE,

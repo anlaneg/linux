@@ -303,11 +303,13 @@ enum pci_bus_speed {
 	PCI_SPEED_66MHz_PCIX_533	= 0x11,
 	PCI_SPEED_100MHz_PCIX_533	= 0x12,
 	PCI_SPEED_133MHz_PCIX_533	= 0x13,
+	/*速率2.5GT/s*/
 	PCIE_SPEED_2_5GT		= 0x14,
 	PCIE_SPEED_5_0GT		= 0x15,
 	PCIE_SPEED_8_0GT		= 0x16,
 	PCIE_SPEED_16_0GT		= 0x17,
 	PCIE_SPEED_32_0GT		= 0x18,
+	/*速率64.0GT/s*/
 	PCIE_SPEED_64_0GT		= 0x19,
 	PCI_SPEED_UNKNOWN		= 0xff,
 };
@@ -351,7 +353,7 @@ struct pci_dev {
 	struct proc_dir_entry *procent;	/* Device entry in /proc/bus/pci */
 	struct pci_slot	*slot;		/* Physical slot this device is in */
 
-	//设备deviceid+function_id
+	//设备device id+ function id
 	unsigned int	devfn;		/* Encoded device & function index */
 	unsigned short	vendor;//设备vendor_id信息,来自pci配置空间
 	unsigned short	device;//设备类型编号(device_id)，来自pci配置空间
@@ -454,6 +456,7 @@ struct pci_dev {
 	 * directly, use the values stored here. They might be different!
 	 */
 	unsigned int	irq;//中断号
+	/*记录此设备所有资源，比如各bar资源*/
 	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
 	struct resource driver_exclusive_resource;	 /* driver exclusive resource ranges */
 
@@ -482,8 +485,8 @@ struct pci_dev {
 	unsigned int	is_msi_managed:1;	/* MSI release via devres installed */
 	unsigned int	needs_freset:1;		/* Requires fundamental reset */
 	unsigned int	state_saved:1;
-	unsigned int	is_physfn:1;//是否物理function
-	unsigned int	is_virtfn:1;
+	unsigned int	is_physfn:1;//是否物理function(PF)
+	unsigned int	is_virtfn:1;/*是否vf*/
 	unsigned int	is_hotplug_bridge:1;
 	unsigned int	is_pciehp:1;
 	unsigned int	shpc_managed:1;		/* SHPC owned by shpchp */
@@ -587,6 +590,7 @@ struct pci_dev {
 #endif
 	u16		acs_cap;	/* ACS Capability offset */
 	u16		acs_capabilities; /* ACS Capabilities */
+	/*设备支持的速率*/
 	u8		supported_speeds; /* Supported Link Speeds Vector */
 	phys_addr_t	rom;		/* Physical address if not from BAR */
 	size_t		romlen;		/* Length if not from BAR */
@@ -726,10 +730,12 @@ struct pci_bus {
 	struct list_head resources;	/* Address space routed to this bus */
 	struct resource busn_res;	/* Bus numbers routed to this bus */
 
+	/*pci访问函数*/
 	struct pci_ops	*ops;		/* Configuration access functions */
 	void		*sysdata;	/* Hook for sys-specific extension */
 	struct proc_dir_entry *procdir;	/* Directory entry in /proc/bus/pci */
 
+	/*bus编号*/
 	unsigned char	number;		/* Bus number */
 	unsigned char	primary;	/* Number of primary bridge */
 	unsigned char	max_bus_speed;	/* enum pci_bus_speed */
@@ -768,6 +774,7 @@ static inline u16 pci_dev_id(struct pci_dev *dev)
  */
 static inline bool pci_is_root_bus(struct pci_bus *pbus)
 {
+	/*是否根桥*/
 	return !(pbus->parent);
 }
 
@@ -890,8 +897,10 @@ struct pci_ops {
 	int (*add_bus)(struct pci_bus *bus);
 	void (*remove_bus)(struct pci_bus *bus);
 	void __iomem *(*map_bus)(struct pci_bus *bus, unsigned int devfn, int where);
-	int (*read)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *val);
-	int (*write)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 val);
+	/*自指定位置读取指定长度的内容*/
+	int (*read)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *val/*出参，读取到的内容*/);
+	/*向指定位置写入指定长度的内容*/
+	int (*write)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 val/*要写入的内容*/);
 };
 
 /*
@@ -2304,13 +2313,14 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
  * for accessing popular PCI BAR info
  */
 #define pci_resource_n(dev, bar)	(&(dev)->resource[(bar)])
-//bar的起始地址
+//此设备对应bar的起始地址
 #define pci_resource_start(dev, bar)	(pci_resource_n(dev, bar)->start)
 //bar的结尾地址
 #define pci_resource_end(dev, bar)	(pci_resource_n(dev, bar)->end)
 //取第bar个dev资源flags
 #define pci_resource_flags(dev, bar)	(pci_resource_n(dev, bar)->flags)
-//获得dev[bar]内存的长度
+//获得dev[bar]资源内存的长度
+//软件通过读此可知道硬件资源空间大小
 //如果start为0，且end也为0的情况下返回0，否则长度为end-（start+1）
 #define pci_resource_len(dev,bar)					\
 	(pci_resource_end((dev), (bar)) ? 				\

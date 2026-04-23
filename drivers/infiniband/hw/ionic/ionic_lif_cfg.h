@@ -24,19 +24,19 @@ struct ionic_lif_cfg {
 	struct ionic_intr __iomem *intr_ctrl;
 	phys_addr_t db_phys;
 
-	u64 page_size_supported;
+	u64 page_size_supported;/*支持哪些页大小，例如4K,2M,1G*/
 	u32 npts_per_lif;
 	u32 nmrs_per_lif;
 	u32 nahs_per_lif;
 
-	u32 aq_base;
-	u32 cq_base;
-	u32 eq_base;
+	u32 aq_base;/*adminq最小id*/
+	u32 cq_base;/*cq最小id*/
+	u32 eq_base;/*event queue最小id*/
 
-	int aq_count;
-	int eq_count;
-	int cq_count;
-	int qp_count;
+	int aq_count;/*adminq长度*/
+	int eq_count;/*event queueu长度*/
+	int cq_count;/*complete queue长度*/
+	int qp_count;/*send queue长度*/
 
 	u16 stats_type;
 	u8 aq_qtype;
@@ -45,14 +45,14 @@ struct ionic_lif_cfg {
 	u8 cq_qtype;
 	u8 eq_qtype;
 
-	u8 udma_count;
+	u8 udma_count;/*可用的udma总数*/
 	u8 udma_qgrp_shift;
 
 	u8 rdma_version;
 	u8 qp_opcodes;
 	u8 admin_opcodes;
 
-	u8 max_stride;
+	u8 max_stride;/*最大块大小，其值是以2为底N的对数，例如11,即4096字节*/
 	bool sq_expdb;
 	bool rq_expdb;
 	u8 expdb_mask;

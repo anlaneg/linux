@@ -18,6 +18,7 @@
 	(0x80000000 | ((reg & 0xF00) << 16) | (bus << 16) \
 	| (devfn << 8) | (reg & 0xFC))
 
+/*采用in指令来完成读取*/
 static int pci_conf1_read(unsigned int seg, unsigned int bus,
 			  unsigned int devfn, int reg, int len, u32 *value)
 {
@@ -34,6 +35,7 @@ static int pci_conf1_read(unsigned int seg, unsigned int bus,
 
 	switch (len) {
 	case 1:
+		/*inb指令操作*/
 		*value = inb(0xCFC + (reg & 3));
 		break;
 	case 2:
@@ -63,6 +65,7 @@ static int pci_conf1_write(unsigned int seg, unsigned int bus,
 
 	switch (len) {
 	case 1:
+		/*outb指令操作*/
 		outb((u8)value, 0xCFC + (reg & 3));
 		break;
 	case 2:
@@ -80,6 +83,7 @@ static int pci_conf1_write(unsigned int seg, unsigned int bus,
 
 #undef PCI_CONF1_ADDRESS
 
+/*采用in,out指令方式读写*/
 const struct pci_raw_ops pci_direct_conf1 = {
 	.read =		pci_conf1_read,
 	.write =	pci_conf1_write,

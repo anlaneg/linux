@@ -414,7 +414,7 @@ struct ib_device_attr {
 	int			max_qp;
 	/*qp_wr最大数目*/
 	int			max_qp_wr;
-	u64			device_cap_flags;
+	u64			device_cap_flags;/*设备支持能力标记位列表*/
 	u64			kernel_cap_flags;
 	int			max_send_sge;
 	int			max_recv_sge;
@@ -4709,6 +4709,7 @@ static inline int ib_check_mr_access(struct ib_device *ib_dev,
 	    !(device_cap & IB_DEVICE_FLUSH_GLOBAL)) ||
 	    (flags & IB_ACCESS_FLUSH_PERSISTENT &&
 	    !(device_cap & IB_DEVICE_FLUSH_PERSISTENT)))
+		/*要求的权限，设备必须支持*/
 		return -EOPNOTSUPP;
 
 	return 0;

@@ -101,6 +101,7 @@
 #define ETIMEDOUT	145	/* Connection timed out */
 #define ECONNREFUSED	146	/* Connection refused */
 #define EHOSTDOWN	147	/* Host is down */
+/*主机不可达*/
 #define EHOSTUNREACH	148	/* No route to host */
 #define EWOULDBLOCK	EAGAIN	/* Operation would block */
 #define EALREADY	149	/* Operation already in progress */

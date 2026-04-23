@@ -70,7 +70,7 @@ struct prefix_info;
 extern struct neigh_table nd_tbl;
 
 struct nd_msg {
-        struct icmp6hdr	icmph;
+        struct icmp6hdr	icmph;/*nd消息首先包含icmpv6 header*/
         struct in6_addr	target;
 	__u8		opt[];
 };

@@ -2911,6 +2911,7 @@ static void ip6_link_failure(struct sk_buff *skb)
 {
 	struct rt6_info *rt;
 
+	/*构造并发送icmpv6 目的不可达*/
 	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0);
 
 	rt = dst_rt6_info(skb_dst(skb));

@@ -244,6 +244,7 @@ int ip6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	/*检查条件，确认是否走post-routing钩子点，否则直接走ip6_finish_output*/
 	ret = NF_HOOK_COND(NFPROTO_IPV6, NF_INET_POST_ROUTING,
 			   net, sk, skb, indev, dev,
 			   ip6_finish_output,

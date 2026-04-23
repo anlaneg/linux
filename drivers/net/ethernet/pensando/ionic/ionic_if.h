@@ -457,10 +457,10 @@ enum ionic_hwstamp_bits {
  * @qid_base:       Minimum Queue ID of the logical type
  */
 struct ionic_lif_logical_qtype {
-	u8     qtype;
+	u8     qtype;/*从硬件获取的queue type,操作时需提供给硬件*/
 	u8     rsvd[3];
 	__le32 qid_count;
-	__le32 qid_base;
+	__le32 qid_base;/*最小的q id*/
 };
 
 /**
@@ -573,7 +573,7 @@ union ionic_lif_identity {
 			__le64 hwstamp_rx_filters;
 			u8 rsvd3[88];
 			union ionic_lif_config config;
-		} __packed eth;
+		} __packed eth;/*以太设备信息*/
 
 		struct {
 			u8 version;
@@ -592,16 +592,16 @@ union ionic_lif_identity {
 			u8 udma_shift;
 			u8 rsvd_dimensions;
 			__le64 page_size_cap;
-			struct ionic_lif_logical_qtype aq_qtype;
-			struct ionic_lif_logical_qtype sq_qtype;
-			struct ionic_lif_logical_qtype rq_qtype;
-			struct ionic_lif_logical_qtype cq_qtype;
-			struct ionic_lif_logical_qtype eq_qtype;
+			struct ionic_lif_logical_qtype aq_qtype;/*指明adminq type,例如ETH_HW_QTYPE_ADMIN*/
+			struct ionic_lif_logical_qtype sq_qtype;/*例如：ETH_HW_QTYPE_SQ*/
+			struct ionic_lif_logical_qtype rq_qtype;/*例如：ETH_HW_QTYPE_RQ*/
+			struct ionic_lif_logical_qtype cq_qtype;/*ETH_HW_QTYPE_CQ*/
+			struct ionic_lif_logical_qtype eq_qtype;/*例如：ETH_HW_QTYPE_EQ*/
 			__le16 stats_type;
 			u8 rsvd1[162];
-		} __packed rdma;
+		} __packed rdma;/*rdma设备信息*/
 	} __packed;
-	__le32 words[478];
+	__le32 words[478];/*1912字节*/
 };
 
 /**
@@ -3279,7 +3279,7 @@ union ionic_dev_cmd_regs {
 		u8                    rsvd[48];
 		u32                   data[478];
 	} __packed;
-	u32 words[512];
+	u32 words[512];/*共计2048字节*/
 };
 
 /**
@@ -3388,10 +3388,11 @@ union ionic_notifyq_comp {
 };
 
 /* Deprecate */
+/*当前这些数据是通过dev cmd来获取的，其和adminq机掉重复，后期预计会改造*/
 struct ionic_identity {
 	union ionic_drv_identity drv;
 	union ionic_dev_identity dev;
-	union ionic_lif_identity lif;
+	union ionic_lif_identity lif;/*ionic_identify函数填充此数据*/
 	union ionic_port_identity port;
 	union ionic_qos_identity qos;
 	union ionic_q_identity txq;

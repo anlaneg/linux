@@ -375,10 +375,12 @@ static void tcp_v6_mtu_reduced(struct sock *sk)
 	}
 }
 
+/*例如收到icmp端口不可达报文，且内嵌的为tcp报文，则此函数被调用*/
 static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		u8 type, u8 code, int offset, __be32 info)
 {
 	const struct ipv6hdr *hdr = (const struct ipv6hdr *)skb->data;
+	/*通过offset找到tcphdr*/
 	const struct tcphdr *th = (struct tcphdr *)(skb->data+offset);
 	struct net *net = dev_net_rcu(skb->dev);
 	struct request_sock *fastopen;
@@ -389,11 +391,13 @@ static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	bool fatal;
 	int err;
 
+	/*利用4元组查询socket*/
 	sk = __inet6_lookup_established(net, &hdr->daddr, th->dest,
 					&hdr->saddr, ntohs(th->source),
 					skb->dev->ifindex, inet6_sdif(skb));
 
 	if (!sk) {
+		/*返回*/
 		__ICMP6_INC_STATS(net, __in6_dev_get(skb->dev),
 				  ICMP6_MIB_INERRORS);
 		return -ENOENT;
@@ -406,6 +410,7 @@ static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		return 0;
 	}
 	seq = ntohl(th->seq);
+	/*产生errno*/
 	fatal = icmpv6_err_convert(type, code, &err);
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		tcp_req_err(sk, seq, fatal);
@@ -510,7 +515,7 @@ static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	}
 
 	if (!sock_owned_by_user(sk) && inet6_test_bit(RECVERR6, sk)) {
-		WRITE_ONCE(sk->sk_err, err);
+		WRITE_ONCE(sk->sk_err, err);/*设置socket error*/
 		sk_error_report(sk);
 	} else {
 		WRITE_ONCE(sk->sk_err_soft, err);
@@ -2383,6 +2388,7 @@ int __init tcpv6_init(void)
 	net_hotdata.tcpv6_protocol = (struct inet6_protocol) {
 		/*ipv6对应的tcp收取函数*/
 		.handler     = tcp_v6_rcv,
+		/*指明ipv6 tcp对应的error处理函数，例如收到icmpv6端口不可达报文*/
 		.err_handler = tcp_v6_err,
 		.flags	     = INET6_PROTO_NOPOLICY | INET6_PROTO_FINAL,
 	};

@@ -376,6 +376,7 @@ static netdev_tx_t clip_start_xmit(struct sk_buff *skb,
 			to_atmarpd(act_need, PRIV(dev)->number, *((__be32 *)n->primary_key));
 		}
 		if (entry->neigh->arp_queue.qlen < ATMARP_MAX_UNRES_PACKETS)
+			/*队列长度未超限，skb入队*/
 			skb_queue_tail(&entry->neigh->arp_queue, skb);
 		else {
 			dev_kfree_skb(skb);

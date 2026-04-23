@@ -3911,7 +3911,7 @@ void tcp_send_active_reset(struct sock *sk, gfp_t priority,
 	/* Reserve space for headers and prepare control bits. */
 	skb_reserve(skb, MAX_TCP_HEADER);
 	tcp_init_nondata_skb(skb, sk, tcp_acceptable_seq(sk),
-			     TCPHDR_ACK | TCPHDR_RST);
+			     TCPHDR_ACK | TCPHDR_RST/*指明reset标记*/);
 	tcp_mstamp_refresh(tcp_sk(sk));
 	/* Send it off. */
 	if (tcp_transmit_skb(sk, skb, 0, priority))

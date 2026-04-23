@@ -534,12 +534,13 @@ EXPORT_SYMBOL(pci_bus_find_capability);
  * not support it.  Some capabilities can occur several times, e.g., the
  * vendor-specific capability, and this provides a way to find them all.
  */
-u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 start, int cap)
+u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 start/*起始位置*/, int cap/*要查找到cap*/)
 {
 	if (dev->cfg_size <= PCI_CFG_SPACE_SIZE)
 		/*无扩展配置空间，直接返回0*/
 		return 0;
 
+	/*返回命中位置偏移量，为0，则不命中*/
 	return PCI_FIND_NEXT_EXT_CAP(pci_bus_read_config, start, cap,
 				     NULL, dev->bus, dev->devfn);
 }
@@ -561,6 +562,7 @@ EXPORT_SYMBOL_GPL(pci_find_next_ext_capability);
  */
 u16 pci_find_ext_capability(struct pci_dev *dev, int cap)
 {
+	/*查找扩展capbility(pcie空间自256位置开始全是扩展）*/
 	return pci_find_next_ext_capability(dev, 0, cap);
 }
 EXPORT_SYMBOL_GPL(pci_find_ext_capability);
@@ -3827,7 +3829,7 @@ static int __pci_request_region(struct pci_dev *pdev, int bar/*bar编号*/,
 				const char *name, int exclusive)
 {
 	if (!pci_bar_index_is_valid(bar))
-		return -EINVAL;
+		return -EINVAL;/*bar编号无效*/
 
 	//如果dev[bar]资源为0，则跳过
 	if (pci_resource_len(pdev, bar) == 0)
@@ -3835,8 +3837,8 @@ static int __pci_request_region(struct pci_dev *pdev, int bar/*bar编号*/,
 
 	//如果bar上有io标记时，优先使用io
 	if (pci_resource_flags(pdev, bar) & IORESOURCE_IO) {
-		if (!request_region(pci_resource_start(pdev, bar),
-			    pci_resource_len(pdev, bar), name))
+		if (!request_region(pci_resource_start(pdev, bar)/*资源起始地址*/,
+			    pci_resource_len(pdev, bar)/*长度*/, name))
 			goto err_out;
 	} else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM) {
 		//memory space region请求(申请并占用对应的resource)
@@ -3893,7 +3895,8 @@ void pci_release_selected_regions(struct pci_dev *pdev, int bars)
 }
 EXPORT_SYMBOL(pci_release_selected_regions);
 
-//bars是base address register的索引掩码，按掩码请求region(memory或者io)
+//bars是base address register的索引掩码，按掩码请求占用此region(memory或者io)
+//函数实现中没有对硬件进行操作只是在软件层面进行了登记
 static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
 					  const char *name, int excl)
 {
@@ -3907,6 +3910,7 @@ static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
 	return 0;
 
 err_out:
+	/*出错，释放*/
 	while (--i >= 0)
 		if (bars & (1 << i))
 			pci_release_region(pdev, i);
@@ -3923,9 +3927,10 @@ err_out:
  *
  * Returns: 0 on success, negative error code on failure.
  */
-int pci_request_selected_regions(struct pci_dev *pdev, int bars,
+int pci_request_selected_regions(struct pci_dev *pdev, int bars/*bar掩码*/,
 				 const char *name)
 {
+	/*登记占用bars掩码指定的所有bar资源*/
 	return __pci_request_selected_regions(pdev, bars, name, 0);
 }
 EXPORT_SYMBOL(pci_request_selected_regions);
@@ -3973,10 +3978,11 @@ EXPORT_SYMBOL(pci_release_regions);
  * Returns 0 on success, or %EBUSY on error.  A warning
  * message is also printed on failure.
  */
-int pci_request_regions(struct pci_dev *pdev, const char *name)
+int pci_request_regions(struct pci_dev *pdev, const char *name/*占用方名称*/)
 {
+	/*登记占用所有std bar资源*/
 	return pci_request_selected_regions(pdev,
-			((1 << PCI_STD_NUM_BARS) - 1), name);
+			((1 << PCI_STD_NUM_BARS) - 1)/*指明所有标准bar*/, name);
 }
 EXPORT_SYMBOL(pci_request_regions);
 
@@ -5994,14 +6000,14 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 
 		/* Check if current device limits the total bandwidth */
 		if (!bw || next_bw <= bw) {
-			bw = next_bw;
+			bw = next_bw;/*更新为最高带宽*/
 
 			if (limiting_dev)
 				*limiting_dev = dev;
 			if (speed)
-				*speed = next_speed;
+				*speed = next_speed;/*更新为PCIE最高速率*/
 			if (width)
-				*width = next_width;
+				*width = next_width;/*更新为PCIE最大lane*/
 		}
 
 		dev = pci_upstream_bridge(dev);
@@ -6071,6 +6077,7 @@ u8 pcie_get_supported_speeds(struct pci_dev *dev)
  */
 enum pci_bus_speed pcie_get_speed_cap(struct pci_dev *dev)
 {
+	/*取速率能力*/
 	return PCIE_LNKCAP2_SLS2SPEED(dev->supported_speeds);
 }
 EXPORT_SYMBOL(pcie_get_speed_cap);
@@ -6086,8 +6093,10 @@ enum pcie_link_width pcie_get_width_cap(struct pci_dev *dev)
 {
 	u32 lnkcap;
 
+	/*读取配置空间0xc位置*/
 	pcie_capability_read_dword(dev, PCI_EXP_LNKCAP, &lnkcap);
 	if (lnkcap)
+		/*返回端口硬件支持的最大 PCIe 通道数（Lane）*/
 		return FIELD_GET(PCI_EXP_LNKCAP_MLW, lnkcap);
 
 	return PCIE_LNK_WIDTH_UNKNOWN;
@@ -6105,16 +6114,16 @@ EXPORT_SYMBOL(pcie_get_width_cap);
  * is in Mb/s, i.e., megabits/second of raw bandwidth.
  */
 static u32 pcie_bandwidth_capable(struct pci_dev *dev,
-				  enum pci_bus_speed *speed,
-				  enum pcie_link_width *width)
+				  enum pci_bus_speed *speed/*出参，速率*/,
+				  enum pcie_link_width *width/*出参，lane的数目*/)
 {
-	*speed = pcie_get_speed_cap(dev);
-	*width = pcie_get_width_cap(dev);
+	*speed = pcie_get_speed_cap(dev);/*取pcie速率*/
+	*width = pcie_get_width_cap(dev);/*取pcie lane数目*/
 
 	if (*speed == PCI_SPEED_UNKNOWN || *width == PCIE_LNK_WIDTH_UNKNOWN)
 		return 0;
 
-	return *width * PCIE_SPEED2MBS_ENC(*speed);
+	return *width * PCIE_SPEED2MBS_ENC(*speed);/*返回乘积（即极致速率）*/
 }
 
 /**
@@ -6129,23 +6138,26 @@ static u32 pcie_bandwidth_capable(struct pci_dev *dev,
  */
 void __pcie_print_link_status(struct pci_dev *dev, bool verbose)
 {
-	enum pcie_link_width width, width_cap;
-	enum pci_bus_speed speed, speed_cap;
+	enum pcie_link_width width/*向上桥能提供的最大lane总数*/, width_cap/*设备插槽lane的数目*/;
+	enum pci_bus_speed speed, speed_cap/*设备插插槽pcie速率*/;
 	struct pci_dev *limiting_dev = NULL;
 	u32 bw_avail, bw_cap;
 	char *flit_mode = "";
 
-	bw_cap = pcie_bandwidth_capable(dev, &speed_cap, &width_cap);
+	bw_cap = pcie_bandwidth_capable(dev, &speed_cap, &width_cap);/*带宽能力*/
+	/*有效带宽能力，向上检查其所属的桥，检查获得其最大能力*/
 	bw_avail = pcie_bandwidth_available(dev, &limiting_dev, &speed, &width);
 
 	if (dev->bus && dev->bus->flit_mode)
 		flit_mode = ", in Flit mode";
 
 	if (bw_avail >= bw_cap && verbose)
+		/*有效带宽大于插槽带宽的情况*/
 		pci_info(dev, "%u.%03u Gb/s available PCIe bandwidth (%s x%d link)%s\n",
 			 bw_cap / 1000, bw_cap % 1000,
 			 pci_speed_string(speed_cap), width_cap, flit_mode);
 	else if (bw_avail < bw_cap)
+		/*有效带宽小于插槽的情况*/
 		pci_info(dev, "%u.%03u Gb/s available PCIe bandwidth, limited by %s x%d link at %s (capable of %u.%03u Gb/s with %s x%d link)%s\n",
 			 bw_avail / 1000, bw_avail % 1000,
 			 pci_speed_string(speed), width,
@@ -6162,6 +6174,7 @@ void __pcie_print_link_status(struct pci_dev *dev, bool verbose)
  */
 void pcie_print_link_status(struct pci_dev *dev)
 {
+	/*显示link状态（方便查桥带宽过小问题）*/
 	__pcie_print_link_status(dev, true);
 }
 EXPORT_SYMBOL(pcie_print_link_status);

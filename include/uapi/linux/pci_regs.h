@@ -645,6 +645,7 @@
 #define  PCI_EXP_LNKCAP_SLS_16_0GB 0x00000004 /* LNKCAP2 SLS Vector bit 3 */
 #define  PCI_EXP_LNKCAP_SLS_32_0GB 0x00000005 /* LNKCAP2 SLS Vector bit 4 */
 #define  PCI_EXP_LNKCAP_SLS_64_0GB 0x00000006 /* LNKCAP2 SLS Vector bit 5 */
+//端口硬件支持的最大 PCIe 通道数（Lane）
 #define  PCI_EXP_LNKCAP_MLW	0x000003f0 /* Maximum Link Width */
 #define  PCI_EXP_LNKCAP_ASPMS	0x00000c00 /* ASPM Support */
 #define  PCI_EXP_LNKCAP_ASPM_L0S 0x00000400 /* ASPM L0s Support */
@@ -814,8 +815,11 @@
 #define PCI_EXP_SLTSTA2		0x3a	/* Slot Status 2 */
 
 /* Extended Capabilities (PCI-X 2.0 and Express) */
+/*低16位表示cap id*/
 #define PCI_EXT_CAP_ID(header)		(header & 0x0000ffff)
+/*版本号占4bit*/
 #define PCI_EXT_CAP_VER(header)		((header >> 16) & 0xf)
+/*next cap偏移占12bit（但next只取10bit,原因标准规定扩展cap必须按4字节对齐)*/
 #define PCI_EXT_CAP_NEXT(header)	((header >> 20) & 0xffc)
 
 #define PCI_EXT_CAP_ID_ERR	0x01	/* Advanced Error Reporting */
@@ -1073,9 +1077,11 @@
 #define  PCI_SRIOV_CAP_VFM	0x00000001  /* VF Migration Capable */
 #define  PCI_SRIOV_CAP_INTR(x)	((x) >> 21) /* Interrupt Message Number */
 #define PCI_SRIOV_CTRL		0x08	/* SR-IOV Control */
+/*用于指明开启VF*/
 #define  PCI_SRIOV_CTRL_VFE	0x0001	/* VF Enable */
 #define  PCI_SRIOV_CTRL_VFM	0x0002	/* VF Migration Enable */
 #define  PCI_SRIOV_CTRL_INTR	0x0004	/* VF Migration Interrupt Enable */
+/*用于指明开启Memory Space Enable for VFs*/
 #define  PCI_SRIOV_CTRL_MSE	0x0008	/* VF Memory Space Enable */
 #define  PCI_SRIOV_CTRL_ARI	0x0010	/* ARI Capable Hierarchy */
 #define PCI_SRIOV_STATUS	0x0a	/* SR-IOV Status */

@@ -11,10 +11,11 @@
 
 #ifdef CONFIG_DEBUG_FS
 
-static struct dentry *ionic_dir;
+static struct dentry *ionic_dir;/*指向debugfs下根目录*/
 
 void ionic_debugfs_create(void)
 {
+	/*创建debugfs下根目录*/
 	ionic_dir = debugfs_create_dir(IONIC_DRV_NAME, NULL);
 }
 
@@ -25,6 +26,7 @@ void ionic_debugfs_destroy(void)
 
 void ionic_debugfs_add_dev(struct ionic *ionic)
 {
+	/*在根目录下创建设备名称对应的文件夹，例如0000:4c:00.0*/
 	ionic->dentry = debugfs_create_dir(ionic_bus_info(ionic), ionic_dir);
 }
 

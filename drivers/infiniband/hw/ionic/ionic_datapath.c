@@ -744,9 +744,9 @@ static s64 ionic_prep_inline(void *data, u32 max_data,
 
 static s64 ionic_prep_pld(struct ionic_v1_wqe *wqe,
 			  union ionic_v1_pld *pld,
-			  int spec, u32 max_sge,
-			  const struct ib_sge *ib_sgl,
-			  int num_sge)
+			  int spec/*不为0时需检查num_sge数目*/, u32 max_sge/*sge最大大小*/,
+			  const struct ib_sge *ib_sgl/*sge指针*/,
+			  int num_sge/*sge数目*/)
 {
 	static const s64 bit_31 = 1l << 31;
 	struct ionic_sge *sgl;
@@ -756,33 +756,39 @@ static s64 ionic_prep_pld(struct ionic_v1_wqe *wqe,
 	int sg_i = 0;
 
 	if (unlikely(num_sge < 0 || (u32)num_sge > max_sge))
-		return -EINVAL;
+		return -EINVAL;/*无效sge数目或者超过最大支持的sge将返回*/
 
 	if (spec && num_sge > IONIC_V1_SPEC_FIRST_SGE) {
+		/*超过IONIC_V1_SPEC_FIRST_SGE数目的sge将从2位置开始填*/
 		sg_i = IONIC_V1_SPEC_FIRST_SGE;
 
 		if (num_sge > 8) {
+			/*数目大于8的情况*/
 			wqe->base.flags |= cpu_to_be16(IONIC_V1_FLAG_SPEC16);
 			spec16 = pld->spec16;
 		} else {
+			/*数目大于2小于8的情况*/
 			wqe->base.flags |= cpu_to_be16(IONIC_V1_FLAG_SPEC32);
 			spec32 = pld->spec32;
 		}
 	}
 
+	/*起始sgl填写位置，对于小于等于2的从0开始填，对于大于2的从2开始填*/
 	sgl = &pld->sgl[sg_i];
 
 	for (sg_i = 0; sg_i < num_sge; ++sg_i) {
+		/*取当前sg_i对应的长度*/
 		sg_len = ib_sgl[sg_i].length;
 
 		/* sge length zero means 2GB */
 		if (unlikely(sg_len == 0))
-			sg_len = bit_31;
+			sg_len = bit_31;/*sg_len长度置为0时，认为是2GB大小*/
 
 		/* greater than 2GB data is invalid */
 		if (unlikely(len + sg_len > bit_31))
-			return -EINVAL;
+			return -EINVAL;/*总大小超过2G*/
 
+		/*填va,len,lkey*/
 		sgl[sg_i].va = cpu_to_be64(ib_sgl[sg_i].addr);
 		sgl[sg_i].len = cpu_to_be32(sg_len);
 		sgl[sg_i].lkey = cpu_to_be32(ib_sgl[sg_i].lkey);
@@ -791,11 +797,11 @@ static s64 ionic_prep_pld(struct ionic_v1_wqe *wqe,
 			spec32[sg_i] = sgl[sg_i].len;
 		} else if (spec16) {
 			if (unlikely(sg_len > U16_MAX))
-				return -EINVAL;
+				return -EINVAL;/*spec16情况下，单个长度超限*/
 			spec16[sg_i] = cpu_to_be16(sg_len);
 		}
 
-		len += sg_len;
+		len += sg_len;/*总长度*/
 	}
 
 	return len;
@@ -821,7 +827,7 @@ static void ionic_prep_base(struct ionic_qp *qp,
 
 	if (qp->sig_all || wr->send_flags & IB_SEND_SIGNALED) {
 		wqe->base.flags |= cpu_to_be16(IONIC_V1_FLAG_SIG);
-		meta->signal = true;
+		meta->signal = true;/*指定SE标记*/
 	}
 
 	meta->seq = qp->sq_msn_prod;
@@ -853,7 +859,10 @@ static int ionic_prep_common(struct ionic_qp *qp,
 		signed_len = ionic_prep_inline(wqe->common.pld.data, mval,
 					       wr->sg_list, wr->num_sge);
 	} else {
+		/*非inline情况，设置sge总数*/
 		wqe->base.num_sge_key = wr->num_sge;
+		/*取能支持的sge最大值，在stride_log2中默认结构体提供了两个sge的存放，但由
+		 * stride_log指定的大小容许动态的存放不多于qp->sq_spec个sge*/
 		mval = ionic_v1_send_wqe_max_sge(qp->sq.stride_log2,
 						 qp->sq_spec,
 						 false);
@@ -1260,7 +1269,7 @@ static int ionic_post_send_common(struct ionic_ibdev *dev,
 		if (rc)
 			goto out;
 
-		wr = wr->next;
+		wr = wr->next;/*切到下一个wr*/
 	}
 
 out:

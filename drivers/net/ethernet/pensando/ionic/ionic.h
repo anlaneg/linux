@@ -38,7 +38,7 @@ struct ionic_vf {
 };
 
 struct ionic {
-	struct pci_dev *pdev;
+	struct pci_dev *pdev;/*对应的pci设备*/
 	struct device *dev;
 	struct devlink_port dl_port;
 	struct ionic_dev idev;

@@ -162,7 +162,7 @@ EXPORT_SYMBOL(ib_umem_find_best_pgsz);
  * @size: length of region to pin
  * @access: IB_ACCESS_xxx flags for memory being pinned
  */
-struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*内存起始地址*/,
+struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户态内存起始地址*/,
 			    size_t size/*内存区域长度*/, int access)
 {
 	struct ib_umem *umem;

@@ -414,23 +414,27 @@ static struct sk_buff *ndisc_alloc_skb(struct net_device *dev,
 				       int len)
 {
 	int hlen = LL_RESERVED_SPACE(dev);
-	int tlen = dev->needed_tailroom;
+	int tlen = dev->needed_tailroom;/*取需预留的tailroom*/
 	struct sk_buff *skb;
 
+	/*申请skb*/
 	skb = alloc_skb(hlen + sizeof(struct ipv6hdr) + len + tlen, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
 
 	skb->protocol = htons(ETH_P_IPV6);
-	skb->dev = dev;
+	skb->dev = dev;/*指明所属设备*/
 
+	/*先预留headroom*/
 	skb_reserve(skb, hlen + sizeof(struct ipv6hdr));
+	/*记录此位置为transport header*/
 	skb_reset_transport_header(skb);
 
 	/* Manually assign socket ownership as we avoid calling
 	 * sock_alloc_send_pskb() to bypass wmem buffer limits
 	 */
 	rcu_read_lock();
+	/*指定所属socket*/
 	skb_set_owner_w(skb, dev_net_rcu(dev)->ipv6.ndisc_sk);
 	rcu_read_unlock();
 
@@ -451,6 +455,7 @@ static void ip6_nd_hdr(struct sk_buff *skb,
 	tclass = idev ? READ_ONCE(idev->cnf.ndisc_tclass) : 0;
 	rcu_read_unlock();
 
+	/*设置ipv6 header*/
 	skb_push(skb, sizeof(*hdr));
 	skb_reset_network_header(skb);
 	hdr = ipv6_hdr(skb);
@@ -465,6 +470,7 @@ static void ip6_nd_hdr(struct sk_buff *skb,
 	hdr->daddr = *daddr;
 }
 
+/*发送icmpv6报文*/
 void ndisc_send_skb(struct sk_buff *skb, const struct in6_addr *daddr,
 		    const struct in6_addr *saddr)
 {
@@ -498,17 +504,20 @@ void ndisc_send_skb(struct sk_buff *skb, const struct in6_addr *daddr,
 		skb_dst_set(skb, dst);
 	}
 
+	/*更新checksum*/
 	icmp6h->icmp6_cksum = csum_ipv6_magic(saddr, daddr, skb->len,
 					      IPPROTO_ICMPV6,
 					      csum_partial(icmp6h,
 							   skb->len, 0));
 
+	/*填充ipv6 header*/
 	ip6_nd_hdr(skb, saddr, daddr, READ_ONCE(inet6_sk(sk)->hop_limit), skb->len);
 
 	dev = dst_dev_rcu(dst);
 	idev = __in6_dev_get(dev);
 	IP6_INC_STATS(net, idev, IPSTATS_MIB_OUTREQUESTS);
 
+	/*触发local out钩子点，执行发送*/
 	err = NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 		      net, sk, skb, NULL, dev,
 		      dst_output);
@@ -608,8 +617,8 @@ struct sk_buff *ndisc_ns_create(struct net_device *dev, const struct in6_addr *s
 {
 	int inc_opt = dev->addr_len;
 	struct sk_buff *skb;
-	struct nd_msg *msg;
-	int optlen = 0;
+	struct nd_msg *msg;/*nd消息头*/
+	int optlen = 0;/*nd消息选项长度*/
 
 	if (!saddr)
 		return NULL;
@@ -622,16 +631,18 @@ struct sk_buff *ndisc_ns_create(struct net_device *dev, const struct in6_addr *s
 	if (nonce != 0)
 		optlen += 8;
 
+	/*申请skb*/
 	skb = ndisc_alloc_skb(dev, sizeof(*msg) + optlen);
 	if (!skb)
 		return NULL;
 
+	/*填写nd消息*/
 	msg = skb_put(skb, sizeof(*msg));
 	*msg = (struct nd_msg) {
 		.icmph = {
-			.icmp6_type = NDISC_NEIGHBOUR_SOLICITATION,
+			.icmp6_type = NDISC_NEIGHBOUR_SOLICITATION,/*指明为NS*/
 		},
-		.target = *solicit,
+		.target = *solicit,/*指明要获取Mac的目标ipv6地址*/
 	};
 
 	if (inc_opt)
@@ -650,22 +661,25 @@ struct sk_buff *ndisc_ns_create(struct net_device *dev, const struct in6_addr *s
 }
 EXPORT_SYMBOL(ndisc_ns_create);
 
-void ndisc_send_ns(struct net_device *dev, const struct in6_addr *solicit,
-		   const struct in6_addr *daddr, const struct in6_addr *saddr,
+void ndisc_send_ns(struct net_device *dev, const struct in6_addr *solicit/*目标地址*/,
+		   const struct in6_addr *daddr/*目的地址*/, const struct in6_addr *saddr,
 		   u64 nonce)
 {
 	struct in6_addr addr_buf;
 	struct sk_buff *skb;
 
 	if (!saddr) {
+		/*未指定源地址，使用link local地址*/
 		if (ipv6_get_lladdr(dev, &addr_buf,
 				    (IFA_F_TENTATIVE | IFA_F_OPTIMISTIC)))
 			return;
 		saddr = &addr_buf;
 	}
 
+	/*构造ns报文*/
 	skb = ndisc_ns_create(dev, solicit, saddr, nonce);
 
+	/*发送ns报文*/
 	if (skb)
 		ndisc_send_skb(skb, daddr, saddr);
 }
@@ -722,20 +736,20 @@ void ndisc_send_rs(struct net_device *dev, const struct in6_addr *saddr,
 	ndisc_send_skb(skb, daddr, saddr);
 }
 
-
+/*此邻居表项neigh已无效，其上缓存有skb,需进行目的不可达通知*/
 static void ndisc_error_report(struct neighbour *neigh, struct sk_buff *skb)
 {
 	/*
 	 *	"The sender MUST return an ICMP
 	 *	 destination unreachable"
 	 */
-	dst_link_failure(skb);
-	kfree_skb(skb);
+	dst_link_failure(skb);/*依据skb生成icmp目的不可达*/
+	kfree_skb(skb);/*释放此报文*/
 }
 
 /* Called with locked neigh: either read or both */
 
-static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
+static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb/*取源ip*/)
 {
 	struct in6_addr *saddr = NULL;
 	struct in6_addr mcaddr;
@@ -746,19 +760,20 @@ static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	if (skb && ipv6_chk_addr_and_flags(dev_net(dev), &ipv6_hdr(skb)->saddr,
 					   dev, false, 1,
 					   IFA_F_TENTATIVE|IFA_F_OPTIMISTIC))
-		saddr = &ipv6_hdr(skb)->saddr;
+		saddr = &ipv6_hdr(skb)->saddr;/*取skb中记录的src ip*/
 	probes -= NEIGH_VAR(neigh->parms, UCAST_PROBES);
 	if (probes < 0) {
 		if (!(READ_ONCE(neigh->nud_state) & NUD_VALID)) {
 			net_dbg_ratelimited("%s: trying to ucast probe in NUD_INVALID: %pI6\n",
 					    __func__, target);
 		}
-		ndisc_send_ns(dev, target, target, saddr, 0);
+		ndisc_send_ns(dev, target, target/*目的地址使用target地址*/, saddr, 0);
 	} else if ((probes -= NEIGH_VAR(neigh->parms, APP_PROBES)) < 0) {
-		neigh_app_ns(neigh);
+		neigh_app_ns(neigh);/*通知用户态*/
 	} else {
+		/*由target地址算出组播地址*/
 		addrconf_addr_solict_mult(target, &mcaddr);
-		ndisc_send_ns(dev, target, &mcaddr, saddr, 0);
+		ndisc_send_ns(dev, target, &mcaddr/*目的地址使用组播地址*/, saddr, 0);
 	}
 }
 
@@ -970,6 +985,7 @@ out:
 	return reason;
 }
 
+/*检查是否接收未跟踪的na(即被动收到的na)*/
 static int accept_untracked_na(struct net_device *dev, struct in6_addr *saddr)
 {
 	struct inet6_dev *idev = __in6_dev_get(dev);
@@ -989,6 +1005,7 @@ static int accept_untracked_na(struct net_device *dev, struct in6_addr *saddr)
 	}
 }
 
+/*收到na报文*/
 static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 {
 	struct nd_msg *msg = (struct nd_msg *)skb_transport_header(skb);
@@ -1006,6 +1023,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	u8 new_state;
 
 	if (skb->len < sizeof(struct nd_msg))
+		/*报文长度有误*/
 		return SKB_DROP_REASON_PKT_TOO_SMALL;
 
 	if (ipv6_addr_is_multicast(&msg->target)) {
@@ -1015,6 +1033,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 
 	if (ipv6_addr_is_multicast(daddr) &&
 	    msg->icmph.icmp6_solicited) {
+		/*目的地址使用的是组播，但标记为回复请求而发的响应*/
 		net_dbg_ratelimited("NA: solicited NA is multicasted\n");
 		return reason;
 	}
@@ -1026,7 +1045,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	 */
 	if (!msg->icmph.icmp6_solicited && idev &&
 	    READ_ONCE(idev->cnf.drop_unsolicited_na))
-		return reason;
+		return reason;/*未标记因请求而发的响应，且设置配置为丢弃宣告类NA*/
 
 	if (!ndisc_parse_options(dev, msg->opt, ndoptlen, &ndopts))
 		return SKB_DROP_REASON_IPV6_NDISC_BAD_OPTIONS;
@@ -1040,6 +1059,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	}
 	ifp = ipv6_get_ifaddr(dev_net(dev), &msg->target, dev, 1);
 	if (ifp) {
+		/*NA中说明的target地址在本机*/
 		if (skb->pkt_type != PACKET_LOOPBACK
 		    && (ifp->flags & IFA_F_TENTATIVE)) {
 				addrconf_dad_failure(skb, ifp);
@@ -1055,13 +1075,15 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 		   unsolicited advertisement.
 		 */
 		if (skb->pkt_type != PACKET_LOOPBACK)
+			/*不来自loopback，告警*/
 			net_warn_ratelimited("NA: %pM advertised our address %pI6c on %s!\n",
-					     eth_hdr(skb)->h_source, &ifp->addr,
+					     eth_hdr(skb)->h_source/*发起方mac*/, &ifp->addr,
 					     ifp->idev->dev->name);
 		in6_ifa_put(ifp);
 		return reason;
 	}
 
+	/*利用目的地址查询邻居表项*/
 	neigh = neigh_lookup(&nd_tbl, &msg->target, dev);
 
 	/* RFC 9131 updates original Neighbour Discovery RFC 4861.
@@ -1079,9 +1101,11 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	 *
 	 * Note that we don't do a (daddr == all-routers-mcast) check.
 	 */
+	/*如是请求响应式则为reachable,主宣式则为stale*/
 	new_state = msg->icmph.icmp6_solicited ? NUD_REACHABLE : NUD_STALE;
 	if (!neigh && lladdr && idev && READ_ONCE(idev->cnf.forwarding)) {
 		if (accept_untracked_na(dev, saddr)) {
+			/*容许接收未跟踪的na,则创建邻居表项*/
 			neigh = neigh_create(&nd_tbl, &msg->target, dev);
 			new_state = NUD_STALE;
 		}
@@ -1092,7 +1116,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 		struct net *net = dev_net(dev);
 
 		if (READ_ONCE(neigh->nud_state) & NUD_FAILED)
-			goto out;
+			goto out;/*已被标记为failed,放弃*/
 
 		/*
 		 * Don't update the neighbor cache entry on a proxy NA from
@@ -1107,6 +1131,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 			goto out;
 		}
 
+		/*更新表项*/
 		ndisc_update(dev, neigh, lladdr,
 			     new_state,
 			     NEIGH_UPDATE_F_WEAK_OVERRIDE|

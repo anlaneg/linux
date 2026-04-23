@@ -24,18 +24,21 @@
 #define UVERBS_OBJECT(id)	_UVERBS_NAME(UVERBS_MODULE_NAME, _object_##id)
 
 /* These are static so they do not need to be qualified */
-/*定义method_id,例如:_method_attrs_$method_id*/
+/*定义method_id（增加前缀）,例如:_method_attrs_$method_id*/
 #define UVERBS_METHOD_ATTRS(method_id) _method_attrs_##method_id
 /*定义object_id,例如_object_methods_$object_id$__LINE__*/
 #define UVERBS_OBJECT_METHODS(object_id) _UVERBS_NAME(_object_methods_##object_id, __LINE__)
 
+/*指定method id及其支持的一组attribute*/
 #define DECLARE_UVERBS_NAMED_METHOD(_method_id, ...)                           \
-	/*定义method_id数组*/\
+	/*定义method_id数组,数组名称有固定格式，此数组的值是多个结构体uverbs_attr_def*/\
+	/*故需要(采用）一组宏'UVERBS_ATTR_*'来定义取值 */\
 	static const struct uverbs_attr_def *const UVERBS_METHOD_ATTRS(        \
 		_method_id)[] = { __VA_ARGS__ };                               \
+	/*上面定义了method_id数组，这里指明此method如何处理*/\
 	static const struct uverbs_method_def UVERBS_METHOD(_method_id) = {    \
 		.id = _method_id,                                              \
-		.handler = UVERBS_HANDLER(_method_id),/*指定消息响应handler*/                         \
+		.handler = UVERBS_HANDLER(_method_id),/*指定消息响应handler，为ib_uverbs_handler_$method_id*/                         \
 		.num_attrs = ARRAY_SIZE(UVERBS_METHOD_ATTRS(_method_id)), /*method_id数组长度*/     \
 		.attrs = &UVERBS_METHOD_ATTRS(_method_id),/*指向method_id数组*/                     \
 	}
@@ -49,7 +52,7 @@
 		_method_id)[] = { _handle_attr };                              \
 	static const struct uverbs_method_def UVERBS_METHOD(_method_id) = {    \
 		.id = _method_id,                                              \
-		.handler = uverbs_destroy_def_handler,                         \
+		.handler = uverbs_destroy_def_handler,/*指明此方法处理回调*/      \
 		.num_attrs = ARRAY_SIZE(UVERBS_METHOD_ATTRS(_method_id)),      \
 		.attrs = &UVERBS_METHOD_ATTRS(_method_id),                     \
 	}

@@ -147,21 +147,22 @@ struct neighbour {
 	struct hlist_node	dev_list;
 	//表项所属的邻居hash table
 	struct neigh_table	*tbl;
-	//表项参数（先来自tbl->parms,后来自indev->arp_parms，
+	//表项参数（例如超时重传间隔，reachable保活最大时间等）
 	struct neigh_parms	*parms;
 	unsigned long		confirmed;
-	//neighbour时间更新
+	//neighbour时间更新（比如状态发生变更）
 	unsigned long		updated;
 	rwlock_t		lock;
 	//表项引用计数
 	refcount_t		refcnt;
+	/*此邻居表项缓存在arp_queue中的skbs总字节长度*/
 	unsigned int		arp_queue_len_bytes;
 	struct sk_buff_head	arp_queue;
 	//邻居表项的timer
 	struct timer_list	timer;
 	unsigned long		used;
 	atomic_t		probes;//表项的探测次数
-	//邻居表项的状态(例如NUD_NOARP）
+	//邻居表项的状态(例如NUD_NOARP，NUD_STALE）
 	u8			nud_state;
 	//地址类型
 	u8			type;
@@ -186,7 +187,7 @@ struct neighbour {
 
 struct neigh_ops {
 	int			family;
-	//请求arp
+	//构造并请求邻居表项
 	void			(*solicit)(struct neighbour *, struct sk_buff *);
 	void			(*error_report)(struct neighbour *, struct sk_buff *);
 	int			(*output)(struct neighbour *, struct sk_buff *);
@@ -523,7 +524,7 @@ static __always_inline int neigh_event_send_probe(struct neighbour *neigh,
 	return 0;
 }
 
-/*向外发送邻居表项探测报文*/
+/*如有必要则向外发送邻居表项探测报文*/
 static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 {
 	return neigh_event_send_probe(neigh, skb, true);

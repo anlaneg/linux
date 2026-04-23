@@ -183,35 +183,36 @@ bool pcie_cap_has_rtctl(const struct pci_dev *dev);
  *
  * Return: Position of the capability if found, 0 otherwise.
  */
-#define PCI_FIND_NEXT_EXT_CAP(read_cfg, start, cap, prev_ptr, args...)	\
+#define PCI_FIND_NEXT_EXT_CAP(read_cfg/*配置空间读取函数*/, start, cap/*关注的能力编号*/, prev_ptr/*记录上一次位置*/, args.../*设备bus等信息*/)	\
 ({									\
-	u16 __pos = (start) ?: PCI_CFG_SPACE_SIZE;			\
+	u16 __pos = (start) ?: PCI_CFG_SPACE_SIZE/*默认从256位置开始*/;			\
 	u16 __found_pos = 0;						\
 	u16 __prev_pos;							\
 	int __ttl, __ret;						\
 	u32 __header;							\
 									\
 	__prev_pos = __pos;						\
-	__ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;	\
+	__ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;/*最大扩展数*/	\
 	while (__ttl-- > 0 && __pos >= PCI_CFG_SPACE_SIZE) {		\
-		__ret = read_cfg##_dword(args, __pos, &__header);	\
+		__ret = read_cfg##_dword(args, __pos/*读取位置*/, &__header);/*读取4字节*/	\
 		if (__ret != PCIBIOS_SUCCESSFUL)			\
-			break;						\
+			break;/*读取失败*/						\
 									\
 		if (__header == 0)					\
-			break;						\
+			break;/*返回的内容为0*/						\
 									\
-		if (PCI_EXT_CAP_ID(__header) == (cap) && __pos != start) {\
+		if (PCI_EXT_CAP_ID(__header) == (cap)/*cap匹配*/ && __pos != start) {\
+			/*找到此扩展能力，但找到的位置与start不一致，记录发现位置*/\
 			__found_pos = __pos;				\
 			if (prev_ptr != NULL)				\
-				*(u16 *)prev_ptr = __prev_pos;		\
+				*(u16 *)prev_ptr = __prev_pos;/*更新上一次位置*/		\
 			break;						\
 		}							\
 									\
 		__prev_pos = __pos;					\
-		__pos = PCI_EXT_CAP_NEXT(__header);			\
+		__pos = PCI_EXT_CAP_NEXT(__header);/*取下一个cap位置*/			\
 	}								\
-	__found_pos;							\
+	__found_pos;/*返回查找到的位置*/							\
 })
 
 /* Functions internal to the PCI core code */
@@ -305,6 +306,7 @@ static inline void pci_wakeup_event(struct pci_dev *dev)
 static inline bool pci_bar_index_is_valid(int bar)
 {
 	if (bar >= 0 && bar < PCI_NUM_RESOURCES)
+		/*bar编号有效*/
 		return true;
 
 	return false;
@@ -573,6 +575,7 @@ void pci_bus_put(struct pci_bus *bus);
 })
 
 /* PCIe link information from Link Capabilities 2 */
+/*依据link cap获得速率能力*/
 #define PCIE_LNKCAP2_SLS2SPEED(lnkcap2) \
 	((lnkcap2) & PCI_EXP_LNKCAP2_SLS_64_0GB ? PCIE_SPEED_64_0GT : \
 	 (lnkcap2) & PCI_EXP_LNKCAP2_SLS_32_0GB ? PCIE_SPEED_32_0GT : \
@@ -665,7 +668,9 @@ struct pci_sriov {
 	u16		initial_VFs;	/* Initial VFs associated with the PF */
 	//当前启用的vf数量
 	u16		num_VFs;	/* Number of VFs available */
+	/*vf编号起始offset*/
 	u16		offset;		/* First VF Routing ID offset */
+	/*vf编号步长(即两个紧领vf编号增长量）*/
 	u16		stride;		/* Following VF stride */
 	u16		vf_device;	/* VF device ID */
 	u32		pgsz;		/* Page size for BAR alignment */

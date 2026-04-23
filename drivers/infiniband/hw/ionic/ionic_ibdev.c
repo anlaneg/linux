@@ -212,7 +212,7 @@ static const struct ib_device_ops ionic_dev_ops = {
 	.driver_id = RDMA_DRIVER_IONIC,
 	.uverbs_abi_ver = IONIC_ABI_VERSION,
 
-	.alloc_ucontext = ionic_alloc_ucontext,
+	.alloc_ucontext = ionic_alloc_ucontext,/*初始化ucontext*/
 	.dealloc_ucontext = ionic_dealloc_ucontext,
 	.mmap = ionic_mmap,
 	.mmap_free = ionic_mmap_free,
@@ -223,17 +223,17 @@ static const struct ib_device_ops ionic_dev_ops = {
 	.destroy_ah = ionic_destroy_ah,
 	.create_user_ah = ionic_create_ah,
 	.get_dma_mr = ionic_get_dma_mr,
-	.reg_user_mr = ionic_reg_user_mr,
+	.reg_user_mr = ionic_reg_user_mr,/*实现用户态mr注册*/
 	.reg_user_mr_dmabuf = ionic_reg_user_mr_dmabuf,
 	.dereg_mr = ionic_dereg_mr,
 	.alloc_mr = ionic_alloc_mr,
 	.map_mr_sg = ionic_map_mr_sg,
 	.alloc_mw = ionic_alloc_mw,
 	.dealloc_mw = ionic_dealloc_mw,
-	.create_cq = ionic_create_cq,
+	.create_cq = ionic_create_cq,/*实现cq创建*/
 	.destroy_cq = ionic_destroy_cq,
 	.create_qp = ionic_create_qp,
-	.modify_qp = ionic_modify_qp,
+	.modify_qp = ionic_modify_qp,/*qp属性变更*/
 	.query_qp = ionic_query_qp,
 	.destroy_qp = ionic_destroy_qp,
 
@@ -308,10 +308,12 @@ static struct ionic_ibdev *ionic_create_ibdev(struct ionic_aux_dev *ionic_adev)
 	struct net_device *ndev;
 	int rc;
 
+	/*申请ib设备*/
 	dev = ib_alloc_device(ionic_ibdev, ibdev);
 	if (!dev)
 		return ERR_PTR(-EINVAL);
 
+	/*填充lif_cfg*/
 	ionic_fill_lif_cfg(ionic_adev->lif, &dev->lif_cfg);
 
 	xa_init_flags(&dev->qp_tbl, GFP_ATOMIC);
@@ -378,7 +380,7 @@ static int ionic_aux_probe(struct auxiliary_device *adev,
 	struct ionic_ibdev *dev;
 
 	ionic_adev = container_of(adev, struct ionic_aux_dev, adev);
-	dev = ionic_create_ibdev(ionic_adev);
+	dev = ionic_create_ibdev(ionic_adev);/*创建ib设备*/
 	if (IS_ERR(dev))
 		return dev_err_probe(&adev->dev, PTR_ERR(dev),
 				     "Failed to register ibdev\n");

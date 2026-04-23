@@ -167,11 +167,31 @@
  */
 #ifndef __ASSEMBLER__
 enum page_cache_mode {
+	/*WriteBack性能最好，但读写行为对 “寄存器型硬件” 极度不友好，
+	 * 缓存会合并,重排，减少读，对内存友好，但对硬件寄存器致命
+	 * 但由于读写都是走的缓存，故写时缓存miss会先读再写。
+	 * */
 	_PAGE_CACHE_MODE_WB       = 0,
+	/*
+	 * WC在写时会写入到Write Combining Buffer（不属于cache),以实现写合并
+	 * 且没有缓存。WC的读也不走缓存，直接读取硬件，不缓存，且不读取Write Combining Buffer
+	 * 故读取的内容可能是旧的（多CPU情况，单cpu下读会刷WCB)。
+	 * */
 	_PAGE_CACHE_MODE_WC       = 1,
+	/*
+	 *  UC‑minus 存在的唯一理由：自动兼容 MTRR
+	 *  UC-minus默认就是UC，但支持变更为WC，允许被 MTRR 升级成 WC。
+	 * */
 	_PAGE_CACHE_MODE_UC_MINUS = 2,
+	/*UC (完全不可缓存)：完全禁用 CPU 缓存（L1/L2/L3），
+	 * 所有读写直接访问物理内存 / 设备，严格有序、强序，不合并、不重排。*/
 	_PAGE_CACHE_MODE_UC       = 3,
+	/*读时自缓存中读；写时会同时向缓存和内存中写，如果缓存中有则更新缓存，缓存中没有，则忽略
+	 * 用于多写少读取的场景*/
 	_PAGE_CACHE_MODE_WT       = 4,
+	/*WP (Write-Protect，写保护)
+	 * 写操作时1。无效缓存；2。直接写入硬件；读操作时自cache中读取
+	 * */
 	_PAGE_CACHE_MODE_WP       = 5,
 
 	_PAGE_CACHE_MODE_NUM      = 8

@@ -60,7 +60,7 @@ void dst_init(struct dst_entry *dst, struct dst_ops *ops,
 	dst->xfrm = NULL;
 #endif
 	dst->input = dst_discard;//默认初始化为丢包
-	dst->output = dst_discard_out;
+	dst->output = dst_discard_out;/*默认初始化为丢包*/
 	dst->error = 0;
 	dst->obsolete = initial_obsolete;
 	dst->header_len = 0;
@@ -90,10 +90,12 @@ void *dst_alloc(struct dst_ops *ops, struct net_device *dev,
 	    dst_entries_get_fast(ops) > ops->gc_thresh)
 		ops->gc(ops);
 
+	/*申请dst_entry*/
 	dst = kmem_cache_alloc(ops->kmem_cachep, GFP_ATOMIC);
 	if (!dst)
 		return NULL;
 
+	/*初始化dst*/
 	dst_init(dst, ops, dev, initial_obsolete, flags);
 
 	return dst;

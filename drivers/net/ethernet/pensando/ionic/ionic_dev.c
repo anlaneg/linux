@@ -403,6 +403,7 @@ int ionic_dev_setup(struct ionic *ionic)
 		return -EFAULT;
 	}
 
+	/*检查bar0空间大小（32K)*/
 	if (bar->len < IONIC_BAR0_SIZE) {
 		dev_err(dev, "Resource bar size %lu too small, aborting\n",
 			bar->len);
@@ -648,6 +649,7 @@ void ionic_dev_cmd_comp(struct ionic_dev *idev, union ionic_dev_cmd_comp *comp)
 	memcpy_fromio(comp, &idev->dev_cmd_regs->comp, sizeof(*comp));
 }
 
+/*触发dev cmd处理*/
 void ionic_dev_cmd_go(struct ionic_dev *idev, union ionic_dev_cmd *cmd)
 {
 	idev->opcode = cmd->cmd.opcode;
@@ -671,6 +673,7 @@ void ionic_dev_cmd_identify(struct ionic_dev *idev, u8 ver)
 	ionic_dev_cmd_go(idev, &cmd);
 }
 
+/*触发IONIC_CMD_INIT dev cmd*/
 void ionic_dev_cmd_init(struct ionic_dev *idev)
 {
 	union ionic_dev_cmd cmd = {
@@ -831,6 +834,7 @@ void ionic_dev_cmd_queue_identify(struct ionic_dev *idev,
 	ionic_dev_cmd_go(idev, &cmd);
 }
 
+/*向设备发送dev cmd IONIC_CMD_LIF_IDENTIFY,指明type及版本*/
 void ionic_dev_cmd_lif_identify(struct ionic_dev *idev, u8 type, u8 ver)
 {
 	union ionic_dev_cmd cmd = {
@@ -842,6 +846,7 @@ void ionic_dev_cmd_lif_identify(struct ionic_dev *idev, u8 type, u8 ver)
 	ionic_dev_cmd_go(idev, &cmd);
 }
 
+/*发送IONIC_CMD_LIF_INIT dev cmd*/
 void ionic_dev_cmd_lif_init(struct ionic_dev *idev, u16 lif_index,
 			    dma_addr_t info_pa)
 {

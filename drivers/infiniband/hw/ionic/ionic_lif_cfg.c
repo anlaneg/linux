@@ -59,6 +59,7 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 	cfg->nmrs_per_lif = le32_to_cpu(ident->rdma.nmrs_per_lif);
 	cfg->nahs_per_lif = le32_to_cpu(ident->rdma.nahs_per_lif);
 
+	/*指明q的最小id号，例如0*/
 	cfg->aq_base = le32_to_cpu(ident->rdma.aq_qtype.qid_base);
 	cfg->cq_base = le32_to_cpu(ident->rdma.cq_qtype.qid_base);
 	cfg->eq_base = le32_to_cpu(ident->rdma.eq_qtype.qid_base);
@@ -72,9 +73,10 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 	cfg->aq_count = le32_to_cpu(ident->rdma.aq_qtype.qid_count);
 	cfg->eq_count = le32_to_cpu(ident->rdma.eq_qtype.qid_count);
 	cfg->cq_count = le32_to_cpu(ident->rdma.cq_qtype.qid_count);
-	cfg->qp_count = le32_to_cpu(ident->rdma.sq_qtype.qid_count);
+	cfg->qp_count = le32_to_cpu(ident->rdma.sq_qtype.qid_count);/*取send queue长度*/
 	cfg->dbid_count = le32_to_cpu(lif->ionic->ident.dev.ndbpgs_per_lif);
 
+	/*填写adminq,sq,rq,cq,eq对应的qtype*/
 	cfg->aq_qtype = ident->rdma.aq_qtype.qtype;
 	cfg->sq_qtype = ident->rdma.sq_qtype.qtype;
 	cfg->rq_qtype = ident->rdma.rq_qtype.qtype;
@@ -83,7 +85,7 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 	cfg->udma_qgrp_shift = ident->rdma.udma_shift;
 	cfg->udma_count = 2;
 
-	cfg->max_stride = ident->rdma.max_stride;
+	cfg->max_stride = ident->rdma.max_stride;/*支持的wqe最大大小*/
 	cfg->expdb_mask = ionic_get_expdb(lif);
 
 	cfg->sq_expdb =

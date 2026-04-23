@@ -26,13 +26,14 @@
  * @dbell:	Doorbell identifying bits
  */
 struct ionic_queue {
-	size_t size;
+	size_t size;/*队列占用的内存总数*/
 	dma_addr_t dma;
-	void *ptr;
-	u16 prod;
+	void *ptr;/*队列起始地址*/
+	u16 prod;/*队列生产者指针*/
 	u16 cons;
-	u16 mask;
-	u8 depth_log2;
+	u16 mask;/*队列深度对应的掩码*/
+	u8 depth_log2;/*队列深度（以2为底的对数）*/
+	/*wqe大小（以2为底的对数）这个大小决定了可以最多存放多少个struct ionic_sge*/
 	u8 stride_log2;
 	u64 dbell;
 };

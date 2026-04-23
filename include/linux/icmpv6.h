@@ -26,7 +26,7 @@ static inline void __icmpv6_send(struct sk_buff *skb, u8 type, u8 code, __u32 in
 				 const struct inet6_skb_parm *parm)
 {
     /*发送icmpv6报文*/
-	icmp6_send(skb, type, code, info, NULL, parm);
+	icmp6_send(skb, type, code, info, NULL/*未强制指定源*/, parm);
 }
 static inline int inet6_register_icmp_sender(ip6_icmp_send_t *fn)
 {
@@ -45,6 +45,7 @@ extern int inet6_register_icmp_sender(ip6_icmp_send_t *fn);
 extern int inet6_unregister_icmp_sender(ip6_icmp_send_t *fn);
 #endif
 
+/*按type,code发送icmpv6*/
 static inline void icmpv6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info)
 {
 	__icmpv6_send(skb, type, code, info, IP6CB(skb));

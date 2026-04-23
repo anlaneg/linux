@@ -57,6 +57,7 @@ struct inet6_protocol {
 	int	(*handler)(struct sk_buff *skb);
 
 	/* This returns an error if we weren't able to handle the error. */
+	/*比如收到icmpv6的端口不可达报文，会执行此回调*/
 	int	(*err_handler)(struct sk_buff *skb,
 			       struct inet6_skb_parm *opt,
 			       u8 type, u8 code, int offset,

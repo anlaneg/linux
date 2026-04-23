@@ -221,9 +221,9 @@ static void __pci_size_rom(struct pci_dev *dev, unsigned int pos, u32 *sizes)
  *
  * Returns 1 if the BAR is 64-bit, or 0 if 32-bit.
  */
-//读取pci的base address register
+//读取pci的BAR（base address register）
 int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
-		    struct resource *res, unsigned int pos, u32 *sizes)
+		    struct resource *res, unsigned int pos/*bar偏移量*/, u32 *sizes)
 {
 	u32 l = 0, sz;
 	u64 l64, sz64, mask64;
@@ -232,7 +232,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 	res->name = pci_name(dev);
 
-	//读pos对应的base address register(4字节），备份旧值
+	//读pos对应的base address register(4字节）
 	pci_read_config_dword(dev, pos, &l);
 	sz = sizes[0];
 

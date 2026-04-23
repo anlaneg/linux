@@ -24,8 +24,9 @@ int ionic_auxbus_register(struct ionic_lif *lif)
 	int err, id;
 
 	if (!(le64_to_cpu(lif->ionic->ident.lif.capabilities) & IONIC_LIF_CAP_RDMA))
-		return 0;
+		return 0;/*不支持rdma,返回*/
 
+	/*申请ionic_aux_dev设备*/
 	ionic_adev = kzalloc_obj(*ionic_adev);
 	if (!ionic_adev)
 		return -ENOMEM;
@@ -43,6 +44,7 @@ int ionic_auxbus_register(struct ionic_lif *lif)
 	aux_dev->name = "rdma";
 	aux_dev->dev.parent = &lif->ionic->pdev->dev;
 	aux_dev->dev.release = ionic_auxbus_release;
+	/*指定其所对应的lif(在函数ionic_create_ibdev中设置ionic_fill_lif_cfg的即为此lif)*/
 	ionic_adev->lif = lif;
 	err = auxiliary_device_init(aux_dev);
 	if (err) {
@@ -53,6 +55,7 @@ int ionic_auxbus_register(struct ionic_lif *lif)
 		return err;
 	}
 
+	/*添加此辅助设备，并走辅助设备发现流程*/
 	err = auxiliary_device_add(aux_dev);
 	if (err) {
 		dev_err(lif->ionic->dev, "Failed to add %s aux device: %d\n",

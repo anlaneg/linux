@@ -28,9 +28,9 @@
  * */
 //映射dev设备的第bar寄存器指向的地址内容（offset,maxlen指出偏移及长度)
 void __iomem *pci_iomap_range(struct pci_dev *dev,
-			      int bar,
-			      unsigned long offset,
-			      unsigned long maxlen)
+			      int bar/*bar编号*/,
+			      unsigned long offset/*bar对应的偏移量*/,
+			      unsigned long maxlen/*映射长度*/)
 {
 	resource_size_t start, len;
 	unsigned long flags;
@@ -52,7 +52,7 @@ void __iomem *pci_iomap_range(struct pci_dev *dev,
 	if (flags & IORESOURCE_IO)
 		return __pci_ioport_map(dev, start, len);
 	if (flags & IORESOURCE_MEM)
-		//memory space方式映射
+		//memory space方式映射，将start物理地址映射为虚拟地址并返回
 		return ioremap(start, len);
 	/* What? */
 	return NULL;
@@ -122,7 +122,7 @@ EXPORT_SYMBOL_GPL(pci_iomap_wc_range);
  * @maxlen specifies the maximum length to map. If you want to get access to
  * the complete BAR without checking for its length first, pass %0 here.
  * */
-void __iomem *pci_iomap(struct pci_dev *dev, int bar, unsigned long maxlen)
+void __iomem *pci_iomap(struct pci_dev *dev, int bar/*bar编号*/, unsigned long maxlen/*资源长度*/)
 {
 	return pci_iomap_range(dev, bar, 0, maxlen);
 }

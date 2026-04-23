@@ -580,7 +580,7 @@ EXPORT_SYMBOL_GPL(debugfs_create_file_size);
  * passed to them could be an error and they don't crash in that case.
  * Drivers should generally work fine even if debugfs fails to init anyway.
  */
-struct dentry *debugfs_create_dir(const char *name/*目录名*/, struct dentry *parent/*父节点*/)
+struct dentry *debugfs_create_dir(const char *name/*目录名*/, struct dentry *parent/*父节点/父目录名称*/)
 {
 	//在debugfs中创建一个目录项
 	struct dentry *dentry = debugfs_start_creating(name, parent);
@@ -920,14 +920,15 @@ static int __init debugfs_init(void)
 	int retval;
 
 	if (!debugfs_enabled)
-	    /*如果不容许挂载，则返回失败*/
+	    /*如果未使能，则返回失败*/
 		return -EPERM;
 
-	/*创建debug挂载点进行挂载*/
+	/*创建debug目录，做为挂载点进行挂载*/
 	retval = sysfs_create_mount_point(kernel_kobj, "debug");
 	if (retval)
 		return retval;
 
+	/*创建debugfs inode cache*/
 	debugfs_inode_cachep = kmem_cache_create("debugfs_inode_cache",
 				sizeof(struct debugfs_inode_info), 0,
 				SLAB_RECLAIM_ACCOUNT | SLAB_ACCOUNT,
@@ -940,7 +941,7 @@ static int __init debugfs_init(void)
 	/*为系统注册debugfs文件系统*/
 	retval = register_filesystem(&debug_fs_type);
 	if (retval) { // Really not going to happen
-	    	/*注册失败，解挂载*/
+	    /*注册失败，依除debug目录*/
 		sysfs_remove_mount_point(kernel_kobj, "debug");
 		kmem_cache_destroy(debugfs_inode_cachep);
 		return retval;

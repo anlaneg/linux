@@ -769,7 +769,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 	 * or another process disconnected us.
 	 */
 	if (sk->sk_state == TCP_CLOSE)
-		goto sock_error;
+		goto sock_error;/*已标记为关闭*/
 
 	/* sk->sk_err may be not zero now, if RECVERR was ordered by user
 	 * and error was received after socket entered established state.
@@ -782,6 +782,7 @@ out:
 	return err;
 
 sock_error:
+	/*取socket中设置的sk_err*/
 	err = sock_error(sk) ? : -ECONNABORTED;
 	sock->state = SS_UNCONNECTED;
 	sk->sk_disconnects++;

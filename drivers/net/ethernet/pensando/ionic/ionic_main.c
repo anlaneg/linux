@@ -642,9 +642,12 @@ int ionic_identify(struct ionic *ionic)
 	sz = min(sizeof(ident->drv), sizeof(idev->dev_cmd_regs->data));
 	memcpy_toio(&idev->dev_cmd_regs->data, &ident->drv, sz);
 
+	/*触发IONIC_CMD_IDENTIFY dev cmd,网卡handle_ionic_cmd_identify函数会被触发*/
 	ionic_dev_cmd_identify(idev, IONIC_DEV_IDENTITY_VERSION_2);
+	/*等待响应*/
 	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
 	if (!err) {
+		/*填写ident->dev*/
 		sz = min(sizeof(ident->dev), sizeof(idev->dev_cmd_regs->data));
 		memcpy_fromio(&ident->dev, &idev->dev_cmd_regs->data, sz);
 	}
@@ -667,7 +670,8 @@ int ionic_identify(struct ionic *ionic)
 			 (u8)idev->dev_info.fw_version[2],
 			 (u8)idev->dev_info.fw_version[3]);
 
-	err = ionic_lif_identify(ionic, IONIC_LIF_TYPE_CLASSIC,
+	/*发送IONIC_CMD_LIF_IDENTIFY dev cmd，要求填充ionic->ident.lif*/
+	err = ionic_lif_identify(ionic, IONIC_LIF_TYPE_CLASSIC/*指明类型*/,
 				 &ionic->ident.lif);
 	if (err) {
 		dev_err(ionic->dev, "Cannot identify LIFs: %d\n", err);
@@ -798,8 +802,8 @@ static int __init ionic_init_module(void)
 {
 	int ret;
 
-	ionic_debugfs_create();
-	ret = ionic_bus_register_driver();
+	ionic_debugfs_create();/*创建debugfs根目录*/
+	ret = ionic_bus_register_driver();/*注册driver*/
 	if (ret)
 		ionic_debugfs_destroy();
 

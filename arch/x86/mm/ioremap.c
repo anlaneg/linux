@@ -181,7 +181,7 @@ static void __ioremap_check_mem(resource_size_t addr, unsigned long size,
  * caller shouldn't need to know that small detail.
  */
 static void __iomem *
-__ioremap_caller(resource_size_t phys_addr, unsigned long size,
+__ioremap_caller(resource_size_t phys_addr/*起始地址*/, unsigned long size/*长度*/,
 		 enum page_cache_mode pcm, void *caller, bool encrypted)
 {
 	unsigned long offset, vaddr;
@@ -196,11 +196,12 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	void __iomem *ret_addr;
 
 	/* Don't allow wraparound or zero size */
-	last_addr = phys_addr + size - 1;
+	last_addr = phys_addr + size - 1;/*终止地址*/
 	if (!size || last_addr < phys_addr)
 		return NULL;
 
 	if (!phys_addr_valid(phys_addr)) {
+		/*地址值在x86上有溢出问题*/
 		printk(KERN_WARNING "ioremap: invalid physical address %llx\n",
 		       (unsigned long long)phys_addr);
 		WARN_ON_ONCE(1);
@@ -213,6 +214,7 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	 * Don't allow anybody to remap normal RAM that we're using..
 	 */
 	if (io_desc.flags & IORES_MAP_SYSTEM_RAM) {
+		/*普通ram*/
 		WARN_ONCE(1, "ioremap on RAM at %pa - %pa\n",
 			  &phys_addr, &last_addr);
 		return NULL;
@@ -221,9 +223,9 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	/*
 	 * Mappings have to be page-aligned
 	 */
-	offset = phys_addr & ~PAGE_MASK;
-	phys_addr &= PAGE_MASK;
-	size = PAGE_ALIGN(last_addr+1) - phys_addr;
+	offset = phys_addr & ~PAGE_MASK;/*页内偏移*/
+	phys_addr &= PAGE_MASK;/*对齐到页*/
+	size = PAGE_ALIGN(last_addr+1) - phys_addr;/*终止地址对齐到页，计算两者差值（即长度）*/
 
 	/*
 	 * Mask out any bits not part of the actual physical
@@ -232,13 +234,14 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	phys_addr &= PHYSICAL_PAGE_MASK;
 
 	retval = memtype_reserve(phys_addr, (u64)phys_addr + size,
-						pcm, &new_pcm);
+						pcm, &new_pcm/*出参，获得Page Cache Mode*/);
 	if (retval) {
 		printk(KERN_ERR "ioremap memtype_reserve failed %d\n", retval);
 		return NULL;
 	}
 
 	if (pcm != new_pcm) {
+		/*设置与实际不一致*/
 		if (!is_new_memtype_allowed(phys_addr, size, pcm, new_pcm)) {
 			printk(KERN_ERR
 		"ioremap error for 0x%llx-0x%llx, requested 0x%x, got 0x%x\n",
@@ -292,15 +295,17 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	area = get_vm_area_caller(size, VM_IOREMAP, caller);
 	if (!area)
 		goto err_free_memtype;
-	area->phys_addr = phys_addr;
+	area->phys_addr = phys_addr;/*设置对应的物理地址*/
 	vaddr = (unsigned long) area->addr;
 
 	if (memtype_kernel_map_sync(phys_addr, size, pcm))
 		goto err_free_area;
 
+	/*虚拟地址与物理地址映射*/
 	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot))
 		goto err_free_area;
 
+	/*返回此物理地址对应的虚拟地址*/
 	ret_addr = (void __iomem *) (vaddr + offset);
 	mmiotrace_ioremap(unaligned_phys_addr, unaligned_size, ret_addr);
 
@@ -311,7 +316,7 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 	if (iomem_map_sanity_check(unaligned_phys_addr, unaligned_size))
 		pr_warn("caller %pS mapping multiple BARs\n", caller);
 
-	return ret_addr;
+	return ret_addr;/*返回虚拟地址*/
 err_free_area:
 	free_vm_area(area);
 err_free_memtype:
@@ -340,7 +345,7 @@ err_free_memtype:
  *
  * Must be freed with iounmap.
  */
-//映射到cpu space,要映射的起始地址，size 要映射的长度
+//映射到cpu space（虚拟地址）,要映射的起始地址，size 要映射的长度
 void __iomem *ioremap(resource_size_t phys_addr, unsigned long size)
 {
 	/*
@@ -354,7 +359,7 @@ void __iomem *ioremap(resource_size_t phys_addr, unsigned long size)
 	enum page_cache_mode pcm = _PAGE_CACHE_MODE_UC_MINUS;
 
 	return __ioremap_caller(phys_addr, size, pcm,
-				__builtin_return_address(0), false);
+				__builtin_return_address(0), false/*未加密*/);
 }
 EXPORT_SYMBOL(ioremap);
 

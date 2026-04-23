@@ -266,6 +266,7 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 			goto err_uncharge;
 	}
 
+	/*使用设备ops,初始化ucontext*/
 	ret = ucontext->device->ops.alloc_ucontext(ucontext,
 						   &attrs->driver_udata);
 	if (ret)
@@ -292,6 +293,7 @@ err:
 	return ret;
 }
 
+/*响应get_context命令*/
 static int ib_uverbs_get_context(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_get_context_resp resp;
@@ -720,7 +722,7 @@ int ib_uverbs_dealloc_xrcd(struct ib_uobject *uobject, struct ib_xrcd *xrcd,
 	return 0;
 }
 
-/*注册memory region*/
+/*响应注册memory region*/
 static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_reg_mr_resp resp = {};
@@ -757,7 +759,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 		goto err_free;
 	}
 
-	/*此pd对应的device执行user mr注册*/
+	/*此pd对应的device执行user mr注册，触发回调*/
 	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*hca/iova地址*/,
 					 cmd.access_flags/*访问标记*/, NULL,
 					 &attrs->driver_udata);

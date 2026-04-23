@@ -172,10 +172,12 @@ static int pci_read(struct pci_bus *bus, unsigned int devfn, int where,
 		    int size, u32 *value)
 {
 	if (type1_access_ok(bus->number, devfn, where))
+		/*采用in/out指令方式者*/
 		return pci_direct_conf1.read(pci_domain_nr(bus), bus->number,
 					devfn, where, size, value);
-	return raw_pci_ext_ops->read(pci_domain_nr(bus), bus->number,
-			      devfn, where, size, value);
+	/*采用内存方式访问*/
+	return raw_pci_ext_ops->read(pci_domain_nr(bus)/*取domain*/, bus->number,
+			      devfn, where/*读取位置*/, size, value);
 }
 
 static int pci_write(struct pci_bus *bus, unsigned int devfn, int where,

@@ -1114,7 +1114,7 @@ static void neigh_invalidate(struct neighbour *neigh)
 
 	   So that, we try to be accurate and avoid dead loop. --ANK
 	 */
-	//neigh上挂载的这些报文因为arp无法解析成功，通知处理，例如响应目的不可达
+	//neigh上挂载的这些报文因为邻居表项无法解析成功，需通知处理，例如响应目的不可达
 	while (neigh->nud_state == NUD_FAILED &&
 	       (skb = __skb_dequeue(&neigh->arp_queue)) != NULL) {
 		write_unlock(&neigh->lock);
@@ -1129,14 +1129,17 @@ static void neigh_invalidate(struct neighbour *neigh)
 static void neigh_probe(struct neighbour *neigh)
 	__releases(neigh->lock)
 {
+	/*peek最后一个报文*/
 	struct sk_buff *skb = skb_peek_tail(&neigh->arp_queue);
 	/* keep skb alive even if arp_queue overflows */
 	if (skb)
+		/*clone此报文*/
 		skb = skb_clone(skb, GFP_ATOMIC);
 	write_unlock(&neigh->lock);
+	/*构造并发送探测报文*/
 	if (neigh->ops->solicit)
 		neigh->ops->solicit(neigh, skb);
-	atomic_inc(&neigh->probes);
+	atomic_inc(&neigh->probes);/*增加探测次数*/
 	consume_skb(skb);
 }
 
@@ -1145,6 +1148,7 @@ static void neigh_probe(struct neighbour *neigh)
 static void neigh_timer_handler(struct timer_list *t)
 {
 	unsigned long now, next;
+	/*取得此timer对应的领居表项*/
 	struct neighbour *neigh = timer_container_of(neigh, t, timer);
 	bool skip_probe = false;
 	unsigned int state;
@@ -1162,23 +1166,24 @@ static void neigh_timer_handler(struct timer_list *t)
 		goto out;
 
 	if (state & NUD_REACHABLE) {
-		//当前处于reachable状态
 		if (time_before_eq(now,
 				   neigh->confirmed + neigh->parms->reachable_time)) {
-		    /*confirmed的时间距离现在还不到reachable_time,更新下次检查时间*/
+		    /*当前处于reachable状态，且当前时间小于此领居表项confirmed的时间与reachable_time之和（即未达到reachable过期时间）
+		     * 仅更新下次检查时间为reachable过期时间*/
 			neigh_dbg(2, "neigh %p is still alive\n", neigh);
 			next = neigh->confirmed + neigh->parms->reachable_time;
 		} else if (time_before_eq(now,
 					  neigh->used +
 					  NEIGH_VAR(neigh->parms, DELAY_PROBE_TIME))) {
-		    /*当前时间大于conirmed +reachable_time,但小于used+probe_time,转DELAY状态*/
+		    /*当前处于reachable状态，且当前时间大于conirmed +reachable_time（达到STALE状态),
+		     * 但小于used + probe_time(最后一次被使用的时间后还未超过）,直接转DELAY状态*/
 			neigh_dbg(2, "neigh %p is delayed\n", neigh);
 			WRITE_ONCE(neigh->nud_state, NUD_DELAY);
 			neigh->updated = jiffies;
 			neigh_suspect(neigh);
 			next = now + NEIGH_VAR(neigh->parms, DELAY_PROBE_TIME);
 		} else {
-		    /*当前时间大于used+probe_time,转STALE状态*/
+		    /*当前处于reachable状态，当前时间大于used+probe_time,转STALE状态*/
 			neigh_dbg(2, "neigh %p is suspected\n", neigh);
 			WRITE_ONCE(neigh->nud_state, NUD_STALE);
 			neigh->updated = jiffies;
@@ -1189,6 +1194,7 @@ static void neigh_timer_handler(struct timer_list *t)
 		if (time_before_eq(now,
 				   neigh->confirmed +
 				   NEIGH_VAR(neigh->parms, DELAY_PROBE_TIME))) {
+			/*当前时间小于confirmed时间+probe_time,即已收到确认且还未超过probe_time,直接更新为reach*/
 			neigh_dbg(2, "neigh %p is now reachable\n", neigh);
 			WRITE_ONCE(neigh->nud_state, NUD_REACHABLE);
 			neigh->updated = jiffies;
@@ -1196,21 +1202,24 @@ static void neigh_timer_handler(struct timer_list *t)
 			notify = 1;
 			next = neigh->confirmed + neigh->parms->reachable_time;
 		} else {
+			/*当前处于delay状态，且未收到确认，转probe状态*/
 			neigh_dbg(2, "neigh %p is probed\n", neigh);
 			WRITE_ONCE(neigh->nud_state, NUD_PROBE);
 			neigh->updated = jiffies;
-			atomic_set(&neigh->probes, 0);
+			atomic_set(&neigh->probes, 0);/*probe次数置为0*/
 			notify = 1;
+			/*用于下次重传超时*/
 			next = now + max(NEIGH_VAR(neigh->parms, RETRANS_TIME),
 					 HZ/100);
 		}
 	} else {
-		/* NUD_PROBE|NUD_INCOMPLETE */
+		/*其它状态，指明下次重传超时时醒来*/
 		next = now + max(NEIGH_VAR(neigh->parms, RETRANS_TIME), HZ/100);
 	}
 
 	if ((neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) &&
 	    atomic_read(&neigh->probes) >= neigh_max_probes(neigh)) {
+		/*处于incomplete或者probe状态，且探测次数已用尽*/
 		if (neigh->nud_state == NUD_PROBE &&
 		    neigh->flags & NTF_EXT_VALIDATED) {
 			WRITE_ONCE(neigh->nud_state, NUD_STALE);
@@ -1218,12 +1227,14 @@ static void neigh_timer_handler(struct timer_list *t)
 		} else {
 			//当前处于incomplete或者probe状态，且探测次数超阀值，置failed状态
 			WRITE_ONCE(neigh->nud_state, NUD_FAILED);
+			/*将此neigh置为无效*/
 			neigh_invalidate(neigh);
 		}
 		notify = 1;
 		skip_probe = true;
 	}
 
+	/*通过netlink对外通知*/
 	if (notify)
 		__neigh_notify(neigh, RTM_NEWNEIGH, 0, 0);
 
@@ -1239,7 +1250,7 @@ static void neigh_timer_handler(struct timer_list *t)
 	}
 
 	if (neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) {
-		//当前处于incomplete或者probe状态，执行arp探测
+		//当前处于incomplete或者probe状态，执行邻居表项探测
 		neigh_probe(neigh);
 	} else {
 out:
@@ -1264,6 +1275,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 
 	rc = 0;
 	if (neigh->nud_state & (NUD_CONNECTED | NUD_DELAY | NUD_PROBE))
+		/*以上状态，如需探测即探测，否则不处理*/
 		goto out_unlock_bh;
 	if (neigh->dead)
 		goto out_dead;
@@ -1271,23 +1283,25 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 	if (!(neigh->nud_state & (NUD_STALE | NUD_INCOMPLETE))) {
 		if (NEIGH_VAR(neigh->parms, MCAST_PROBES) +
 		    NEIGH_VAR(neigh->parms, APP_PROBES)) {
+			/*当前此邻居表项非reach,且非incomplete,stale状态，且容许探测*/
 			unsigned long next, now = jiffies;
 
 			atomic_set(&neigh->probes,
 				   NEIGH_VAR(neigh->parms, UCAST_PROBES));
-			neigh_del_timer(neigh);
-			WRITE_ONCE(neigh->nud_state, NUD_INCOMPLETE);
+			neigh_del_timer(neigh);/*移除原timer*/
+			WRITE_ONCE(neigh->nud_state, NUD_INCOMPLETE);/*变更为incomplete*/
 			neigh->updated = now;
 			if (!immediate_ok) {
-				next = now + 1;
+				next = now + 1;/*1s后探测*/
 			} else {
 				immediate_probe = true;
 				next = now + max(NEIGH_VAR(neigh->parms,
 							   RETRANS_TIME),
-						 HZ / 100);
+						 HZ / 100);/*立即探测，且指明下次探测时间*/
 			}
-			neigh_add_timer(neigh, next);
+			neigh_add_timer(neigh, next);/*重加定时器*/
 		} else {
+			/*置为failed状态，skb直接释放*/
 			WRITE_ONCE(neigh->nud_state, NUD_FAILED);
 			neigh->updated = jiffies;
 			write_unlock_bh(&neigh->lock);
@@ -1296,6 +1310,8 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 			return 1;
 		}
 	} else if (neigh->nud_state & NUD_STALE) {
+		/*当前此neighbour处于stale状态，有报文要发送，
+		 * 移除掉之前的timer,变更为delay状态，延迟delay时间再执行probe*/
 		neigh_dbg(2, "neigh %p is delayed\n", neigh);
 		neigh_del_timer(neigh);
 		WRITE_ONCE(neigh->nud_state, NUD_DELAY);
@@ -1308,6 +1324,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 		if (skb) {
 			while (neigh->arp_queue_len_bytes + skb->truesize >
 			       NEIGH_VAR(neigh->parms, QUEUE_LEN_BYTES)) {
+				/*当前缓存的报文字节总数已超限，释放队首的报文*/
 				struct sk_buff *buff;
 
 				buff = __skb_dequeue(&neigh->arp_queue);
@@ -1317,6 +1334,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 				kfree_skb_reason(buff, SKB_DROP_REASON_NEIGH_QUEUEFULL);
 				NEIGH_CACHE_STAT_INC(neigh->tbl, unres_discards);
 			}
+			/*当前为incomplete状态，将此skb缓存*/
 			skb_dst_force(skb);
 			__skb_queue_tail(&neigh->arp_queue, skb);
 			neigh->arp_queue_len_bytes += skb->truesize;
@@ -1325,6 +1343,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 	}
 out_unlock_bh:
 	if (immediate_probe)
+		/*立即探测*/
 		neigh_probe(neigh);
 	else
 		write_unlock(&neigh->lock);
@@ -1370,8 +1389,8 @@ static void neigh_update_process_arp_queue(struct neighbour *neigh)
 	struct sk_buff *skb;
 
 	/* Again: avoid deadlock if something went wrong. */
-	while (neigh->nud_state & NUD_VALID &&
-	       (skb = __skb_dequeue(&neigh->arp_queue)) != NULL) {
+	while (neigh->nud_state & NUD_VALID/*可发送*/ &&
+	       (skb = __skb_dequeue(&neigh->arp_queue))/*缓存报文出队*/ != NULL) {
 		struct dst_entry *dst = skb_dst(skb);
 		struct neighbour *n2, *n1 = neigh;
 
@@ -1660,11 +1679,12 @@ int neigh_resolve_output(struct neighbour *neigh, struct sk_buff *skb)
 	int rc = 0;
 
 	if (!neigh_event_send(neigh, skb)) {
+		/*neigh_event_send调用后，指明neighbour未缓存此skb,可以发送*/
 		int err;
 		struct net_device *dev = neigh->dev;
 		unsigned int seq;
 
-		//有cache回调，但neighbour还未缓存，则缓存它
+		//有header cache回调，neighbour还未缓存，则缓存它
 		if (dev->header_ops->cache && !READ_ONCE(neigh->hh.hh_len))
 			neigh_hh_init(neigh);
 
@@ -3648,6 +3668,7 @@ static const struct seq_operations neigh_stat_seq_ops = {
 };
 #endif /* CONFIG_PROC_FS */
 
+/*邻居表项向用户态通知事件触发*/
 static void __neigh_notify(struct neighbour *n, int type, int flags,
 			   u32 pid)
 {
@@ -3685,6 +3706,7 @@ static void neigh_notify(struct neighbour *neigh, int type, int flags, u32 pid)
 
 void neigh_app_ns(struct neighbour *n)
 {
+	/*向用户态发送getneigh请求*/
 	neigh_notify(n, RTM_GETNEIGH, NLM_F_REQUEST, 0);
 }
 EXPORT_SYMBOL(neigh_app_ns);

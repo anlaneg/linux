@@ -116,6 +116,7 @@ struct pci_mmcfg_region *__init pci_mmconfig_add(int segment, int start,
 	return new;
 }
 
+/*通过domain,bus查找对应的mmcfg region*/
 struct pci_mmcfg_region *pci_mmconfig_lookup(int segment, int bus)
 {
 	struct pci_mmcfg_region *cfg;

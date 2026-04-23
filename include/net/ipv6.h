@@ -483,6 +483,7 @@ static inline bool ipv6_accept_ra(const struct inet6_dev *idev)
 int __ipv6_addr_type(const struct in6_addr *addr);
 static inline int ipv6_addr_type(const struct in6_addr *addr)
 {
+	/*取地址类型*/
 	return __ipv6_addr_type(addr) & 0xffff;
 }
 

@@ -97,7 +97,7 @@ struct netns_ipv6 {
 	struct fib6_table       *fib6_local_tbl;/*local路由表*/
 	struct fib_rules_ops    *fib6_rules_ops;/*策略路由表*/
 #endif
-	struct sock             *ndisc_sk;
+	struct sock             *ndisc_sk;/*邻居表项发现socket*/
 	struct sock             *tcp_sk;
 	struct sock             *igmp_sk;
 	struct sock		*mc_autojoin_sk;

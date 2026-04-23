@@ -26,7 +26,7 @@ struct icmp6hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
                         __u32		reserved:5,
                         		override:1,
-                        		solicited:1,
+                        		solicited:1,/*是“宣告式”，还是“回复响应式”*/
                         		router:1,
 					reserved2:24;
 #elif defined(__BIG_ENDIAN_BITFIELD)
@@ -70,6 +70,7 @@ struct icmp6hdr {
 #define icmp6_maxdelay		icmp6_dataun.un_data16[0]
 #define icmp6_datagram_len	icmp6_dataun.un_data8[0]
 #define icmp6_router		icmp6_dataun.u_nd_advt.router
+/*Solicited NA（请求式）/Unsolicited NA（主动宣告式）*/
 #define icmp6_solicited		icmp6_dataun.u_nd_advt.solicited
 #define icmp6_override		icmp6_dataun.u_nd_advt.override
 #define icmp6_ndiscreserved	icmp6_dataun.u_nd_advt.reserved

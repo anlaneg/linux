@@ -21,7 +21,7 @@ static int ionic_validate_qdesc(struct ionic_qdesc *q)
 		return -EINVAL;
 
 	if (q->addr & (PAGE_SIZE - 1))
-		return -EINVAL;
+		return -EINVAL;/*地址未按页对齐*/
 
 	if (q->mask != BIT(q->depth_log2) - 1)
 		return -EINVAL;
@@ -42,6 +42,7 @@ static u32 ionic_get_eqid(struct ionic_ibdev *dev, u32 comp_vector, u8 udma_idx)
 	return (comp_vector % comp_vec_count + 1) * dev->lif_cfg.udma_count + udma_idx;
 }
 
+/*分配Cqid*/
 static int ionic_get_cqid(struct ionic_ibdev *dev, u32 *cqid, u8 udma_idx)
 {
 	unsigned int size, base, bound;
@@ -77,7 +78,7 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 			   struct ionic_tbl_buf *buf,
 			   const struct ib_cq_init_attr *attr,
 			   struct ionic_ctx *ctx,
-			   struct ib_udata *udata,
+			   struct ib_udata *udata/*用户态提供的额外参数*/,
 			   struct ionic_qdesc *req_cq,
 			   __u32 *resp_cqid,
 			   int udma_idx)
@@ -94,6 +95,7 @@ int ionic_create_cq_common(struct ionic_vcq *vcq,
 		goto err_args;
 	}
 
+	/*分配cqid*/
 	rc = ionic_get_cqid(dev, &cq->cqid, udma_idx);
 	if (rc)
 		goto err_args;
@@ -358,12 +360,14 @@ ionic_mmap_entry_insert(struct ionic_ctx *ctx, unsigned long size,
 		return NULL;
 	}
 
+	/*生成offset*/
 	if (offset)
 		*offset = rdma_user_mmap_get_offset(&entry->rdma_entry);
 
 	return &entry->rdma_entry;
 }
 
+/*初始化ucontext,对应的变量为ibctx*/
 int ionic_alloc_ucontext(struct ib_ucontext *ibctx, struct ib_udata *udata)
 {
 	struct ionic_ibdev *dev = to_ionic_ibdev(ibctx->device);
@@ -399,6 +403,7 @@ int ionic_alloc_ucontext(struct ib_ucontext *ibctx, struct ib_udata *udata)
 	resp.qp_opcodes = dev->lif_cfg.qp_opcodes;
 	resp.admin_opcodes = dev->lif_cfg.admin_opcodes;
 
+	/*响应sq,rq,cq,adminq队列类型(这些操作q时需要提供给硬件）*/
 	resp.sq_qtype = dev->lif_cfg.sq_qtype;
 	resp.rq_qtype = dev->lif_cfg.rq_qtype;
 	resp.cq_qtype = dev->lif_cfg.cq_qtype;
@@ -867,8 +872,8 @@ struct ib_mr *ionic_get_dma_mr(struct ib_pd *ibpd, int access)
 	return &mr->ibmr;
 }
 
-struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
-				u64 addr, int access, struct ib_dmah *dmah,
+struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start/*起始地址*/, u64 length/*长度*/,
+				u64 addr/*iova地址*/, int access/*访问权限*/, struct ib_dmah *dmah,
 				struct ib_udata *udata)
 {
 	struct ionic_ibdev *dev = to_ionic_ibdev(ibpd->device);
@@ -878,6 +883,7 @@ struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 	int rc;
 
 	if (dmah)
+		/*不支持dmah非NULL情况*/
 		return ERR_PTR(-EOPNOTSUPP);
 
 	mr = kzalloc_obj(*mr);
@@ -1215,7 +1221,7 @@ int ionic_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		    struct uverbs_attr_bundle *attrs)
 {
 	struct ionic_ibdev *dev = to_ionic_ibdev(ibcq->device);
-	struct ib_udata *udata = &attrs->driver_udata;
+	struct ib_udata *udata = &attrs->driver_udata;/*用户态提供的额外参数*/
 	struct ionic_ctx *ctx =
 		rdma_udata_to_drv_context(udata, struct ionic_ctx, ibctx);
 	struct ionic_vcq *vcq = to_ionic_vcq(ibcq);
@@ -1242,7 +1248,7 @@ int ionic_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 
 	for (; udma_idx < dev->lif_cfg.udma_count; ++udma_idx) {
 		if (!(vcq->udma_mask & BIT(udma_idx)))
-			continue;
+			continue;/*跳过未启用的udma*/
 
 		rc = ionic_create_cq_common(vcq, &buf, attr, ctx, udata,
 					    &req.cq[udma_idx],
@@ -1378,6 +1384,7 @@ static int ionic_create_qp_cmd(struct ionic_ibdev *dev,
 	return ionic_admin_wait(dev, &wr, 0);
 }
 
+/*修改qp*/
 static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 			       struct ionic_pd *pd,
 			       struct ionic_qp *qp,
@@ -1410,8 +1417,8 @@ static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 					  (attr->rnr_retry << 4)),
 				.rnr_timer = attr->min_rnr_timer,
 				.retry_timeout = attr->timeout,
-				.type_state = state,
-				.id_ver = cpu_to_le32(qp->qpid),
+				.type_state = state,/*qp状态*/
+				.id_ver = cpu_to_le32(qp->qpid),/*qp编号*/
 			}
 		}
 	};
@@ -1457,6 +1464,7 @@ static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 		if (!qp->hdr)
 			return -ENOMEM;
 
+		/*获得srcport*/
 		sport = rdma_get_udp_sport(grh->flow_label,
 					   qp->qpid,
 					   attr->dest_qp_num);
@@ -1505,10 +1513,13 @@ static int ionic_modify_qp_cmd(struct ionic_ibdev *dev,
 		wr.wqe.cmd.mod_qp.ip_dscp = grh->traffic_class >> 2;
 	}
 
+	/*提交此wr到adminq*/
 	ionic_admin_post(dev, &wr);
 
+	/*等待响应*/
 	rc = ionic_admin_wait(dev, &wr, 0);
 
+	/*处理完成，执行unmap*/
 	if (mask & IB_QP_AV)
 		dma_unmap_single(dev->lif_cfg.hwdev, hdr_dma, hdr_len,
 				 DMA_TO_DEVICE);
@@ -2577,6 +2588,7 @@ int ionic_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr, int mask,
 	if (rc)
 		return rc;
 
+	/*有qp状态变更*/
 	if (mask & IB_QP_STATE) {
 		qp->state = attr->qp_state;
 

@@ -219,8 +219,8 @@ struct ionic_cq {
 
 struct ionic_vcq {
 	struct ib_cq		ibcq;
-	struct ionic_cq		cq[2];
-	u8			udma_mask;
+	struct ionic_cq		cq[2];/*当前udma共有2个，故这里使用长度为2的数组*/
+	u8			udma_mask;/*指明使用哪些udma*/
 	u8			poll_idx;
 };
 
@@ -250,8 +250,8 @@ struct ionic_qp {
 	u32			rq_cqid;
 	u8			udma_idx;
 	u8			has_ah:1;
-	u8			has_sq:1;
-	u8			has_rq:1;
+	u8			has_sq:1;/*是否有sq*/
+	u8			has_rq:1;/*是否有rq*/
 	u8			sig_all:1;
 
 	struct list_head	qp_list_counter;
@@ -262,10 +262,10 @@ struct ionic_qp {
 	struct list_head	ibkill_flush_ent;
 
 	spinlock_t		sq_lock; /* for posting and polling */
-	struct ionic_queue	sq;
+	struct ionic_queue	sq;/*此qp对应的send queue*/
 	struct ionic_sq_meta	*sq_meta;
 	u16			*sq_msn_idx;
-	int			sq_spec;
+	int			sq_spec;/*指明的要支持的最大sge数目*/
 	u16			sq_old_prod;
 	u16			sq_msn_prod;
 	u16			sq_msn_cons;
@@ -274,7 +274,7 @@ struct ionic_qp {
 	bool			sq_flush_rcvd;
 
 	spinlock_t		rq_lock; /* for posting and polling */
-	struct ionic_queue	rq;
+	struct ionic_queue	rq;/*此qp对应的recv queue*/
 	struct ionic_rq_meta	*rq_meta;
 	struct ionic_rq_meta	*rq_meta_head;
 	int			rq_spec;

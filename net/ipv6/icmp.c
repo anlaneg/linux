@@ -642,7 +642,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 		const struct inet6_skb_parm *parm)
 {
 	struct inet6_dev *idev = NULL;
-	struct ipv6hdr *hdr = ipv6_hdr(skb);
+	struct ipv6hdr *hdr = ipv6_hdr(skb);/*取得ipv6 header*/
 	struct sock *sk;
 	struct net *net;
 	struct ipv6_pinfo *np;
@@ -662,13 +662,14 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 
 	if ((u8 *)hdr < skb->head ||
 	    (skb_network_header(skb) + sizeof(*hdr)) > skb_tail_pointer(skb))
-		return;
+		return;/*不足以存放，返回*/
 
 	if (!skb->dev)
-		return;
+		return;/*无从属设备*/
 
 	rcu_read_lock();
 
+	/*取所属netns*/
 	net = dev_net_rcu(skb->dev);
 	mark = IP6_REPLY_MARK(net, skb->mark);
 	/*
@@ -750,7 +751,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 
 	memset(&fl6, 0, sizeof(fl6));
 	fl6.flowi6_proto = IPPROTO_ICMPV6;
-	fl6.daddr = hdr->saddr;
+	fl6.daddr = hdr->saddr;/*使用报文中的源地址为目的地址*/
 	if (force_saddr)
 		saddr = force_saddr;
 	if (saddr) {
@@ -794,6 +795,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 	ipc6.sockc.mark = mark;
 	fl6.flowlabel = ip6_make_flowinfo(ipc6.tclass, fl6.flowlabel);
 
+	/*查路由*/
 	dst = icmpv6_route_lookup(net, skb, sk, &fl6);
 	if (IS_ERR(dst))
 		goto out_unlock;
@@ -819,6 +821,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 
 	idev = __in6_dev_get(skb->dev);
 
+	/*嵌入一部分内容*/
 	if (ip6_append_data(sk, icmpv6_getfrag, &msg,
 			    len + sizeof(struct icmp6hdr),
 			    sizeof(struct icmp6hdr),
@@ -827,6 +830,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 		ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTERRORS);
 		ip6_flush_pending_frames(sk);
 	} else {
+		/*发送*/
 		icmpv6_push_pending_frames(sk, &fl6, &tmp_hdr,
 					   len + sizeof(struct icmp6hdr));
 	}
@@ -1054,12 +1058,14 @@ enum skb_drop_reason icmpv6_notify(struct sk_buff *skb, u8 type,
 	__be16 frag_off;
 	u8 nexthdr;
 
+	/*取得ipv6 header*/
 	reason = pskb_may_pull_reason(skb, sizeof(struct ipv6hdr));
 	if (reason != SKB_NOT_DROPPED_YET)
 		goto out;
 
 	seg6_icmp_srh(skb, opt);
 
+	/*取得内层头指明的协议*/
 	nexthdr = ((struct ipv6hdr *)skb->data)->nexthdr;
 	if (ipv6_ext_hdr(nexthdr)) {
 		/* now skip over extension headers */
@@ -1091,6 +1097,7 @@ enum skb_drop_reason icmpv6_notify(struct sk_buff *skb, u8 type,
 	   --ANK (980726)
 	 */
 
+	/*找到内层协议号，触发此协议注册的err_handler回调*/
 	ipprot = rcu_dereference(inet6_protos[nexthdr]);
 	if (ipprot && ipprot->err_handler)
 		ipprot->err_handler(skb, opt, type, code, inner_offset, info);
@@ -1201,6 +1208,7 @@ static int icmpv6_rcv(struct sk_buff *skb)
 	case ICMPV6_DEST_UNREACH:
 	case ICMPV6_TIME_EXCEED:
 	case ICMPV6_PARAMPROB:
+		/*目标不可达，ttl减为0；IPv6 报文格式 / 参数非法，触发通知*/
 		reason = icmpv6_notify(skb, type, hdr->icmp6_code,
 				       hdr->icmp6_mtu);
 		break;
@@ -1288,6 +1296,7 @@ int __init icmpv6_init(void)
 	struct sock *sk;
 	int err, i;
 
+	/*为每个cpu创建一个icmpv6 raw socket*/
 	for_each_possible_cpu(i) {
 		err = inet_ctl_sock_create(&sk, PF_INET6,
 					   SOCK_RAW, IPPROTO_ICMPV6, &init_net);
@@ -1370,7 +1379,7 @@ int icmpv6_err_convert(u8 type, u8 code, int *err)
 	*err = EPROTO;
 
 	switch (type) {
-	case ICMPV6_DEST_UNREACH:
+	case ICMPV6_DEST_UNREACH:/*目标不可达*/
 		fatal = 1;
 		if (code < ARRAY_SIZE(tab_unreach)) {
 			*err  = tab_unreach[code].err;

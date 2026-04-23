@@ -218,7 +218,7 @@ static struct resource * __request_resource(struct resource *root, struct resour
 		if (tmp->end < start)
 		    //tmp的终止位置小于start,继续向后找
 			continue;
-		//tmp已在其中包含
+		//tmp已在其中被包含
 		return tmp;
 	}
 }
@@ -552,7 +552,7 @@ out:
  * This function calls the @func callback against all memory ranges, which
  * are ranges marked as IORESOURCE_MEM and IORESOUCE_BUSY.
  */
-int walk_mem_res(u64 start, u64 end, void *arg,
+int walk_mem_res(u64 start/*起始地址*/, u64 end/*终止地址*/, void *arg,
 		 int (*func)(struct resource *, void *))
 {
 	unsigned long flags = IORESOURCE_MEM | IORESOURCE_BUSY;
@@ -1341,7 +1341,7 @@ static int __request_region_locked(struct resource *res, struct resource *parent
 		//请求资源（将res添加进parent中）
 		conflict = __request_resource(parent, res);
 		if (!conflict)
-		    //未返回冲突，跳出
+		    //未返回冲突，占用成功，跳出
 			break;
 		/*
 		 * mm/hmm.c reserves physical addresses which then
@@ -1369,7 +1369,7 @@ static int __request_region_locked(struct resource *res, struct resource *parent
 			write_lock(&resource_lock);
 			continue;
 		}
-		//资源申请失败
+		//资源占用失败
 		/* Uhhuh, that didn't work out.. */
 		return -EBUSY;
 	}

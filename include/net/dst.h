@@ -443,7 +443,7 @@ static inline void dst_link_failure(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
 	if (dst && dst->ops && dst->ops->link_failure)
-		dst->ops->link_failure(skb);
+		dst->ops->link_failure(skb);/*触发回调*/
 }
 
 static inline void dst_set_expires(struct dst_entry *dst, int timeout)

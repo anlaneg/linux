@@ -3505,6 +3505,7 @@ static inline void __skb_queue_purge_reason(struct sk_buff_head *list,
 
 static inline void __skb_queue_purge(struct sk_buff_head *list)
 {
+	/*释放此list上所有skb，并指明原因*/
 	__skb_queue_purge_reason(list, SKB_DROP_REASON_QUEUE_PURGE);
 }
 

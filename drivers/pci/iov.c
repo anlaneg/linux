@@ -91,8 +91,11 @@ static inline void pci_iov_set_numvfs(struct pci_dev *dev, int nr_virtfn)
 {
 	struct pci_sriov *iov = dev->sriov;
 
+	/*设置vf数量*/
 	pci_write_config_word(dev, iov->pos + PCI_SRIOV_NUM_VF, nr_virtfn);
+	/*读取vf从几号位置开始排*/
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_VF_OFFSET, &iov->offset);
+	/*读取vf编号步长*/
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_VF_STRIDE, &iov->stride);
 }
 
@@ -501,7 +504,7 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 	}
 
 	/* is PF driver loaded w/callback */
-	//未找到要应的setup回调
+	//未找到对应的sriov_configure回调
 	if (!pdev->driver->sriov_configure) {
 		pci_info(pdev, "driver does not support SR-IOV configuration via sysfs\n");
 		ret = -ENOENT;
@@ -668,6 +671,7 @@ failed:
 	return rc;
 }
 
+/*开启pci设备的sriov*/
 static int sriov_enable(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量*/)
 {
 	int rc;
@@ -681,12 +685,12 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量
 	int bus;
 
 	if (!nr_virtfn)
-		return 0;
+		return 0;/*vf数量为0，直接返回*/
 
 	if (iov->num_VFs)
 		return -EINVAL;
 
-	//获取当前设备有多少个虚设备
+	//获取当前设备支持多少个虚设备
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_INITIAL_VF, &initial);
 	if (initial > iov->total_VFs ||
 	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs)))
@@ -756,8 +760,9 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量
 	}
 
 	pci_iov_set_numvfs(dev, nr_virtfn);
-	iov->ctrl |= PCI_SRIOV_CTRL_VFE | PCI_SRIOV_CTRL_MSE;
+	iov->ctrl |= PCI_SRIOV_CTRL_VFE/*指明开启VF*/ | PCI_SRIOV_CTRL_MSE;
 	pci_cfg_access_lock(dev);
+	/*写sriov ctrl开启sriov,开始memory space enable*/
 	pci_write_config_word(dev, iov->pos + PCI_SRIOV_CTRL, iov->ctrl);
 	msleep(100);
 	pci_cfg_access_unlock(dev);
@@ -820,7 +825,31 @@ static void sriov_disable(struct pci_dev *dev)
 	pci_iov_set_numvfs(dev, 0);
 }
 
-static int sriov_init(struct pci_dev *dev, int pos)
+/*
+ * PCI_EXT_CAP_ID_SRIOV 扩展格式
+ * 偏移｜寄存器名｜说明｜访问属性
+ * ---｜---｜---｜---
+ * 0x00｜扩展能力头｜Cap ID=0x0010, Version=1, Next 指针｜RO
+ * 0x04｜SR-IOV Capabilities｜硬件支持特性（VF Migration/ARI 等）｜RO
+ * 0x08｜SR-IOV Control/Status｜VF 使能、迁移控制与状态｜RW/RO
+ * 0x0C｜InitialVFs/TotalVFs｜初始 VF 数 / 硬件最大 VF 数｜RO
+ * 0x10｜NumVFs｜当前配置启用的 VF 数量｜RW
+ * 0x12｜Function Dependency Link｜功能依赖链接｜RO
+ * 0x14｜First VF Offset｜首个 VF 相对 PF 的功能偏移｜RO
+ * 0x18｜VF Device ID｜VF 设备 ID｜RO
+ * 0x1C｜Supported Page Sizes (SUP_PGSIZE)｜支持的页大小掩码｜RO
+ * 0x20｜System Page Size (SYS_PGSIZE)｜系统页大小配置｜RW
+ * 0x24｜VF BAR0｜VF 基址寄存器 0｜RO
+ * 0x28｜VF BAR1｜VF 基址寄存器 1｜RO
+ * 0x2C｜VF BAR2｜VF 基址寄存器 2｜RO
+ * 0x30｜VF BAR3｜VF 基址寄存器 3｜RO
+ * 0x34｜VF BAR4｜VF 基址寄存器 4｜RO
+ * 0x38｜VF Migration State BAR｜VF 迁移状态寄存器｜RO
+ * 0x3C｜VF Expansion ROM BAR｜VF ROM 基址｜RO
+ * 0x40｜VF Capability Offset｜VF 能力结构偏移｜RO
+ * 0x48～｜保留｜规范保留位｜RO
+ * */
+static int sriov_init(struct pci_dev *dev, int pos/*PCI_EXT_CAP_ID_SRIOV扩展在config空间中的偏移*/)
 {
 	int i, bar64;
 	int rc;
@@ -856,6 +885,7 @@ found:
 	if (!total)
 		return 0;
 
+	/*读取支持的页大小*/
 	pci_read_config_dword(dev, pos + PCI_SRIOV_SUP_PGSIZE, &pgsz);
 	i = PAGE_SHIFT > 12 ? PAGE_SHIFT - 12 : 0;
 	pgsz &= ~((1 << i) - 1);
@@ -1023,6 +1053,7 @@ int pci_iov_init(struct pci_dev *dev)
 		return -ENODEV;
 
 	//网卡有sriov能力，则初始化sriov
+	/*1。取PCI_EXT_CAP_ID_SRIOV(sriov扩展)对应的pos*/
 	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_SRIOV);
 	if (pos)
 		return sriov_init(dev, pos);

@@ -41,10 +41,10 @@
 #define IONIC_EXPDB_512B_WQE_LG2	9
 
 struct ionic_dev_bar {
-	void __iomem *vaddr;
-	phys_addr_t bus_addr;
-	unsigned long len;
-	int res_index;
+	void __iomem *vaddr;/*映射的虚拟地址*/
+	phys_addr_t bus_addr;/*对应的物理地址*/
+	unsigned long len;/*bar资源长度*/
+	int res_index;/*对应的资源索引*/
 };
 
 #ifndef __CHECKER__
