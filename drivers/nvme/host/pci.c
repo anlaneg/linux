@@ -31,7 +31,9 @@
 #include "trace.h"
 #include "nvme.h"
 
+/*这里存的sqes是log以2为底的对数，表示的是sqe的大小*/
 #define SQ_SIZE(q)	((q)->q_depth << (q)->sqes)
+/*每个队列元素对应一个nvme_completion结构体*/
 #define CQ_SIZE(q)	((q)->q_depth * sizeof(struct nvme_completion))
 
 /* Optimisation for I/Os between 4k and 128k */
@@ -292,18 +294,18 @@ struct nvme_descriptor_pools {
  * Represents an NVM Express device.  Each nvme_dev is a PCI function.
  */
 struct nvme_dev {
-	struct nvme_queue *queues;
-	struct blk_mq_tag_set tagset;
-	struct blk_mq_tag_set admin_tagset;
-	u32 __iomem *dbs;
+	struct nvme_queue *queues;/*队列数组*/
+	struct blk_mq_tag_set tagset;/*其它queue对应的tagset（由于不含adminq故放置时为q-1)*/
+	struct blk_mq_tag_set admin_tagset;/*admin queue对应的tagset*/
+	u32 __iomem *dbs;/*记录doorbell内存，大小4096,其内存按sq,cq成对出现*/
 	struct device *dev;
 	unsigned online_queues;
 	unsigned max_qid;
 	unsigned io_queues[HCTX_MAX_TYPES];
 	unsigned int num_vecs;
 	u32 q_depth;
-	int io_sqes;
-	u32 db_stride;
+	int io_sqes;/*sqe大小（对数形式），非admin sqe*/
+	u32 db_stride;/*doorbell步副*/
 	void __iomem *bar;
 	unsigned long bar_mapped_size;
 	struct mutex shutdown_lock;
@@ -343,11 +345,13 @@ static int io_queue_depth_set(const char *val, const struct kernel_param *kp)
 			NVME_PCI_MAX_QUEUE_SIZE);
 }
 
+/*sq的doorbell总是2N*/
 static inline unsigned int sq_idx(unsigned int qid, u32 stride)
 {
 	return qid * 2 * stride;
 }
 
+/*cq的doorbell总是2N+1*/
 static inline unsigned int cq_idx(unsigned int qid, u32 stride)
 {
 	return (qid * 2 + 1) * stride;
@@ -366,21 +370,23 @@ struct nvme_queue {
 	struct nvme_dev *dev;
 	struct nvme_descriptor_pools descriptor_pools;
 	spinlock_t sq_lock;
-	void *sq_cmds;
+	void *sq_cmds;/*指向sq(用于存入cmd)*/
 	 /* only used for poll queues: */
 	spinlock_t cq_poll_lock ____cacheline_aligned_in_smp;
-	struct nvme_completion *cqes;
-	dma_addr_t sq_dma_addr;
-	dma_addr_t cq_dma_addr;
-	u32 __iomem *q_db;
-	u32 q_depth;
+	struct nvme_completion *cqes;/*cq队列（用于存放cqe)*/
+	dma_addr_t sq_dma_addr;/*sq对应的dma地址*/
+	dma_addr_t cq_dma_addr;/*cq对应的dma地址*/
+	u32 __iomem *q_db;/*此队列对应的doorbell*/
+	u32 q_depth;/*队列深度*/
 	u16 cq_vector;
-	u16 sq_tail;
-	u16 last_sq_tail;
+	u16 sq_tail;/*sq队列尾部（生产者指针）*/
+	u16 last_sq_tail;/*最后一次向doorbell中写入的sq_tail*/
 	u16 cq_head;
-	u16 qid;
+	u16 qid;/*队列编号*/
+	/*标记位（1/0），软件读取时检查此位置写入的cq_phase是否与自身维护的cq_phase相等，
+	 * 如相等，则数据已完成可以读，否则此位置暂无数据*/
 	u8 cq_phase;
-	u8 sqes;
+	u8 sqes;/*记录sq中存入的sqe元素大小（对数形式，实际大小为1<<sqe)*/
 	unsigned long flags;
 #define NVMEQ_ENABLED		0
 #define NVMEQ_SQ_CMB		1
@@ -568,7 +574,7 @@ static bool nvme_dbbuf_update_and_check_event(u16 value, __le32 *dbbuf_db,
 		wmb();
 
 		old_value = le32_to_cpu(*dbbuf_db);
-		*dbbuf_db = cpu_to_le32(value);
+		*dbbuf_db = cpu_to_le32(value);/*写入新值*/
 
 		/*
 		 * Ensure that the doorbell is updated before reading the event
@@ -713,17 +719,18 @@ static void nvme_pci_map_queues(struct blk_mq_tag_set *set)
 static inline void nvme_write_sq_db(struct nvme_queue *nvmeq, bool write_sq)
 {
 	if (!write_sq) {
+		/*不需要写sq,则只更新nvmeq->sq_tail*/
 		u16 next_tail = nvmeq->sq_tail + 1;
 
 		if (next_tail == nvmeq->q_depth)
-			next_tail = 0;
+			next_tail = 0;/*绕回*/
 		if (next_tail != nvmeq->last_sq_tail)
-			return;
+			return;/*未达到上一次执行doorbell的位置，不强制doorbell*/
 	}
 
 	if (nvme_dbbuf_update_and_check_event(nvmeq->sq_tail,
 			nvmeq->dbbuf_sq_db, nvmeq->dbbuf_sq_ei))
-		writel(nvmeq->sq_tail, nvmeq->q_db);
+		writel(nvmeq->sq_tail, nvmeq->q_db);/*写sq_tail给doorbell*/
 	nvmeq->last_sq_tail = nvmeq->sq_tail;
 }
 
@@ -731,9 +738,10 @@ static inline void nvme_sq_copy_cmd(struct nvme_queue *nvmeq,
 				    struct nvme_command *cmd)
 {
 	memcpy(nvmeq->sq_cmds + (nvmeq->sq_tail << nvmeq->sqes),
-		absolute_pointer(cmd), sizeof(*cmd));
+		absolute_pointer(cmd), sizeof(*cmd));/*写cmd到sq_cmds中*/
+	/*sq_tail位置完成已写入，切换到下一个*/
 	if (++nvmeq->sq_tail == nvmeq->q_depth)
-		nvmeq->sq_tail = 0;
+		nvmeq->sq_tail = 0;/*绕回*/
 }
 
 static void nvme_commit_rqs(struct blk_mq_hw_ctx *hctx)
@@ -1407,7 +1415,7 @@ static blk_status_t nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 {
 	struct nvme_queue *nvmeq = hctx->driver_data;
 	struct nvme_dev *dev = nvmeq->dev;
-	struct request *req = bd->rq;
+	struct request *req = bd->rq;/*取得请求*/
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 	blk_status_t ret;
 
@@ -1425,8 +1433,8 @@ static blk_status_t nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (unlikely(ret))
 		return ret;
 	spin_lock(&nvmeq->sq_lock);
-	nvme_sq_copy_cmd(nvmeq, &iod->cmd);
-	nvme_write_sq_db(nvmeq, bd->last);
+	nvme_sq_copy_cmd(nvmeq, &iod->cmd);/*将req中指明的cmd写入sq_cmds*/
+	nvme_write_sq_db(nvmeq, bd->last/*是否最后一个请求*/);/*写doorbell*/
 	spin_unlock(&nvmeq->sq_lock);
 	return BLK_STS_OK;
 }
@@ -1509,6 +1517,7 @@ static inline bool nvme_cqe_pending(struct nvme_queue *nvmeq)
 {
 	struct nvme_completion *hcqe = &nvmeq->cqes[nvmeq->cq_head];
 
+	/*检查此位置是否有数据*/
 	return (le16_to_cpu(READ_ONCE(hcqe->status)) & 1) == nvmeq->cq_phase;
 }
 
@@ -1518,21 +1527,24 @@ static inline void nvme_ring_cq_doorbell(struct nvme_queue *nvmeq)
 
 	if (nvme_dbbuf_update_and_check_event(head, nvmeq->dbbuf_cq_db,
 					      nvmeq->dbbuf_cq_ei))
+		/*更新cq_head,使硬件知道*/
 		writel(head, nvmeq->q_db + nvmeq->dev->db_stride);
 }
 
 static inline struct blk_mq_tags *nvme_queue_tagset(struct nvme_queue *nvmeq)
 {
 	if (!nvmeq->qid)
+		/*adminq对应的blk_mq_tags*/
 		return nvmeq->dev->admin_tagset.tags[0];
+	/*其它queue对应的blk_mq_tags*/
 	return nvmeq->dev->tagset.tags[nvmeq->qid - 1];
 }
 
 static inline void nvme_handle_cqe(struct nvme_queue *nvmeq,
 				   struct io_comp_batch *iob, u16 idx)
 {
-	struct nvme_completion *cqe = &nvmeq->cqes[idx];
-	__u16 command_id = READ_ONCE(cqe->command_id);
+	struct nvme_completion *cqe = &nvmeq->cqes[idx];/*取cqe*/
+	__u16 command_id = READ_ONCE(cqe->command_id);/*取分配的cid*/
 	struct request *req;
 
 	/*
@@ -1547,6 +1559,7 @@ static inline void nvme_handle_cqe(struct nvme_queue *nvmeq,
 		return;
 	}
 
+	/*查找对应的request*/
 	req = nvme_find_rq(nvme_queue_tagset(nvmeq), command_id);
 	if (unlikely(!req)) {
 		dev_warn(nvmeq->dev->ctrl.device,
@@ -1563,13 +1576,14 @@ static inline void nvme_handle_cqe(struct nvme_queue *nvmeq,
 		nvme_pci_complete_rq(req);
 }
 
+/*更新cq_head*/
 static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 {
 	u32 tmp = nvmeq->cq_head + 1;
 
 	if (tmp == nvmeq->q_depth) {
-		nvmeq->cq_head = 0;
-		nvmeq->cq_phase ^= 1;
+		nvmeq->cq_head = 0;/*绕回*/
+		nvmeq->cq_phase ^= 1;/*color,每次达到0，则反转*/
 	} else {
 		nvmeq->cq_head = tmp;
 	}
@@ -1580,6 +1594,7 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 {
 	bool found = false;
 
+	/*检查cq_head位置是否有硬件写好的数据*/
 	while (nvme_cqe_pending(nvmeq)) {
 		found = true;
 		/*
@@ -1587,15 +1602,17 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 		 * the cqe requires a full read memory barrier
 		 */
 		dma_rmb();
-		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head);
-		nvme_update_cq_head(nvmeq);
+		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head/*cqe索引*/);
+		nvme_update_cq_head(nvmeq);/*更新cq_head*/
 	}
 
+	/*已消费cqe,知会硬件更新cq_head*/
 	if (found)
 		nvme_ring_cq_doorbell(nvmeq);
 	return found;
 }
 
+/*中断处理*/
 static irqreturn_t nvme_irq(int irq, void *data)
 {
 	struct nvme_queue *nvmeq = data;
@@ -2093,6 +2110,7 @@ static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 		}
 	}
 
+	/*创建sq,Sq中保存cmds*/
 	nvmeq->sq_cmds = dma_alloc_coherent(dev->dev, SQ_SIZE(nvmeq),
 				&nvmeq->sq_dma_addr, GFP_KERNEL);
 	if (!nvmeq->sq_cmds)
@@ -2100,20 +2118,24 @@ static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 	return 0;
 }
 
-static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
+/*申请queue*/
+static int nvme_alloc_queue(struct nvme_dev *dev, int qid/*队列编号*/, int depth/*队列深度*/)
 {
 	struct nvme_queue *nvmeq = &dev->queues[qid];
 
 	if (dev->ctrl.queue_count > qid)
-		return 0;
+		return 0;/*此队列已创建，直接返回*/
 
+	/*qid队列未创建，创建它*/
 	nvmeq->sqes = qid ? dev->io_sqes : NVME_ADM_SQES;
 	nvmeq->q_depth = depth;
+	/*创建cq队列*/
 	nvmeq->cqes = dma_alloc_coherent(dev->dev, CQ_SIZE(nvmeq),
 					 &nvmeq->cq_dma_addr, GFP_KERNEL);
 	if (!nvmeq->cqes)
 		goto free_nvmeq;
 
+	/*创建sq队列*/
 	if (nvme_alloc_sq_cmds(dev, nvmeq, qid))
 		goto free_cqdma;
 
@@ -2122,7 +2144,7 @@ static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
 	spin_lock_init(&nvmeq->cq_poll_lock);
 	nvmeq->cq_head = 0;
 	nvmeq->cq_phase = 1;
-	nvmeq->q_db = &dev->dbs[qid * 2 * dev->db_stride];
+	nvmeq->q_db = &dev->dbs[qid * 2 * dev->db_stride];/*doorbell按sq,cq双倍顺序排列*/
 	nvmeq->qid = qid;
 	dev->ctrl.queue_count++;
 
@@ -2281,18 +2303,20 @@ static int nvme_remap_bar(struct nvme_dev *dev, unsigned long size)
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 
 	if (size <= dev->bar_mapped_size)
-		return 0;
+		return 0;/*map的长度超过size,不处理直接返回*/
 	if (size > pci_resource_len(pdev, 0))
 		return -ENOMEM;
 	if (dev->bar)
+		/*先回退以前的iomap*/
 		iounmap(dev->bar);
-	dev->bar = ioremap(pci_resource_start(pdev, 0), size);
+	/*执行iomap*/
+	dev->bar = ioremap(pci_resource_start(pdev, 0/*0号bar*/), size);
 	if (!dev->bar) {
 		dev->bar_mapped_size = 0;
 		return -ENOMEM;
 	}
-	dev->bar_mapped_size = size;
-	dev->dbs = dev->bar + NVME_REG_DBS;
+	dev->bar_mapped_size = size;/*设置map的总大小*/
+	dev->dbs = dev->bar + NVME_REG_DBS;/*doorbell自4096偏移开始*/
 
 	return 0;
 }
@@ -2345,7 +2369,7 @@ static int nvme_pci_configure_admin_queue(struct nvme_dev *dev)
 			"controller reset completed after pcie flr\n");
 	}
 
-	result = nvme_alloc_queue(dev, 0, NVME_AQ_DEPTH);
+	result = nvme_alloc_queue(dev, 0/*0号队列为adminq*/, NVME_AQ_DEPTH);
 	if (result)
 		return result;
 
@@ -2365,7 +2389,7 @@ static int nvme_pci_configure_admin_queue(struct nvme_dev *dev)
 
 	nvmeq->cq_vector = 0;
 	nvme_init_queue(nvmeq, 0);
-	result = queue_request_irq(nvmeq);
+	result = queue_request_irq(nvmeq);/*申请中断*/
 	if (result) {
 		dev->online_queues--;
 		return result;

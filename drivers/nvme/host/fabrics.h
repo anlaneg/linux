@@ -114,7 +114,7 @@ enum {
 struct nvmf_ctrl_options {
 	unsigned		mask;
 	int			max_reconnects;
-	char			*transport;/*用户通过transport提定的值，例如tcp*/
+	char			*transport;/*用户通过transport提定的传输层值，例如tcp*/
 	char			*subsysnqn;
 	char			*traddr;
 	char			*trsvcid;
@@ -170,7 +170,7 @@ struct nvmf_ctrl_options {
 struct nvmf_transport_ops {
 	struct list_head	entry;
 	struct module		*module;
-	const char		*name;
+	const char		*name;/*传输协议名称*/
 	int			required_opts;/*此transport必需的opts*/
 	int			allowed_opts;
 	struct nvme_ctrl	*(*create_ctrl)(struct device *dev,
@@ -210,6 +210,7 @@ static inline void nvmf_complete_timed_out_request(struct request *rq)
 	}
 }
 
+/*队列总数*/
 static inline unsigned int nvmf_nr_io_queues(struct nvmf_ctrl_options *opts)
 {
 	return min(opts->nr_io_queues, num_online_cpus()) +

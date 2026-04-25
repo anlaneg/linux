@@ -47,8 +47,8 @@ enum {
  * used to reason about the start, end, and size of the group of
  * struct members.
  */
-#define struct_group(NAME, MEMBERS...)	\
-	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
+#define struct_group(NAME, MEMBERS.../*结构体成员*/)	\
+	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS/*结构体成员*/)
 
 /**
  * struct_group_attr() - Create a struct_group() with trailing attributes

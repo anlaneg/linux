@@ -32,6 +32,7 @@ struct blk_mq_ctx {
 } ____cacheline_aligned_in_smp;
 
 enum {
+	/*无需tag*/
 	BLK_MQ_NO_TAG		= -1U,
 	BLK_MQ_TAG_MIN		= 1,
 	BLK_MQ_TAG_MAX		= BLK_MQ_NO_TAG - 1,
@@ -143,6 +144,7 @@ void blk_mq_release(struct request_queue *q);
 static inline struct blk_mq_ctx *__blk_mq_get_ctx(struct request_queue *q,
 					   unsigned int cpu)
 {
+	/*取当前cpu对应的struct blk_mq_ctx结构体指针*/
 	return per_cpu_ptr(q->queue_ctx, cpu);
 }
 
@@ -154,7 +156,7 @@ static inline struct blk_mq_ctx *__blk_mq_get_ctx(struct request_queue *q,
  */
 static inline struct blk_mq_ctx *blk_mq_get_ctx(struct request_queue *q)
 {
-	return __blk_mq_get_ctx(q, raw_smp_processor_id());
+	return __blk_mq_get_ctx(q, raw_smp_processor_id()/*当前cpu*/);
 }
 
 struct blk_mq_alloc_data {
@@ -372,6 +374,7 @@ bool __blk_mq_alloc_driver_tag(struct request *rq);
 static inline bool blk_mq_get_driver_tag(struct request *rq)
 {
 	if (rq->tag == BLK_MQ_NO_TAG && !__blk_mq_alloc_driver_tag(rq))
+		/*无需tag或者申请tag失败，返回false*/
 		return false;
 
 	return true;
@@ -444,11 +447,11 @@ do {								\
 								\
 		might_sleep_if(check_sleep);			\
 		srcu_idx = srcu_read_lock(__tag_set->srcu);	\
-		(dispatch_ops);					\
+		(dispatch_ops);/*执行分发操作*/		\
 		srcu_read_unlock(__tag_set->srcu, srcu_idx);	\
 	} else {						\
 		rcu_read_lock();				\
-		(dispatch_ops);					\
+		(dispatch_ops);/*执行分发操作*/	\
 		rcu_read_unlock();				\
 	}							\
 } while (0)

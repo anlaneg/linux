@@ -319,6 +319,7 @@ static struct bio *bio_map_kern(struct request *rq, void *data, unsigned int len
 		return ERR_PTR(-ENOMEM);
 
 	if (is_vmalloc_addr(data)) {
+		/*此地址属于vmalloc地址*/
 		bio->bi_private = data;
 		if (!bio_add_vmalloc(bio, data, len)) {
 			blk_mq_map_bio_put(bio);
@@ -452,7 +453,7 @@ int blk_rq_append_bio(struct request *rq, struct bio *bio)
 	}
 
 	rq->nr_phys_segments = nr_segs;
-	rq->bio = rq->biotail = bio;
+	rq->bio = rq->biotail = bio;/*设置对应的bio*/
 	rq->__data_len = bio->bi_iter.bi_size;
 	rq->phys_gap_bit = bio->bi_bvec_gap_bit;
 	return 0;

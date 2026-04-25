@@ -34,7 +34,7 @@
  */
 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
 	union { \
-		struct { MEMBERS /*各成员*/} ATTRS/*变量*/; \
+		struct { MEMBERS /*结构体各成员*/} ATTRS/*结构体属性*/; \
 		struct __struct_group_tag(TAG) { MEMBERS } ATTRS NAME; \
 	} ATTRS
 

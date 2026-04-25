@@ -223,11 +223,11 @@ static int blk_mq_do_dispatch_ctx(struct blk_mq_hw_ctx *hctx)
 
 		if (!list_empty_careful(&hctx->dispatch)) {
 			ret = -EAGAIN;
-			break;
+			break;/*队列为空，跳过*/
 		}
 
 		if (!sbitmap_any_bit_set(&hctx->ctx_map))
-			break;
+			break;/*无标记，跳过*/
 
 		budget_token = blk_mq_get_dispatch_budget(q);
 		if (budget_token < 0)
@@ -265,6 +265,7 @@ static int blk_mq_do_dispatch_ctx(struct blk_mq_hw_ctx *hctx)
 	return ret;
 }
 
+/*分发request*/
 static int __blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx)
 {
 	bool need_dispatch = false;
@@ -277,6 +278,7 @@ static int __blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx)
 	if (!list_empty_careful(&hctx->dispatch)) {
 		spin_lock(&hctx->lock);
 		if (!list_empty(&hctx->dispatch))
+			/*dispatch上的元素移动到rq_list上*/
 			list_splice_init(&hctx->dispatch, &rq_list);
 		spin_unlock(&hctx->lock);
 	}
@@ -295,7 +297,9 @@ static int __blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx)
 	 * dispatch list.
 	 */
 	if (!list_empty(&rq_list)) {
+		/*添加restart标记*/
 		blk_mq_sched_mark_restart_hctx(hctx);
+		/*分发request list*/
 		if (!blk_mq_dispatch_rq_list(hctx, &rq_list, true))
 			return 0;
 		need_dispatch = true;

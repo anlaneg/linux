@@ -1174,7 +1174,7 @@ void *__kmalloc_node_track_caller_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flag
 #define kmalloc_track_caller_noprof(...)	\
 		kmalloc_node_track_caller_noprof(__VA_ARGS__, NUMA_NO_NODE, _RET_IP_)
 
-static inline __alloc_size(1, 2) void *kmalloc_array_node_noprof(size_t n, size_t size, gfp_t flags,
+static inline __alloc_size(1, 2) void *kmalloc_array_node_noprof(size_t n/*元素数目*/, size_t size/*元素大小*/, gfp_t flags,
 							  int node)
 {
 	size_t bytes;
@@ -1187,7 +1187,7 @@ static inline __alloc_size(1, 2) void *kmalloc_array_node_noprof(size_t n, size_
 }
 #define kmalloc_array_node(...)			alloc_hooks(kmalloc_array_node_noprof(__VA_ARGS__))
 
-#define kcalloc_node(_n, _size, _flags, _node)	\
+#define kcalloc_node(_n/*元素数目*/, _size/*元素大小*/, _flags, _node)	\
 	kmalloc_array_node(_n, _size, (_flags) | __GFP_ZERO, _node)
 
 /*

@@ -41,7 +41,7 @@ struct nvme_passthru_cmd {
 	__u32	cdw13;
 	__u32	cdw14;
 	__u32	cdw15;
-	__u32	timeout_ms;
+	__u32	timeout_ms;/*超时时间(ms)*/
 	__u32	result;
 };
 

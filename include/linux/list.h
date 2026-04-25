@@ -605,6 +605,7 @@ static inline void list_splice_tail_init(struct list_head *list,
 					 struct list_head *head)
 {
 	if (!list_empty(list)) {
+		/*list不为空，将list添加到head链表上*/
 		__list_splice(list, head->prev, head);
 		INIT_LIST_HEAD(list);
 	}

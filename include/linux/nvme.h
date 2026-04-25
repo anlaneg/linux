@@ -195,7 +195,7 @@ enum {
  * Submission and Completion Queue Entry Sizes for the NVM command set.
  * (In bytes and specified as a power of two (2^n)).
  */
-#define NVME_ADM_SQES       6
+#define NVME_ADM_SQES       6 /*1<<6可知大小为64字节*/
 #define NVME_NVM_IOSQES		6
 #define NVME_NVM_IOCQES		4
 
@@ -1069,9 +1069,9 @@ enum {
 };
 
 struct nvme_common_command {
-	__u8			opcode;
+	__u8			opcode;/*命令操作码*/
 	__u8			flags;
-	__u16			command_id;
+	__u16			command_id;/*此command_id唯一标识一个在途io,cqe将返回此command_id*/
 	__le32			nsid;
 	__le32			cdw2[2];
 	__le64			metadata;
@@ -1298,6 +1298,7 @@ enum nvme_admin_opcode {
 	nvme_admin_get_log_page		= 0x02,
 	nvme_admin_delete_cq		= 0x04,
 	nvme_admin_create_cq		= 0x05,
+	//从 SSD 控制器硬件读取固定结构化描述信息
 	nvme_admin_identify		= 0x06,
 	nvme_admin_abort_cmd		= 0x08,
 	nvme_admin_set_features		= 0x09,
@@ -1978,7 +1979,7 @@ struct nvme_command {
 		struct nvme_common_command common;
 		struct nvme_rw_command rw;
 		struct nvme_identify identify;
-		struct nvme_features features;
+		struct nvme_features features;/*features配置相关*/
 		struct nvme_create_cq create_cq;
 		struct nvme_create_sq create_sq;
 		struct nvme_delete_queue delete_queue;

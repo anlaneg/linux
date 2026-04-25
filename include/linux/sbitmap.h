@@ -30,17 +30,18 @@ struct sbitmap_word {
 	/**
 	 * @word: word holding free bits
 	 */
-	unsigned long word;
+	unsigned long word;/*存放当前“空闲/已分配”状态的 bits*/
 
 	/**
 	 * @cleared: word holding cleared bits
 	 */
-	unsigned long cleared ____cacheline_aligned_in_smp;
+	unsigned long cleared ____cacheline_aligned_in_smp;/*暂存“被释放的位”（异步释放用）*/
 
 	/**
 	 * @swap_lock: serializes simultaneous updates of ->word and ->cleared
 	 */
-	raw_spinlock_t swap_lock;
+	raw_spinlock_t swap_lock;/*保护 word ←→ cleared 合并操作，当把 cleared 里的释放位合并回 word 时
+	 *   因为要同时修改两个变量，必须加锁保证原子性*/
 } ____cacheline_aligned_in_smp;
 
 /**
@@ -53,17 +54,17 @@ struct sbitmap {
 	/**
 	 * @depth: Number of bits used in the whole bitmap.
 	 */
-	unsigned int depth;
+	unsigned int depth;/*sbitmap中使用的位数（例如对应队列深度）*/
 
 	/**
 	 * @shift: log2(number of bits used per word)
 	 */
-	unsigned int shift;
+	unsigned int shift;/*每个 word 包含多少位（以 2 的幂表示）*/
 
 	/**
 	 * @map_nr: Number of words (cachelines) being used for the bitmap.
 	 */
-	unsigned int map_nr;
+	unsigned int map_nr;/*整个位图使用了多少个 sbitmap_word*/
 
 	/**
 	 * @round_robin: Allocate bits in strict round-robin order.
@@ -73,7 +74,7 @@ struct sbitmap {
 	/**
 	 * @map: Allocated bitmap.
 	 */
-	struct sbitmap_word *map;
+	struct sbitmap_word *map;/*位图实际存储数组*/
 
 	/**
 	 * @alloc_hint: Cache of last successfully allocated or freed bit.
@@ -81,7 +82,7 @@ struct sbitmap {
 	 * This is per-cpu, which allows multiple users to stick to different
 	 * cachelines until the map is exhausted.
 	 */
-	unsigned int __percpu *alloc_hint;
+	unsigned int __percpu *alloc_hint;/*每 CPU 上次成功分配/释放的位置*/
 };
 
 #define SBQ_WAIT_QUEUES 8
@@ -233,15 +234,15 @@ typedef bool (*sb_for_each_fn)(struct sbitmap *, unsigned int, void *);
  * callback will hopefully get optimized away.
  */
 static inline void __sbitmap_for_each_set(struct sbitmap *sb,
-					  unsigned int start,
-					  sb_for_each_fn fn, void *data)
+					  unsigned int start/*起始位置*/,
+					  sb_for_each_fn fn/*遍历函数*/, void *data)
 {
 	unsigned int index;
 	unsigned int nr;
-	unsigned int scanned = 0;
+	unsigned int scanned = 0;/*已扫描数目*/
 
 	if (start >= sb->depth)
-		start = 0;
+		start = 0;/*从零位置开始*/
 	index = SB_NR_TO_INDEX(sb, start);
 	nr = SB_NR_TO_BIT(sb, start);
 
@@ -254,7 +255,7 @@ static inline void __sbitmap_for_each_set(struct sbitmap *sb,
 		scanned += depth;
 		word = sb->map[index].word & ~sb->map[index].cleared;
 		if (!word)
-			goto next;
+			goto next;/*index位置无可用bit,跳下一个*/
 
 		/*
 		 * On the first iteration of the outer loop, we need to add the
@@ -265,16 +266,16 @@ static inline void __sbitmap_for_each_set(struct sbitmap *sb,
 		while (1) {
 			nr = find_next_bit(&word, depth, nr);
 			if (nr >= depth)
-				break;
+				break;/*不可以发生*/
 			if (!fn(sb, (index << sb->shift) + nr, data))
-				return;
+				return;/*访问出错，停止遍历*/
 
 			nr++;
 		}
 next:
 		nr = 0;
 		if (++index >= sb->map_nr)
-			index = 0;
+			index = 0;/*达到map结尾，索引绕回*/
 	}
 }
 
@@ -284,7 +285,7 @@ next:
  * @fn: Callback. Should return true to continue or false to break early.
  * @data: Pointer to pass to callback.
  */
-static inline void sbitmap_for_each_set(struct sbitmap *sb, sb_for_each_fn fn,
+static inline void sbitmap_for_each_set(struct sbitmap *sb, sb_for_each_fn fn/*遍历函数*/,
 					void *data)
 {
 	__sbitmap_for_each_set(sb, 0, fn, data);
@@ -303,6 +304,7 @@ static inline void sbitmap_set_bit(struct sbitmap *sb, unsigned int bitnr)
 	set_bit(SB_NR_TO_BIT(sb, bitnr), __sbitmap_word(sb, bitnr));
 }
 
+/*移除sb中的bitnr内容*/
 static inline void sbitmap_clear_bit(struct sbitmap *sb, unsigned int bitnr)
 {
 	clear_bit(SB_NR_TO_BIT(sb, bitnr), __sbitmap_word(sb, bitnr));

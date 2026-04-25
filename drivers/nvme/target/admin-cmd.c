@@ -1352,9 +1352,12 @@ void nvmet_execute_set_features(struct nvmet_req *req)
 		status = nvmet_set_feat_arbitration(req);
 		break;
 	case NVME_FEAT_NUM_QUEUES:
+		/*高16位为cq队列数*/
 		ncqr = (cdw11 >> 16) & 0xffff;
+		/*低16位为sq队列数*/
 		nsqr = cdw11 & 0xffff;
 		if (ncqr == 0xffff || nsqr == 0xffff) {
+			/*指定的数目有误*/
 			status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
 			break;
 		}
@@ -1651,6 +1654,7 @@ u16 nvmet_parse_admin_cmd(struct nvmet_req *req)
 	if (nvmet_is_passthru_req(req))
 		return nvmet_parse_passthru_admin_cmd(req);
 
+	/*依据收到的opcode,设置处理此opcode对应的回调*/
 	switch (cmd->common.opcode) {
 	case nvme_admin_delete_sq:
 		req->execute = nvmet_execute_delete_sq;

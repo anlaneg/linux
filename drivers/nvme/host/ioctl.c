@@ -171,6 +171,7 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	u32 effects;
 	int ret;
 
+	/*申请req*/
 	req = nvme_alloc_user_request(q, cmd, 0, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
@@ -187,7 +188,7 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	ctrl = nvme_req(req)->ctrl;
 
 	effects = nvme_passthru_start(ctrl, ns, cmd->common.opcode);
-	ret = nvme_execute_rq(req, false);
+	ret = nvme_execute_rq(req, false);/*执行request*/
 	if (result)
 		*result = le64_to_cpu(nvme_req(req)->result.u64);
 	if (bio)
@@ -291,12 +292,13 @@ static int nvme_user_cmd(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	if (copy_from_user(&cmd, ucmd, sizeof(cmd)))
 		return -EFAULT;
 	if (cmd.flags)
+		/*flags必须为0*/
 		return -EINVAL;
 	if (!nvme_validate_passthru_nsid(ctrl, ns, cmd.nsid))
-		return -EINVAL;
+		return -EINVAL;/*nsid不一致*/
 
 	memset(&c, 0, sizeof(c));
-	c.common.opcode = cmd.opcode;
+	c.common.opcode = cmd.opcode;/*指定cmd opcode*/
 	c.common.flags = cmd.flags;
 	c.common.nsid = cpu_to_le32(cmd.nsid);
 	c.common.cdw2[0] = cpu_to_le32(cmd.cdw2);
@@ -314,7 +316,7 @@ static int nvme_user_cmd(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	if (cmd.timeout_ms)
 		timeout = msecs_to_jiffies(cmd.timeout_ms);
 
-	status = nvme_submit_user_cmd(ns ? ns->queue : ctrl->admin_q, &c,
+	status = nvme_submit_user_cmd(ns ? ns->queue : ctrl->admin_q/*送admin queue*/, &c,
 			cmd.addr, cmd.data_len, nvme_to_user_ptr(cmd.metadata),
 			cmd.metadata_len, &result, timeout, 0);
 

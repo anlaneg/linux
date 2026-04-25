@@ -14,7 +14,7 @@
 #include "fabrics.h"
 #include <linux/nvme-keyring.h>
 
-static LIST_HEAD(nvmf_transports);
+static LIST_HEAD(nvmf_transports);/*用于记录系统所有注册的transport*/
 static DECLARE_RWSEM(nvmf_transports_rwsem);
 
 static LIST_HEAD(nvmf_hosts);
@@ -463,6 +463,7 @@ int nvmf_connect_admin_queue(struct nvme_ctrl *ctrl)
 	if (!data)
 		return -ENOMEM;
 
+	/*提交同步命令*/
 	ret = __nvme_submit_sync_cmd(ctrl->fabrics_q, &cmd, &res,
 			data, sizeof(*data), NVME_QID_ANY,
 			NVME_SUBMIT_AT_HEAD |
@@ -617,14 +618,14 @@ EXPORT_SYMBOL_GPL(nvmf_should_reconnect);
  * being implemented to the common NVMe fabrics library. Part of
  * the overall init sequence of starting up a fabrics driver.
  */
-int nvmf_register_transport(struct nvmf_transport_ops *ops)
+int nvmf_register_transport(struct nvmf_transport_ops *ops/*传输层ops*/)
 {
 	if (!ops->create_ctrl)
 		/*必须有create_ctrl回调*/
 		return -EINVAL;
 
 	down_write(&nvmf_transports_rwsem);
-	list_add_tail(&ops->entry, &nvmf_transports);
+	list_add_tail(&ops->entry, &nvmf_transports);/*注册进队列*/
 	up_write(&nvmf_transports_rwsem);
 
 	return 0;
@@ -648,6 +649,7 @@ void nvmf_unregister_transport(struct nvmf_transport_ops *ops)
 }
 EXPORT_SYMBOL_GPL(nvmf_unregister_transport);
 
+/*通过transport名称查找transport ops*/
 static struct nvmf_transport_ops *nvmf_lookup_transport(
 		struct nvmf_ctrl_options *opts)
 {
@@ -1425,18 +1427,18 @@ static ssize_t nvmf_dev_write(struct file *file, const char __user *ubuf,
 
 	mutex_lock(&nvmf_dev_mutex);
 	if (seq_file->private) {
-		ret = -EINVAL;
+		ret = -EINVAL;/*已配置，跳出*/
 		goto out_unlock;
 	}
 
-	/*创建ctrl*/
+	/*通过参数创建transport ctrl*/
 	ctrl = nvmf_create_ctrl(nvmf_device, buf/*用户指定的参数*/);
 	if (IS_ERR(ctrl)) {
 		ret = PTR_ERR(ctrl);
 		goto out_unlock;
 	}
 
-	seq_file->private = ctrl;
+	seq_file->private = ctrl;/*记录此transport ctrl*/
 
 out_unlock:
 	mutex_unlock(&nvmf_dev_mutex);
@@ -1505,9 +1507,9 @@ static int nvmf_dev_release(struct inode *inode, struct file *file)
 
 static const struct file_operations nvmf_dev_fops = {
 	.owner		= THIS_MODULE,
-	.write		= nvmf_dev_write,
+	.write		= nvmf_dev_write,/*通过与配置创建nvme ctrl*/
 	.read		= seq_read,
-	.open		= nvmf_dev_open,
+	.open		= nvmf_dev_open,/*实现文件打开*/
 	.release	= nvmf_dev_release,
 };
 

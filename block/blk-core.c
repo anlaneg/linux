@@ -631,7 +631,7 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 	return BLK_STS_OK;
 }
 
-/*块io提前入口，交由各block设备处理*/
+/*块io提交入口，交由各block设备处理*/
 static void __submit_bio(struct bio *bio)
 {
 	/* If plug is not used, add new plug here to cache nsecs time. */
@@ -640,7 +640,7 @@ static void __submit_bio(struct bio *bio)
 	blk_start_plug(&plug);
 
 	if (!bdev_test_flag(bio->bi_bdev, BD_HAS_SUBMIT_BIO)) {
-		/*设备不支持submit_bio回调，走blk_mq_submit_bio*/
+		/*块设备不支持submit_bio回调，走blk_mq_submit_bio*/
 		blk_mq_submit_bio(bio);
 	} else if (likely(bio_queue_enter(bio) == 0)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
@@ -1204,14 +1204,17 @@ static void flush_plug_callbacks(struct blk_plug *plug, bool from_schedule)
 {
 	LIST_HEAD(callbacks);
 
+	/*执行回调，直到cb_list为空*/
 	while (!list_empty(&plug->cb_list)) {
 		list_splice_init(&plug->cb_list, &callbacks);
 
+		/*遍历处理callbacks*/
 		while (!list_empty(&callbacks)) {
 			struct blk_plug_cb *cb = list_first_entry(&callbacks,
 							  struct blk_plug_cb,
 							  list);
 			list_del(&cb->list);
+			/*执行回调*/
 			cb->callback(cb, from_schedule);
 		}
 	}

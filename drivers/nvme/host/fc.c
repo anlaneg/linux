@@ -3915,7 +3915,7 @@ static int __init nvme_fc_init_module(void)
 		goto out_destroy_class;
 	}
 
-	ret = nvmf_register_transport(&nvme_fc_transport);
+	ret = nvmf_register_transport(&nvme_fc_transport);/*注册fc transport*/
 	if (ret)
 		goto out_destroy_device;
 

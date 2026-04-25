@@ -2314,7 +2314,7 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
  */
 #define pci_resource_n(dev, bar)	(&(dev)->resource[(bar)])
 //此设备对应bar的起始地址
-#define pci_resource_start(dev, bar)	(pci_resource_n(dev, bar)->start)
+#define pci_resource_start(dev, bar/*bar索引*/)	(pci_resource_n(dev, bar)->start)
 //bar的结尾地址
 #define pci_resource_end(dev, bar)	(pci_resource_n(dev, bar)->end)
 //取第bar个dev资源flags

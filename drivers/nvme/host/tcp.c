@@ -200,7 +200,7 @@ struct nvme_tcp_ctrl {
 	u32			io_queues[HCTX_MAX_TYPES];
 };
 
-static LIST_HEAD(nvme_tcp_ctrl_list);
+static LIST_HEAD(nvme_tcp_ctrl_list);/*用于记录系统中创建的所有nvme ctrl*/
 static DEFINE_MUTEX(nvme_tcp_ctrl_mutex);
 static struct workqueue_struct *nvme_tcp_wq;
 static const struct blk_mq_ops nvme_tcp_mq_ops;
@@ -1785,7 +1785,7 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 
 	ret = sock_create_kern(current->nsproxy->net_ns,
 			ctrl->addr.ss_family, SOCK_STREAM,
-			IPPROTO_TCP, &queue->sock);
+			IPPROTO_TCP, &queue->sock);/*创建tcp socket*/
 	if (ret) {
 		dev_err(nctrl->device,
 			"failed to create socket: %d\n", ret);
@@ -1873,6 +1873,7 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 	dev_dbg(nctrl->device, "connecting queue %d\n",
 			nvme_tcp_queue_id(queue));
 
+	/*连接目的地址*/
 	ret = kernel_connect(queue->sock, (struct sockaddr_unsized *)&ctrl->addr,
 		sizeof(ctrl->addr), 0);
 	if (ret) {
@@ -2003,6 +2004,7 @@ static int nvme_tcp_start_queue(struct nvme_ctrl *nctrl, int idx)
 		nvme_tcp_set_queue_io_cpu(queue);
 		ret = nvmf_connect_io_queue(nctrl, idx);
 	} else
+		/*0号为adminq，与admin queue连接*/
 		ret = nvmf_connect_admin_queue(nctrl);
 
 	if (!ret) {
@@ -2123,6 +2125,7 @@ static int __nvme_tcp_alloc_io_queues(struct nvme_ctrl *ctrl)
 		}
 	}
 
+	/*遍历创建每个队列*/
 	for (i = 1; i < ctrl->queue_count; i++) {
 		ret = nvme_tcp_alloc_queue(ctrl, i,
 				ctrl->tls_pskid);
@@ -2168,6 +2171,7 @@ static int nvme_tcp_configure_io_queues(struct nvme_ctrl *ctrl, bool new)
 {
 	int ret, nr_queues;
 
+	/*申请io队列*/
 	ret = nvme_tcp_alloc_io_queues(ctrl);
 	if (ret)
 		return ret;
@@ -2998,7 +3002,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 		nvmf_ctrl_subsysnqn(&ctrl->ctrl), &ctrl->addr, opts->host->nqn);
 
 	mutex_lock(&nvme_tcp_ctrl_mutex);
-	/*收集ctrl*/
+	/*收集创建的所有ctrl*/
 	list_add_tail(&ctrl->list, &nvme_tcp_ctrl_list);
 	mutex_unlock(&nvme_tcp_ctrl_mutex);
 

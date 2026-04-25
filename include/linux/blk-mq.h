@@ -110,7 +110,7 @@ struct request {
 	blk_opf_t cmd_flags;		/* op and common flags */
 	req_flags_t rq_flags;
 
-	int tag;
+	int tag;/*为此request分配的唯一在途id*/
 	int internal_tag;
 
 	unsigned int timeout;
@@ -399,7 +399,7 @@ struct blk_mq_hw_ctx {
 	/** @nr_ctx: Number of software queues. */
 	unsigned short		nr_ctx;
 	/** @ctxs: Array of software queues. */
-	struct blk_mq_ctx	**ctxs;
+	struct blk_mq_ctx	**ctxs;/*一组mq_ctx，其索引由hctx->ctx_map维护*/
 
 	/** @dispatch_wait_lock: Lock for dispatch_wait queue. */
 	spinlock_t		dispatch_wait_lock;
@@ -486,9 +486,9 @@ struct blk_mq_queue_map {
  * @HCTX_MAX_TYPES:	Number of types of hctx.
  */
 enum hctx_type {
-	HCTX_TYPE_DEFAULT,
-	HCTX_TYPE_READ,
-	HCTX_TYPE_POLL,
+	HCTX_TYPE_DEFAULT,/*普通读写混跑，写不抢占读的专用资源*/
+	HCTX_TYPE_READ,/*只读队列*/
+	HCTX_TYPE_POLL,/*用户态轮询（polled）I/O*/
 
 	HCTX_MAX_TYPES,
 };
@@ -546,6 +546,7 @@ struct blk_mq_tag_set {
 	unsigned int		flags;
 	void			*driver_data;
 
+	/*各queue对应的blk_mq_tags,每个queue1个此结构*/
 	struct blk_mq_tags	**tags;
 
 	struct blk_mq_tags	*shared_tags;
@@ -565,7 +566,7 @@ struct blk_mq_tag_set {
  * @last: If it is the last request in the queue.
  */
 struct blk_mq_queue_data {
-	struct request *rq;/*请求*/
+	struct request *rq;/*记录对应的请求*/
 	bool last;/*是否为最后一个请求*/
 };
 
@@ -781,7 +782,7 @@ struct blk_mq_tags {
 	struct sbitmap_queue bitmap_tags;
 	struct sbitmap_queue breserved_tags;
 
-	struct request **rqs;
+	struct request **rqs;/*利用索引唯一标识每一个在途IO。*/
 	struct request **static_rqs;
 	struct list_head page_list;
 
@@ -793,6 +794,7 @@ struct blk_mq_tags {
 	struct rcu_head rcu_head;
 };
 
+/*利用tag取对应的request*/
 static inline struct request *blk_mq_tag_to_rq(struct blk_mq_tags *tags,
 					       unsigned int tag)
 {

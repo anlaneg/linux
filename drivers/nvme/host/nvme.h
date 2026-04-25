@@ -344,7 +344,7 @@ struct nvme_ctrl {
 	struct request_queue *fabrics_q;
 	struct device *dev;
 	int instance;
-	int numa_node;
+	int numa_node;/*所属numa node*/
 	struct blk_mq_tag_set *tagset;
 	struct blk_mq_tag_set *admin_tagset;
 	struct list_head namespaces;
@@ -355,7 +355,7 @@ struct nvme_ctrl {
 #ifdef CONFIG_NVME_HWMON
 	struct device *hwmon_device;
 #endif
-	struct cdev cdev;
+	struct cdev cdev;/*对应的字符设备*/
 	struct work_struct reset_work;
 	struct work_struct delete_work;
 	wait_queue_head_t state_wq;
@@ -369,7 +369,7 @@ struct nvme_ctrl {
 
 	u16 mtfa;
 	u32 ctrl_config;
-	u32 queue_count;
+	u32 queue_count;/*队列总数*/
 
 	u64 cap;
 	u32 max_hw_sectors;
@@ -650,8 +650,10 @@ struct nvme_ctrl_ops {
 #define nvme_genctr_mask(gen)			(gen & 0xf)
 #define nvme_cid_install_genctr(gen)		(nvme_genctr_mask(gen) << 12)
 #define nvme_genctr_from_cid(cid)		((cid & 0xf000) >> 12)
+/*自command id中取cid(即rq->tag)*/
 #define nvme_tag_from_cid(cid)			(cid & 0xfff)
 
+/*构造12bit的command id*/
 static inline u16 nvme_cid(struct request *rq)
 {
 	return nvme_cid_install_genctr(nvme_req(rq)->genctr) | rq->tag;
@@ -664,6 +666,7 @@ static inline struct request *nvme_find_rq(struct blk_mq_tags *tags,
 	u16 tag = nvme_tag_from_cid(command_id);
 	struct request *rq;
 
+	/*利用tag取对应的request*/
 	rq = blk_mq_tag_to_rq(tags, tag);
 	if (unlikely(!rq)) {
 		pr_err("could not locate request for tag %#x\n",
@@ -795,8 +798,8 @@ static inline bool nvme_try_complete_req(struct request *req, __le16 status,
 	if (!(ctrl->quirks & NVME_QUIRK_SKIP_CID_GEN))
 		rq->genctr++;
 
-	rq->status = le16_to_cpu(status) >> 1;
-	rq->result = result;
+	rq->status = le16_to_cpu(status) >> 1;/*设置status(丢弃了一位，这一位实际上是cq_phase)*/
+	rq->result = result;/*设置执行结果*/
 	/* inject error when permitted by fault injection framework */
 	nvme_should_fail(req);
 	if (unlikely(blk_should_fake_timeout(req->q)))

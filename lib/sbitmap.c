@@ -338,6 +338,7 @@ static int sbitmap_get_shallow(struct sbitmap *sb, unsigned long shallow_depth)
 	return nr;
 }
 
+/*检查sb中是否有任意bit被标记*/
 bool sbitmap_any_bit_set(const struct sbitmap *sb)
 {
 	unsigned int i;
@@ -419,7 +420,7 @@ void sbitmap_bitmap_show(struct sbitmap *sb, struct seq_file *m)
 			byte |= (word & (BIT(bits) - 1)) << byte_bits;
 			byte_bits += bits;
 			if (byte_bits == 8) {
-				emit_byte(m, offset, byte);
+				emit_byte(m, offset, byte);/*显示bit内容*/
 				byte = 0;
 				byte_bits = 0;
 				offset++;

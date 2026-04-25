@@ -34,8 +34,8 @@
  *
  * @dev_id must not be NULL and must be globally unique.
  */
-int pci_request_irq(struct pci_dev *dev, unsigned int nr, irq_handler_t handler,
-		irq_handler_t thread_fn, void *dev_id, const char *fmt, ...)
+int pci_request_irq(struct pci_dev *dev, unsigned int nr, irq_handler_t handler/*硬中断处理函数（上半部）*/,
+		irq_handler_t thread_fn/*线程化中断（下半部）*/, void *dev_id, const char *fmt, ...)
 {
 	va_list ap;
 	int ret;

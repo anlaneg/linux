@@ -1180,6 +1180,7 @@ struct rq_list {
  * blk_flush_plug() is called.
  */
 struct blk_plug {
+	/*缓存请求，以便合并*/
 	struct rq_list mq_list; /* blk-mq requests */
 
 	/* if ios_left is > 1, we can batch tag/rq allocations */
@@ -1187,11 +1188,12 @@ struct blk_plug {
 	u64 cur_ktime;
 	unsigned short nr_ios;
 
-	unsigned short rq_count;
+	unsigned short rq_count;/*mq_list队列长度*/
 
 	bool multiple_queues;
-	bool has_elevator;
+	bool has_elevator;/*是否有电梯调度器*/
 
+	/*用于串连一组struct blk_plug_cb*/
 	struct list_head cb_list; /* md requires an unplug callback */
 };
 
@@ -1199,7 +1201,7 @@ struct blk_plug_cb;
 typedef void (*blk_plug_cb_fn)(struct blk_plug_cb *, bool);
 struct blk_plug_cb {
 	struct list_head list;
-	blk_plug_cb_fn callback;
+	blk_plug_cb_fn callback;/*回调函数*/
 	void *data;
 };
 extern struct blk_plug_cb *blk_check_plugged(blk_plug_cb_fn unplug,

@@ -74,7 +74,7 @@ static void blk_mq_hctx_mark_pending(struct blk_mq_hw_ctx *hctx,
 	const int bit = ctx->index_hw[hctx->type];
 
 	if (!sbitmap_test_bit(&hctx->ctx_map, bit))
-		sbitmap_set_bit(&hctx->ctx_map, bit);
+		sbitmap_set_bit(&hctx->ctx_map, bit);/*占用此bit，标志此索引占用*/
 }
 
 static void blk_mq_hctx_clear_pending(struct blk_mq_hw_ctx *hctx,
@@ -82,7 +82,7 @@ static void blk_mq_hctx_clear_pending(struct blk_mq_hw_ctx *hctx,
 {
 	const int bit = ctx->index_hw[hctx->type];
 
-	sbitmap_clear_bit(&hctx->ctx_map, bit);
+	sbitmap_clear_bit(&hctx->ctx_map, bit);/*清除对此索引占用*/
 }
 
 struct mq_inflight {
@@ -640,6 +640,7 @@ static struct request *blk_mq_alloc_cached_request(struct request_queue *q,
 		if (!rq)
 			return NULL;
 	} else {
+		/*缓存的rqs不为空，尝试取一个*/
 		rq = rq_list_peek(&plug->cached_rqs);
 		if (!rq || rq->q != q)
 			return NULL;
@@ -649,7 +650,8 @@ static struct request *blk_mq_alloc_cached_request(struct request_queue *q,
 		if (op_is_flush(rq->cmd_flags) != op_is_flush(opf))
 			return NULL;
 
-		rq_list_pop(&plug->cached_rqs);
+		rq_list_pop(&plug->cached_rqs);/*自cache取一个*/
+		/*初始化刚取的这个*/
 		blk_mq_rq_time_init(rq, blk_time_get_ns());
 	}
 
@@ -658,6 +660,7 @@ static struct request *blk_mq_alloc_cached_request(struct request_queue *q,
 	return rq;
 }
 
+/*申请request*/
 struct request *blk_mq_alloc_request(struct request_queue *q, blk_opf_t opf,
 		blk_mq_req_flags_t flags)
 {
@@ -1403,19 +1406,21 @@ EXPORT_SYMBOL(blk_mq_start_request);
 static inline unsigned short blk_plug_max_rq_count(struct blk_plug *plug)
 {
 	if (plug->multiple_queues)
-		return BLK_MAX_REQUEST_COUNT * 2;
+		return BLK_MAX_REQUEST_COUNT * 2;/*最大缓存量*/
 	return BLK_MAX_REQUEST_COUNT;
 }
 
+/*向mq_list中添加新的request*/
 static void blk_add_rq_to_plug(struct blk_plug *plug, struct request *rq)
 {
 	struct request *last = rq_list_peek(&plug->mq_list);
 
 	if (!plug->rq_count) {
 		trace_block_plug(rq->q);
-	} else if (plug->rq_count >= blk_plug_max_rq_count(plug) ||
+	} else if (plug->rq_count >= blk_plug_max_rq_count(plug) /*缓存数量超限*/||
 		   (!blk_queue_nomerges(rq->q) &&
 		    blk_rq_bytes(last) >= BLK_PLUG_FLUSH_SIZE)) {
+		/*向下批量刷*/
 		blk_mq_flush_plug_list(plug, false);
 		last = NULL;
 		trace_block_plug(rq->q);
@@ -1507,7 +1512,7 @@ static void blk_rq_poll_completion(struct request *rq, struct completion *wait)
  *    for execution and wait for completion.
  * Return: The blk_status_t result provided to blk_mq_end_request().
  */
-blk_status_t blk_execute_rq(struct request *rq, bool at_head)
+blk_status_t blk_execute_rq(struct request *rq, bool at_head/*添加至header*/)
 {
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 	struct blk_rq_wait wait = {
@@ -1521,12 +1526,16 @@ blk_status_t blk_execute_rq(struct request *rq, bool at_head)
 	rq->end_io = blk_end_sync_rq;
 
 	blk_account_io_start(rq);
+	/*reqeust入队（首次调度，合并等）*/
 	blk_mq_insert_request(rq, at_head ? BLK_MQ_INSERT_AT_HEAD : 0);
+	/*触发mp队列调度（二次多队列调度，交给queue_rq)*/
 	blk_mq_run_hw_queue(hctx, false);
 
 	if (blk_rq_is_poll(rq))
+		/*poll等待*/
 		blk_rq_poll_completion(rq, &wait.done);
 	else
+		/*超时等待*/
 		blk_wait_io(&wait.done);
 
 	return wait.ret;
@@ -1798,16 +1807,17 @@ struct flush_busy_ctx_data {
 	struct list_head *list;
 };
 
-static bool flush_busy_ctx(struct sbitmap *sb, unsigned int bitnr, void *data)
+static bool flush_busy_ctx(struct sbitmap *sb, unsigned int bitnr/*此位置有效*/, void *data)
 {
 	struct flush_busy_ctx_data *flush_data = data;
 	struct blk_mq_hw_ctx *hctx = flush_data->hctx;
-	struct blk_mq_ctx *ctx = hctx->ctxs[bitnr];
+	struct blk_mq_ctx *ctx = hctx->ctxs[bitnr];/*取对应的mq_ctx*/
 	enum hctx_type type = hctx->type;
 
 	spin_lock(&ctx->lock);
+	/*加锁，添加rq_lists到flush_data->list指定的链表*/
 	list_splice_tail_init(&ctx->rq_lists[type], flush_data->list);
-	sbitmap_clear_bit(sb, bitnr);
+	sbitmap_clear_bit(sb, bitnr);/*已移至flush_data->list上，原bit清除*/
 	spin_unlock(&ctx->lock);
 	return true;
 }
@@ -1866,6 +1876,7 @@ struct request *blk_mq_dequeue_from_ctx(struct blk_mq_hw_ctx *hctx,
 	return data.rq;
 }
 
+/*申请并填充request->tag*/
 bool __blk_mq_alloc_driver_tag(struct request *rq)
 {
 	struct sbitmap_queue *bt = &rq->mq_hctx->tags->bitmap_tags;
@@ -2127,7 +2138,7 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list/
 	bool needs_resource = false;
 
 	if (list_empty(list))
-		return false;
+		return false;/*队列为空，直接返回*/
 
 	/*
 	 * Now process all the entries, sending them to the driver.
@@ -2149,7 +2160,7 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list/
 		bd.rq = rq;/*设置request*/
 		bd.last = list_empty(list);/*如果list为空，则为最后一个request*/
 
-		ret = q->mq_ops->queue_rq(hctx, &bd);/*将io请求入队*/
+		ret = q->mq_ops->queue_rq(hctx, &bd);/*多队列二次调度：将io请求入队*/
 		switch (ret) {
 		case BLK_STS_OK:/*处理成功*/
 			queued++;
@@ -2379,7 +2390,7 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async/*是否异步*/)
 		spin_unlock_irqrestore(&hctx->queue->queue_lock, flags);
 
 		if (!need_run)
-			return;
+			return;/*无需运行，直接返回*/
 	}
 
 	if (async || !cpumask_test_cpu(raw_smp_processor_id(), hctx->cpumask)) {
@@ -2577,16 +2588,20 @@ static void blk_mq_run_work_fn(struct work_struct *work)
  */
 static void blk_mq_request_bypass_insert(struct request *rq, blk_insert_t flags)
 {
+	/*bypass直接入队到hctx->dispatch*/
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
 	spin_lock(&hctx->lock);
 	if (flags & BLK_MQ_INSERT_AT_HEAD)
+		/*入队到最前面*/
 		list_add(&rq->queuelist, &hctx->dispatch);
 	else
+		/*入队到最后面*/
 		list_add_tail(&rq->queuelist, &hctx->dispatch);
 	spin_unlock(&hctx->lock);
 }
 
+/*按hctx->type将list串到ctx->rq_lists[type]上*/
 static void blk_mq_insert_requests(struct blk_mq_hw_ctx *hctx,
 		struct blk_mq_ctx *ctx, struct list_head *list,
 		bool run_queue_async)
@@ -2617,7 +2632,7 @@ static void blk_mq_insert_requests(struct blk_mq_hw_ctx *hctx,
 	}
 
 	spin_lock(&ctx->lock);
-	list_splice_tail_init(list, &ctx->rq_lists[type]);
+	list_splice_tail_init(list, &ctx->rq_lists[type]);/*按type存放*/
 	blk_mq_hctx_mark_pending(hctx, ctx);
 	spin_unlock(&ctx->lock);
 out:
@@ -2666,6 +2681,7 @@ static void blk_mq_insert_request(struct request *rq, blk_insert_t flags)
 		 */
 		blk_mq_request_bypass_insert(rq, BLK_MQ_INSERT_AT_HEAD);
 	} else if (q->elevator) {
+		/*有io调度算法，交给调度器排队。*/
 		LIST_HEAD(list);
 
 		WARN_ON_ONCE(rq->tag != BLK_MQ_NO_TAG);
@@ -2677,8 +2693,10 @@ static void blk_mq_insert_request(struct request *rq, blk_insert_t flags)
 
 		spin_lock(&ctx->lock);
 		if (flags & BLK_MQ_INSERT_AT_HEAD)
+			/*添加在头部*/
 			list_add(&rq->queuelist, &ctx->rq_lists[hctx->type]);
 		else
+			/*添加到尾部*/
 			list_add_tail(&rq->queuelist,
 				      &ctx->rq_lists[hctx->type]);
 		blk_mq_hctx_mark_pending(hctx, ctx);
@@ -2726,7 +2744,7 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 * Any other error (busy), just add it to our list as we
 	 * previously would have done.
 	 */
-	ret = q->mq_ops->queue_rq(hctx, &bd);/*请求入队*/
+	ret = q->mq_ops->queue_rq(hctx, &bd);/*多队列二次入队：请求入队*/
 	switch (ret) {
 	case BLK_STS_OK:
 		blk_mq_update_dispatch_busy(hctx, false);
@@ -2801,17 +2819,18 @@ static void blk_mq_try_issue_directly(struct blk_mq_hw_ctx *hctx,
 	}
 }
 
-static blk_status_t blk_mq_request_issue_directly(struct request *rq, bool last)
+static blk_status_t blk_mq_request_issue_directly(struct request *rq, bool last/*是否最后一个*/)
 {
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
 	if (blk_mq_hctx_stopped(hctx) || blk_queue_quiesced(rq->q)) {
-		blk_mq_insert_request(rq, 0);
-		blk_mq_run_hw_queue(hctx, false);
+		blk_mq_insert_request(rq, 0);/*执行mp入队*/
+		blk_mq_run_hw_queue(hctx, false);/*mp入队分发*/
 		return BLK_STS_OK;
 	}
 
 	if (!blk_mq_get_budget_and_tag(rq))
+		/*资源不够，不入队*/
 		return BLK_STS_RESOURCE;
 	return __blk_mq_issue_directly(hctx, rq, last);
 }
@@ -2824,7 +2843,7 @@ static void blk_mq_issue_direct(struct rq_list *rqs)
 	blk_status_t ret = BLK_STS_OK;
 
 	while ((rq = rq_list_pop(rqs))) {
-		bool last = rq_list_empty(rqs);
+		bool last = rq_list_empty(rqs);/*此rq是否为最后一个*/
 
 		if (hctx != rq->mq_hctx) {
 			if (hctx) {
@@ -2834,13 +2853,15 @@ static void blk_mq_issue_direct(struct rq_list *rqs)
 			hctx = rq->mq_hctx;
 		}
 
+		/*尝试直接分发*/
 		ret = blk_mq_request_issue_directly(rq, last);
 		switch (ret) {
 		case BLK_STS_OK:
-			queued++;
+			queued++;/*已入队*/
 			break;
 		case BLK_STS_RESOURCE:
 		case BLK_STS_DEV_RESOURCE:
+			/*资源不足，入队到bypass*/
 			blk_mq_request_bypass_insert(rq, 0);
 			blk_mq_run_hw_queue(hctx, false);
 			goto out;
@@ -2862,6 +2883,7 @@ static void __blk_mq_flush_list(struct request_queue *q, struct rq_list *rqs)
 	q->mq_ops->queue_rqs(rqs);
 }
 
+/*按rq->q划分rqs,对于划分出来的进queue_rqs队列，其余仍存rqs队列*/
 static unsigned blk_mq_extract_queue_requests(struct rq_list *rqs,
 					      struct rq_list *queue_rqs)
 {
@@ -2877,12 +2899,12 @@ static unsigned blk_mq_extract_queue_requests(struct rq_list *rqs,
 		if (rq->q == this_q) {
 			/* move rq from rqs to matched_rqs */
 			*prev = rq->rq_next;
-			rq_list_add_tail(&matched_rqs, rq);
+			rq_list_add_tail(&matched_rqs, rq);/*队列匹配，合并（移动）至matched_rqs队列*/
 			depth++;
 		} else {
 			/* leave rq in rqs */
 			prev = &rq->rq_next;
-			last = rq;
+			last = rq;/*保持原位，仅变更游标*/
 		}
 	}
 
@@ -2904,14 +2926,17 @@ static void blk_mq_dispatch_queue_requests(struct rq_list *rqs, unsigned depth)
 	 * same queue, caller must ensure that's the case.
 	 */
 	if (q->mq_ops->queue_rqs) {
+		/*实现了queue_rqs回调，使用批量接口*/
 		blk_mq_run_dispatch_ops(q, __blk_mq_flush_list(q, rqs));
 		if (rq_list_empty(rqs))
 			return;
 	}
 
+	/*没有实现批量接口:*/
 	blk_mq_run_dispatch_ops(q, blk_mq_issue_direct(rqs));
 }
 
+/*按hctx划分rqs,一次只能处理一种（上层需循环调用）*/
 static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 {
 	struct blk_mq_hw_ctx *this_hctx = NULL;
@@ -2925,33 +2950,39 @@ static void blk_mq_dispatch_list(struct rq_list *rqs, bool from_sched)
 		struct request *rq = rq_list_pop(rqs);
 
 		if (!this_hctx) {
+			/*暂无hctx,以首个request的hctx为准*/
 			this_hctx = rq->mq_hctx;
 			this_ctx = rq->mq_ctx;
 			is_passthrough = blk_rq_is_passthrough(rq);
 		} else if (this_hctx != rq->mq_hctx || this_ctx != rq->mq_ctx ||
 			   is_passthrough != blk_rq_is_passthrough(rq)) {
+			/*与当前ctx不同，先排后面，晚点处理*/
 			rq_list_add_tail(&requeue_list, rq);
 			continue;
 		}
+		/*ctx相同加入队列，队列长度增加*/
 		list_add_tail(&rq->queuelist, &list);
 		depth++;
 	} while (!rq_list_empty(rqs));
 
-	*rqs = requeue_list;
+	*rqs = requeue_list;/*rqs更新记录为本轮未处理的request*/
 	trace_block_unplug(this_hctx->queue, depth, !from_sched);
 
 	percpu_ref_get(&this_hctx->queue->q_usage_counter);
 	/* passthrough requests should never be issued to the I/O scheduler */
 	if (is_passthrough) {
+		/*裸命令，不走调度，直接进硬件队列 dispatch*/
 		spin_lock(&this_hctx->lock);
 		list_splice_tail_init(&list, &this_hctx->dispatch);
 		spin_unlock(&this_hctx->lock);
 		blk_mq_run_hw_queue(this_hctx, from_sched);
 	} else if (this_hctx->queue->elevator) {
+		/*有电梯算法的，以电梯算法来处理list*/
 		this_hctx->queue->elevator->type->ops.insert_requests(this_hctx,
 				&list, 0);
 		blk_mq_run_hw_queue(this_hctx, from_sched);
 	} else {
+		// 既不是直通，也没有 IO 调度器（NVMe默认场景！），按type分发到不同list
 		blk_mq_insert_requests(this_hctx, this_ctx, &list, from_sched);
 	}
 	percpu_ref_put(&this_hctx->queue->q_usage_counter);
@@ -2963,8 +2994,11 @@ static void blk_mq_dispatch_multiple_queue_requests(struct rq_list *rqs)
 		struct rq_list queue_rqs;
 		unsigned depth;
 
+		/*自rqs中出一组queue_rqs(长度为depth)*/
 		depth = blk_mq_extract_queue_requests(rqs, &queue_rqs);
+		/*分发queue_rqs：1。按批量接口分发；2。按direct接口分发*/
 		blk_mq_dispatch_queue_requests(&queue_rqs, depth);
+		/*如果queue_rqs仍不为空，则按ctx进行循环分发（按类型分发）*/
 		while (!rq_list_empty(&queue_rqs))
 			blk_mq_dispatch_list(&queue_rqs, false);
 	} while (!rq_list_empty(rqs));
@@ -2982,11 +3016,12 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	 * whether the mq_list is empty.
 	 */
 	if (plug->rq_count == 0)
-		return;
-	depth = plug->rq_count;
+		return;/*无request,退出*/
+	depth = plug->rq_count;/*取得实际长度，缓存长度归零*/
 	plug->rq_count = 0;
 
 	if (!plug->has_elevator && !from_schedule) {
+		/*???*/
 		if (plug->multiple_queues) {
 			blk_mq_dispatch_multiple_queue_requests(&plug->mq_list);
 			return;
@@ -2997,6 +3032,7 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 			return;
 	}
 
+	/*按类型分发plug->mq_list上的内容*/
 	do {
 		blk_mq_dispatch_list(&plug->mq_list, from_schedule);
 	} while (!rq_list_empty(&plug->mq_list));
@@ -3039,6 +3075,7 @@ static bool blk_mq_attempt_bio_merge(struct request_queue *q,
 				     struct bio *bio, unsigned int nr_segs)
 {
 	if (!blk_queue_nomerges(q) && bio_mergeable(bio)) {
+		/*尝试合并*/
 		if (blk_attempt_plug_merge(q, bio, nr_segs))
 			return true;
 		if (blk_mq_sched_bio_merge(q, bio, nr_segs))
@@ -3204,6 +3241,7 @@ void blk_mq_submit_bio(struct bio *bio)
 		goto queue_exit;
 
 	blk_mq_bio_issue_init(q, bio);
+	/*尝试合并*/
 	if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
 		goto queue_exit;
 
@@ -4371,12 +4409,12 @@ static int blk_mq_alloc_ctxs(struct request_queue *q)
 	if (!ctxs)
 		return -ENOMEM;
 
-	/*申请percpu变量*/
+	/*申请percpu变量（ctxs->queue_ctx）*/
 	ctxs->queue_ctx = alloc_percpu(struct blk_mq_ctx);
 	if (!ctxs->queue_ctx)
 		goto fail;
 
-	/*使各percpu变量指向ctxs*/
+	/*初始化，使各percpu变量中的ctxs指向ctxs*/
 	for_each_possible_cpu(cpu) {
 		struct blk_mq_ctx *ctx = per_cpu_ptr(ctxs->queue_ctx, cpu);
 		ctx->ctxs = ctxs;
@@ -4867,7 +4905,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 		return -EINVAL;
 
 	if (!set->ops->queue_rq)
-	    /*必须包含queue_rq回调*/
+	    /*必须实现queue_rq回调*/
 		return -EINVAL;
 
 	if (!set->ops->get_budget ^ !set->ops->put_budget)

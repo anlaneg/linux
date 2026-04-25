@@ -740,7 +740,7 @@ void nvme_init_request(struct request *req, struct nvme_command *cmd)
 	if (req->mq_hctx->type == HCTX_TYPE_POLL)
 		req->cmd_flags |= REQ_POLLED;
 	nvme_clear_nvme_request(req);
-	memcpy(nr->cmd, cmd, sizeof(*cmd));
+	memcpy(nr->cmd, cmd, sizeof(*cmd));/*在request中记录cmd*/
 }
 EXPORT_SYMBOL_GPL(nvme_init_request);
 
@@ -1127,7 +1127,7 @@ blk_status_t nvme_setup_cmd(struct nvme_ns *ns, struct request *req)
 		return BLK_STS_IOERR;
 	}
 
-	cmd->common.command_id = nvme_cid(req);
+	cmd->common.command_id = nvme_cid(req);/*分配command id*/
 	trace_nvme_setup_cmd(req, cmd);
 	return ret;
 }
@@ -1156,8 +1156,8 @@ EXPORT_SYMBOL_NS_GPL(nvme_execute_rq, "NVME_TARGET_PASSTHRU");
  * Returns 0 on success.  If the result is negative, it's a Linux error code;
  * if the result is positive, it's an NVM Express status code
  */
-int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
-		union nvme_result *result, void *buffer, unsigned bufflen,
+int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd/*需同步执行的命令*/,
+		union nvme_result *result, void *buffer/*用于填充响应的buffer*/, unsigned bufflen/*响应buffer长度*/,
 		int qid, nvme_submit_flags_t flags)
 {
 	struct request *req;
@@ -1168,6 +1168,7 @@ int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 		blk_flags |= BLK_MQ_REQ_NOWAIT;
 	if (flags & NVME_SUBMIT_RESERVED)
 		blk_flags |= BLK_MQ_REQ_RESERVED;
+	/*申请request*/
 	if (qid == NVME_QID_ANY)
 		req = blk_mq_alloc_request(q, nvme_req_op(cmd), blk_flags);
 	else
@@ -1176,16 +1177,18 @@ int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	nvme_init_request(req, cmd);
+	nvme_init_request(req, cmd);/*初始化request*/
 	if (flags & NVME_SUBMIT_RETRY)
 		req->cmd_flags &= ~REQ_FAILFAST_DRIVER;
 
+	/*为request关联buffer*/
 	if (buffer && bufflen) {
 		ret = blk_rq_map_kern(req, buffer, bufflen, GFP_KERNEL);
 		if (ret)
 			goto out;
 	}
 
+	/*执行此request*/
 	ret = nvme_execute_rq(req, flags & NVME_SUBMIT_AT_HEAD);
 	if (result && ret >= 0)
 		*result = nvme_req(req)->result;
@@ -1195,8 +1198,8 @@ int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 }
 EXPORT_SYMBOL_GPL(__nvme_submit_sync_cmd);
 
-int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
-		void *buffer, unsigned bufflen)
+int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd/*需同步执行的命令*/,
+		void *buffer/*用于填充响应的buffer*/, unsigned bufflen/*响应buffer长度*/)
 {
 	return __nvme_submit_sync_cmd(q, cmd, NULL, buffer, bufflen,
 			NVME_QID_ANY, 0);
@@ -1469,12 +1472,14 @@ static int nvme_identify_ctrl(struct nvme_ctrl *dev, struct nvme_id_ctrl **id)
 	c.identify.opcode = nvme_admin_identify;
 	c.identify.cns = NVME_ID_CNS_CTRL;
 
+	/*准备出参空间*/
 	*id = kmalloc_obj(struct nvme_id_ctrl);
 	if (!*id)
 		return -ENOMEM;
 
-	error = nvme_submit_sync_cmd(dev->admin_q, &c, *id,
-			sizeof(struct nvme_id_ctrl));
+	/*发送nvme_admin_identify，读取固定结构化描述信息*/
+	error = nvme_submit_sync_cmd(dev->admin_q, &c/*命令*/, *id/*出参*/,
+			sizeof(struct nvme_id_ctrl)/*出参大小*/);
 	if (error) {
 		kfree(*id);
 		*id = NULL;
@@ -1688,10 +1693,11 @@ static int nvme_features(struct nvme_ctrl *dev, u8 op, unsigned int fid,
 	struct nvme_command c = { };
 	int ret;
 
-	c.features.opcode = op;
+	c.features.opcode = op;/*指明feature标识*/
 	c.features.fid = cpu_to_le32(fid);
 	c.features.dword11 = cpu_to_le32(dword11);
 
+	/*提交此command给admin queue*/
 	ret = __nvme_submit_sync_cmd(dev->admin_q, &c, &res,
 			buffer, buflen, NVME_QID_ANY, 0);
 	if (ret >= 0 && result)
@@ -1703,6 +1709,7 @@ int nvme_set_features(struct nvme_ctrl *dev, unsigned int fid,
 		      unsigned int dword11, void *buffer, size_t buflen,
 		      void *result)
 {
+	/*执行为set features命令*/
 	return nvme_features(dev, nvme_admin_set_features, fid, dword11, buffer,
 			     buflen, result);
 }
@@ -3760,7 +3767,7 @@ static const struct file_operations nvme_dev_fops = {
 	.owner		= THIS_MODULE,
 	.open		= nvme_dev_open,
 	.release	= nvme_dev_release,
-	.unlocked_ioctl	= nvme_dev_ioctl,
+	.unlocked_ioctl	= nvme_dev_ioctl,/*主要实现了ioctl*/
 	.compat_ioctl	= compat_ptr_ioctl,
 	.uring_cmd	= nvme_dev_uring_cmd,
 };
@@ -4175,7 +4182,7 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	synchronize_srcu(&ctrl->srcu);
 	nvme_get_ctrl(ctrl);
 
-	/*将disk加入到系统*/
+	/*将disk加入到系统，磁盘对外可见*/
 	if (device_add_disk(ctrl->device, ns->disk, nvme_ns_attr_groups))
 		goto out_cleanup_ns_from_list;
 
@@ -4863,6 +4870,7 @@ int nvme_alloc_admin_tag_set(struct nvme_ctrl *ctrl, struct blk_mq_tag_set *set,
 	if (ctrl->admin_q)
 		blk_put_queue(ctrl->admin_q);
 
+	/*创建admin queue*/
 	ctrl->admin_q = blk_mq_alloc_queue(set, NULL, NULL);
 	if (IS_ERR(ctrl->admin_q)) {
 		ret = PTR_ERR(ctrl->admin_q);
@@ -5162,12 +5170,12 @@ int nvme_add_ctrl(struct nvme_ctrl *ctrl)
 {
 	int ret;
 
-	/*设置字符设备名称*/
+	/*设置字符设备名称(nvme*)*/
 	ret = dev_set_name(ctrl->device, "nvme%d", ctrl->instance);
 	if (ret)
 		return ret;
 
-	cdev_init(&ctrl->cdev, &nvme_dev_fops);
+	cdev_init(&ctrl->cdev, &nvme_dev_fops);/*指明字符设备fops*/
 	ctrl->cdev.owner = ctrl->ops->module;
 	/*将此字符设备加入到系统*/
 	ret = cdev_device_add(&ctrl->cdev, ctrl->device);

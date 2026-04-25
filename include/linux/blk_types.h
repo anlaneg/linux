@@ -385,8 +385,8 @@ enum req_op {
 
 	/* Driver private requests */
 	/* private: */
-	REQ_OP_DRV_IN		= (__force blk_opf_t)34,
-	REQ_OP_DRV_OUT		= (__force blk_opf_t)35,
+	REQ_OP_DRV_IN		= (__force blk_opf_t)34,/*读*/
+	REQ_OP_DRV_OUT		= (__force blk_opf_t)35,/*写*/
 
 	REQ_OP_LAST		= (__force blk_opf_t)36,
 };
