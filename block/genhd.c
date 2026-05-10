@@ -1187,6 +1187,7 @@ static ssize_t disk_discard_alignment_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", bdev_alignment_offset(disk->part0));
 }
 
+/*显示diskseq*/
 static ssize_t diskseq_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
@@ -1355,6 +1356,7 @@ static void disk_release(struct device *dev)
 	bdev_drop(disk->part0);	/* frees the disk */
 }
 
+/*block类设备向 uevent 消息追加环境变量*/
 static int block_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	const struct gendisk *disk = dev_to_disk(dev);
@@ -1362,7 +1364,7 @@ static int block_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	return add_uevent_var(env, "DISKSEQ=%llu", disk->diskseq);
 }
 
-/*用来标识block设备*/
+/*用来标识block类设备*/
 const struct class block_class = {
 	.name		= "block",
 	.dev_uevent	= block_uevent,
@@ -1557,7 +1559,7 @@ out_free_disk:
 struct gendisk *__blk_alloc_disk(struct queue_limits *lim, int node,
 		struct lock_class_key *lkclass)
 {
-	struct queue_limits default_lim = { };
+	struct queue_limits default_lim = { };/*未提供时，使用default_lim*/
 	struct request_queue *q;
 	struct gendisk *disk;
 
@@ -1631,5 +1633,6 @@ EXPORT_SYMBOL(set_disk_ro);
 
 void inc_diskseq(struct gendisk *disk)
 {
+	/*分配唯一索引*/
 	disk->diskseq = atomic64_inc_return(&diskseq);
 }

@@ -756,6 +756,7 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		 * options that take numeric values
 		 */
 	case Opt_port:
+		/*目的port*/
 		if (result.uint_32 > USHRT_MAX)
 			goto out_of_bounds;
 		ctx->nfs_server.port = result.uint_32;
@@ -1571,7 +1572,8 @@ static int nfs_fs_context_validate(struct fs_context *fc)
 			port = NFS_RDMA_PORT;
 	}
 
-	nfs_set_port(sap, &ctx->nfs_server.port, port);
+	/*更新sap中的port*/
+	nfs_set_port(sap, &ctx->nfs_server.port, port/*默认port*/);
 
 	/*解析source*/
 	ret = nfs_parse_source(fc, max_namelen, max_pathlen);
@@ -1742,6 +1744,7 @@ static int nfs_init_fs_context(struct fs_context *fc)
 		ctx->version		= nfss->nfs_client->rpc_ops->version;
 		ctx->minorversion	= nfss->nfs_client->cl_minorversion;
 
+		/*设置地址*/
 		memcpy(&ctx->nfs_server._address, &nfss->nfs_client->cl_addr,
 			ctx->nfs_server.addrlen);
 

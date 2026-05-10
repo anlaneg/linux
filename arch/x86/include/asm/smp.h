@@ -39,6 +39,7 @@ struct smp_ops {
 	void (*stop_this_cpu)(void);
 
 	void (*send_call_func_ipi)(const struct cpumask *mask);
+	/*需中断并“执行单核回调函数”的任务*/
 	void (*send_call_func_single_ipi)(int cpu);
 };
 

@@ -1158,7 +1158,7 @@ EXPORT_SYMBOL_NS_GPL(nvme_execute_rq, "NVME_TARGET_PASSTHRU");
  */
 int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd/*需同步执行的命令*/,
 		union nvme_result *result, void *buffer/*用于填充响应的buffer*/, unsigned bufflen/*响应buffer长度*/,
-		int qid, nvme_submit_flags_t flags)
+		int qid/*队列编号*/, nvme_submit_flags_t flags)
 {
 	struct request *req;
 	int ret;
@@ -1202,7 +1202,7 @@ int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd/*需�
 		void *buffer/*用于填充响应的buffer*/, unsigned bufflen/*响应buffer长度*/)
 {
 	return __nvme_submit_sync_cmd(q, cmd, NULL, buffer, bufflen,
-			NVME_QID_ANY, 0);
+			NVME_QID_ANY/*任意队列*/, 0);
 }
 EXPORT_SYMBOL_GPL(nvme_submit_sync_cmd);
 

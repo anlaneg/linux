@@ -53,6 +53,7 @@ struct block_device {
 	/*块设备统计信息*/
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
+	/*分区号及flags*/
 	atomic_t		__bd_flags;	// partition number + flags
 #define BD_PARTNO		255	// lower 8 bits; assign-once
 #define BD_READ_ONLY		(1u<<8) // read-only policy
@@ -359,9 +360,9 @@ typedef __u32 __bitwise blk_mq_req_flags_t;
  */
 enum req_op {
 	/** @REQ_OP_READ: read sectors from the device */
-	REQ_OP_READ		= (__force blk_opf_t)0,/*自设备读取*/
+	REQ_OP_READ		= (__force blk_opf_t)0,/*自设备读取（读请求）*/
 	/** @REQ_OP_WRITE: write sectors to the device */
-	REQ_OP_WRITE		= (__force blk_opf_t)1,/*向设备写入*/
+	REQ_OP_WRITE		= (__force blk_opf_t)1,/*向设备写入（写请求）*/
 	/** @REQ_OP_FLUSH: flush the volatile write cache */
 	REQ_OP_FLUSH		= (__force blk_opf_t)2,
 	/** @REQ_OP_DISCARD: discard sectors */

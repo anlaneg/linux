@@ -1415,7 +1415,7 @@ static blk_status_t nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 {
 	struct nvme_queue *nvmeq = hctx->driver_data;
 	struct nvme_dev *dev = nvmeq->dev;
-	struct request *req = bd->rq;/*取得请求*/
+	struct request *req = bd->rq;/*取得request*/
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 	blk_status_t ret;
 

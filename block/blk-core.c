@@ -51,7 +51,7 @@
 #include "blk-throttle.h"
 #include "blk-ioprio.h"
 
-struct dentry *blk_debugfs_root;
+struct dentry *blk_debugfs_root;/*负责记录系统中block debugfs的根目录*/
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_remap);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_remap);
@@ -70,7 +70,7 @@ static struct kmem_cache *blk_requestq_cachep;//负责block request queue申请�
 /*
  * Controlling structure to kblockd
  */
-static struct workqueue_struct *kblockd_workqueue;
+static struct workqueue_struct *kblockd_workqueue;/*名称为kblockd的工作队列*/
 
 /**
  * blk_queue_flag_set - atomically set a queue flag
@@ -397,7 +397,7 @@ struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id)
 	struct request_queue *q;
 	int error;
 
-	/*自cache申请request_queue结构体*/
+	/*自cache申请一个request_queue结构体*/
 	q = kmem_cache_alloc_node(blk_requestq_cachep, GFP_KERNEL | __GFP_ZERO,
 				  node_id);
 	if (!q)
@@ -406,7 +406,7 @@ struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id)
 
 	q->last_merge = NULL;
 
-	/*设置id*/
+	/*分配，设置id*/
 	q->id = ida_alloc(&blk_queue_ida, GFP_KERNEL);
 	if (q->id < 0) {
 		error = q->id;
@@ -1147,13 +1147,13 @@ EXPORT_SYMBOL(kblockd_mod_delayed_work_on);
 
 void blk_start_plug_nr_ios(struct blk_plug *plug, unsigned short nr_ios)
 {
-	struct task_struct *tsk = current;
+	struct task_struct *tsk = current;/*取当前进程*/
 
 	/*
 	 * If this is a nested plug, don't actually assign it.
 	 */
 	if (tsk->plug)
-		return;
+		return;/*已设置plug,退出*/
 
 	plug->cur_ktime = 0;
 	rq_list_init(&plug->mq_list);
@@ -1168,7 +1168,7 @@ void blk_start_plug_nr_ios(struct blk_plug *plug, unsigned short nr_ios)
 	 * Store ordering should not be needed here, since a potential
 	 * preempt will imply a full memory barrier
 	 */
-	tsk->plug = plug;
+	tsk->plug = plug;/*设置plug*/
 }
 
 /**
@@ -1308,8 +1308,10 @@ int __init blk_dev_init(void)
 	if (!kblockd_workqueue)
 		panic("Failed to create kblockd\n");
 
+	/*创建request queue cache*/
 	blk_requestq_cachep = KMEM_CACHE(request_queue, SLAB_PANIC);
 
+	/*创建block debugfs根目录*/
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
 
 	return 0;

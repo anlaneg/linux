@@ -31,7 +31,7 @@ static inline unsigned short rpc_get_port(const struct sockaddr *sap)
 	return 0;
 }
 
-/*设置port*/
+/*为sockaddr设置port*/
 static inline void rpc_set_port(struct sockaddr *sap,
 				const unsigned short port)
 {

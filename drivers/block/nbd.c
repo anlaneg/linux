@@ -2036,8 +2036,8 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 		goto out;
 
 	nbd->tag_set.ops = &nbd_mq_ops;
-	nbd->tag_set.nr_hw_queues = 1;
-	nbd->tag_set.queue_depth = 128;
+	nbd->tag_set.nr_hw_queues = 1;/*仅一个硬件队列*/
+	nbd->tag_set.queue_depth = 128;/*队列长度为128*/
 	nbd->tag_set.numa_node = NUMA_NO_NODE;
 	nbd->tag_set.cmd_size = sizeof(struct nbd_cmd);
 	nbd->tag_set.flags = BLK_MQ_F_BLOCKING;

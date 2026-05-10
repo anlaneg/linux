@@ -69,16 +69,17 @@ static struct kmem_cache *sigqueue_cachep;
 
 int print_fatal_signals __read_mostly;
 
+/*取进程t设置的信号sig对应的处理函数*/
 static void __user *sig_handler(struct task_struct *t, int sig)
 {
 	return t->sighand->action[sig - 1].sa.sa_handler;
 }
 
-static inline bool sig_handler_ignored(void __user *handler, int sig)
+static inline bool sig_handler_ignored(void __user *handler/*信号处理函数*/, int sig/*信号值*/)
 {
 	/* Is it explicitly or implicitly ignored? */
 	return handler == SIG_IGN ||
-	       (handler == SIG_DFL && sig_kernel_ignore(sig));
+	       (handler == SIG_DFL && sig_kernel_ignore(sig));/*明确指为ignore或者明确指为default且sig被kernel指为ignore*/
 }
 
 static bool sig_task_ignored(struct task_struct *t, int sig, bool force)
@@ -4302,25 +4303,26 @@ void __weak sigaction_compat_abi(struct k_sigaction *act,
 {
 }
 
-int do_sigaction(int sig, struct k_sigaction *act/*新的信号响应函数*/, struct k_sigaction *oact/**/)
+int do_sigaction(int sig/*信号编号*/, struct k_sigaction *act/*新的信号响应函数*/, struct k_sigaction *oact/*出参，旧的信号响应函数*/)
 {
 	struct task_struct *p = current, *t;
 	struct k_sigaction *k;
 	sigset_t mask;
 
 	if (!valid_signal(sig) || sig < 1 || (act && sig_kernel_only(sig)))
-		return -EINVAL;
+		return -EINVAL;/*信号值无效或者信号只能由kernel*/
 
 	/*取当前进程sig号信号的action*/
 	k = &p->sighand->action[sig-1];
 
 	spin_lock_irq(&p->sighand->siglock);
 	if (k->sa.sa_flags & SA_IMMUTABLE) {
+		/*此信号不可修改，报错*/
 		spin_unlock_irq(&p->sighand->siglock);
 		return -EINVAL;
 	}
 	if (oact)
-		*oact = *k;
+		*oact = *k;/*设置出参，旧的action*/
 
 	/*
 	 * Make sure that we never accidentally claim to support SA_UNSUPPORTED,
@@ -4334,18 +4336,18 @@ int do_sigaction(int sig, struct k_sigaction *act/*新的信号响应函数*/, s
 	 * internally.
 	 */
 	if (act)
-		act->sa.sa_flags &= UAPI_SA_FLAGS;
+		act->sa.sa_flags &= UAPI_SA_FLAGS;/*去除多余标记*/
 	if (oact)
 		oact->sa.sa_flags &= UAPI_SA_FLAGS;
 
 	sigaction_compat_abi(act, oact);
 
 	if (act) {
-		bool was_ignored = k->sa.sa_handler == SIG_IGN;
+		bool was_ignored = k->sa.sa_handler == SIG_IGN;/*指明为忽略*/
 
 		sigdelsetmask(&act->sa.sa_mask,
-			      sigmask(SIGKILL) | sigmask(SIGSTOP));
-		*k = *act;
+			      sigmask(SIGKILL) | sigmask(SIGSTOP));/*kill,stop仅kernel可处理*/
+		*k = *act;/*设置新的signal action*/
 		/*
 		 * POSIX 3.3.1.3:
 		 *  "Setting a signal action to SIG_IGN for a signal that is
@@ -4358,6 +4360,7 @@ int do_sigaction(int sig, struct k_sigaction *act/*新的信号响应函数*/, s
 		 *   be discarded, whether or not it is blocked"
 		 */
 		if (sig_handler_ignored(sig_handler(p, sig), sig)) {
+			/*此信号handle为ignore*/
 			sigemptyset(&mask);
 			sigaddset(&mask, sig);
 			flush_sigqueue_mask(p, &mask, &p->signal->shared_pending);
@@ -4813,8 +4816,9 @@ SYSCALL_DEFINE1(ssetmask, int, newmask)
 /*
  * For backwards compatibility.  Functionality superseded by sigaction.
  */
-SYSCALL_DEFINE2(signal, int, sig, __sighandler_t, handler)
+SYSCALL_DEFINE2(signal, int, sig/*信号*/, __sighandler_t, handler/*信号处理函数*/)
 {
+	/*注册信号处理*/
 	struct k_sigaction new_sa, old_sa;
 	int ret;
 
@@ -4822,7 +4826,7 @@ SYSCALL_DEFINE2(signal, int, sig, __sighandler_t, handler)
 	new_sa.sa.sa_flags = SA_ONESHOT | SA_NOMASK;
 	sigemptyset(&new_sa.sa.sa_mask);
 
-	ret = do_sigaction(sig, &new_sa, &old_sa);
+	ret = do_sigaction(sig, &new_sa, &old_sa/*取回旧的*/);
 
 	/*如果失败，则返回ret,否则返回旧的handler*/
 	return ret ? ret : (unsigned long)old_sa.sa.sa_handler;

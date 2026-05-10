@@ -120,7 +120,7 @@ static int __blk_mq_get_tag(struct blk_mq_alloc_data *data,
 }
 
 unsigned long blk_mq_get_tags(struct blk_mq_alloc_data *data, int nr_tags,
-			      unsigned int *offset)
+			      unsigned int *offset/*出参，起始tags*/)
 {
 	struct blk_mq_tags *tags = blk_mq_tags_from_data(data);
 	struct sbitmap_queue *bt = &tags->bitmap_tags;
@@ -129,6 +129,7 @@ unsigned long blk_mq_get_tags(struct blk_mq_alloc_data *data, int nr_tags,
 	if (data->shallow_depth ||data->flags & BLK_MQ_REQ_RESERVED ||
 	    data->hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
 		return 0;
+	/*从bitmap_tags位图中，批量申请 nr_tags 个tag*/
 	ret = __sbitmap_queue_get_batch(bt, nr_tags, offset);
 	*offset += tags->nr_reserved_tags;
 	return ret;
@@ -136,6 +137,7 @@ unsigned long blk_mq_get_tags(struct blk_mq_alloc_data *data, int nr_tags,
 
 unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 {
+	/*取得使用哪种tags*/
 	struct blk_mq_tags *tags = blk_mq_tags_from_data(data);
 	struct sbitmap_queue *bt;
 	struct sbq_wait_state *ws;
@@ -155,9 +157,10 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 		tag_offset = tags->nr_reserved_tags;
 	}
 
+	/*获取一个tag*/
 	tag = __blk_mq_get_tag(data, bt);
 	if (tag != BLK_MQ_NO_TAG)
-		goto found_tag;
+		goto found_tag;/*查找到tag*/
 
 	if (data->flags & BLK_MQ_REQ_NOWAIT)
 		return BLK_MQ_NO_TAG;
@@ -555,10 +558,12 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 	struct blk_mq_tags *tags;
 
 	if (total_tags > BLK_MQ_TAG_MAX) {
+		/*总tag数过大*/
 		pr_err("blk-mq: tag depth too large\n");
 		return NULL;
 	}
 
+	/*申请blk_mq_tags结构体*/
 	tags = kzalloc_node(sizeof(*tags), GFP_KERNEL, node);
 	if (!tags)
 		return NULL;
@@ -568,8 +573,10 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 	spin_lock_init(&tags->lock);
 	INIT_LIST_HEAD(&tags->page_list);
 
+	/*申请bitmap,负责分配depth号牌*/
 	if (bt_alloc(&tags->bitmap_tags, depth, round_robin, node))
 		goto out_free_tags;
+	/*申请bitmap,负责分配reserved号牌*/
 	if (bt_alloc(&tags->breserved_tags, reserved_tags, round_robin, node))
 		goto out_free_bitmap_tags;
 

@@ -213,7 +213,7 @@ struct gendisk {
 	int node_id;
 	struct badblocks *bb;
 	struct lockdep_map lockdep_map;
-	u64 diskseq;
+	u64 diskseq;/*唯一索引（每个gendisk索引必不相同）*/
 	blk_mode_t open_mode;
 
 	/*
@@ -483,9 +483,11 @@ struct request_queue {
 	 */
 	void			*queuedata;/*创建时传入的私有数据*/
 
+	/* 此queue对应的I/O 调度器实例（mq-deadline/bfq等） */
 	struct elevator_queue	*elevator;
 
-	const struct blk_mq_ops	*mq_ops;/*此ops不为空时，为多队列操作集*/
+	/*此ops不为空时，为多队列操作集*/
+	const struct blk_mq_ops	*mq_ops;
 
 	/* sw queues */
 	struct blk_mq_ctx __percpu	*queue_ctx;/*percpu context*/
@@ -497,13 +499,13 @@ struct request_queue {
 
 	unsigned int __data_racy rq_timeout;/*request的超时时间*/
 
-	unsigned int		queue_depth;
+	unsigned int		queue_depth;/*队列深度：同时支持的最大并发 I/O 数*/
 
 	refcount_t		refs;
 
 	/* hw dispatch queues */
-	unsigned int		nr_hw_queues;
-	struct blk_mq_hw_ctx * __rcu *queue_hw_ctx;
+	unsigned int		nr_hw_queues;/*硬件队列数组大小*/
+	struct blk_mq_hw_ctx * __rcu *queue_hw_ctx;/*硬件队列集合：每个元素对应一个 CPU / 硬件通道，直接下发 I/O 给驱动*/
 
 	struct percpu_ref	q_usage_counter;
 	struct lock_class_key	io_lock_cls_key;
@@ -639,6 +641,7 @@ struct request_queue {
 	 */
 	struct mutex		mq_freeze_lock;
 
+	/*对应的tag_set,负责tag管理（io提交后会出现合并乱序执行，乱序返回等回题，引入tag来解决搞请楚哪个request完成）*/
 	struct blk_mq_tag_set	*tag_set;
 	struct list_head	tag_set_list;
 
@@ -802,6 +805,7 @@ static inline bool bdev_test_flag(const struct block_device *bdev, unsigned flag
 	return atomic_read(&bdev->__bd_flags) & flag;
 }
 
+/*为block_device设置flag*/
 static inline void bdev_set_flag(struct block_device *bdev, unsigned flag)
 {
 	atomic_or(flag, &bdev->__bd_flags);
@@ -1163,7 +1167,7 @@ extern void blk_put_queue(struct request_queue *);
 void blk_mark_disk_dead(struct gendisk *disk);
 
 struct rq_list {
-	struct request *head;
+	struct request *head;/*链表头*/
 	struct request *tail;
 };
 

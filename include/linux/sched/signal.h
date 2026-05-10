@@ -22,7 +22,7 @@ struct sighand_struct {
 	spinlock_t		siglock;
 	refcount_t		count;
 	wait_queue_head_t	signalfd_wqh;
-	struct k_sigaction	action[_NSIG];
+	struct k_sigaction	action[_NSIG];/*按信号映射其对应的处理方式*/
 };
 
 /*
@@ -657,6 +657,7 @@ extern bool current_is_single_threaded(void);
 	list_for_each_entry_rcu(t, &(signal)->thread_head, thread_node, \
 		lockdep_is_held(&tasklist_lock))
 
+/*遍历每个线程*/
 #define for_each_thread(p, t)		\
 	__for_each_thread((p)->signal, t)
 

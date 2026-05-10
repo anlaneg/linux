@@ -22,7 +22,7 @@ struct blk_mq_ctx {
 		struct list_head	rq_lists[HCTX_MAX_TYPES];
 	} ____cacheline_aligned_in_smp;
 
-	unsigned int		cpu;
+	unsigned int		cpu;/*记录提交的cpu*/
 	unsigned short		index_hw[HCTX_MAX_TYPES];
 	struct blk_mq_hw_ctx 	*hctxs[HCTX_MAX_TYPES];
 
@@ -226,6 +226,7 @@ static inline bool blk_mq_tag_is_reserved(struct blk_mq_tags *tags,
 	return tag < tags->nr_reserved_tags;
 }
 
+/*是否shared tags*/
 static inline bool blk_mq_is_shared_tags(unsigned int flags)
 {
 	return flags & BLK_MQ_F_TAG_HCTX_SHARED;
@@ -234,6 +235,7 @@ static inline bool blk_mq_is_shared_tags(unsigned int flags)
 static inline struct blk_mq_tags *blk_mq_tags_from_data(struct blk_mq_alloc_data *data)
 {
 	if (data->rq_flags & RQF_SCHED_TAGS)
+		/*使用sched tags*/
 		return data->hctx->sched_tags;
 	return data->hctx->tags;
 }

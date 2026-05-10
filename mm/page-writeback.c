@@ -1836,7 +1836,7 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 		}
 
 		if (nr_dirty > gdtc->bg_thresh && !writeback_in_progress(wb))
-			wb_start_background_writeback(wb);
+			wb_start_background_writeback(wb);/*启动后面writeback方式*/
 
 		/*
 		 * If memcg domain is in effect, @dirty should be under
@@ -2072,6 +2072,7 @@ int balance_dirty_pages_ratelimited_flags(struct address_space *mapping,
 	preempt_enable();
 
 	if (unlikely(current->nr_dirtied >= ratelimit))
+		/*需要减少dirty pages占用*/
 		ret = balance_dirty_pages(wb, current->nr_dirtied, flags);
 
 	wb_put(wb);
@@ -2540,6 +2541,7 @@ done:
 }
 EXPORT_SYMBOL_GPL(writeback_iter);
 
+/*调用writepages回调*/
 int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 {
 	int ret;

@@ -30,7 +30,7 @@ int smp_call_function_single_async(int cpu, call_single_data_t *csd)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	csd->func(csd->info);
+	csd->func(csd->info);/*直接触发*/
 	local_irq_restore(flags);
 	return 0;
 }

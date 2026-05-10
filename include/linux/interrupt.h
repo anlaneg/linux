@@ -558,7 +558,7 @@ enum
 	TIMER_SOFTIRQ,
 	NET_TX_SOFTIRQ,/*网络发包软中断(比如使能了qos,且队列中仍有报文）*/
 	NET_RX_SOFTIRQ,/*网络收包软中断*/
-	BLOCK_SOFTIRQ,
+	BLOCK_SOFTIRQ,/*块设备的request complete时软中断*/
 	IRQ_POLL_SOFTIRQ,
 	TASKLET_SOFTIRQ,
 	SCHED_SOFTIRQ,

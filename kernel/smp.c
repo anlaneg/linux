@@ -117,6 +117,7 @@ send_call_function_single_ipi(int cpu)
 	if (call_function_single_prep_ipi(cpu)) {
 		trace_ipi_send_cpu(cpu, _RET_IP_,
 				   generic_smp_call_function_single_interrupt);
+		/*知会目标cpu需“执行单核回调函数”的任务*/
 		arch_send_call_function_single_ipi(cpu);
 	}
 }
@@ -410,6 +411,7 @@ void __smp_call_single_queue(int cpu, struct llist_node *node)
 	 * equipped to do the right thing...
 	 */
 	if (llist_add(node, &per_cpu(call_single_queue, cpu)))
+		/*将此node加入到call_single_queue链表后，链表之前为空，需中断知会*/
 		send_call_function_single_ipi(cpu);
 }
 
@@ -425,6 +427,7 @@ static int generic_exec_single(int cpu, call_single_data_t *csd)
 	 * ensuring mutually exclusive CPU offlining and last IPI flush.
 	 */
 	if (cpu == smp_processor_id()) {
+		/*同一个cpu*/
 		smp_call_func_t func = csd->func;
 		void *info = csd->info;
 		unsigned long flags;
@@ -436,6 +439,7 @@ static int generic_exec_single(int cpu, call_single_data_t *csd)
 		csd_lock_record(csd);
 		csd_unlock(csd);
 		local_irq_save(flags);
+		/*触发回调*/
 		csd_do_func(func, info, NULL);
 		csd_lock_record(NULL);
 		local_irq_restore(flags);

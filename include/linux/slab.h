@@ -1208,7 +1208,7 @@ static inline __alloc_size(1) void *kzalloc_noprof(size_t size, gfp_t flags)
 }
 #define kzalloc(...)				alloc_hooks(kzalloc_noprof(__VA_ARGS__))
 //自指定的内存node上申请内存，返回虚拟地址(提供的内存须为全零）
-#define kzalloc_node(_size, _flags, _node/*在哪个node上申请内存*/)	kmalloc_node(_size, (_flags)|__GFP_ZERO, _node)
+#define kzalloc_node(_size/*结构体大小*/, _flags, _node/*在哪个node上申请内存*/)	kmalloc_node(_size, (_flags)|__GFP_ZERO, _node)
 
 void *__kvmalloc_node_noprof(DECL_BUCKET_PARAMS(size, b), unsigned long align,
 			     gfp_t flags, int node) __alloc_size(1);

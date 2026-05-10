@@ -506,12 +506,12 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno/*分区号*/)
 	inode->i_data.a_ops = &def_blk_aops;
 	mapping_set_gfp_mask(&inode->i_data, GFP_USER);
 
-	/*取此bdev对应的block device结构体，并开始初始化它*/
+	/*取此bdev对应的block device结构体(new_inode只分配了空间），开始初始化它*/
 	bdev = I_BDEV(inode);
 	mutex_init(&bdev->bd_fsfreeze_mutex);
 	spin_lock_init(&bdev->bd_size_lock);
 	mutex_init(&bdev->bd_holder_lock);
-	atomic_set(&bdev->__bd_flags, partno);
+	atomic_set(&bdev->__bd_flags, partno);/*设分区编号*/
 	bdev->bd_mapping = &inode->i_data;
 	bdev->bd_queue = disk->queue;/*block设备queue复用disk->queue*/
 	if (partno && bdev_test_flag(disk->part0, BD_HAS_SUBMIT_BIO))

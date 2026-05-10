@@ -200,7 +200,7 @@ static inline bool llist_on_list(const struct llist_node *node)
  * reverse the order by yourself before traversing.
  */
 #define llist_for_each_entry_safe(pos, n, node, member)			       \
-	for (pos = llist_entry((node), typeof(*pos), member);		       \
+	for (pos = llist_entry((node)/*成员指针*/, typeof(*pos)/*结构体类型*/, member/*成员名称*/);		       \
 	     member_address_is_nonnull(pos, member) &&			       \
 	        (n = llist_entry(pos->member.next, typeof(*n), member), true); \
 	     pos = n)
@@ -235,13 +235,14 @@ static inline bool llist_add_batch(struct llist_node *new_first,
 				   struct llist_node *new_last,
 				   struct llist_head *head)
 {
+	/*取header*/
 	struct llist_node *first = READ_ONCE(head->first);
 
 	do {
-		new_last->next = first;
-	} while (!try_cmpxchg(&head->first, &first, new_first));
+		new_last->next = first;/*使last串上header*/
+	} while (!try_cmpxchg(&head->first, &first, new_first));/*更新new_first到header，保证原子性*/
 
-	return !first;
+	return !first;/*加之前链表是否为空*/
 }
 
 static inline bool __llist_add_batch(struct llist_node *new_first,
@@ -262,7 +263,7 @@ static inline bool __llist_add_batch(struct llist_node *new_first,
  */
 static inline bool llist_add(struct llist_node *new, struct llist_head *head)
 {
-	return llist_add_batch(new, new, head);
+	return llist_add_batch(new, new, head);/*在head前添加一个元素*/
 }
 
 static inline bool __llist_add(struct llist_node *new, struct llist_head *head)

@@ -79,6 +79,7 @@
 #endif
 
 #ifndef __ASSEMBLY__
+/*信号处理函数*/
 typedef void __signalfn_t(int);
 typedef __signalfn_t __user *__sighandler_t;
 

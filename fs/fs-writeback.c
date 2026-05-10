@@ -133,7 +133,7 @@ static void wb_wakeup(struct bdi_writeback *wb)
 {
 	spin_lock_irq(&wb->work_lock);
 	if (test_bit(WB_registered, &wb->state))
-		mod_delayed_work(bdi_wq, &wb->dwork, 0);
+		mod_delayed_work(bdi_wq, &wb->dwork, 0);/*触发wb->dwork,其对应的即为wb_workfn回调*/
 	spin_unlock_irq(&wb->work_lock);
 }
 
@@ -155,10 +155,10 @@ static void wb_wakeup_delayed(struct bdi_writeback *wb)
 {
 	unsigned long timeout;
 
-	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);
+	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);/*超时时间*/
 	spin_lock_irq(&wb->work_lock);
 	if (test_bit(WB_registered, &wb->state))
-		queue_delayed_work(bdi_wq, &wb->dwork, timeout);
+		queue_delayed_work(bdi_wq, &wb->dwork, timeout);/*延迟触发此work*/
 	spin_unlock_irq(&wb->work_lock);
 }
 
@@ -2174,7 +2174,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 	unsigned long dirtied_before = jiffies;
 	struct inode *inode;
 	long progress;
-	struct blk_plug plug;
+	struct blk_plug plug;/*局部变量*/
 	bool queued = false;
 
 	blk_start_plug(&plug);
@@ -2276,6 +2276,7 @@ static struct wb_writeback_work *get_next_work_item(struct bdi_writeback *wb)
 
 	spin_lock_irq(&wb->work_lock);
 	if (!list_empty(&wb->work_list)) {
+		/*取首个writeback_work*/
 		work = list_entry(wb->work_list.next,
 				  struct wb_writeback_work, list);
 		list_del_init(&work->list);
@@ -2369,8 +2370,10 @@ static long wb_do_writeback(struct bdi_writeback *wb)
 	long wrote = 0;
 
 	set_bit(WB_writeback_running, &wb->state);
+	/*遍历wb中的每个writeback_work,逐个执行*/
 	while ((work = get_next_work_item(wb)) != NULL) {
 		trace_writeback_exec(wb, work);
+		/*writeback此work*/
 		wrote += wb_writeback(wb, work);
 		finish_writeback_work(work);
 	}
@@ -2426,9 +2429,9 @@ void wb_workfn(struct work_struct *work)
 	}
 
 	if (!list_empty(&wb->work_list))
-		wb_wakeup(wb);
+		wb_wakeup(wb);/*队列不为空，还得立即继续唤醒此worker*/
 	else if (wb_has_dirty_io(wb) && dirty_writeback_interval)
-		wb_wakeup_delayed(wb);
+		wb_wakeup_delayed(wb);/*延迟唤醒此worker*/
 }
 
 /*

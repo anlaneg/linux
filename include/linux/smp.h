@@ -27,12 +27,13 @@ struct __call_single_data {
 };
 
 #define CSD_INIT(_func, _info) \
-	(struct __call_single_data){ .func = (_func), .info = (_info), }
+	(struct __call_single_data){ .func = (_func)/*回调函数*/, .info = (_info)/*回调函数参数*/, }
 
 /* Use __aligned() to avoid to use 2 cache lines for 1 csd */
 typedef struct __call_single_data call_single_data_t
 	__aligned(sizeof(struct __call_single_data));
 
+/*初始化struct __call_single_data*/
 #define INIT_CSD(_csd, _func, _info)		\
 do {						\
 	*(_csd) = CSD_INIT((_func), (_info));	\

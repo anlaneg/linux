@@ -72,7 +72,7 @@ static struct bio *mpage_bio_submit_read(struct bio *bio)
 {
 	bio->bi_end_io = mpage_read_end_io;
 	guard_bio_eod(bio);
-	submit_bio(bio);
+	submit_bio(bio);//自此函数进入磁盘读取
 	return NULL;
 }
 
@@ -80,7 +80,7 @@ static struct bio *mpage_bio_submit_write(struct bio *bio)
 {
 	bio->bi_end_io = mpage_write_end_io;
 	guard_bio_eod(bio);
-	submit_bio(bio);//自此函数进入磁盘读取
+	submit_bio(bio);//自此函数进入磁盘写入
 	return NULL;
 }
 

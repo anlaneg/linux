@@ -76,6 +76,7 @@ void native_smp_send_reschedule(int cpu)
 
 void native_send_call_func_single_ipi(int cpu)
 {
+	/*向目标cpu指明，需中断并“执行单核回调函数”的任务*/
 	__apic_send_IPI(cpu, CALL_FUNCTION_SINGLE_VECTOR);
 }
 

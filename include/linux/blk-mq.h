@@ -103,7 +103,7 @@ enum mq_rq_state {
  * especially blk_mq_rq_ctx_init() to take care of the added fields.
  */
 struct request {
-	struct request_queue *q;
+	struct request_queue *q;/*所属的request_queue*/
 	struct blk_mq_ctx *mq_ctx;
 	struct blk_mq_hw_ctx *mq_hctx;
 
@@ -167,7 +167,7 @@ struct request {
 	struct blk_crypto_keyslot *crypt_keyslot;
 #endif
 
-	enum mq_rq_state state;
+	enum mq_rq_state state;/*用于指明此request状态*/
 	atomic_t ref;
 
 	unsigned long deadline;
@@ -277,15 +277,16 @@ static inline void rq_list_add_head(struct rq_list *rl, struct request *rq)
 		rl->tail = rq;
 }
 
+/*弹出链表头上第一个request*/
 static inline struct request *rq_list_pop(struct rq_list *rl)
 {
 	struct request *rq = rl->head;
 
 	if (rq) {
-		rl->head = rl->head->rq_next;
+		rl->head = rl->head->rq_next;/*指向第二个*/
 		if (!rl->head)
-			rl->tail = NULL;
-		rq->rq_next = NULL;
+			rl->tail = NULL;/*链表为空情况*/
+		rq->rq_next = NULL;/*使首个元素断开链*/
 	}
 
 	return rq;
@@ -425,7 +426,7 @@ struct blk_mq_hw_ctx {
 	 * scheduler associated with a request queue, a tag is assigned when
 	 * that request is allocated. Else, this member is not used.
 	 */
-	struct blk_mq_tags	*sched_tags;
+	struct blk_mq_tags	*sched_tags;/*有RQF_SCHED_TAGS标记时有效*/
 
 	/** @numa_node: NUMA node the storage adapter has been connected to. */
 	unsigned int		numa_node;
@@ -532,14 +533,15 @@ enum hctx_type {
  * 		   switching elevator.
  */
 struct blk_mq_tag_set {
-	const struct blk_mq_ops	*ops;/*多队列对应的ops*/
+	/*多队列对应的ops*/
+	const struct blk_mq_ops	*ops;
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
 	unsigned int		nr_maps;
 	/*硬件队列数目*/
 	unsigned int		nr_hw_queues;
-	unsigned int		queue_depth;/*队列深度*/
-	unsigned int		reserved_tags;
-	unsigned int		cmd_size;
+	unsigned int		queue_depth;/*队列深度（总tags数目）*/
+	unsigned int		reserved_tags;/*需预留的tags数目*/
+	unsigned int		cmd_size;/* 每个请求的额外数据大小 */
 	/*对应的numa节点（在哪个numa node上申请request_queue)*/
 	int			numa_node;
 	unsigned int		timeout;/*request的超时时间*/
@@ -549,7 +551,7 @@ struct blk_mq_tag_set {
 	/*各queue对应的blk_mq_tags,每个queue1个此结构*/
 	struct blk_mq_tags	**tags;
 
-	struct blk_mq_tags	*shared_tags;
+	struct blk_mq_tags	*shared_tags;/*指明共享情况下使用的tags*/
 
 	struct mutex		tag_list_lock;
 	struct list_head	tag_list;
@@ -581,7 +583,7 @@ struct blk_mq_ops {
 	 * @queue_rq: Queue a new request from block IO.
 	 */
 	blk_status_t (*queue_rq)(struct blk_mq_hw_ctx *,
-				 const struct blk_mq_queue_data *);/*新请求入队*/
+				 const struct blk_mq_queue_data *);/*request入队处理*/
 
 	/**
 	 * @commit_rqs: If a driver uses bd->last to judge when to submit
@@ -598,7 +600,7 @@ struct blk_mq_ops {
 	 * empty the @rqlist completely, then the rest will be queued
 	 * individually by the block layer upon return.
 	 */
-	void (*queue_rqs)(struct rq_list *rqlist);
+	void (*queue_rqs)(struct rq_list *rqlist);/*一组request入队*/
 
 	/**
 	 * @get_budget: Reserve budget before queue request, once .queue_rq is
@@ -635,7 +637,7 @@ struct blk_mq_ops {
 	/**
 	 * @complete: Mark the request as complete.
 	 */
-	void (*complete)(struct request *);/*block软中断触发此回调*/
+	void (*complete)(struct request *);/*当一个request被完成后调用（比如：block软中断触发此回调）*/
 
 	/**
 	 * @init_hctx: Called when the block layer side of a hardware queue has
@@ -655,7 +657,7 @@ struct blk_mq_ops {
 	 * Tag greater than or equal to queue_depth is for setting up
 	 * flush request.
 	 */
-	int (*init_request)(struct blk_mq_tag_set *set, struct request *,
+	int (*init_request)(struct blk_mq_tag_set *set, struct request */*要初始的request*/,
 			    unsigned int, unsigned int);/*采用此函数初始化request*/
 	/**
 	 * @exit_request: Ditto for exit/teardown.
@@ -697,6 +699,7 @@ enum {
 	 * completing IO:
 	 */
 	BLK_MQ_F_STACKING	= 1 << 2,
+	/*指明使用set->shared_tags*/
 	BLK_MQ_F_TAG_HCTX_SHARED = 1 << 3,
 	BLK_MQ_F_BLOCKING	= 1 << 4,
 
@@ -775,16 +778,16 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
  * Tag address space map.
  */
 struct blk_mq_tags {
-	unsigned int nr_tags;
-	unsigned int nr_reserved_tags;
+	unsigned int nr_tags;/*总tag数*/
+	unsigned int nr_reserved_tags;/*预留的tag数，nr_tags-预留的tag数后等于depth数*/
 	unsigned int active_queues;
 
-	struct sbitmap_queue bitmap_tags;
-	struct sbitmap_queue breserved_tags;
+	struct sbitmap_queue bitmap_tags;/*负责depth tag号码分配(自其获得的id，可自static_rqs中获得真正的request)*/
+	struct sbitmap_queue breserved_tags;/*负责reserved tag号码分配*/
 
 	struct request **rqs;/*利用索引唯一标识每一个在途IO。*/
-	struct request **static_rqs;
-	struct list_head page_list;
+	struct request **static_rqs;/*记录此tag分配的一组request结构体*/
+	struct list_head page_list;/*用于记录分配此tag而占用的物理页*/
 
 	/*
 	 * used to clear request reference in rqs[] before freeing one

@@ -1032,7 +1032,7 @@ EXPORT_SYMBOL_GPL(queue_limits_stack_integrity);
  */
 void blk_set_queue_depth(struct request_queue *q, unsigned int depth)
 {
-	q->queue_depth = depth;
+	q->queue_depth = depth;/*设置队列深度*/
 	rq_qos_queue_depth_changed(q);
 }
 EXPORT_SYMBOL(blk_set_queue_depth);

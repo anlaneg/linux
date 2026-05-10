@@ -54,6 +54,7 @@ struct class {
 	/*设备公共属性*/
 	const struct attribute_group	**dev_groups;
 
+	/*此类设备在触发uevent时需要增加的env*/
 	int (*dev_uevent)(const struct device *dev, struct kobj_uevent_env *env);
 	/*设备在vduse下的节点名称*/
 	char *(*devnode)(const struct device *dev, umode_t *mode);

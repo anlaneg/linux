@@ -28,6 +28,7 @@ typedef unsigned long sigset_t;
 #define SIGIOT		 6
 #define SIGBUS		 7
 #define SIGFPE		 8
+/*kill信号*/
 #define SIGKILL		 9
 #define SIGUSR1		10
 #define SIGSEGV		11
@@ -38,6 +39,7 @@ typedef unsigned long sigset_t;
 #define SIGSTKFLT	16
 #define SIGCHLD		17
 #define SIGCONT		18
+/*stop信号*/
 #define SIGSTOP		19
 #define SIGTSTP		20
 #define SIGTTIN		21

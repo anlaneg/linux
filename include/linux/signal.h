@@ -129,7 +129,7 @@ static inline int sigequalsets(const sigset_t *set1, const sigset_t *set2)
 	return 0;
 }
 
-//获得指定信号的mask
+//获得指定信号值对应的mask(每个信号占一个bit）
 #define sigmask(sig)	(1UL << ((sig) - 1))
 
 #ifndef __HAVE_ARCH_SIG_SETOPS
@@ -202,7 +202,7 @@ _SIG_SET_OP(signotset, _sig_not)
 #undef _SIG_SET_OP
 #undef _sig_not
 
-//清空原信号集
+//清空信号集set
 static inline void sigemptyset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
@@ -289,6 +289,7 @@ extern void flush_sigqueue(struct sigpending *queue);
 /* Test if 'sig' is valid signal. Use this instead of testing _NSIG directly */
 static inline int valid_signal(unsigned long sig)
 {
+	/*信号值是否有效，超过信号最大值，则返回无效标记0*/
 	return sig <= _NSIG ? 1 : 0;
 }
 
@@ -460,6 +461,7 @@ extern bool unhandled_signal(struct task_struct *tsk, int sig);
 	rt_sigmask(SIGPOLL)   |  rt_sigmask(SIGSYS)    | \
 	SIGEMT_MASK                                    )
 
+/*检查是否“只能由内核处理、用户空间绝对无法干预”的信号*/
 #define sig_kernel_only(sig)		siginmask(sig, SIG_KERNEL_ONLY_MASK)
 #define sig_kernel_coredump(sig)	siginmask(sig, SIG_KERNEL_COREDUMP_MASK)
 #define sig_kernel_ignore(sig)		siginmask(sig, SIG_KERNEL_IGNORE_MASK)

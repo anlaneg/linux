@@ -136,7 +136,7 @@ struct nfs_fs_context {
 		size_t			addrlen;/*地址长度*/
 		char			*hostname;
 		char			*export_path;
-		int			port;
+		int			port;/*目的port*/
 		unsigned short		protocol;/*服务采用的协议，例如udp,tcp,rdma*/
 		unsigned short		nconnect;/*连接数*/
 		unsigned short		max_connect;/*连接上限*/
@@ -963,11 +963,11 @@ static inline bool nfs_error_is_fatal_on_server(int err)
  * Select between a default port value and a user-specified port value.
  * If a zero value is set, then autobind will be used.
  */
-static inline void nfs_set_port(struct sockaddr_storage *sap, int *port,
+static inline void nfs_set_port(struct sockaddr_storage *sap/*出参，使用的地址*/, int *port/*出参，实际使用的port*/,
 				const unsigned short default_port)
 {
 	if (*port == NFS_UNSPEC_PORT)
-		*port = default_port;
+		*port = default_port;/*使用默认port*/
 
 	rpc_set_port((struct sockaddr *)sap, *port);
 }
