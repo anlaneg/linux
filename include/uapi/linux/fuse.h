@@ -1033,7 +1033,7 @@ struct fuse_fallocate_in {
 
 struct fuse_in_header {
 	uint32_t	len;
-	uint32_t	opcode;
+	uint32_t	opcode;/*请求对应的opcode*/
 	uint64_t	unique;
 	uint64_t	nodeid;
 	uint32_t	uid;

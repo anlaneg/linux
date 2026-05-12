@@ -417,6 +417,7 @@ static void fuse_init_submount_lookup(struct fuse_submount_lookup *sl,
 	refcount_set(&sl->count, 1);
 }
 
+/*初始化inode*/
 static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 			    struct fuse_conn *fc)
 {
@@ -465,6 +466,7 @@ static int fuse_inode_set(struct inode *inode, void *_nodeidp)
 	return 0;
 }
 
+/*通过inode编号加载inode*/
 struct inode *fuse_iget(struct super_block *sb, u64 nodeid/*inode编号*/,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version,
@@ -841,7 +843,7 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		param->string = NULL;
 		return 0;
 
-	case OPT_FD:
+	case OPT_FD:/*指出fuse字符设备对应的fd*/
 		ctx->fd = result.uint_32;
 		ctx->fd_present = true;
 		break;
@@ -963,10 +965,11 @@ void fuse_pqueue_init(struct fuse_pqueue *fpq)
 	unsigned int i;
 
 	spin_lock_init(&fpq->lock);
+	/*初始化链表数组*/
 	for (i = 0; i < FUSE_PQ_HASH_SIZE; i++)
 		INIT_LIST_HEAD(&fpq->processing[i]);
 	INIT_LIST_HEAD(&fpq->io);
-	fpq->connected = 1;
+	fpq->connected = 1;/*指明已连接*/
 }
 
 void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
@@ -1065,7 +1068,7 @@ static struct inode *fuse_get_root_inode(struct super_block *sb, unsigned int mo
 	attr.mode = mode;
 	attr.ino = FUSE_ROOT_ID;
 	attr.nlink = 1;
-	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0);
+	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0);/*返回root对应的inode*/
 }
 
 struct fuse_inode_handle {
@@ -1616,6 +1619,7 @@ static int fuse_bdi_init(struct fuse_conn *fc, struct super_block *sb)
 	return 0;
 }
 
+/*申请fuse_dev*/
 struct fuse_dev *fuse_dev_alloc(void)
 {
 	struct fuse_dev *fud;
@@ -1626,7 +1630,7 @@ struct fuse_dev *fuse_dev_alloc(void)
 	if (!fud)
 		return NULL;
 
-	/*申请一组pq*/
+	/*申请一组pq对象*/
 	pq = kzalloc_objs(struct list_head, FUSE_PQ_HASH_SIZE);
 	if (!pq) {
 		kfree(fud);
@@ -1660,7 +1664,7 @@ struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc)
 	if (!fud)
 		return NULL;
 
-	fuse_dev_install(fud, fc);
+	fuse_dev_install(fud, fc);/*fud与fc关联*/
 	return fud;
 }
 EXPORT_SYMBOL_GPL(fuse_dev_alloc_install);
@@ -1852,7 +1856,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 #endif
 		fc->sync_fs = 1;
 	} else {
-		sb->s_blocksize = PAGE_SIZE;
+		sb->s_blocksize = PAGE_SIZE;/*块大小为页大小*/
 		sb->s_blocksize_bits = PAGE_SHIFT;
 	}
 
@@ -1866,6 +1870,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 
 	if (ctx->fudptr) {
 		err = -ENOMEM;
+		/*申请并关联fud*/
 		fud = fuse_dev_alloc_install(fc);
 		if (!fud)
 			goto err_free_dax;
@@ -1895,7 +1900,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	err = -ENOMEM;
 	root = fuse_get_root_inode(sb, ctx->rootmode);/*获取root inode*/
 	set_default_d_op(sb, &fuse_dentry_operations);
-	root_dentry = d_make_root(root);
+	root_dentry = d_make_root(root);/*构造root dentry*/
 	if (!root_dentry)
 		goto err_dev_free;
 
@@ -1913,9 +1918,9 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 		goto err_unlock;
 
 	list_add_tail(&fc->entry, &fuse_conn_list);
-	sb->s_root = root_dentry;
+	sb->s_root = root_dentry;/*设置根dentry*/
 	if (ctx->fudptr) {
-		*ctx->fudptr = fud;
+		*ctx->fudptr = fud;/*填写fud*/
 		wake_up_all(&fuse_dev_waitq);
 	}
 	mutex_unlock(&fuse_mutex);
@@ -1943,7 +1948,7 @@ static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 
 	if (!ctx->file || !ctx->rootmode_present ||
 	    !ctx->user_id_present || !ctx->group_id_present)
-		return -EINVAL;
+		return -EINVAL;/*参数不完全*/
 
 	/*
 	 * Require mount to happen from the same user namespace which
@@ -1952,7 +1957,7 @@ static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 	if ((ctx->file->f_op != &fuse_dev_operations) ||
 	    (ctx->file->f_cred->user_ns != sb->s_user_ns))
 		return -EINVAL;
-	ctx->fudptr = &ctx->file->private_data;
+	ctx->fudptr = &ctx->file->private_data;/*指向private指针,后续通过填写fudptr完成private_data指定填写*/
 
 	err = fuse_fill_super_common(sb, ctx);
 	if (err)
@@ -2006,9 +2011,10 @@ static int fuse_get_tree(struct fs_context *fsc)
 	fsc->s_fs_info = fm;
 
 	if (ctx->fd_present)
-		ctx->file = fget(ctx->fd);
+		ctx->file = fget(ctx->fd);/*取得fuse字符设备对应的文件*/
 
 	if (IS_ENABLED(CONFIG_BLOCK) && ctx->is_bdev) {
+		/*基于块设备,获取根*/
 		err = get_tree_bdev(fsc, fuse_fill_super);
 		goto out;
 	}
@@ -2032,6 +2038,7 @@ static int fuse_get_tree(struct fs_context *fsc)
 		if (!IS_ERR(sb))
 			fsc->root = dget(sb->s_root);
 	} else {
+		/*fud还未设置(即ctx->file的私有数据还未设置),设置它*/
 		err = get_tree_nodev(fsc, fuse_fill_super);
 	}
 out:

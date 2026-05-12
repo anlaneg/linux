@@ -193,12 +193,13 @@ static void fuse_drop_waiting(struct fuse_conn *fc)
 
 static void fuse_put_request(struct fuse_req *req);
 
+/*申请fuse_req结构体*/
 static struct fuse_req *fuse_get_req(struct mnt_idmap *idmap,
 				     struct fuse_mount *fm,
 				     bool for_background)
 {
 	struct fuse_conn *fc = fm->fc;
-	struct fuse_req *req;
+	struct fuse_req *req;/*fuse request结构体*/
 	bool no_idmap = !fm->sb || (fm->sb->s_iflags & SB_I_NOIDMAP);
 	kuid_t fsuid;
 	kgid_t fsgid;
@@ -233,6 +234,7 @@ static struct fuse_req *fuse_get_req(struct mnt_idmap *idmap,
 		goto out;
 	}
 
+	/*指明进程id*/
 	req->in.h.pid = pid_nr_ns(task_pid(current), fc->pid_ns);
 
 	__set_bit(FR_WAITING, &req->flags);
@@ -400,9 +402,10 @@ static void fuse_dev_queue_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 	spin_lock(&fiq->lock);
 	if (fiq->connected) {
 		fuse_request_assign_unique_locked(fiq, req);
-		list_add_tail(&req->list, &fiq->pending);
-		fuse_dev_wake_and_unlock(fiq);
+		list_add_tail(&req->list, &fiq->pending);/*加入到pending队列*/
+		fuse_dev_wake_and_unlock(fiq);/*唤醒等待队列*/
 	} else {
+		/*没有连接,标记出错*/
 		spin_unlock(&fiq->lock);
 		req->out.h.error = -ENOTCONN;
 		clear_bit(FR_PENDING, &req->flags);
@@ -422,7 +425,7 @@ static void fuse_send_one(struct fuse_iqueue *fiq, struct fuse_req *req)
 	req->in.h.len = sizeof(struct fuse_in_header) +
 		fuse_len_args(req->args->in_numargs,
 			      (struct fuse_arg *) req->args->in_args);
-	fiq->ops->send_req(fiq, req);
+	fiq->ops->send_req(fiq, req);/*发送请求*/
 }
 
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
@@ -598,9 +601,9 @@ static void __fuse_request_send(struct fuse_req *req)
 	/* acquire extra reference, since request is still needed after
 	   fuse_request_end() */
 	__fuse_get_request(req);
-	fuse_send_one(fiq, req);
+	fuse_send_one(fiq, req);/*发送请求*/
 
-	request_wait_answer(req);
+	request_wait_answer(req);/*等待响应*/
 	/* Pairs with smp_wmb() in fuse_request_end() */
 	smp_rmb();
 }
@@ -653,6 +656,7 @@ static void fuse_force_creds(struct fuse_req *req)
 	req->in.h.pid = pid_nr_ns(task_pid(current), fc->pid_ns);
 }
 
+/*如果要这样处理,为什么不先申请req,再填充args?*/
 static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 {
 	req->in.h.opcode = args->opcode;
@@ -694,10 +698,12 @@ ssize_t __fuse_simple_request(struct mnt_idmap *idmap,
 	fuse_args_to_req(req, args);
 
 	if (!args->noreply)
+		/*需要响应,置响应标识*/
 		__set_bit(FR_ISREPLY, &req->flags);
 	__fuse_request_send(req);/*发送请求*/
 	ret = req->out.h.error;
 	if (!ret && args->out_argvar) {
+		/*处理成功,且有出参,复制出参,返回出参最后一个参数的size*/
 		BUG_ON(args->out_numargs == 0);
 		ret = args->out_args[args->out_numargs - 1].size;
 	}
@@ -1236,6 +1242,7 @@ static int forget_pending(struct fuse_iqueue *fiq)
 	return fiq->forget_list_head.next != NULL;
 }
 
+/*有待处理的REQUEST*/
 static int request_pending(struct fuse_iqueue *fiq)
 {
 	return !list_empty(&fiq->pending) || !list_empty(&fiq->interrupts) ||
@@ -1432,35 +1439,38 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 			   sizeof(struct fuse_in_header) +
 			   sizeof(struct fuse_write_in) +
 			   fc->max_write))
-		return -EINVAL;
+		return -EINVAL;/*读取的内容过于小*/
 
  restart:
 	for (;;) {
 		spin_lock(&fiq->lock);
-		if (!fiq->connected || request_pending(fiq))
+		if (!fiq->connected/*未连接*/ || request_pending(fiq)/*有待处理的请求*/)
 			break;
 		spin_unlock(&fiq->lock);
 
 		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
+			return -EAGAIN;/*无待处理的请求,指明非阻塞,返回eagain*/
 		err = wait_event_interruptible_exclusive(fiq->waitq,
-				!fiq->connected || request_pending(fiq));
+				!fiq->connected || request_pending(fiq));/*阻塞等待*/
 		if (err)
 			return err;
 	}
 
 	if (!fiq->connected) {
+		/*连接断开*/
 		err = fc->aborted ? -ECONNABORTED : -ENODEV;
 		goto err_unlock;
 	}
 
 	if (!list_empty(&fiq->interrupts)) {
+		/*中断链表不为空*/
 		req = list_entry(fiq->interrupts.next, struct fuse_req,
 				 intr_entry);
 		return fuse_read_interrupt(fiq, cs, nbytes, req);
 	}
 
 	if (forget_pending(fiq)) {
+		/*forget_list_head不为空*/
 		if (list_empty(&fiq->pending) || fiq->forget_batch-- > 0)
 			return fuse_read_forget(fc, fiq, cs, nbytes);
 
@@ -1468,9 +1478,10 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 			fiq->forget_batch = 16;
 	}
 
+	/*自pending上移除req*/
 	req = list_entry(fiq->pending.next, struct fuse_req, list);
 	clear_bit(FR_PENDING, &req->flags);
-	list_del_init(&req->list);
+	list_del_init(&req->list);/*移除*/
 	spin_unlock(&fiq->lock);
 
 	args = req->args;
@@ -1478,6 +1489,7 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 
 	/* If request is too large, reply with an error and restart the read */
 	if (nbytes < reqsize) {
+		/*提供的BUFFER过小*/
 		req->out.h.error = -EIO;
 		/* SETXATTR is special, since it may contain too large data */
 		if (args->opcode == FUSE_SETXATTR)
@@ -1495,11 +1507,13 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 		goto out_end;
 
 	}
-	list_add(&req->list, &fpq->io);
+	list_add(&req->list, &fpq->io);/*req加入到io队列,待读取*/
 	spin_unlock(&fpq->lock);
 	cs->req = req;
+	/*复制header至cs*/
 	err = fuse_copy_one(cs, &req->in.h, sizeof(req->in.h));
 	if (!err)
+		/*复制WRITE_IN(参数)至cs*/
 		err = fuse_copy_args(cs, args->in_numargs, args->in_pages,
 				     (struct fuse_arg *) args->in_args, 0);
 	fuse_copy_finish(cs);
@@ -1518,7 +1532,7 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 		goto out_end;
 	}
 	hash = fuse_req_hash(req->in.h.unique);
-	list_move_tail(&req->list, &fpq->processing[hash]);
+	list_move_tail(&req->list, &fpq->processing[hash]);/*存放到processing链表*/
 	__fuse_get_request(req);
 	set_bit(FR_SENT, &req->flags);
 	spin_unlock(&fpq->lock);
@@ -1562,11 +1576,13 @@ struct fuse_dev *fuse_get_dev(struct file *file)
 	if (likely(fud))
 		return fud;
 
+	/*如private_data为FUSE_DEV_SYNC_INIT,则等待*/
 	err = wait_event_interruptible(fuse_dev_waitq,
 				       READ_ONCE(file->private_data) != FUSE_DEV_SYNC_INIT);
 	if (err)
 		return ERR_PTR(err);
 
+	/*取fud*/
 	fud = __fuse_get_dev(file);
 	if (!fud)
 		return ERR_PTR(-EPERM);
@@ -1574,6 +1590,7 @@ struct fuse_dev *fuse_get_dev(struct file *file)
 	return fud;
 }
 
+/*提供buffer读取kernel积攒的REQUEST*/
 static ssize_t fuse_dev_read(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct fuse_copy_state cs;
@@ -1587,8 +1604,9 @@ static ssize_t fuse_dev_read(struct kiocb *iocb, struct iov_iter *to)
 	if (!user_backed_iter(to))
 		return -EINVAL;
 
-	fuse_copy_init(&cs, true, to);
+	fuse_copy_init(&cs, true, to);/*初始化cs*/
 
+	/*读取io请求*/
 	return fuse_dev_do_read(fud, file, &cs, iov_iter_count(to));
 }
 
@@ -2219,6 +2237,7 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 	spin_lock(&fpq->lock);
 	req = NULL;
 	if (fpq->connected)
+		/*通过unique查找req*/
 		req = fuse_request_find(fpq, oh.unique & ~FUSE_INT_REQ_BIT);
 
 	err = -ENOENT;
@@ -2292,6 +2311,7 @@ static ssize_t fuse_dev_write(struct kiocb *iocb, struct iov_iter *from)
 
 	fuse_copy_init(&cs, false, from);
 
+	/*执行对具体req的响应*/
 	return fuse_dev_do_write(fud, &cs, iov_iter_count(from));
 }
 
@@ -2397,12 +2417,13 @@ static __poll_t fuse_dev_poll(struct file *file, poll_table *wait)
 		return EPOLLERR;
 
 	fiq = &fud->fc->iq;
-	poll_wait(file, &fiq->waitq, wait);
+	poll_wait(file, &fiq->waitq, wait);/*等待请求*/
 
 	spin_lock(&fiq->lock);
 	if (!fiq->connected)
-		mask = EPOLLERR;
+		mask = EPOLLERR;/*未连接*/
 	else if (request_pending(fiq))
+		/*有请求*/
 		mask |= EPOLLIN | EPOLLRDNORM;
 	spin_unlock(&fiq->lock);
 
@@ -2578,12 +2599,13 @@ static int fuse_dev_fasync(int fd, struct file *file, int on)
 	return fasync_helper(fd, file, on, &fud->fc->iq.fasync);
 }
 
+/*申请并设置private_data(fuse_dev)*/
 static int fuse_device_clone(struct fuse_conn *fc, struct file *new)
 {
 	struct fuse_dev *fud;
 
 	if (__fuse_get_dev(new))
-		/*调用时private_data不能有值*/
+		/*调用时private_data不能有值,已有值,返回错误*/
 		return -EINVAL;
 
 	/*申请并安装fud，并设置private_data*/
@@ -2668,6 +2690,7 @@ static long fuse_dev_ioctl_sync_init(struct file *file)
 
 	mutex_lock(&fuse_mutex);
 	if (!__fuse_get_dev(file)) {
+		/*未设置fuse_dev,置为FUSE_DEV_SYNC_INIT*/
 		WRITE_ONCE(file->private_data, FUSE_DEV_SYNC_INIT);
 		err = 0;
 	}
@@ -2691,6 +2714,7 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 		return fuse_dev_ioctl_backing_close(file, argp);
 
 	case FUSE_DEV_IOC_SYNC_INIT:
+		/*如未设置fuse_dev,private_data置为FUSE_DEV_SYNC_INIT*/
 		return fuse_dev_ioctl_sync_init(file);
 
 	default:
@@ -2711,12 +2735,12 @@ static void fuse_dev_show_fdinfo(struct seq_file *seq, struct file *file)
 
 const struct file_operations fuse_dev_operations = {
 	.owner		= THIS_MODULE,
-	.open		= fuse_dev_open,
-	.read_iter	= fuse_dev_read,
+	.open		= fuse_dev_open,/*私有数据置为null,仅挂载后才直正设置为fuse_dev*/
+	.read_iter	= fuse_dev_read,/*读取请求*/
 	.splice_read	= fuse_dev_splice_read,
-	.write_iter	= fuse_dev_write,
+	.write_iter	= fuse_dev_write,/*回复响应*/
 	.splice_write	= fuse_dev_splice_write,
-	.poll		= fuse_dev_poll,
+	.poll		= fuse_dev_poll,/*检查是否有请求待处理*/
 	.release	= fuse_dev_release,
 	.fasync		= fuse_dev_fasync,
 	.unlocked_ioctl = fuse_dev_ioctl,
@@ -2730,6 +2754,7 @@ const struct file_operations fuse_dev_operations = {
 };
 EXPORT_SYMBOL_GPL(fuse_dev_operations);
 
+/*字符设备,用于提供fuse文件系统的IO请求转交用户态及处理用户态响应的IO响应*/
 static struct miscdevice fuse_miscdevice = {
 	.minor = FUSE_MINOR,
 	.name  = "fuse",
@@ -2746,7 +2771,7 @@ int __init fuse_dev_init(void)
 	if (!fuse_req_cachep)
 		goto out;
 
-	/*misc设备注册*/
+	/*misc设备注册(用户态通过读此设备拿到req,通过写此设备返回io响应)*/
 	err = misc_register(&fuse_miscdevice);
 	if (err)
 		goto out_cache_clean;

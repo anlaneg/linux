@@ -32,7 +32,7 @@
  * mutual exclusion in device removal and mounting path
  */
 static DEFINE_MUTEX(virtio_fs_mutex);
-static LIST_HEAD(virtio_fs_instances);
+static LIST_HEAD(virtio_fs_instances);/*用于记录系统中所有fs instances*/
 
 /* The /sys/fs/virtio_fs/ kset */
 static struct kset *virtio_fs_kset;
@@ -67,6 +67,7 @@ struct virtio_fs {
 	struct list_head list;    /* on virtio_fs_instances */
 	char *tag;
 	struct virtio_fs_vq *vqs;
+	/*VQS队列数目*/
 	unsigned int nvqs;               /* number of virtqueues */
 	unsigned int num_request_queues; /* number of request queues */
 	struct dax_device *dax_dev;
@@ -118,6 +119,7 @@ static const struct fs_parameter_spec virtio_fs_parameters[] = {
 	{}
 };
 
+/*virtio-fs参数解析*/
 static int virtio_fs_parse_param(struct fs_context *fsc,
 				 struct fs_parameter *param)
 {
@@ -167,7 +169,7 @@ static inline void inc_in_flight_req(struct virtio_fs_vq *fsvq)
 static inline void dec_in_flight_req(struct virtio_fs_vq *fsvq)
 {
 	WARN_ON(fsvq->in_flight <= 0);
-	fsvq->in_flight--;
+	fsvq->in_flight--;/*减少*/
 	if (!fsvq->in_flight)
 		complete(&fsvq->in_flight_zero);
 }
@@ -461,6 +463,7 @@ static struct virtio_fs *virtio_fs_find_instance(const char *tag)
 
 	mutex_lock(&virtio_fs_mutex);
 
+	/*遍历所有virtio-fs设备,检查指定tag的设备*/
 	list_for_each_entry(fs, &virtio_fs_instances, list) {
 		if (strcmp(fs->tag, tag) == 0) {
 			kobject_get(&fs->kobj);
@@ -564,6 +567,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 	pr_debug("virtio-fs: worker %s called.\n", __func__);
 	while (1) {
 		spin_lock(&fsvq->lock);
+		/*自fsvq->end_reqs链表上摘取一个req(已失败认为完成的请求)*/
 		req = list_first_entry_or_null(&fsvq->end_reqs, struct fuse_req,
 					       list);
 		if (!req) {
@@ -573,7 +577,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 
 		list_del_init(&req->list);
 		spin_unlock(&fsvq->lock);
-		fuse_request_end(req);
+		fuse_request_end(req);/*处理此req*/
 	}
 
 	/* Dispatch pending requests */
@@ -591,7 +595,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 		list_del_init(&req->list);
 		spin_unlock(&fsvq->lock);
 
-		/*将req入队到vq*/
+		/*将req入队到vq,以发送请求*/
 		flags = memalloc_nofs_save();
 		ret = virtio_fs_enqueue_req(fsvq, req, true, GFP_KERNEL);
 		memalloc_nofs_restore(flags);
@@ -762,7 +766,7 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 }
 
 /* Work function for request completion */
-static void virtio_fs_request_complete(struct fuse_req *req,
+static void virtio_fs_request_complete(struct fuse_req *req/*被完成的请求*/,
 				       struct virtio_fs_vq *fsvq)
 {
 	struct fuse_args *args;
@@ -797,10 +801,11 @@ static void virtio_fs_request_complete(struct fuse_req *req,
 
 	fuse_request_end(req);
 	spin_lock(&fsvq->lock);
-	dec_in_flight_req(fsvq);
+	dec_in_flight_req(fsvq);/*REQ inflight数减少*/
 	spin_unlock(&fsvq->lock);
 }
 
+/*REQ完成后的处理工作*/
 static void virtio_fs_complete_req_work(struct work_struct *work)
 {
 	struct virtio_fs_req_work *w =
@@ -824,14 +829,15 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 	/* Collect completed requests off the virtqueue */
 	spin_lock(&fsvq->lock);
 	do {
-		virtqueue_disable_cb(vq);
+		virtqueue_disable_cb(vq);/*禁用此vq上的回调(当前正在处理)*/
 
+		/*取REQ并存放在reqs队列*/
 		while ((req = virtqueue_get_buf(vq, &len)) != NULL) {
 			spin_lock(&fpq->lock);
 			list_move_tail(&req->list, &reqs);
 			spin_unlock(&fpq->lock);
 		}
-	} while (!virtqueue_enable_cb(vq));
+	} while (!virtqueue_enable_cb(vq));/*开启回调*/
 	spin_unlock(&fsvq->lock);
 
 	/* End requests */
@@ -842,8 +848,9 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		if (req->args->may_block) {
 			struct virtio_fs_req_work *w;
 
+			/*针对此REQ触发req complete工作*/
 			w = kzalloc_obj(*w, GFP_NOFS | __GFP_NOFAIL);
-			INIT_WORK(&w->done_work, virtio_fs_complete_req_work);
+			INIT_WORK(&w->done_work, virtio_fs_complete_req_work);/*将请求完成时,此WORK将被调用*/
 			w->fsvq = fsvq;
 			w->req = req;
 			schedule_work(&w->done_work);
@@ -904,11 +911,11 @@ static void virtio_fs_vq_done(struct virtqueue *vq)
 
 	dev_dbg(&vq->vdev->dev, "%s %s\n", __func__, fsvq->name);
 
-	schedule_work(&fsvq->done_work);
+	schedule_work(&fsvq->done_work);/*此队列有已完成的请求*/
 }
 
-static void virtio_fs_init_vq(struct virtio_fs_vq *fsvq, char *name,
-			      int vq_type)
+static void virtio_fs_init_vq(struct virtio_fs_vq *fsvq, char *name/*VQ名称*/,
+			      int vq_type/*VQ类型*/)
 {
 	strscpy(fsvq->name, name, VQ_NAME_LEN);
 	spin_lock_init(&fsvq->lock);
@@ -917,6 +924,9 @@ static void virtio_fs_init_vq(struct virtio_fs_vq *fsvq, char *name,
 	init_completion(&fsvq->in_flight_zero);
 
 	if (vq_type == VQ_REQUEST) {
+		/*此VQ为请求队列(当前io栈设计与net栈不同,io栈中的req结构是可以填写响应状态及响应数据的,因此这个VQ实际上就是双向的了)
+		 * 当此IO完成时done_work将调用
+		 * */
 		INIT_WORK(&fsvq->done_work, virtio_fs_requests_done_work);
 		INIT_WORK(&fsvq->dispatch_work,
 				virtio_fs_request_dispatch_work);/*初始化入队的work*/
@@ -973,8 +983,8 @@ static int virtio_fs_setup_vqs(struct virtio_device *vdev,
 		char vq_name[VQ_NAME_LEN];
 
 		snprintf(vq_name, VQ_NAME_LEN, "requests.%u", i - VQ_REQUEST);
-		virtio_fs_init_vq(&fs->vqs[i], vq_name, VQ_REQUEST);
-		vqs_info[i].callback = virtio_fs_vq_done;
+		virtio_fs_init_vq(&fs->vqs[i], vq_name, VQ_REQUEST);/*请求队列*/
+		vqs_info[i].callback = virtio_fs_vq_done;/*设置回调,在IO完成时调用*/
 		vqs_info[i].name = fs->vqs[i].name;
 	}
 
@@ -1371,7 +1381,7 @@ static unsigned int sg_init_fuse_args(struct scatterlist *sg,
 
 /* Add a request to a virtqueue and kick the device */
 static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
-				 struct fuse_req *req, bool in_flight,
+				 struct fuse_req *req/*要入队的请求*/, bool in_flight,
 				 gfp_t gfp)
 {
 	/* requests need at least 4 elements */
@@ -1475,6 +1485,7 @@ out:
 	return ret;
 }
 
+/*发送IO请求*/
 static void virtio_fs_send_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 {
 	unsigned int queue_id;
@@ -1488,7 +1499,7 @@ static void virtio_fs_send_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 	clear_bit(FR_PENDING, &req->flags);
 
 	fs = fiq->priv;/*取fiq的私有数据*/
-	queue_id = fs->mq_map[raw_smp_processor_id()];
+	queue_id = fs->mq_map[raw_smp_processor_id()];/*取此cpu对应的queue*/
 
 	pr_debug("%s: opcode %u unique %#llx nodeid %#llx in.len %u out.len %u queue_id %u\n",
 		 __func__, req->in.h.opcode, req->in.h.unique,
@@ -1497,7 +1508,7 @@ static void virtio_fs_send_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 		 queue_id);
 
 	fsvq = &fs->vqs[queue_id];/*取queue_id对应的vq*/
-	ret = virtio_fs_enqueue_req(fsvq, req, false, GFP_ATOMIC);/*入队到此vq*/
+	ret = virtio_fs_enqueue_req(fsvq, req, false, GFP_ATOMIC);/*入队到此request*/
 	if (ret < 0) {
 		if (ret == -ENOSPC) {
 			/*
@@ -1515,8 +1526,8 @@ static void virtio_fs_send_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 
 		/* Can't end request in submission context. Use a worker */
 		spin_lock(&fsvq->lock);
-		list_add_tail(&req->list, &fsvq->end_reqs);
-		schedule_work(&fsvq->dispatch_work);
+		list_add_tail(&req->list, &fsvq->end_reqs);/*已失败,为响应,存入end_reqs列表*/
+		schedule_work(&fsvq->dispatch_work);/*发送REQ失败,处理为响应*/
 		spin_unlock(&fsvq->lock);
 		return;
 	}
@@ -1525,7 +1536,7 @@ static void virtio_fs_send_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 static const struct fuse_iqueue_ops virtio_fs_fiq_ops = {
 	.send_forget	= virtio_fs_send_forget,
 	.send_interrupt	= virtio_fs_send_interrupt,
-	.send_req	= virtio_fs_send_req,
+	.send_req	= virtio_fs_send_req,/*发送io请求*/
 	.release	= virtio_fs_fiq_release,
 };
 
@@ -1584,7 +1595,8 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 		}
 		ctx->dax_dev = fs->dax_dev;
 	}
-	err = fuse_fill_super_common(sb, ctx);/*填充super*/
+	/*使用fuse提供的方式填充super,这样virtio-fs的VFS实现就复用了fuse*/
+	err = fuse_fill_super_common(sb, ctx);
 	if (err < 0)
 		goto err_free_fuse_devs;
 
@@ -1672,21 +1684,23 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 	int err = -EIO;
 
 	if (!fsc->source)
+		/*必须指定源*/
 		return invalf(fsc, "No source specified");
 
 	/* This gets a reference on virtio_fs object. This ptr gets installed
 	 * in fc->iq->priv. Once fuse_conn is going away, it calls ->put()
 	 * to drop the reference to this object.
 	 */
-	fs = virtio_fs_find_instance(fsc->source);
+	fs = virtio_fs_find_instance(fsc->source);/*查找对应的virtio-fs设备*/
 	if (!fs) {
 		pr_info("virtio-fs: tag <%s> not found\n", fsc->source);
 		return -EINVAL;
 	}
 
+	/*取队列深度*/
 	virtqueue_size = virtqueue_get_vring_size(fs->vqs[VQ_REQUEST].vq);
 	if (WARN_ON(virtqueue_size <= FUSE_HEADER_OVERHEAD))
-		goto out_err;
+		goto out_err;/*过小*/
 
 	err = -ENOMEM;
 	fc = kzalloc_obj(struct fuse_conn);
@@ -1751,11 +1765,12 @@ static int virtio_fs_init_fs_context(struct fs_context *fsc)
 	ctx = kzalloc_obj(struct fuse_fs_context);
 	if (!ctx)
 		return -ENOMEM;
-	fsc->fs_private = ctx;
+	fsc->fs_private = ctx;/*使用fuse_fs_context*/
 	fsc->ops = &virtio_fs_context_ops;
 	return 0;
 }
 
+/*实现virtiofs*/
 static struct file_system_type virtio_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "virtiofs",

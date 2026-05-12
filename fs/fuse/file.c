@@ -24,7 +24,7 @@
 #include <linux/iomap.h>
 
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
-			  unsigned int open_flags, int opcode,
+			  unsigned int open_flags, int opcode/*操作码*/,
 			  struct fuse_open_out *outargp)
 {
 	struct fuse_open_in inarg;
@@ -40,7 +40,7 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 		inarg.open_flags |= FUSE_OPEN_KILL_SUIDGID;
 	}
 
-	args.opcode = opcode;
+	args.opcode = opcode;/*指定操作码*/
 	args.nodeid = nodeid;
 	args.in_numargs = 1;
 	args.in_args[0].size = sizeof(inarg);
@@ -49,6 +49,7 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 	args.out_args[0].size = sizeof(*outargp);
 	args.out_args[0].value = outargp;
 
+	/*向用户态发送请求*/
 	return fuse_simple_request(fm, &args);
 }
 
@@ -127,7 +128,7 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 }
 
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid/*numa node 编号*/,
-				 unsigned int open_flags, bool isdir/*是否为目标操作*/)
+				 unsigned int open_flags, bool isdir/*是否目录操作*/)
 {
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_file *ff;
@@ -156,7 +157,7 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid/*numa node �
 		struct fuse_open_out *outargp = &ff->args->open_outarg;
 		int err;
 
-		err = fuse_send_open(fm, nodeid, open_flags, opcode, outargp);
+		err = fuse_send_open(fm, nodeid, open_flags, opcode/*操作码*/, outargp);
 		if (!err) {
 			ff->fh = outargp->fh;
 			ff->open_flags = outargp->open_flags;
@@ -3159,6 +3160,7 @@ static ssize_t fuse_copy_file_range(struct file *src_file, loff_t src_off,
 	return ret;
 }
 
+/*FUSE文件操作集*/
 static const struct file_operations fuse_file_operations = {
 	.llseek		= fuse_file_llseek,
 	.read_iter	= fuse_file_read_iter,
@@ -3195,6 +3197,7 @@ static const struct address_space_operations fuse_file_aops  = {
 	.direct_IO	= fuse_direct_IO,
 };
 
+/*fuse初始化file inode*/
 void fuse_init_file_inode(struct inode *inode, unsigned int flags)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);

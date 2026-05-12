@@ -359,15 +359,19 @@ static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 			     struct fuse_entry_out *outarg)
 {
 	memset(outarg, 0, sizeof(struct fuse_entry_out));
-	args->opcode = FUSE_LOOKUP;
-	args->nodeid = nodeid;
+	args->opcode = FUSE_LOOKUP;//目录文件查找（FUSE协议标准命令）
+	args->nodeid = nodeid;/*指定在哪个父目录下查找（父目录的唯一ID）*/
 	args->in_numargs = 3;
 	fuse_set_zero_arg0(args);
+	/*第1个输入参数：要查找的文件名字符串 + 长度*/
 	args->in_args[1].size = name->len;
 	args->in_args[1].value = name->name;
+	/*第2个输入参数：字符串结束符 '\0'（FUSE协议要求字符串以\0结尾）*/
 	args->in_args[2].size = 1;
 	args->in_args[2].value = "";
+	/*输出参数1个（用户态返回的文件条目信息）*/
 	args->out_numargs = 1;
+	/*绑定输出缓冲区：接收用户态返回的inode、文件属性等*/
 	args->out_args[0].size = sizeof(struct fuse_entry_out);
 	args->out_args[0].value = outarg;
 }
@@ -600,7 +604,8 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	return err;
 }
 
-static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
+/*在dir下查找指定名称的dentry*/
+static struct dentry *fuse_lookup(struct inode *dir/*目录*/, struct dentry *entry,
 				  unsigned int flags)
 {
 	struct fuse_entry_out outarg;
@@ -2455,6 +2460,7 @@ void fuse_init_common(struct inode *inode)
 	inode->i_op = &fuse_common_inode_operations;
 }
 
+/*初始化目录型inode*/
 void fuse_init_dir(struct inode *inode)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);

@@ -3223,7 +3223,7 @@ void virtqueue_disable_cb(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
-	VOID_VIRTQUEUE_CALL(vq, disable_cb);
+	VOID_VIRTQUEUE_CALL(vq, disable_cb);/*禁用此回调*/
 }
 EXPORT_SYMBOL_GPL(virtqueue_disable_cb);
 
@@ -3370,7 +3370,7 @@ irqreturn_t vring_interrupt(int irq, void *_vq)
 
 	pr_debug("virtqueue callback for %p (%p)\n", vq, vq->vq.callback);
 	if (vq->vq.callback)
-		vq->vq.callback(&vq->vq);
+		vq->vq.callback(&vq->vq);/*执行callback*/
 
 	return IRQ_HANDLED;
 }

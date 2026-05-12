@@ -268,7 +268,7 @@ struct super_block {
 	 * interpret filesystem uids, gids, quotas, device nodes,
 	 * xattrs and security labels.
 	 */
-	struct user_namespace			*s_user_ns;
+	struct user_namespace			*s_user_ns;/*所属的user ns*/
 
 	/*
 	 * The list_lru structure is essentially just a pointer to a table

@@ -168,6 +168,7 @@ static void set_init_blocksize(struct block_device *bdev)
  */
 int bdev_validate_blocksize(struct block_device *bdev, int block_size)
 {
+	/*校验块大小*/
 	if (blk_validate_block_size(block_size))
 		return -EINVAL;
 
@@ -190,7 +191,7 @@ int set_blocksize(struct file *file, int size)
 		return ret;
 
 	if (!file->private_data)
-		return -EINVAL;
+		return -EINVAL;/*文件对应的private_data需要已设置*/
 
 	/* Don't change the size if it is same as current */
 	if (inode->i_blkbits != blksize_bits(size)) {

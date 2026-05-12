@@ -1295,7 +1295,7 @@ int get_anon_bdev(dev_t *p)
 	 * Always return at least 1 from get_anon_bdev.
 	 */
 	dev = ida_alloc_range(&unnamed_dev_ida, 1, (1 << MINORBITS) - 1,
-			GFP_ATOMIC);
+			GFP_ATOMIC);/*申请id*/
 	if (dev == -ENOSPC)
 		dev = -EMFILE;
 	if (dev < 0)
@@ -1381,7 +1381,7 @@ int get_tree_nodev(struct fs_context *fc,
 				    struct fs_context *fc))
 {
 	/*填充fc->root*/
-	return vfs_get_super(fc, NULL/*不共享*/, fill_super/*填充root dentry节点设置*/);
+	return vfs_get_super(fc, NULL/*不共享*/, fill_super/*填充fc->root dentry节点设置*/);
 }
 EXPORT_SYMBOL(get_tree_nodev);
 

@@ -310,14 +310,14 @@ struct fuse_file {
 
 /** One input argument of a request */
 struct fuse_in_arg {
-	unsigned size;
-	const void *value;
+	unsigned size;/*参数长度*/
+	const void *value;/*参数值*/
 };
 
 /** One output argument of a request */
 struct fuse_arg {
-	unsigned size;
-	void *value;
+	unsigned size;/*参数长度*/
+	void *value;/*参数值*/
 };
 
 /** FUSE folio descriptor */
@@ -329,11 +329,11 @@ struct fuse_folio_desc {
 struct fuse_args {
 	uint64_t nodeid;/*inode对应的numa node id*/
 	uint32_t opcode;/*操作码，例如FUSE_OPEN*/
-	uint8_t in_numargs;
-	uint8_t out_numargs;
+	uint8_t in_numargs;/*in_args数组大小*/
+	uint8_t out_numargs;/*out_args数组大小*/
 	uint8_t ext_idx;
 	bool force:1;
-	bool noreply:1;
+	bool noreply:1;/*是否指明无需响应*/
 	bool nocreds:1;
 	bool in_pages:1;
 	bool out_pages:1;
@@ -345,8 +345,8 @@ struct fuse_args {
 	bool is_ext:1;
 	bool is_pinned:1;
 	bool invalidate_vmap:1;
-	struct fuse_in_arg in_args[4];
-	struct fuse_arg out_args[2];
+	struct fuse_in_arg in_args[4];/*向用户态去(入参)*/
+	struct fuse_arg out_args[2];/*从用户态来(出参)*/
 	void (*end)(struct fuse_mount *fm, struct fuse_args *args, int error);
 	/* Used for kvec iter backed by vmalloc address */
 	void *vmap_base;
@@ -416,7 +416,7 @@ struct fuse_io_priv {
  * FR_URING:		request is handled through fuse-io-uring
  */
 enum fuse_req_flag {
-	FR_ISREPLY,
+	FR_ISREPLY,/*需要响应*/
 	FR_FORCE,
 	FR_BACKGROUND,
 	FR_WAITING,
@@ -450,7 +450,7 @@ struct fuse_req {
 	struct fuse_args *args;/*请求对应的参数*/
 
 	/** refcount */
-	refcount_t count;
+	refcount_t count;/*引用计数*/
 
 	/* Request flags, updated with test/set/clear_bit() */
 	unsigned long flags;
@@ -508,7 +508,7 @@ struct fuse_iqueue_ops {
 	/**
 	 * Send one request
 	 */
-	void (*send_req)(struct fuse_iqueue *fiq, struct fuse_req *req);
+	void (*send_req)(struct fuse_iqueue *fiq, struct fuse_req *req);/*负责发送请求*/
 
 	/**
 	 * Clean up when fuse_iqueue is destroyed
@@ -577,10 +577,10 @@ struct fuse_pqueue {
  */
 struct fuse_dev {
 	/** Fuse connection for this device */
-	struct fuse_conn *fc;
+	struct fuse_conn *fc;/*连接*/
 
 	/** Processing queue */
-	struct fuse_pqueue pq;
+	struct fuse_pqueue pq;/*处理队列*/
 
 	/** list entry on fc->devices */
 	struct list_head entry;
@@ -605,7 +605,7 @@ struct fuse_fs_context {
 	kuid_t user_id;
 	kgid_t group_id;
 	bool is_bdev:1;
-	bool fd_present:1;
+	bool fd_present:1;/*指明fd已设置*/
 	bool rootmode_present:1;
 	bool user_id_present:1;
 	bool group_id_present:1;
@@ -961,7 +961,7 @@ struct fuse_conn {
 	struct rw_semaphore killsb;
 
 	/** List of device instances belonging to this connection */
-	struct list_head devices;
+	struct list_head devices;/*连接对应的所有设备*/
 
 #ifdef CONFIG_FUSE_DAX
 	/* Dax mode */
@@ -1012,7 +1012,7 @@ struct fuse_mount {
 	 * Super block for this connection (fc->killsb must be held when
 	 * accessing this).
 	 */
-	struct super_block *sb;
+	struct super_block *sb;/*对应super block*/
 
 	/* Entry on fc->mounts */
 	struct list_head fc_entry;

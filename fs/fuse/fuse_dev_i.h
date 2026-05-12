@@ -42,6 +42,7 @@ struct fuse_copy_state {
 #define FUSE_DEV_SYNC_INIT ((struct fuse_dev *) 1)
 #define FUSE_DEV_PTR_MASK (~1UL)
 
+/*取fuse_dev指针*/
 static inline struct fuse_dev *__fuse_get_dev(struct file *file)
 {
 	/*
