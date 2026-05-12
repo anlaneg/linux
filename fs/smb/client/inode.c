@@ -46,7 +46,7 @@ static void cifs_set_ops(struct inode *inode)
 	unsigned int sbflags = cifs_sb_flags(cifs_sb);
 
 	switch (inode->i_mode & S_IFMT) {
-	case S_IFREG:
+	case S_IFREG:/*设置普通文件对应的操作ops*/
 		inode->i_op = &cifs_file_inode_ops;
 		if (sbflags & CIFS_MOUNT_DIRECT_IO) {
 			set_bit(NETFS_ICTX_UNBUFFERED, &ictx->flags);
@@ -76,7 +76,7 @@ static void cifs_set_ops(struct inode *inode)
 		if (IS_AUTOMOUNT(inode)) {
 			inode->i_op = &cifs_namespace_inode_operations;
 		} else {
-			inode->i_op = &cifs_dir_inode_ops;
+			inode->i_op = &cifs_dir_inode_ops;/*设置目录inode操作集*/
 			inode->i_fop = &cifs_dir_ops;
 		}
 		break;
@@ -2307,7 +2307,7 @@ struct dentry *cifs_mkdir(struct mnt_idmap *idmap, struct inode *inode,
 	}
 
 	/* BB add setting the equivalent of mode via CreateX w/ACLs */
-	rc = server->ops->mkdir(xid, inode, mode, tcon, full_path, cifs_sb);
+	rc = server->ops->mkdir(xid, inode, mode, tcon, full_path, cifs_sb);/*创建目录*/
 	if (rc) {
 		cifs_dbg(FYI, "cifs_mkdir returned 0x%x\n", rc);
 		d_drop(direntry);

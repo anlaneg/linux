@@ -175,7 +175,7 @@ static int check_wsl_eas(struct kvec *rsp_iov)
 static int smb2_compound_op(const unsigned int xid, struct cifs_tcon *tcon,
 			    struct cifs_sb_info *cifs_sb, const char *full_path,
 			    struct cifs_open_parms *oparms, struct kvec *in_iov,
-			    int *cmds, int num_cmds, struct cifsFileInfo *cfile,
+			    int *cmds, int num_cmds/*cmds数组长度*/, struct cifsFileInfo *cfile,
 			    struct kvec *out_iov, int *out_buftype, struct dentry *dentry)
 {
 
@@ -277,6 +277,7 @@ replay_again:
 	if (num_cmds > 0 && cmds[0] == SMB2_OP_OPEN_QUERY)
 		i++;
 
+	/*遍历提供的这一组命令*/
 	for (; i < num_cmds; i++) {
 		/* Operation */
 		switch (cmds[i]) {
@@ -459,6 +460,7 @@ replay_again:
 							   ses->Suid, full_path);
 			break;
 		case SMB2_OP_RENAME:
+			/*重命名*/
 			rqst[num_rqst].rq_iov = vars->rename_iov;
 			rqst[num_rqst].rq_nvec = 2;
 
@@ -1134,7 +1136,7 @@ smb2_mkdir(const unsigned int xid, struct inode *parent_inode, umode_t mode,
 			     FILE_CREATE, CREATE_NOT_FILE, mode);
 	return smb2_compound_op(xid, tcon, cifs_sb,
 				name, &oparms, NULL,
-				&(int){SMB2_OP_MKDIR}, 1,
+				&(int){SMB2_OP_MKDIR}/*指明创建目录*/, 1/*命令数为1*/,
 				NULL, NULL, NULL, NULL);
 }
 

@@ -540,7 +540,7 @@ struct sock {
 	u32			sk_dst_pending_confirm;
 	u32			sk_pacing_status; /* see enum sk_pacing */
 	unsigned long		sk_max_pacing_rate;
-	long			sk_sndtimeo;
+	long			sk_sndtimeo;/*发超时时间*/
 	u32			sk_priority;
 	u32			sk_mark;
 	kuid_t			sk_uid;

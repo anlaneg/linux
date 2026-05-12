@@ -4940,7 +4940,7 @@ receive_encrypted_read(struct TCP_Server_Info *server, struct mid_q_entry **mid,
 
 	rc = cifs_read_from_socket(server, buf + HEADER_SIZE(server) - 1, len);
 	if (rc < 0)
-		goto free_dw;
+		goto free_dw;/*读取失败*/
 	server->total_read += rc;
 
 	len = le32_to_cpu(tr_hdr->OriginalMessageSize) -
@@ -4989,7 +4989,7 @@ receive_encrypted_read(struct TCP_Server_Info *server, struct mid_q_entry **mid,
 	}
 
 	rc = decrypt_raw_data(server, buf, server->vals->read_rsp_size,
-			      &iter, false);
+			      &iter, false);/*解密内容*/
 	if (rc)
 		goto free_pages;
 

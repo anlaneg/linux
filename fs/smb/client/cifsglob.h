@@ -690,8 +690,8 @@ struct TCP_Server_Info {
 	/* updates to tcpStatus protected by cifs_tcp_ses_lock */
 	enum statusEnum tcpStatus; /* what we think the status is */
 	char *hostname; /* hostname portion of UNC string */
-	struct socket *ssocket;
-	struct sockaddr_storage dstaddr;
+	struct socket *ssocket;/*与对端建立的socket*/
+	struct sockaddr_storage dstaddr;/*目的地址*/
 	struct sockaddr_storage srcaddr; /* locally bind to this IP */
 #ifdef CONFIG_NET_NS
 	struct net *net;

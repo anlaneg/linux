@@ -574,6 +574,7 @@ cifs_ses_add_channel(struct cifs_ses *ses,
 	       sizeof(ctx->client_guid));
 	ctx->use_client_guid = true;
 
+	/*建立连接(增加个channel)*/
 	chan_server = cifs_get_tcp_session(ctx, ses->server);
 
 	spin_lock(&ses->chan_lock);

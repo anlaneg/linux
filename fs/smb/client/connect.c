@@ -729,6 +729,7 @@ zero_credits(struct TCP_Server_Info *server)
 	return false;
 }
 
+/*自socket中收取消息*/
 static int
 cifs_readv_from_socket(struct TCP_Server_Info *server, struct msghdr *smb_msg)
 {
@@ -749,7 +750,7 @@ cifs_readv_from_socket(struct TCP_Server_Info *server, struct msghdr *smb_msg)
 		if (cifs_rdma_enabled(server) && server->smbd_conn)
 			length = smbd_recv(server->smbd_conn, smb_msg);
 		else
-			length = sock_recvmsg(server->ssocket, smb_msg, 0);
+			length = sock_recvmsg(server->ssocket, smb_msg, 0);/*自socket中收取消息*/
 
 		spin_lock(&server->srv_lock);
 		if (server->tcpStatus == CifsExiting) {
@@ -787,15 +788,15 @@ cifs_readv_from_socket(struct TCP_Server_Info *server, struct msghdr *smb_msg)
 }
 
 int
-cifs_read_from_socket(struct TCP_Server_Info *server, char *buf,
-		      unsigned int to_read)
+cifs_read_from_socket(struct TCP_Server_Info *server, char *buf/*存放读取内容*/,
+		      unsigned int to_read/*计划读取的长度*/)
 {
 	struct msghdr smb_msg = {};
-	struct kvec iov = {.iov_base = buf, .iov_len = to_read};
+	struct kvec iov = {.iov_base = buf, .iov_len = to_read};/*可读取的长度*/
 
 	iov_iter_kvec(&smb_msg.msg_iter, ITER_DEST, &iov, 1, to_read);
 
-	return cifs_readv_from_socket(server, &smb_msg);
+	return cifs_readv_from_socket(server, &smb_msg);/*读取*/
 }
 
 ssize_t
@@ -1250,7 +1251,7 @@ smb2_add_credits_from_hdr(char *buffer, struct TCP_Server_Info *server)
 	}
 }
 
-
+/*cifsd 内核线程，就是内核里处理 SMB 客户端连接、协议解析、IO 读写、认证、缓存的工作线程。*/
 static int
 cifs_demultiplex_thread(void *p)
 {
@@ -1285,9 +1286,9 @@ cifs_demultiplex_thread(void *p)
 		buf = server->smallbuf;
 		pdu_length = 4; /* enough to get RFC1001 header */
 
-		length = cifs_read_from_socket(server, buf, pdu_length);
+		length = cifs_read_from_socket(server, buf, pdu_length);/*读取4字节的header*/
 		if (length < 0)
-			continue;
+			continue;/*读取有误,忽略*/
 
 		server->total_read = 0;
 
@@ -1295,11 +1296,11 @@ cifs_demultiplex_thread(void *p)
 		 * The right amount was read from socket - 4 bytes,
 		 * so we can now interpret the length field.
 		 */
-		pdu_length = be32_to_cpup(((__be32 *)buf)) & 0xffffff;
+		pdu_length = be32_to_cpup(((__be32 *)buf)) & 0xffffff;/*取内容长度*/
 
 		cifs_dbg(FYI, "RFC1002 header 0x%x\n", pdu_length);
 		if (!is_smb_response(server, buf[0]))
-			continue;
+			continue;/*非响应报文*/
 
 		pending_reconnect = false;
 next_pdu:
@@ -1315,7 +1316,7 @@ next_pdu:
 
 		/* read down to the MID */
 		length = cifs_read_from_socket(server, buf,
-					       MID_HEADER_SIZE(server));
+					       MID_HEADER_SIZE(server));/*再读取剩余内容*/
 		if (length < 0)
 			continue;
 		server->total_read += length;
@@ -1509,6 +1510,7 @@ cifs_ipaddr_cmp(struct sockaddr *srcaddr, struct sockaddr *rhs)
 bool
 cifs_match_ipaddr(struct sockaddr *srcaddr, struct sockaddr *rhs)
 {
+	/*检查srcaddr与rhs指定的地址是否相同*/
 	switch (srcaddr->sa_family) {
 	case AF_UNSPEC:
 		return (rhs->sa_family == AF_UNSPEC);
@@ -1545,6 +1547,7 @@ match_port(struct TCP_Server_Info *server, struct sockaddr *addr)
 	if (server->rdma)
 		return true;
 
+	/*自地址中取port*/
 	switch (addr->sa_family) {
 	case AF_INET:
 		sport = &((struct sockaddr_in *) &server->dstaddr)->sin_port;
@@ -1567,7 +1570,7 @@ match_port(struct TCP_Server_Info *server, struct sockaddr *addr)
 		port = htons(RFC1001_PORT);
 	}
 
-	return port == *sport;
+	return port == *sport;/*检查与指定的sport是否相等*/
 }
 
 static bool match_server_address(struct TCP_Server_Info *server, struct sockaddr *addr)
@@ -1754,7 +1757,7 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 	/* see if we already have a matching tcp_ses */
 	tcp_ses = cifs_find_tcp_session(ctx);
 	if (tcp_ses)
-		return tcp_ses;
+		return tcp_ses;/*查找到可复用的,直接返回*/
 
 	tcp_ses = kzalloc_obj(struct TCP_Server_Info);
 	if (!tcp_ses) {
@@ -1762,6 +1765,7 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 		goto out_err;
 	}
 
+	/*复制主机名称*/
 	tcp_ses->hostname = kstrdup(ctx->server_hostname, GFP_KERNEL);
 	if (!tcp_ses->hostname) {
 		rc = -ENOMEM;
@@ -1830,7 +1834,7 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 	memcpy(&tcp_ses->srcaddr, &ctx->srcaddr,
 	       sizeof(tcp_ses->srcaddr));
 	memcpy(&tcp_ses->dstaddr, &ctx->dstaddr,
-		sizeof(tcp_ses->dstaddr));
+		sizeof(tcp_ses->dstaddr));/*设置目的地址*/
 	if (ctx->use_client_guid)
 		memcpy(tcp_ses->client_guid, ctx->client_guid,
 		       SMB2_CLIENT_GUID_SIZE);
@@ -1862,6 +1866,7 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 			goto out_err_crypto_release;
 		}
 	}
+	/*与server端连接*/
 	rc = ip_connect(tcp_ses);
 	if (rc < 0) {
 		cifs_dbg(VFS, "Error connecting to socket. Aborting operation.\n");
@@ -1874,7 +1879,7 @@ smbd_connected:
 	 */
 	__module_get(THIS_MODULE);
 	tcp_ses->tsk = kthread_run(cifs_demultiplex_thread,
-				  tcp_ses, "cifsd");
+				  tcp_ses, "cifsd");/*创建cifsd线程*/
 	if (IS_ERR(tcp_ses->tsk)) {
 		rc = PTR_ERR(tcp_ses->tsk);
 		cifs_dbg(VFS, "error %d create cifsd thread\n", rc);
@@ -3104,13 +3109,14 @@ bind_socket(struct TCP_Server_Info *server)
 {
 	int rc = 0;
 
+	/*源地址不为零,绑定源地址*/
 	if (server->srcaddr.ss_family != AF_UNSPEC) {
 		/* Bind to the specified local IP address */
-		struct socket *socket = server->ssocket;
+		struct socket *socket = server->ssocket;/*取SOCKET*/
 
 		rc = kernel_bind(socket,
 				 (struct sockaddr_unsized *) &server->srcaddr,
-				 sizeof(server->srcaddr));
+				 sizeof(server->srcaddr));/*绑定指定的源地址*/
 		if (rc < 0) {
 			struct sockaddr_in *saddr4;
 			struct sockaddr_in6 *saddr6;
@@ -3362,7 +3368,7 @@ generic_ip_connect(struct TCP_Server_Info *server)
 		struct sock *sk;
 
 		rc = sock_create_kern(net, sfamily, SOCK_STREAM,
-				      IPPROTO_TCP, &server->ssocket);
+				      IPPROTO_TCP, &server->ssocket);/*创建TCP SOCKET*/
 		if (rc < 0) {
 			cifs_server_dbg(VFS, "Error %d creating socket\n", rc);
 			return rc;
@@ -3382,7 +3388,7 @@ generic_ip_connect(struct TCP_Server_Info *server)
 			cifs_reclassify_socket4(socket);
 	}
 
-	rc = bind_socket(server);
+	rc = bind_socket(server);/*绑定非零地址*/
 	if (rc < 0)
 		return rc;
 
@@ -3403,12 +3409,13 @@ generic_ip_connect(struct TCP_Server_Info *server)
 	}
 
 	if (server->tcp_nodelay)
-		tcp_sock_set_nodelay(socket->sk);
+		tcp_sock_set_nodelay(socket->sk);/*设置nodelay*/
 
 	cifs_dbg(FYI, "sndbuf %d rcvbuf %d rcvtimeo 0x%lx\n",
 		 socket->sk->sk_sndbuf,
 		 socket->sk->sk_rcvbuf, socket->sk->sk_rcvtimeo);
 
+	/*执行到目的地址的连接*/
 	rc = kernel_connect(socket, (struct sockaddr_unsized *)saddr, slen,
 			    server->noblockcnt ? O_NONBLOCK : 0);
 	/*
@@ -3419,6 +3426,7 @@ generic_ip_connect(struct TCP_Server_Info *server)
 	if (server->noblockcnt && rc == -EINPROGRESS)
 		rc = 0;
 	if (rc < 0) {
+		/*连接目的地址失败*/
 		cifs_dbg(FYI, "Error %d connecting to server\n", rc);
 		trace_smb3_connect_err(server->hostname, server->conn_id, &server->dstaddr, rc);
 		sock_release(socket);
@@ -3454,12 +3462,13 @@ ip_connect(struct TCP_Server_Info *server)
 		sport = &addr->sin_port;
 
 	if (*sport == 0) {
+		/*使用默认port*/
 		int rc;
 
 		/* try with 445 port at first */
 		*sport = htons(CIFS_PORT);
 
-		rc = generic_ip_connect(server);
+		rc = generic_ip_connect(server);/*与server端建立连接*/
 		if (rc >= 0)
 			return rc;
 
@@ -3562,7 +3571,7 @@ int cifs_mount_get_session(struct cifs_mount_ctx *mnt_ctx)
 	ctx = mnt_ctx->fs_ctx;
 
 	/* get a reference to a tcp session */
-	server = cifs_get_tcp_session(ctx, NULL);
+	server = cifs_get_tcp_session(ctx, NULL);/*增加连接*/
 	if (IS_ERR(server)) {
 		rc = PTR_ERR(server);
 		server = NULL;

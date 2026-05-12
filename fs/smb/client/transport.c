@@ -1178,8 +1178,8 @@ cifs_readv_receive(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 	length = cifs_read_from_socket(server,
 				       buf + HEADER_SIZE(server) - 1, len);
 	if (length < 0)
-		return length;
-	server->total_read += length;
+		return length;/*读取失败*/
+	server->total_read += length;/*读取内容长度增加*/
 
 	if (server->ops->is_session_expired &&
 	    server->ops->is_session_expired(buf)) {
@@ -1194,8 +1194,8 @@ cifs_readv_receive(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 	}
 
 	/* set up first two iov for signature check and to get credits */
-	rdata->iov[0].iov_base = buf;
-	rdata->iov[0].iov_len = server->total_read;
+	rdata->iov[0].iov_base = buf;/*设置读取到的内容*/
+	rdata->iov[0].iov_len = server->total_read;/*设置读取到的内容长度*/
 	cifs_dbg(FYI, "0: iov_base=%p iov_len=%zu\n",
 		 rdata->iov[0].iov_base, rdata->iov[0].iov_len);
 

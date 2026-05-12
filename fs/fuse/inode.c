@@ -2066,7 +2066,7 @@ static int fuse_init_fs_context(struct fs_context *fsc)
 
 #ifdef CONFIG_BLOCK
 	if (fsc->fs_type == &fuseblk_fs_type) {
-		ctx->is_bdev = true;
+		ctx->is_bdev = true;/*指明为块设备*/
 		ctx->destroy = true;
 	}
 #endif

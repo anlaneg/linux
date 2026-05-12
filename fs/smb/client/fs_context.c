@@ -910,6 +910,7 @@ static int smb3_get_tree_common(struct fs_context *fc)
 	struct dentry *root;
 	int rc = 0;
 
+	/*执行挂载*/
 	root = cifs_smb3_do_mount(fc->fs_type, 0, ctx);
 	if (IS_ERR(root))
 		return PTR_ERR(root);
