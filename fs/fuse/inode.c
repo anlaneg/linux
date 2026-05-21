@@ -805,7 +805,7 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	{}
 };
 
-static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
+static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param/*待解析参数*/)
 {
 	struct fs_parse_result result;
 	struct fuse_fs_context *ctx = fsc->fs_private;
@@ -824,7 +824,7 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		return invalfc(fsc, "No changes allowed in reconfigure");
 	}
 
-	opt = fs_parse(fsc, fuse_fs_parameters, param, &result);
+	opt = fs_parse(fsc, fuse_fs_parameters/*参数规范*/, param, &result/*解析结果*/);
 	if (opt < 0)
 		return opt;
 
@@ -2051,7 +2051,7 @@ out:
 
 static const struct fs_context_operations fuse_context_ops = {
 	.free		= fuse_free_fsc,
-	.parse_param	= fuse_parse_param,
+	.parse_param	= fuse_parse_param,/*解析挂载参数*/
 	.reconfigure	= fuse_reconfigure,
 	.get_tree	= fuse_get_tree,
 };
@@ -2149,7 +2149,7 @@ static struct file_system_type fuse_fs_type = {
 	.name		= "fuse",
 	.fs_flags	= FS_HAS_SUBTYPE | FS_USERNS_MOUNT | FS_ALLOW_IDMAP,
 	.init_fs_context = fuse_init_fs_context,
-	.parameters	= fuse_fs_parameters,/*文件系统参数*/
+	.parameters	= fuse_fs_parameters,/*fuse文件系统参数列表*/
 	.kill_sb	= fuse_kill_sb_anon,
 };
 MODULE_ALIAS_FS("fuse");

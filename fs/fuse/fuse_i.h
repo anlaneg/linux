@@ -605,10 +605,10 @@ struct fuse_fs_context {
 	kuid_t user_id;
 	kgid_t group_id;
 	bool is_bdev:1;
-	bool fd_present:1;/*指明fd已设置*/
-	bool rootmode_present:1;
-	bool user_id_present:1;
-	bool group_id_present:1;
+	bool fd_present:1;/*标明fd参数有效*/
+	bool rootmode_present:1;/*标明rootmode参数有效*/
+	bool user_id_present:1;/*标明user_id参数有效*/
+	bool group_id_present:1;/*标明group_id参数有效*/
 	bool default_permissions:1;
 	bool allow_other:1;
 	bool destroy:1;

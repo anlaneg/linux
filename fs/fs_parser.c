@@ -410,7 +410,7 @@ EXPORT_SYMBOL(fs_param_is_path);
  * @desc: The parameter specification array to validate.
  */
 bool fs_validate_description(const char *name,
-	const struct fs_parameter_spec *desc)
+	const struct fs_parameter_spec *desc/*fs参数列表描述*/)
 {
 	const struct fs_parameter_spec *param, *p2;
 	bool good = true;
@@ -419,6 +419,7 @@ bool fs_validate_description(const char *name,
 		/* Check for duplicate parameter names */
 		for (p2 = desc; p2 < param; p2++) {
 			if (strcmp(param->name, p2->name) == 0) {
+				/*出现重复参数名称*/
 				if (is_flag(param) != is_flag(p2))
 					continue;
 				pr_err("VALIDATE %s: PARAM[%s]: Duplicate\n",

@@ -108,7 +108,7 @@ struct fs_context {
 	const struct cred	*cred;		/* The mounter's credentials */
 	/*输出buffer，用于log*/
 	struct p_log		log;		/* Logging buffer */
-	/*source参数提供的字符串，例如可能是fs_type名称*/
+	/*source参数提供的字符串，例如可能是fs_type名称或者块设备路径*/
 	const char		*source;	/* The source name (eg. dev path) */
 	void			*security;	/* LSM options */
 	void			*s_fs_info;	/* Proposed s_fs_info */
