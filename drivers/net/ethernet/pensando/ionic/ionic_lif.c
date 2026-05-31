@@ -3231,7 +3231,8 @@ int ionic_lif_alloc(struct ionic *ionic)
 	if (!lid)
 		return -ENOMEM;
 
-	netdev = alloc_etherdev_mqs(sizeof(*lif),
+	/*申请netdev*/
+	netdev = alloc_etherdev_mqs(sizeof(*lif)/*私有结构是ionic_lif*/,
 				    ionic->ntxqs_per_lif, ionic->ntxqs_per_lif);
 	if (!netdev) {
 		dev_err(dev, "Cannot allocate netdev, aborting\n");
@@ -3267,7 +3268,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	lif->neqs = ionic->neqs_per_lif;
 	lif->nxqs = ionic->ntxqs_per_lif;
 
-	lif->index = 0;
+	lif->index = 0;/*默认索引是0*/
 
 	if (is_kdump_kernel()) {
 		lif->ntxq_descs = IONIC_MIN_TXRX_DESC;
@@ -3286,7 +3287,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	set_bit(IONIC_LIF_F_RX_DIM_INTR, lif->state);
 	set_bit(IONIC_LIF_F_TX_DIM_INTR, lif->state);
 
-	snprintf(lif->name, sizeof(lif->name), "lif%u", lif->index);
+	snprintf(lif->name, sizeof(lif->name), "lif%u", lif->index);/*接口名称*/
 
 	mutex_init(&lif->queue_lock);
 	mutex_init(&lif->config_lock);

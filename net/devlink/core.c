@@ -422,7 +422,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (!devlink_reload_actions_valid(ops))
 		return NULL;
 
-	/*申请devlink结构体*/
+	/*申请devlink结构体及其后紧跟的大小为priv_size的priv*/
 	devlink = kvzalloc_flex(*devlink, priv, priv_size);
 	if (!devlink)
 		return NULL;

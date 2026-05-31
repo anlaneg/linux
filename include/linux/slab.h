@@ -1001,10 +1001,12 @@ void *kmalloc_nolock_noprof(size_t size, gfp_t gfp_flags, int node);
  * by the member of @TYPE that counts the @FAM elements (annotated via
  * __counted_by()).
  */
-#define __alloc_flex(KMALLOC, GFP, TYPE, FAM, COUNT)			\
+#define __alloc_flex(KMALLOC, GFP/*申请标记*/, TYPE, FAM, COUNT)			\
 ({									\
 	const size_t __count = (COUNT);					\
+	/*计算类型TYPE后面跟COUNT个FAM需要多少内存*/\
 	const size_t __obj_size = struct_size_t(TYPE, FAM, __count);	\
+	/*申请内存*/\
 	TYPE *__obj_ptr = KMALLOC(__obj_size, GFP);			\
 	if (__obj_ptr)							\
 		__set_flex_counter(__obj_ptr->FAM, __count);		\
@@ -1070,6 +1072,7 @@ void *kmalloc_nolock_noprof(size_t size, gfp_t gfp_flags, int node);
 	__alloc_objs(kvzalloc, default_gfp(__VA_ARGS__), typeof(P), 1)
 #define kvzalloc_objs(P, COUNT, ...) \
 	__alloc_objs(kvzalloc, default_gfp(__VA_ARGS__), typeof(P), COUNT)
+/*申请P结构体及其后有COUNT个FAM所需内存，并初始化p->FAM*/
 #define kvzalloc_flex(P, FAM, COUNT, ...) \
 	__alloc_flex(kvzalloc, default_gfp(__VA_ARGS__), typeof(P), FAM, COUNT)
 

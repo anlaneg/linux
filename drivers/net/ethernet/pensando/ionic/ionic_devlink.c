@@ -60,8 +60,8 @@ struct ionic *ionic_devlink_alloc(struct device *dev)
 {
 	struct devlink *dl;
 
-	/*申请devlink设备*/
-	dl = devlink_alloc(&ionic_dl_ops, sizeof(struct ionic), dev);
+	/*申请devlink设备并dl->priv为struct ionic结构体*/
+	dl = devlink_alloc(&ionic_dl_ops, sizeof(struct ionic)/*私有大小*/, dev);
 	if (!dl)
 		return NULL;
 

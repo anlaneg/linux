@@ -706,6 +706,7 @@ void ionic_dev_cmd_port_identify(struct ionic_dev *idev)
 
 void ionic_dev_cmd_port_init(struct ionic_dev *idev)
 {
+	// 驱动向固件发送初始化命令
 	union ionic_dev_cmd cmd = {
 		.port_init.opcode = IONIC_CMD_PORT_INIT,
 		.port_init.index = 0,

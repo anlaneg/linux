@@ -1639,7 +1639,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 				 struct device *dev);
 /*申请init_net的devlink*/
 static inline struct devlink *devlink_alloc(const struct devlink_ops *ops,
-					    size_t priv_size,
+					    size_t priv_size/*私有大小*/,
 					    struct device *dev)
 {
 	return devlink_alloc_ns(ops, priv_size, &init_net, dev);

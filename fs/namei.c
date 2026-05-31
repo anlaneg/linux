@@ -5283,6 +5283,7 @@ int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+	/*创建inode*/
 	error = dir->i_op->mknod(idmap, dir, dentry, mode, dev);
 	if (!error)
 		fsnotify_create(dir, dentry);
@@ -5292,6 +5293,7 @@ EXPORT_SYMBOL(vfs_mknod);
 
 static int may_mknod(umode_t mode)
 {
+	/*容许普通文件，字符文件，块文件，fifo,socket文件*/
 	switch (mode & S_IFMT) {
 	case S_IFREG:
 	case S_IFCHR:
@@ -5301,13 +5303,13 @@ static int may_mknod(umode_t mode)
 	case 0: /* zero mode translates to S_IFREG */
 		return 0;
 	case S_IFDIR:
-		return -EPERM;
+		return -EPERM;/*不支持目录*/
 	default:
 		return -EINVAL;
 	}
 }
 
-int filename_mknodat(int dfd, struct filename *name, umode_t mode,
+int filename_mknodat(int dfd, struct filename *name/*文件路径*/, umode_t mode,
 		     unsigned int dev)
 {
 	struct delegated_inode di = { };
@@ -5319,7 +5321,7 @@ int filename_mknodat(int dfd, struct filename *name, umode_t mode,
 
 	error = may_mknod(mode);
 	if (error)
-		return error;
+		return error;/*不容许创建*/
 retry:
 	dentry = filename_create(dfd, name, &path, lookup_flags);
 	if (IS_ERR(dentry))
@@ -5372,7 +5374,7 @@ SYSCALL_DEFINE4(mknodat, int, dfd, const char __user *, filename, umode_t, mode,
 
 SYSCALL_DEFINE3(mknod, const char __user *, filename/*设备名称*/, umode_t, mode/*设备类型及mask*/, unsigned, dev/*设备编号*/)
 {
-	/*系统函数mknod实现*/
+	/*系统函数mknod实现，相对AT_FDCWD创建名称为name的inode*/
 	CLASS(filename, name)(filename);
 	return filename_mknodat(AT_FDCWD, name, mode, dev);
 }

@@ -51,8 +51,8 @@ struct ionic {
 	struct ionic_lif *lif;
 	unsigned int nnqs_per_lif;
 	unsigned int neqs_per_lif;
-	unsigned int ntxqs_per_lif;
-	unsigned int nrxqs_per_lif;
+	unsigned int ntxqs_per_lif;/*tx队列数*/
+	unsigned int nrxqs_per_lif;/*rx队列数*/
 	unsigned int nintrs;
 	DECLARE_BITMAP(intrs, IONIC_INTR_CTRL_REGS_MAX);
 	cpumask_var_t *affinity_masks;

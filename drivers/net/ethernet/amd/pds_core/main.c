@@ -139,6 +139,7 @@ void __iomem *pdsc_map_dbpage(struct pdsc *pdsc, int page_num)
 			       (u64)page_num << PAGE_SHIFT, PAGE_SIZE);
 }
 
+/*用于实现sriov*/
 static int pdsc_sriov_configure(struct pci_dev *pdev, int num_vfs)
 {
 	struct pdsc *pdsc = pci_get_drvdata(pdev);

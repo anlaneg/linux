@@ -756,9 +756,10 @@ int ionic_port_init(struct ionic *ionic)
 	mutex_lock(&ionic->dev_cmd_lock);
 
 	memcpy_toio(&idev->dev_cmd_regs->data, &ident->port.config, sz);
-	ionic_dev_cmd_port_init(idev);
-	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
+	ionic_dev_cmd_port_init(idev);/*初始化port*/
+	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);/*等待固件完成*/
 
+	/*设置端口admin up*/
 	ionic_dev_cmd_port_state(&ionic->idev, IONIC_PORT_ADMIN_STATE_UP);
 	ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
 

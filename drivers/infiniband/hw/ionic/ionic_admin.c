@@ -347,7 +347,7 @@ void ionic_admin_post(struct ionic_ibdev *dev, struct ionic_admin_wr *wr)
 	int aq_idx;
 
 	/* Use cpu id for the adminq selection */
-	aq_idx = raw_smp_processor_id() % dev->lif_cfg.aq_count;
+	aq_idx = raw_smp_processor_id() % dev->lif_cfg.aq_count;/*将当前cpu映射到aq_vec数组位置*/
 	ionic_admin_post_aq(dev->aq_vec[aq_idx], wr);
 }
 

@@ -3175,7 +3175,7 @@ union ionic_dev_cmd {
 
 union ionic_dev_cmd_comp {
 	u32 words[4];
-	u8 status;
+	u8 status;/*命令执行状态*/
 	struct ionic_admin_comp comp;
 	struct ionic_nop_comp nop;
 

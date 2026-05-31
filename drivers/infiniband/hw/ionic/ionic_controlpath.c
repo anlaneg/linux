@@ -805,7 +805,7 @@ static int ionic_create_mr_cmd(struct ionic_ibdev *dev,
 	struct ionic_admin_wr wr = {
 		.work = COMPLETION_INITIALIZER_ONSTACK(wr.work),
 		.wqe = {
-			.op = IONIC_V1_ADMIN_CREATE_MR,
+			.op = IONIC_V1_ADMIN_CREATE_MR,/*指明创建mr*/
 			.len = cpu_to_le16(IONIC_ADMIN_CREATE_MR_IN_V1_LEN),
 			.cmd.create_mr = {
 				.va = cpu_to_le64(addr),
