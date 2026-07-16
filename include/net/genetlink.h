@@ -113,7 +113,9 @@ struct genl_family {
 	struct module		*module;
 
 	size_t			sock_priv_size;/*私有结构大小*/
+	/*私有结构体初始化函数*/
 	void			(*sock_priv_init)(void *priv);
+	/*私有结构体销毁函数*/
 	void			(*sock_priv_destroy)(void *priv);
 
 /* private: internal use only */

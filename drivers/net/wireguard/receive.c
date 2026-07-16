@@ -539,6 +539,7 @@ err_keypair:
 	dev_kfree_skb(skb);
 }
 
+/*收包函数处理*/
 void wg_packet_receive(struct wg_device *wg, struct sk_buff *skb)
 {
 	if (unlikely(prepare_skb_header(skb, wg) < 0))

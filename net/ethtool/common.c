@@ -950,7 +950,7 @@ void ethtool_ringparam_get_cfg(struct net_device *dev,
 	memset(kparam, 0, sizeof(*kparam));
 
 	param->cmd = ETHTOOL_GRINGPARAM;
-	dev->ethtool_ops->get_ringparam(dev, param, kparam, extack);
+	dev->ethtool_ops->get_ringparam(dev, param/*出参，容许的最大值*/, kparam/*出参，当前生效值*/, extack);/*取当前信息*/
 
 	/* Driver gives us current state, we want to return current config */
 	kparam->tcp_data_split = dev->cfg->hds_config;

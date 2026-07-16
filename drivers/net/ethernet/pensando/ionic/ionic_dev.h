@@ -148,12 +148,14 @@ static_assert(sizeof(struct ionic_vf_ctrl_comp) == 16);
 struct ionic_devinfo {
 	u8 asic_type;
 	u8 asic_rev;
-	char fw_version[IONIC_DEVINFO_FWVERS_BUFLEN + 1];
-	char serial_num[IONIC_DEVINFO_SERIAL_BUFLEN + 1];
+	char fw_version[IONIC_DEVINFO_FWVERS_BUFLEN + 1];/*fw版本号*/
+	char serial_num[IONIC_DEVINFO_SERIAL_BUFLEN + 1];/*序列号*/
 };
 
 struct ionic_dev {
+	/*设备信息*/
 	union ionic_dev_info_regs __iomem *dev_info_regs;
+	/*设备命令寄存器*/
 	union ionic_dev_cmd_regs __iomem *dev_cmd_regs;
 	struct ionic_hwstamp_regs __iomem *hwstamp_regs;
 
@@ -165,8 +167,8 @@ struct ionic_dev {
 	u8 fw_generation;
 	u8 opcode;
 
-	u64 __iomem *db_pages;
-	dma_addr_t phy_db_pages;
+	u64 __iomem *db_pages;/*doorbell对应的页*/
+	dma_addr_t phy_db_pages;/*doorbell对应的物理页*/
 
 	struct ionic_intr __iomem *intr_ctrl;
 	u64 __iomem *intr_status;
@@ -231,9 +233,9 @@ struct ionic_admin_desc_info {
 
 struct ionic_queue {
 	struct device *dev;
-	struct ionic_lif *lif;
+	struct ionic_lif *lif;/*对应的logic interface*/
 	union {
-		void *info;
+		void *info;/*一组描述符*/
 		struct ionic_tx_desc_info *tx_info;
 		struct ionic_rx_desc_info *rx_info;
 		struct ionic_admin_desc_info *admin_info;/*存放与adminq对应的admin_info*/
@@ -244,7 +246,7 @@ struct ionic_queue {
 	u16 head_idx;/*生产指针*/
 	u16 tail_idx;/*消费指针*/
 	unsigned int index;
-	unsigned int num_descs;/*队列长度*/
+	unsigned int num_descs;/*描述符队列长度*/
 	unsigned int max_sg_elems;
 
 	u64 features;
@@ -263,7 +265,7 @@ struct ionic_queue {
 		struct ionic_rxq_sg_desc *rxq_sgl;
 	};
 	struct xdp_rxq_info *xdp_rxq_info;
-	struct bpf_prog *xdp_prog;
+	struct bpf_prog *xdp_prog;/*此q对应的xdp程序*/
 	struct page_pool *page_pool;
 	struct ionic_queue *partner;
 
@@ -272,20 +274,20 @@ struct ionic_queue {
 		struct ionic_txq_desc __iomem *cmb_txq;
 		struct ionic_rxq_desc __iomem *cmb_rxq;
 	};
-	unsigned int type;
+	unsigned int type;/*队列类型*/
 	unsigned int hw_index;
 	dma_addr_t base_pa;
 	dma_addr_t cmb_base_pa;
 	dma_addr_t sg_base_pa;
 	u64 drop;
-	unsigned int desc_size;
+	unsigned int desc_size;/*描述符大小*/
 	unsigned int sg_desc_size;
 	unsigned int pid;
-	char name[IONIC_QUEUE_NAME_MAX_SZ];
+	char name[IONIC_QUEUE_NAME_MAX_SZ];/*队列名称*/
 } ____cacheline_aligned_in_smp;
 
 struct ionic_cq {
-	struct ionic_lif *lif;
+	struct ionic_lif *lif;/*从属的lif*/
 	struct ionic_queue *bound_q;
 	struct ionic_intr_info *bound_intr;
 	u16 tail_idx;

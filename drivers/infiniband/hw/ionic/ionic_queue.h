@@ -9,7 +9,9 @@
 
 #define IONIC_MAX_DEPTH		0xffff
 #define IONIC_MAX_CQ_DEPTH	0xffff
+/*指明为1号ring*/
 #define IONIC_CQ_RING_ARM	IONIC_DBELL_RING_1
+/*指明为2号ring*/
 #define IONIC_CQ_RING_SOL	IONIC_DBELL_RING_2
 
 /**

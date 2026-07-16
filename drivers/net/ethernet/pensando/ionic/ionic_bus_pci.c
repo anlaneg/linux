@@ -105,11 +105,12 @@ static void ionic_unmap_bars(struct ionic *ionic)
 	ionic->num_bars = 0;
 }
 
+/*映射doorbell page*/
 void __iomem *ionic_bus_map_dbpage(struct ionic *ionic, int page_num)
 {
 	return pci_iomap_range(ionic->pdev,
-			       ionic->bars[IONIC_PCI_BAR_DBELL].res_index,
-			       (u64)page_num << PAGE_SHIFT, PAGE_SIZE);
+			       ionic->bars[IONIC_PCI_BAR_DBELL].res_index/*bar编号*/,
+			       (u64)page_num << PAGE_SHIFT, PAGE_SIZE/*映射一页*/);
 }
 
 void ionic_bus_unmap_dbpage(struct ionic *ionic, void __iomem *page)

@@ -77,7 +77,7 @@ void complete_all(struct completion *x)
 
 	raw_spin_lock_irqsave(&x->wait.lock, flags);
 	x->done = UINT_MAX;
-	swake_up_all_locked(&x->wait);
+	swake_up_all_locked(&x->wait);/*唤醒等待者*/
 	raw_spin_unlock_irqrestore(&x->wait.lock, flags);
 }
 EXPORT_SYMBOL(complete_all);

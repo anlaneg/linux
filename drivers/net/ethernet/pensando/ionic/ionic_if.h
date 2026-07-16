@@ -136,7 +136,7 @@ struct ionic_admin_cmd {
  *              Device Cmd Registers)
  */
 struct ionic_admin_comp {
-	u8     status;
+	u8     status;/*命令执行状态（fw负责填充）*/
 	u8     rsvd;
 	__le16 comp_index;
 	u8     cmd_data[11];
@@ -3133,8 +3133,9 @@ struct ionic_lif_info {
 	struct ionic_lif_stats stats;
 };
 
+/*提供各cmd格式定义*/
 union ionic_dev_cmd {
-	u32 words[16];
+	u32 words[16];/*最少占64字节*/
 	struct ionic_admin_cmd cmd;
 	struct ionic_nop_cmd nop;
 
@@ -3173,6 +3174,7 @@ union ionic_dev_cmd {
 	struct ionic_fw_control_cmd fw_control;
 };
 
+/*提供各cmd响应格式定义*/
 union ionic_dev_cmd_comp {
 	u32 words[4];
 	u8 status;/*命令执行状态*/
@@ -3248,14 +3250,14 @@ union ionic_dev_info_regs {
 		u8     asic_rev;
 #define IONIC_FW_STS_F_RUNNING		0x01
 #define IONIC_FW_STS_F_GENERATION	0xF0
-		u8     fw_status;
+		u8     fw_status;/*用于反馈fw当前状态（比如当前fw是否在running?)*/
 		u32    fw_heartbeat;
-		char   fw_version[IONIC_DEVINFO_FWVERS_BUFLEN];
+		char   fw_version[IONIC_DEVINFO_FWVERS_BUFLEN];/*fw版本*/
 		char   serial_num[IONIC_DEVINFO_SERIAL_BUFLEN];
 		u8     rsvd_pad1024[948];
 		struct ionic_hwstamp_regs hwstamp;
 	};
-	u32 words[512];
+	u32 words[512];/*共占空间512*4=2048字节*/
 };
 
 /**
@@ -3273,11 +3275,12 @@ union ionic_dev_info_regs {
 union ionic_dev_cmd_regs {
 	struct {
 		u32                   doorbell;
+		/*fw负责填充请求的命令是否已处理完成（低位为1时），driver负责初始化清0，以备fw填充*/
 		u32                   done;
-		union ionic_dev_cmd         cmd;
-		union ionic_dev_cmd_comp    comp;
-		u8                    rsvd[48];
-		u32                   data[478];
+		union ionic_dev_cmd         cmd;/*请求cmd对应的格式*/
+		union ionic_dev_cmd_comp    comp;/*fw负责填充的响应格式*/
+		u8                    rsvd[48];/*预留了48字节*/
+		u32                   data[478];/*fw为当前响应提供的额外数据区（可自此处获取）*/
 	} __packed;
 	u32 words[512];/*共计2048字节*/
 };
@@ -3293,7 +3296,7 @@ union ionic_dev_regs {
 		union ionic_dev_info_regs info;
 		union ionic_dev_cmd_regs  devcmd;
 	} __packed;
-	__le32 words[1024];
+	__le32 words[1024];/*共占用4096字节(bar0的第一页情况）*/
 };
 
 /*用于定义adminq command*/
@@ -3328,6 +3331,7 @@ union ionic_adminq_comp {
 };
 
 #define IONIC_BARS_MAX			6
+/*首个bar即记录的是doorbell信息*/
 #define IONIC_PCI_BAR_DBELL		1
 #define IONIC_PCI_BAR_CMB		2
 

@@ -13,6 +13,7 @@
 
 #define IONIC_MAX_RX_COPYBREAK	min(U16_MAX, IONIC_MAX_BUF_LEN)
 
+/*在buf中填写统计名称*/
 static void ionic_get_stats_strings(struct ionic_lif *lif, u8 *buf)
 {
 	u32 i;
@@ -21,6 +22,7 @@ static void ionic_get_stats_strings(struct ionic_lif *lif, u8 *buf)
 		ionic_stats_groups[i].get_strings(lif, &buf);
 }
 
+/*在buf中填写统计值*/
 static void ionic_get_stats(struct net_device *netdev,
 			    struct ethtool_stats *stats, u64 *buf)
 {
@@ -35,6 +37,7 @@ static void ionic_get_stats(struct net_device *netdev,
 		ionic_stats_groups[i].get_values(lif, &buf);
 }
 
+/*返回统计总数*/
 static int ionic_get_stats_count(struct ionic_lif *lif)
 {
 	int i, num_stats = 0;
@@ -55,11 +58,11 @@ static int ionic_get_sset_count(struct net_device *netdev, int sset)
 		count = ionic_get_stats_count(lif);
 		break;
 	}
-	return count;
+	return count;/*返回统计项总数*/
 }
 
 static void ionic_get_strings(struct net_device *netdev,
-			      u32 sset, u8 *buf)
+			      u32 sset, u8 *buf/*出参，填统计项名称集*/)
 {
 	struct ionic_lif *lif = netdev_priv(netdev);
 
@@ -78,7 +81,7 @@ static void ionic_get_drvinfo(struct net_device *netdev,
 
 	strscpy(drvinfo->driver, IONIC_DRV_NAME, sizeof(drvinfo->driver));
 	strscpy(drvinfo->fw_version, ionic->idev.dev_info.fw_version,
-		sizeof(drvinfo->fw_version));
+		sizeof(drvinfo->fw_version));/*自缓存的内容中拿fw版本*/
 	strscpy(drvinfo->bus_info, ionic_bus_info(ionic),
 		sizeof(drvinfo->bus_info));
 }
@@ -586,8 +589,9 @@ static int ionic_validate_cmb_config(struct ionic_lif *lif,
 			return -EOPNOTSUPP;
 		}
 
+		/*有n个队列，每个队列有ntxq_descs个描述符，每个描述符大小为struct ionic_txq_desc*/
 		sz = sizeof(struct ionic_txq_desc) * qparam->ntxq_descs * qparam->nxqs;
-		pages_required += ALIGN(sz, PAGE_SIZE) / PAGE_SIZE;
+		pages_required += ALIGN(sz, PAGE_SIZE) / PAGE_SIZE;/*按页对齐*/
 	}
 
 	if (qparam->cmb_rx) {
@@ -597,19 +601,22 @@ static int ionic_validate_cmb_config(struct ionic_lif *lif,
 			return -EOPNOTSUPP;
 		}
 
+		/*有n个队列，每个队列有ntxq_descs个描述符，每个描述符大小为struct ionic_txq_desc*/
 		sz = sizeof(struct ionic_rxq_desc) * qparam->nrxq_descs * qparam->nxqs;
-		pages_required += ALIGN(sz, PAGE_SIZE) / PAGE_SIZE;
+		pages_required += ALIGN(sz, PAGE_SIZE) / PAGE_SIZE;/*按页对齐*/
 	}
 
+	/*这个bar有多少页*/
 	pages_have = lif->ionic->bars[IONIC_PCI_BAR_CMB].len / PAGE_SIZE;
 	if (pages_required > pages_have) {
+		/*我们需要的页数远大于IONIC_PCI_BAR_CMB bar能提供的*/
 		netdev_info(lif->netdev,
 			    "Not enough CMB pages for number of queues and size of descriptor rings, need %d have %d",
 			    pages_required, pages_have);
 		return -ENOMEM;
 	}
 
-	return pages_required;
+	return pages_required;/*返回我们需要的大小*/
 }
 
 static int ionic_cmb_rings_toggle(struct ionic_lif *lif, bool cmb_tx, bool cmb_rx)
@@ -649,7 +656,7 @@ static int ionic_cmb_rings_toggle(struct ionic_lif *lif, bool cmb_tx, bool cmb_r
 }
 
 static void ionic_get_ringparam(struct net_device *netdev,
-				struct ethtool_ringparam *ring,
+				struct ethtool_ringparam *ring/*出参，支持的最大值*/,
 				struct kernel_ethtool_ringparam *kernel_ring,
 				struct netlink_ext_ack *extack)
 {
@@ -673,9 +680,9 @@ static int ionic_set_ringparam(struct net_device *netdev,
 	int err;
 
 	if (test_bit(IONIC_LIF_F_FW_RESET, lif->state))
-		return -EBUSY;
+		return -EBUSY;/*有reset标记，不得处理*/
 
-	ionic_init_queue_params(lif, &qparam);
+	ionic_init_queue_params(lif, &qparam);/*取当前生效参数*/
 
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending) {
 		netdev_info(netdev, "Changing jumbo or mini descriptors not supported\n");
@@ -695,6 +702,7 @@ static int ionic_set_ringparam(struct net_device *netdev,
 	    kernel_ring->rx_push == test_bit(IONIC_LIF_F_CMB_RX_RINGS, lif->state))
 		return 0;
 
+	/*配置有变化，设置新配置*/
 	qparam.ntxq_descs = ring->tx_pending;
 	qparam.nrxq_descs = ring->rx_pending;
 	qparam.cmb_tx = kernel_ring->tx_push;
@@ -722,12 +730,14 @@ static int ionic_set_ringparam(struct net_device *netdev,
 
 	/* if we're not running, just set the values and return */
 	if (!netif_running(lif->netdev)) {
+		/*fw未运行，直接改*/
 		lif->ntxq_descs = ring->tx_pending;
 		lif->nrxq_descs = ring->rx_pending;
 		return 0;
 	}
 
 	mutex_lock(&lif->queue_lock);
+	/*修改队列配置*/
 	err = ionic_reconfigure_queues(lif, &qparam);
 	mutex_unlock(&lif->queue_lock);
 	if (err)

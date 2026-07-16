@@ -2256,10 +2256,10 @@ static int ethtool_set_ringparam(struct net_device *dev, void __user *useraddr)
 	    ringparam.rx_mini_pending > max.rx_mini_max_pending ||
 	    ringparam.rx_jumbo_pending > max.rx_jumbo_max_pending ||
 	    ringparam.tx_pending > max.tx_max_pending)
-		return -EINVAL;
+		return -EINVAL;/*对新值校验max不通过*/
 
-	ret = dev->ethtool_ops->set_ringparam(dev, &ringparam,
-					      &kernel_ringparam, NULL);
+	ret = dev->ethtool_ops->set_ringparam(dev, &ringparam/*计划设置的新值*/,
+					      &kernel_ringparam/*旧值*/, NULL);
 	if (!ret)
 		ethtool_notify(dev, ETHTOOL_MSG_RINGS_NTF);
 	return ret;

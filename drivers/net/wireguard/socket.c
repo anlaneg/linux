@@ -354,13 +354,13 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 	struct udp_tunnel_sock_cfg cfg = {
 		.sk_user_data = wg,
 		.encap_type = 1,
-		.encap_rcv = wg_receive
+		.encap_rcv = wg_receive/*收到wg隧道报文*/
 	};
 	struct socket *new4 = NULL, *new6 = NULL;
 	struct udp_port_cfg port4 = {
 		.family = AF_INET,
 		.local_ip.s_addr = htonl(INADDR_ANY),
-		.local_udp_port = htons(port),
+		.local_udp_port = htons(port),/*要关注的目的port*/
 		.use_udp_checksums = true
 	};
 #if IS_ENABLED(CONFIG_IPV6)
@@ -385,13 +385,13 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 retry:
 #endif
 
-	ret = udp_sock_create(net, &port4, &new4);
+	ret = udp_sock_create(net, &port4/*端口配置*/, &new4);
 	if (ret < 0) {
 		pr_err("%s: Could not create IPv4 socket\n", wg->dev->name);
 		goto out;
 	}
 	set_sock_opts(new4);
-	setup_udp_tunnel_sock(net, new4, &cfg);
+	setup_udp_tunnel_sock(net, new4, &cfg);/*初始化tunnel socket*/
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (ipv6_mod_enabled()) {

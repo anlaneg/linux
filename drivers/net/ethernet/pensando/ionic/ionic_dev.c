@@ -187,11 +187,11 @@ void ionic_init_devinfo(struct ionic *ionic)
 
 	memcpy_fromio(idev->dev_info.fw_version,
 		      idev->dev_info_regs->fw_version,
-		      IONIC_DEVINFO_FWVERS_BUFLEN);
+		      IONIC_DEVINFO_FWVERS_BUFLEN);/*复制fw版本*/
 
 	memcpy_fromio(idev->dev_info.serial_num,
 		      idev->dev_info_regs->serial_num,
-		      IONIC_DEVINFO_SERIAL_BUFLEN);
+		      IONIC_DEVINFO_SERIAL_BUFLEN);/*复制序列号*/
 
 	idev->dev_info.fw_version[IONIC_DEVINFO_FWVERS_BUFLEN] = 0;
 	idev->dev_info.serial_num[IONIC_DEVINFO_SERIAL_BUFLEN] = 0;
@@ -410,6 +410,8 @@ int ionic_dev_setup(struct ionic *ionic)
 		return -EFAULT;
 	}
 
+	/*初始化指针，
+	 * 内存布局[dev_info_regs（占用0x800)|dev_cmd_regs（占用0x800)|intr_status|intr_ctrl]*/
 	idev->dev_info_regs = bar->vaddr + IONIC_BAR0_DEV_INFO_REGS_OFFSET;
 	idev->dev_cmd_regs = bar->vaddr + IONIC_BAR0_DEV_CMD_REGS_OFFSET;
 	idev->intr_status = bar->vaddr + IONIC_BAR0_INTR_STATUS_OFFSET;
@@ -426,7 +428,7 @@ int ionic_dev_setup(struct ionic *ionic)
 	ionic_init_devinfo(ionic);
 
 	/* BAR1: doorbells */
-	bar++;
+	bar++;/*跳转到bar1*/
 	if (num_bars < 2) {
 		dev_err(dev, "Doorbell bar missing, aborting\n");
 		return -EFAULT;
@@ -436,6 +438,7 @@ int ionic_dev_setup(struct ionic *ionic)
 	if (err)
 		return err;
 
+	/*由此可知bar1的起始地址为doorbell对应的pages*/
 	idev->db_pages = bar->vaddr;
 	idev->phy_db_pages = bar->bus_addr;
 
@@ -506,7 +509,7 @@ int ionic_heartbeat_check(struct ionic *ionic)
 	unsigned long check_time, last_check_time;
 	struct ionic_dev *idev = &ionic->idev;
 	struct ionic_lif *lif = ionic->lif;
-	bool fw_status_ready = true;
+	bool fw_status_ready = true;/*默认状态没问题*/
 	bool fw_hb_ready;
 	u8 fw_generation;
 	u8 fw_status;
@@ -527,13 +530,17 @@ do_check_time:
 
 	/* If fw_status is not ready don't bother with the generation */
 	if (!__ionic_is_fw_running(idev, &fw_status)) {
+		/*fw状态有误*/
 		fw_status_ready = false;
 	} else {
+		/*当前fw在运行，取fw generation*/
 		fw_generation = fw_status & IONIC_FW_STS_F_GENERATION;
 		if (idev->fw_generation != fw_generation) {
+			/*和我们之前缓存的不一致*/
 			dev_info(ionic->dev, "FW generation 0x%02x -> 0x%02x\n",
 				 idev->fw_generation, fw_generation);
 
+			/*修改fw_generation*/
 			idev->fw_generation = fw_generation;
 
 			/* If the generation changed, the fw status is not
@@ -635,10 +642,12 @@ u8 ionic_dev_cmd_status(struct ionic_dev *idev)
 	return ioread8(&idev->dev_cmd_regs->comp.comp.status);
 }
 
+/*检查fw是否已完成此cmd处理*/
 bool ionic_dev_cmd_done(struct ionic_dev *idev)
 {
 	if (!idev->dev_cmd_regs)
 		return false;
+	/*检查低位是否为1，如为1，则认为fw执行此cmd完成*/
 	return ioread32(&idev->dev_cmd_regs->done) & IONIC_DEV_CMD_DONE;
 }
 
@@ -657,6 +666,7 @@ void ionic_dev_cmd_go(struct ionic_dev *idev, union ionic_dev_cmd *cmd)
 	if (!idev->dev_cmd_regs)
 		return;
 
+	/*填写要发送的cmd*/
 	memcpy_toio(&idev->dev_cmd_regs->cmd, cmd, sizeof(*cmd));
 	iowrite32(0, &idev->dev_cmd_regs->done);
 	iowrite32(1, &idev->dev_cmd_regs->doorbell);
@@ -793,7 +803,7 @@ int ionic_set_vf_config(struct ionic *ionic, int vf,
 	union ionic_dev_cmd cmd = {
 		.vf_setattr.opcode = IONIC_CMD_VF_SETATTR,
 		.vf_setattr.attr = vfc->attr,
-		.vf_setattr.vf_index = cpu_to_le16(vf),
+		.vf_setattr.vf_index = cpu_to_le16(vf),/*指定vf索引*/
 	};
 	int err;
 
@@ -877,9 +887,9 @@ void ionic_dev_cmd_adminq_init(struct ionic_dev *idev, struct ionic_qcq *qcq,
 	struct ionic_cq *cq = &qcq->cq;
 
 	union ionic_dev_cmd cmd = {
-		.q_init.opcode = IONIC_CMD_Q_INIT,
+		.q_init.opcode = IONIC_CMD_Q_INIT,/*指明初始化queue*/
 		.q_init.lif_index = cpu_to_le16(lif_index),
-		.q_init.type = q->type,
+		.q_init.type = q->type,/*指明queue类型*/
 		.q_init.ver = qcq->q.lif->qtype_info[q->type].version,
 		.q_init.index = cpu_to_le32(q->index),
 		.q_init.flags = cpu_to_le16(IONIC_QINIT_F_IRQ |
@@ -1003,7 +1013,7 @@ int ionic_cq_init(struct ionic_lif *lif, struct ionic_cq *cq,
 }
 
 unsigned int ionic_cq_service(struct ionic_cq *cq, unsigned int work_to_do,
-			      ionic_cq_cb cb, ionic_cq_done_cb done_cb,
+			      ionic_cq_cb cb/*cq检测函数*/, ionic_cq_done_cb done_cb,
 			      void *done_arg)
 {
 	unsigned int work_done = 0;
@@ -1029,17 +1039,17 @@ unsigned int ionic_cq_service(struct ionic_cq *cq, unsigned int work_to_do,
 
 int ionic_q_init(struct ionic_lif *lif, struct ionic_dev *idev,
 		 struct ionic_queue *q, unsigned int index, const char *name,
-		 unsigned int num_descs, size_t desc_size,
+		 unsigned int num_descs/*描述符数目*/, size_t desc_size/*描述符大小*/,
 		 size_t sg_desc_size, unsigned int pid)
 {
 	unsigned int ring_size;
 
 	if (desc_size == 0 || !is_power_of_2(num_descs))
-		return -EINVAL;
+		return -EINVAL;/*描述符数目及描述符大小校验*/
 
 	ring_size = ilog2(num_descs);
 	if (ring_size < 2 || ring_size > 16)
-		return -EINVAL;
+		return -EINVAL;/*描述符数目过大或过小*/
 
 	q->lif = lif;
 	q->index = index;
@@ -1070,7 +1080,7 @@ void ionic_q_post(struct ionic_queue *q, bool ring_doorbell/*是否触发doorbel
 	if (ring_doorbell) {
 		/*触发doorbell*/
 		ionic_dbell_ring(lif->kern_dbpage, q->hw_type,
-				 q->dbval | q->head_idx);
+				 q->dbval | q->head_idx/*指明生产索引*/);
 
 		q->dbell_jiffies = jiffies;
 	}

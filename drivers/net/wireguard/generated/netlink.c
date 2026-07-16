@@ -65,7 +65,7 @@ const struct genl_split_ops wireguard_nl_ops[2] = {
 	},
 	{
 		.cmd		= WG_CMD_SET_DEVICE,
-		.doit		= wg_set_device_doit,
+		.doit		= wg_set_device_doit,/*用于设置wg设备*/
 		.policy		= wireguard_set_device_nl_policy,
 		.maxattr	= WGDEVICE_A_PEERS,
 		.flags		= GENL_UNS_ADMIN_PERM | GENL_CMD_CAP_DO,

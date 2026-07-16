@@ -4955,7 +4955,7 @@ static inline void rdma_ah_set_interface_id(struct rdma_ah_attr *attr,
 }
 
 static inline void rdma_ah_set_grh(struct rdma_ah_attr *attr,
-				   union ib_gid *dgid, u32 flow_label,
+				   union ib_gid *dgid, u32 flow_label/*指明的flow label*/,
 				   u8 sgid_index, u8 hop_limit,
 				   u8 traffic_class)
 {
@@ -5196,6 +5196,7 @@ static inline u32 rdma_calc_flow_label(u32 lqpn, u32 rqpn)
 static inline u16 rdma_get_udp_sport(u32 fl, u32 lqpn/*本端qpn*/, u32 rqpn/*远端qpn*/)
 {
 	if (!fl)
+		/*未指定flow label时，创建*/
 		fl = rdma_calc_flow_label(lqpn, rqpn);/*通过两端qpn生成fl*/
 
 	return rdma_flow_label_to_udp_sport(fl);/*由fl产生udp src port*/

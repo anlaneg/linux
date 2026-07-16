@@ -671,7 +671,7 @@ EXPORT_SYMBOL(__vcalloc_noprof);
  * @n: number of elements.
  * @size: element size.
  */
-void *vcalloc_noprof(size_t n, size_t size)
+void *vcalloc_noprof(size_t n/*元素数*/, size_t size/*元素大小*/)
 {
 	return __vmalloc_array_noprof(n, size, GFP_KERNEL | __GFP_ZERO);
 }

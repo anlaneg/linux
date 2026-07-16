@@ -349,16 +349,19 @@ static int wg_newlink(struct net_device *dev,
 	if (!wg->packet_crypt_wq)
 		goto err_destroy_handshake_send;
 
+	/*初始化加密队列*/
 	ret = wg_packet_queue_init(&wg->encrypt_queue, wg_packet_encrypt_worker,
 				   MAX_QUEUED_PACKETS);
 	if (ret < 0)
 		goto err_destroy_packet_crypt;
 
+	/*初始化解密队列*/
 	ret = wg_packet_queue_init(&wg->decrypt_queue, wg_packet_decrypt_worker,
 				   MAX_QUEUED_PACKETS);
 	if (ret < 0)
 		goto err_free_encrypt_queue;
 
+	/*初始化握手队列*/
 	ret = wg_packet_queue_init(&wg->handshake_queue, wg_packet_handshake_receive_worker,
 				   MAX_QUEUED_INCOMING_HANDSHAKES);
 	if (ret < 0)
@@ -369,7 +372,7 @@ static int wg_newlink(struct net_device *dev,
 		goto err_free_handshake_queue;
 
 	netif_threaded_enable(dev);
-	ret = register_netdevice(dev);
+	ret = register_netdevice(dev);/*注册此网络设备*/
 	if (ret < 0)
 		goto err_uninit_ratelimiter;
 
@@ -408,7 +411,7 @@ static struct rtnl_link_ops link_ops __read_mostly = {
 	.kind			= KBUILD_MODNAME,
 	.priv_size		= sizeof(struct wg_device),
 	.setup			= wg_setup,
-	.newlink		= wg_newlink,
+	.newlink		= wg_newlink,/*创建新的link*/
 };
 
 static void wg_netns_pre_exit(struct net *net)

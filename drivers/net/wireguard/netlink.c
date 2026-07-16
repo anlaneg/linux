@@ -282,7 +282,7 @@ int wg_get_device_done(struct netlink_callback *cb)
 	return 0;
 }
 
-static int set_port(struct wg_device *wg, u16 port)
+static int set_port(struct wg_device *wg, u16 port/*要设置的端口号*/)
 {
 	struct wg_peer *peer;
 
@@ -294,7 +294,7 @@ static int set_port(struct wg_device *wg, u16 port)
 		wg->incoming_port = port;
 		return 0;
 	}
-	return wg_socket_init(wg, port);
+	return wg_socket_init(wg, port);/*创建隧道socket,以完成wg收包设置*/
 }
 
 static int set_allowedip(struct wg_peer *peer, struct nlattr **attrs)
@@ -470,6 +470,7 @@ out:
 	return ret;
 }
 
+/*设置设备属性*/
 int wg_set_device_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct wg_device *wg = lookup_interface(info->attrs, skb);
@@ -508,6 +509,7 @@ int wg_set_device_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[WGDEVICE_A_LISTEN_PORT]) {
+		/*设置接收用的socket udp port(解决收方向监听哪个端口的问题)*/
 		ret = set_port(wg,
 			nla_get_u16(info->attrs[WGDEVICE_A_LISTEN_PORT]));
 		if (ret)

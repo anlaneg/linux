@@ -38,7 +38,7 @@ void ionic_fill_lif_cfg(struct ionic_lif *lif, struct ionic_lif_cfg *cfg)
 
 	cfg->dbid = lif->kern_pid;
 	cfg->dbid_count = le32_to_cpu(lif->ionic->ident.dev.ndbpgs_per_lif);
-	cfg->dbpage = lif->kern_dbpage;
+	cfg->dbpage = lif->kern_dbpage;/*设置doorbell page(此值按qtype可索引pci地址，地址值中包含了必要信息）*/
 	cfg->intr_ctrl = lif->ionic->idev.intr_ctrl;
 
 	cfg->db_phys = lif->ionic->bars[IONIC_PCI_BAR_DBELL].bus_addr;

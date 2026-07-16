@@ -1675,6 +1675,7 @@ EXPORT_SYMBOL(netdev_notify_peers);
 
 static int napi_threaded_poll(void *data);
 
+/*创建独立线程来处理napi poll*/
 static int napi_kthread_create(struct napi_struct *n)
 {
 	int err = 0;
@@ -1686,6 +1687,7 @@ static int napi_kthread_create(struct napi_struct *n)
 	n->thread = kthread_run(napi_threaded_poll, n, "napi/%s-%d",
 				n->dev->name, n->napi_id);
 	if (IS_ERR(n->thread)) {
+		/*创建napi threaded线程失败*/
 		err = PTR_ERR(n->thread);
 		pr_err("kthread_run failed with err %d\n", err);
 		n->thread = NULL;
@@ -7583,6 +7585,7 @@ int netif_set_threaded(struct net_device *dev,
 	if (threaded) {
 		list_for_each_entry(napi, &dev->napi_list, dev_list) {
 			if (!napi->thread) {
+				/*还没有线程，创建此线程，并poll此napi*/
 				err = napi_kthread_create(napi);
 				if (err) {
 					threaded = NETDEV_NAPI_THREADED_DISABLED;
@@ -8179,12 +8182,12 @@ static int napi_thread_wait(struct napi_struct *napi)
 			return 0;
 		}
 
-		schedule();
+		schedule();/*调度并等待*/
 		set_current_state(TASK_INTERRUPTIBLE);
 	}
-	__set_current_state(TASK_RUNNING);
+	__set_current_state(TASK_RUNNING);/*变更为running状态*/
 
-	return -1;
+	return -1;/*此线程需退出*/
 }
 
 static void napi_threaded_poll_loop(struct napi_struct *napi,
@@ -8205,7 +8208,7 @@ static void napi_threaded_poll_loop(struct napi_struct *napi,
 		sd->in_napi_threaded_poll = true;
 
 		have = netpoll_poll_lock(napi);
-		__napi_poll(napi, &repoll);
+		__napi_poll(napi, &repoll);/*收包并上送*/
 		netpoll_poll_unlock(have);
 
 		sd->in_napi_threaded_poll = false;

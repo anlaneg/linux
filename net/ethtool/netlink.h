@@ -390,8 +390,8 @@ struct ethnl_request_ops {
 	u8			request_cmd;
 	u8			reply_cmd;
 	u16			hdr_attr;
-	unsigned int		req_info_size;
-	unsigned int		reply_data_size;
+	unsigned int		req_info_size;/*请求结构体大小*/
+	unsigned int		reply_data_size;/*响应结构体大小*/
 	bool			allow_nodev_do;
 	u8			set_ntf_cmd;
 
@@ -403,6 +403,7 @@ struct ethnl_request_ops {
 			    const struct genl_info *info);
 	int (*reply_size)(const struct ethnl_req_info *req_info,
 			  const struct ethnl_reply_data *reply_data);
+	/*填充响应*/
 	int (*fill_reply)(struct sk_buff *skb,
 			  const struct ethnl_req_info *req_info,
 			  const struct ethnl_reply_data *reply_data);

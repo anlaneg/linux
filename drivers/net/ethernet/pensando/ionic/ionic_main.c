@@ -321,8 +321,9 @@ bool ionic_adminq_service(struct ionic_cq *cq)
 		return false;
 
 	do {
-		desc_info = &q->admin_info[q->tail_idx];
+		desc_info = &q->admin_info[q->tail_idx];/*取cq对应的admin info*/
 		index = q->tail_idx;
+		/*更新tail_idx*/
 		q->tail_idx = (q->tail_idx + 1) & (q->num_descs - 1);
 		if (likely(desc_info->ctx)) {
 			struct ionic_admin_ctx *ctx = desc_info->ctx;
@@ -359,7 +360,7 @@ bool ionic_adminq_poke_doorbell(struct ionic_queue *q)
 
 	if (dif > q->dbell_deadline) {
 		ionic_dbell_ring(q->lif->kern_dbpage, q->hw_type,
-				 q->dbval | q->head_idx);
+				 q->dbval | q->head_idx/*指明生产指针*/);
 
 		q->dbell_jiffies = now;
 	}
@@ -511,7 +512,8 @@ static void ionic_dev_cmd_clean(struct ionic *ionic)
 	if (!idev->dev_cmd_regs)
 		return;
 
-	iowrite32(0, &idev->dev_cmd_regs->doorbell);
+	iowrite32(0, &idev->dev_cmd_regs->doorbell);/*知会fw，driver已不再等待*/
+	/*清空此cmd*/
 	memset_io(&idev->dev_cmd_regs->cmd, 0, sizeof(idev->dev_cmd_regs->cmd));
 }
 
@@ -527,6 +529,7 @@ void ionic_dev_cmd_dev_err_print(struct ionic *ionic, u8 opcode, u8 status,
 		ionic_opcode_to_str(opcode), opcode, stat_str, err);
 }
 
+/*等待fw完成指定dev cmd*/
 static int __ionic_dev_cmd_wait(struct ionic *ionic, unsigned long max_seconds,
 				const bool do_msg)
 {
@@ -548,20 +551,22 @@ try_again:
 	opcode = idev->opcode;
 	start_time = jiffies;
 	for (fw_up = ionic_is_fw_running(idev);
+			/*没搞定，且fw是在running的，且命令未响应超时*/
 	     !done && fw_up && time_before(jiffies, max_wait);
 	     fw_up = ionic_is_fw_running(idev)) {
 		done = ionic_dev_cmd_done(idev);
 		if (done)
-			break;
-		usleep_range(100, 200);
+			break;/*已处理完成，跳出*/
+		usleep_range(100, 200);/*等待fw处理*/
 	}
-	duration = jiffies - start_time;
+	duration = jiffies - start_time;/*计算总时长*/
 
 	dev_dbg(ionic->dev, "DEVCMD %s (%d) done=%d took %ld secs (%ld jiffies)\n",
 		ionic_opcode_to_str(opcode), opcode,
 		done, duration / HZ, duration);
 
 	if (!done && !fw_up) {
+		/*此cmd未处理完成，且fw未up，清除此cmd*/
 		ionic_dev_cmd_clean(ionic);
 		dev_warn(ionic->dev, "DEVCMD %s (%d) interrupted - FW is down\n",
 			 ionic_opcode_to_str(opcode), opcode);
@@ -569,16 +574,19 @@ try_again:
 	}
 
 	if (!done && !time_before(jiffies, max_wait)) {
-		ionic_dev_cmd_clean(ionic);
+		ionic_dev_cmd_clean(ionic);/*未处理完成，且已超时*/
 		dev_warn(ionic->dev, "DEVCMD %s (%d) timeout after %ld secs\n",
 			 ionic_opcode_to_str(opcode), opcode, max_seconds);
 		return -ETIMEDOUT;
 	}
 
+	/*fw正常处理完成，且未超时*/
 	err = ionic_dev_cmd_status(&ionic->idev);
 	if (err) {
+		/*状态非零，检查原因*/
 		if (err == IONIC_RC_EAGAIN &&
 		    time_before(jiffies, (max_wait - HZ))) {
+			/*fw指明需要重试，且时间容许，重试*/
 			dev_dbg(ionic->dev, "DEV_CMD %s (%d), %s (%d) retrying...\n",
 				ionic_opcode_to_str(opcode), opcode,
 				ionic_error_to_str(err), err);
@@ -590,10 +598,12 @@ try_again:
 		}
 
 		if (!(opcode == IONIC_CMD_FW_CONTROL && err == IONIC_RC_EAGAIN))
+			/*显示错误信息*/
 			if (do_msg)
 				ionic_dev_cmd_dev_err_print(ionic, opcode, err,
 							    ionic_error_to_errno(err));
 
+		/*响应错误码*/
 		return ionic_error_to_errno(err);
 	}
 
@@ -602,14 +612,16 @@ try_again:
 	return 0;
 }
 
+/*等待fw完成指定的dev cmd*/
 int ionic_dev_cmd_wait(struct ionic *ionic, unsigned long max_seconds)
 {
-	return __ionic_dev_cmd_wait(ionic, max_seconds, true);
+	return __ionic_dev_cmd_wait(ionic, max_seconds, true/*容许显示错误信息*/);
 }
 
+/*等待fw完成指定的dev cmd*/
 int ionic_dev_cmd_wait_nomsg(struct ionic *ionic, unsigned long max_seconds)
 {
-	return __ionic_dev_cmd_wait(ionic, max_seconds, false);
+	return __ionic_dev_cmd_wait(ionic, max_seconds, false/*不容许显示错误信息*/);
 }
 
 int ionic_setup(struct ionic *ionic)

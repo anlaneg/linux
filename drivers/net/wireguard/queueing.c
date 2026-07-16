@@ -6,24 +6,27 @@
 #include "queueing.h"
 #include <linux/skb_array.h>
 
+/*初始化多核worker的function*/
 struct multicore_worker __percpu *
 wg_packet_percpu_multicore_worker_alloc(work_func_t function, void *ptr)
 {
 	int cpu;
+	/*申请percpu变量*/
 	struct multicore_worker __percpu *worker = alloc_percpu(struct multicore_worker);
 
 	if (!worker)
 		return NULL;
 
+	/*每个cpu一个此worker,指明worker回调*/
 	for_each_possible_cpu(cpu) {
-		per_cpu_ptr(worker, cpu)->ptr = ptr;
+		per_cpu_ptr(worker, cpu)->ptr = ptr;/*参数，对应的为关联的queue*/
 		INIT_WORK(&per_cpu_ptr(worker, cpu)->work, function);
 	}
 	return worker;
 }
 
 int wg_packet_queue_init(struct crypt_queue *queue, work_func_t function,
-			 unsigned int len)
+			 unsigned int len/*ring长度*/)
 {
 	int ret;
 
@@ -32,6 +35,7 @@ int wg_packet_queue_init(struct crypt_queue *queue, work_func_t function,
 	ret = ptr_ring_init(&queue->ring, len, GFP_KERNEL);
 	if (ret)
 		return ret;
+	/*初始化此queue的worker*/
 	queue->worker = wg_packet_percpu_multicore_worker_alloc(function, queue);
 	if (!queue->worker) {
 		ptr_ring_cleanup(&queue->ring, NULL);

@@ -1229,7 +1229,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 
 			if (pkt->mask & RXE_IMMDT_MASK) {
 				wc->wc_flags |= IB_WC_WITH_IMM;
-				wc->ex.imm_data = immdt_imm(pkt);
+				wc->ex.imm_data = immdt_imm(pkt);/*取得立即数*/
 			}
 
 			if (pkt->mask & RXE_IETH_MASK) {

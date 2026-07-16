@@ -108,13 +108,18 @@ static inline void ionic_intr_mask_assert(struct ionic_intr __iomem *intr_ctrl,
  * @IONIC_DBELL_INDEX_MASK:	bit mask of valid index bits, no shift needed.
  */
 enum ionic_dbell_bits {
+	/*qid共占用24位*/
 	IONIC_DBELL_QID_MASK		= 0xffffff,
+	/*qid所处位置为24bit到47bit，故需左移24bit*/
 	IONIC_DBELL_QID_SHIFT		= 24,
 
+/*doorbell的data中包含QID*/
 #define IONIC_DBELL_QID(n) \
 	(((u64)(n) & IONIC_DBELL_QID_MASK) << IONIC_DBELL_QID_SHIFT)
 
+	/*ring共占用3位*/
 	IONIC_DBELL_RING_MASK		= 0x7,
+	/*ring所处位置为16bit到18bits*/
 	IONIC_DBELL_RING_SHIFT		= 16,
 
 #define IONIC_DBELL_RING(n) \
@@ -125,11 +130,18 @@ enum ionic_dbell_bits {
 	IONIC_DBELL_RING_2		= IONIC_DBELL_RING(2),
 	IONIC_DBELL_RING_3		= IONIC_DBELL_RING(3),
 
+	/*P索引，共占用16bits,所处位置为0bit到15bit*/
 	IONIC_DBELL_INDEX_MASK		= 0xffff,
 };
 
-/*产生doorbell*/
-static inline void ionic_dbell_ring(u64 __iomem *db_page, int qtype, u64 val)
+/*
+ * 产生doorbell
+ * Each LIF can contain multiple Qtypes (max 8)and each qtype can contain multiple
+ * queues(QIDs) (max 16 million). QIDs have associated qstate memory with them in NIC memory
+ * (HBM). The qstate memory is contiguous for a LIF as shown below and has to be allocated
+ * apriori depending on the max number of queues that can be supported.
+ * */
+static inline void ionic_dbell_ring(u64 __iomem *db_page, int qtype/*Qtypes,最大有8种*/, u64 val)
 {
 	writeq(val, &db_page[qtype]);
 }

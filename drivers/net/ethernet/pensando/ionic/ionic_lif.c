@@ -553,11 +553,11 @@ err_out:
 	return err;
 }
 
-static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type,
-			   unsigned int index,
-			   const char *name, unsigned int flags,
-			   unsigned int num_descs, unsigned int desc_size,
-			   unsigned int cq_desc_size,
+static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type/*队列类型（比如TXQ)*/,
+			   unsigned int index/*队列索引*/,
+			   const char *name/*队列名称*/, unsigned int flags,
+			   unsigned int num_descs/*描述符数目*/, unsigned int desc_size/*描述符大小*/,
+			   unsigned int cq_desc_size/*CQ描述符大小*/,
 			   unsigned int sg_desc_size,
 			   unsigned int desc_info_size,
 			   unsigned int pid, struct bpf_prog *xdp_prog,
@@ -580,6 +580,7 @@ static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type,
 	new->q.dev = dev;
 	new->flags = flags;
 
+	/*申请num_descs个描述符*/
 	new->q.info = vcalloc(num_descs, desc_info_size);
 	if (!new->q.info) {
 		netdev_err(lif->netdev, "Cannot allocate queue info\n");
@@ -588,6 +589,7 @@ static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type,
 	}
 
 	if (type == IONIC_QTYPE_RXQ) {
+		/*RXQ*/
 		struct page_pool_params pp_params = {
 			.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
 			.order = 0,
@@ -797,7 +799,7 @@ static int ionic_qcqs_alloc(struct ionic_lif *lif)
 	if (!lif->txqcqs)
 		goto err_out;
 	lif->rxqcqs = devm_kcalloc(dev, lif->ionic->nrxqs_per_lif,
-				   sizeof(*lif->rxqcqs), GFP_KERNEL);
+				   sizeof(*lif->rxqcqs), GFP_KERNEL);/*申请rxqcq*/
 	if (!lif->rxqcqs)
 		goto err_out;
 
@@ -879,7 +881,7 @@ static int ionic_lif_txq_init(struct ionic_lif *lif, struct ionic_qcq *qcq)
 
 	q->hw_type = ctx.comp.q_init.hw_type;
 	q->hw_index = le32_to_cpu(ctx.comp.q_init.hw_index);
-	q->dbval = IONIC_DBELL_QID(q->hw_index);
+	q->dbval = IONIC_DBELL_QID(q->hw_index);/*先仅指明dbval中的qid信息*/
 
 	dev_dbg(dev, "txq->hw_type %d\n", q->hw_type);
 	dev_dbg(dev, "txq->hw_index %d\n", q->hw_index);
@@ -948,7 +950,7 @@ static int ionic_lif_rxq_init(struct ionic_lif *lif, struct ionic_qcq *qcq)
 
 	q->hw_type = ctx.comp.q_init.hw_type;
 	q->hw_index = le32_to_cpu(ctx.comp.q_init.hw_index);
-	q->dbval = IONIC_DBELL_QID(q->hw_index);
+	q->dbval = IONIC_DBELL_QID(q->hw_index);/*先仅指明dbval中的qid信息*/
 
 	dev_dbg(dev, "rxq->hw_type %d\n", q->hw_type);
 	dev_dbg(dev, "rxq->hw_index %d\n", q->hw_index);
@@ -2969,8 +2971,8 @@ int ionic_reconfigure_queues(struct ionic_lif *lif,
 	 */
 	if (tx_qcqs) {
 		num_desc = qparam->ntxq_descs;
-		desc_sz = sizeof(struct ionic_txq_desc);
-		comp_sz = sizeof(struct ionic_txq_comp);
+		desc_sz = sizeof(struct ionic_txq_desc);/*txq描述符大小*/
+		comp_sz = sizeof(struct ionic_txq_comp);/*txq comp描述符大小*/
 
 		if (lif->qtype_info[IONIC_QTYPE_TXQ].version >= 1 &&
 		    lif->qtype_info[IONIC_QTYPE_TXQ].sg_desc_sz ==
@@ -2983,7 +2985,7 @@ int ionic_reconfigure_queues(struct ionic_lif *lif,
 			/* If missing, short placeholder qcq needed for swap */
 			if (!lif->txqcqs[i]) {
 				flags = IONIC_QCQ_F_TX_STATS | IONIC_QCQ_F_SG;
-				err = ionic_qcq_alloc(lif, IONIC_QTYPE_TXQ, i, "tx", flags,
+				err = ionic_qcq_alloc(lif, IONIC_QTYPE_TXQ, i/*队列索引*/, "tx", flags,
 						      4, desc_sz, comp_sz, sg_desc_sz,
 						      sizeof(struct ionic_tx_desc_info),
 						      lif->kern_pid, NULL, &lif->txqcqs[i]);
@@ -3586,7 +3588,7 @@ static int ionic_lif_adminq_init(struct ionic_lif *lif)
 
 	q->hw_type = comp.hw_type;
 	q->hw_index = le32_to_cpu(comp.hw_index);
-	q->dbval = IONIC_DBELL_QID(q->hw_index);
+	q->dbval = IONIC_DBELL_QID(q->hw_index);/*先仅指明dbval中的qid信息*/
 
 	dev_dbg(dev, "adminq->hw_type %d\n", q->hw_type);
 	dev_dbg(dev, "adminq->hw_index %d\n", q->hw_index);
@@ -3594,6 +3596,7 @@ static int ionic_lif_adminq_init(struct ionic_lif *lif)
 	q->dbell_deadline = IONIC_ADMIN_DOORBELL_DEADLINE;
 	q->dbell_jiffies = jiffies;
 
+	/*添加进napi*/
 	netif_napi_add(lif->netdev, &qcq->napi, ionic_adminq_napi);
 
 	napi_enable(&qcq->napi);
@@ -3646,7 +3649,7 @@ static int ionic_lif_notifyq_init(struct ionic_lif *lif)
 	lif->last_eid = 0;
 	q->hw_type = ctx.comp.q_init.hw_type;
 	q->hw_index = le32_to_cpu(ctx.comp.q_init.hw_index);
-	q->dbval = IONIC_DBELL_QID(q->hw_index);
+	q->dbval = IONIC_DBELL_QID(q->hw_index);/*先仅指明dbval中的qid信息*/
 
 	dev_dbg(dev, "notifyq->hw_type %d\n", q->hw_type);
 	dev_dbg(dev, "notifyq->hw_index %d\n", q->hw_index);
@@ -3754,6 +3757,7 @@ int ionic_lif_init(struct ionic_lif *lif)
 
 	lif->kern_pid = 0;
 	dbpage_num = ionic_db_page_num(lif, lif->kern_pid);
+	/*映射此lif对应的doorbell page(之后doorbell向此地址写入内容即可）*/
 	lif->kern_dbpage = ionic_bus_map_dbpage(lif->ionic, dbpage_num);
 	if (!lif->kern_dbpage) {
 		dev_err(dev, "Cannot map dbpage, aborting\n");
@@ -3981,7 +3985,7 @@ static void ionic_lif_queue_identify(struct ionic_lif *lif)
 }
 
 int ionic_lif_identify(struct ionic *ionic, u8 lif_type,
-		       union ionic_lif_identity *lid)
+		       union ionic_lif_identity *lid/*出参*/)
 {
 	struct ionic_dev *idev = &ionic->idev;
 	size_t sz;
@@ -3994,7 +3998,9 @@ int ionic_lif_identify(struct ionic *ionic, u8 lif_type,
 	ionic_dev_cmd_lif_identify(idev, lif_type, IONIC_IDENTITY_VERSION_1);
 	/*等待响应*/
 	err = ionic_dev_cmd_wait(ionic, DEVCMD_TIMEOUT);
-	/*复制响应内容*/
+	/*复制响应内容
+	 * （这类函数用出参指明响应结构体大小，fw填写响应内容到idev->dev_cmd_regs->data中，
+	 * 在此处，自data中拿出结果，提供给出参）*/
 	memcpy_fromio(lid, &idev->dev_cmd_regs->data, sz);
 	mutex_unlock(&ionic->dev_cmd_lock);
 	if (err)

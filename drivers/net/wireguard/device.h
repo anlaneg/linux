@@ -39,7 +39,7 @@ struct prev_queue {
 
 struct wg_device {
 	struct net_device *dev;
-	struct crypt_queue encrypt_queue, decrypt_queue, handshake_queue;
+	struct crypt_queue encrypt_queue/*加密队列*/, decrypt_queue/*解密队列*/, handshake_queue/*握手队列*/;
 	struct sock __rcu *sock4, *sock6;
 	struct net __rcu *creating_net;
 	struct noise_static_identity static_identity;

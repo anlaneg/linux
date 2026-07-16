@@ -523,11 +523,11 @@ struct ethtool_ringparam {
 	__u32	rx_max_pending;
 	__u32	rx_mini_max_pending;
 	__u32	rx_jumbo_max_pending;
-	__u32	tx_max_pending;
+	__u32	tx_max_pending;/*最大可配置的tx队列长度*/
 	__u32	rx_pending;
 	__u32	rx_mini_pending;
 	__u32	rx_jumbo_pending;
-	__u32	tx_pending;
+	__u32	tx_pending;/*当前生效的（最大tx队列长度）*/
 };
 
 /**

@@ -42,6 +42,7 @@ struct ionic {
 	struct device *dev;
 	struct devlink_port dl_port;
 	struct ionic_dev idev;
+	/*保护dev command操作*/
 	struct mutex dev_cmd_lock;	/* lock for dev_cmd operations */
 	struct dentry *dentry;
 	struct ionic_dev_bar bars[IONIC_BARS_MAX];
@@ -62,7 +63,7 @@ struct ionic {
 	struct ionic_vf *vfs;
 	int num_vfs;
 	struct timer_list watchdog_timer;
-	int watchdog_period;
+	int watchdog_period;/*watchdog的周期*/
 };
 
 int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx);

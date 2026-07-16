@@ -95,12 +95,12 @@ int dns_query(struct net *net,
 		typelen = strlen(type);
 		if (typelen < 1)
 			return -EINVAL;
-		desclen += typelen + 1;
+		desclen += typelen + 1;/*加type长度*/
 	}
 
 	if (namelen < 3 || namelen > 255)
 		return -EINVAL;
-	desclen += namelen + 1;
+	desclen += namelen + 1;/*加name长度*/
 
 	desc = kmalloc(desclen, GFP_KERNEL);
 	if (!desc)
@@ -108,11 +108,11 @@ int dns_query(struct net *net,
 
 	cp = desc;
 	if (type) {
-		memcpy(cp, type, typelen);
+		memcpy(cp, type, typelen);/*写入type*/
 		cp += typelen;
-		*cp++ = ':';
+		*cp++ = ':';/*写入type,name分隔符*/
 	}
-	memcpy(cp, name, namelen);
+	memcpy(cp, name, namelen);/*写入name*/
 	cp += namelen;
 	*cp = '\0';
 

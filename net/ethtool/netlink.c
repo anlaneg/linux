@@ -19,7 +19,9 @@ static u32 ethnl_bcast_seq;
 #define ETHTOOL_FLAGS_STATS (ETHTOOL_FLAGS_BASIC | ETHTOOL_FLAG_STATS)
 
 const struct nla_policy ethnl_header_policy[] = {
+		/*设备索引*/
 	[ETHTOOL_A_HEADER_DEV_INDEX]	= { .type = NLA_U32 },
+	/*设备名称*/
 	[ETHTOOL_A_HEADER_DEV_NAME]	= { .type = NLA_NUL_STRING,
 					    .len = ALTIFNAMSIZ - 1 },
 	[ETHTOOL_A_HEADER_FLAGS]	= NLA_POLICY_MASK(NLA_U32,
@@ -488,7 +490,7 @@ static void ethnl_init_reply_data(struct ethnl_reply_data *reply_data,
 				  const struct ethnl_request_ops *ops,
 				  struct net_device *dev)
 {
-	memset(reply_data, 0, ops->reply_data_size);
+	memset(reply_data, 0, ops->reply_data_size);/*初始化响应数据*/
 	reply_data->dev = dev;
 }
 
@@ -538,13 +540,14 @@ static int ethnl_default_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_cleanup;
 	reply_len = ret;
 	ret = -ENOMEM;
+	/*初始化响应skb*/
 	rskb = ethnl_reply_init(reply_len + ethnl_reply_header_size(),
 				req_info->dev, ops->reply_cmd,
 				ops->hdr_attr, info, &reply_payload);
 	if (!rskb)
 		goto err_cleanup;
 	hdr_len = rskb->len;
-	ret = ops->fill_reply(rskb, req_info, reply_data);
+	ret = ops->fill_reply(rskb, req_info, reply_data);/*填充响应*/
 	if (ret < 0)
 		goto err_msg;
 	WARN_ONCE(rskb->len - hdr_len > reply_len,

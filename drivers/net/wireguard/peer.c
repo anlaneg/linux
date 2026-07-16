@@ -227,6 +227,7 @@ void wg_peer_put(struct wg_peer *peer)
 	kref_put(&peer->refcount, kref_release);
 }
 
+/*创建peer_cache*/
 int __init wg_peer_init(void)
 {
 	peer_cache = KMEM_CACHE(wg_peer, 0);

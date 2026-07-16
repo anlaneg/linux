@@ -35,6 +35,7 @@ static const struct ionic_stat_desc ionic_lif_stats_desc[] = {
 	IONIC_LIF_STAT_DESC(xdp_frames),
 };
 
+/*port统计描述符*/
 static const struct ionic_stat_desc ionic_port_stats_desc[] = {
 	IONIC_PORT_STAT_DESC(frames_rx_ok),
 	IONIC_PORT_STAT_DESC(frames_rx_all),
@@ -127,6 +128,7 @@ static const struct ionic_stat_desc ionic_port_stats_desc[] = {
 	IONIC_PORT_STAT_DESC(frames_tx_truncated),
 };
 
+/*tx队列统计描述符*/
 static const struct ionic_stat_desc ionic_tx_stats_desc[] = {
 	IONIC_TX_STAT_DESC(pkts),
 	IONIC_TX_STAT_DESC(bytes),
@@ -144,6 +146,7 @@ static const struct ionic_stat_desc ionic_tx_stats_desc[] = {
 	IONIC_TX_STAT_DESC(xdp_frames),
 };
 
+/*rx队列统计描述符*/
 static const struct ionic_stat_desc ionic_rx_stats_desc[] = {
 	IONIC_RX_STAT_DESC(pkts),
 	IONIC_RX_STAT_DESC(bytes),
@@ -163,6 +166,7 @@ static const struct ionic_stat_desc ionic_rx_stats_desc[] = {
 	IONIC_RX_STAT_DESC(xdp_redirect),
 };
 
+/*lif统计数目*/
 #define IONIC_NUM_LIF_STATS ARRAY_SIZE(ionic_lif_stats_desc)
 #define IONIC_NUM_PORT_STATS ARRAY_SIZE(ionic_port_stats_desc)
 #define IONIC_NUM_TX_STATS ARRAY_SIZE(ionic_tx_stats_desc)
@@ -170,8 +174,9 @@ static const struct ionic_stat_desc ionic_rx_stats_desc[] = {
 
 #define MAX_Q(lif)   ((lif)->netdev->real_num_tx_queues)
 
-static void ionic_add_lif_txq_stats(struct ionic_lif *lif, int q_num,
-				    struct ionic_lif_sw_stats *stats)
+/*取lif tx q_num号队列的统计，将其合入到出参stats上*/
+static void ionic_add_lif_txq_stats(struct ionic_lif *lif, int q_num/*队列id*/,
+				    struct ionic_lif_sw_stats *stats/*出参*/)
 {
 	struct ionic_tx_stats *txstats = &lif->txqstats[q_num];
 
@@ -186,6 +191,7 @@ static void ionic_add_lif_txq_stats(struct ionic_lif *lif, int q_num,
 	stats->xdp_frames += txstats->xdp_frames;
 }
 
+/*取lif rx q_num号队列统计，，将其合入到出参stats上*/
 static void ionic_add_lif_rxq_stats(struct ionic_lif *lif, int q_num,
 				    struct ionic_lif_sw_stats *stats)
 {
@@ -232,6 +238,7 @@ static void ionic_get_lif_stats(struct ionic_lif *lif,
 	stats->hw_tx_aborted_errors = ns.tx_aborted_errors;
 }
 
+/*统计项总数*/
 static u64 ionic_sw_stats_get_count(struct ionic_lif *lif)
 {
 	u64 total = 0, tx_queues = MAX_Q(lif), rx_queues = MAX_Q(lif);
@@ -275,18 +282,21 @@ static void ionic_sw_stats_get_strings(struct ionic_lif *lif, u8 **buf)
 {
 	int i, q_num;
 
+	/*给buffer中放lif统计项名称*/
 	for (i = 0; i < IONIC_NUM_LIF_STATS; i++)
 		ethtool_puts(buf, ionic_lif_stats_desc[i].name);
 
 	for (i = 0; i < IONIC_NUM_PORT_STATS; i++)
 		ethtool_puts(buf, ionic_port_stats_desc[i].name);
 
+	/*给buffer中放各tx队列的统计项名称*/
 	for (q_num = 0; q_num < MAX_Q(lif); q_num++)
 		ionic_sw_stats_get_tx_strings(lif, buf, q_num);
 
 	if (lif->hwstamp_txq)
 		ionic_sw_stats_get_tx_strings(lif, buf, lif->hwstamp_txq->q.index);
 
+	/*给buffer中放各rx队列的统计项名称*/
 	for (q_num = 0; q_num < MAX_Q(lif); q_num++)
 		ionic_sw_stats_get_rx_strings(lif, buf, q_num);
 
@@ -331,7 +341,9 @@ static void ionic_sw_stats_get_values(struct ionic_lif *lif, u64 **buf)
 	ionic_get_lif_stats(lif, &lif_stats);
 
 	for (i = 0; i < IONIC_NUM_LIF_STATS; i++) {
+		/*写入统计值*/
 		**buf = IONIC_READ_STAT64(&lif_stats, &ionic_lif_stats_desc[i]);
+		/*切到下一个写入位置*/
 		(*buf)++;
 	}
 

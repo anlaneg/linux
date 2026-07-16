@@ -760,6 +760,7 @@ int kthread_stop(struct task_struct *k)
 
 	get_task_struct(k);
 	kthread = to_kthread(k);
+	/*指明此线程需要停止*/
 	set_bit(KTHREAD_SHOULD_STOP, &kthread->flags);
 	kthread_unpark(k);
 	set_tsk_thread_flag(k, TIF_NOTIFY_SIGNAL);

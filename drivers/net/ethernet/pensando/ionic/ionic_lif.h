@@ -68,6 +68,7 @@ struct ionic_rx_stats {
 #define IONIC_QCQ_F_NOTIFYQ		BIT(5)
 #define IONIC_QCQ_F_CMB_RINGS		BIT(6)
 
+/*qcq定义为：Queue + Completion Queue*/
 struct ionic_qcq {
 	void *q_base;
 	dma_addr_t q_base_pa;
@@ -160,6 +161,13 @@ enum ionic_lif_state_flags {
 	IONIC_LIF_F_BROKEN,
 	IONIC_LIF_F_TX_DIM_INTR,
 	IONIC_LIF_F_RX_DIM_INTR,
+	/* CMB本意指：Controller Memory Buffer
+	 * 传统网卡：TX/RX 描述符环形队列（ring）分配在主机 CPU 内存，
+	 * 网卡通过 PCIe 去读主机内存的描述符，每一次发包 / 收包都产生 PCIe 读延迟；
+	 * CMB 模式：把 TX/RX descriptor rings 直接放在网卡芯片自身的片上内存，
+	 * 主机只写、网卡本地读，省去跨 PCIe 读取描述符，大幅降低转发时延、减少 PCIe 带宽占用。
+	 * 仅ring本身放在网卡，buffer还在主机
+	 * */
 	IONIC_LIF_F_CMB_TX_RINGS,
 	IONIC_LIF_F_CMB_RX_RINGS,
 
@@ -168,7 +176,7 @@ enum ionic_lif_state_flags {
 };
 
 struct ionic_qtype_info {
-	u8  version;
+	u8  version;/*此Q类型的版本号*/
 	u8  supported;
 	u64 features;
 	u16 desc_sz;
@@ -182,7 +190,7 @@ struct ionic_phc;
 
 #define IONIC_LIF_NAME_MAX_SZ		32
 struct ionic_lif {
-	struct net_device *netdev;
+	struct net_device *netdev;/*对应的netdev*/
 	DECLARE_BITMAP(state, IONIC_LIF_F_STATE_SIZE);
 	struct ionic *ionic;
 	unsigned int index;
@@ -195,18 +203,18 @@ struct ionic_lif {
 	struct ionic_qcq **txqcqs;
 	struct ionic_qcq *hwstamp_txq;
 	struct ionic_tx_stats *txqstats;
-	struct ionic_qcq **rxqcqs;
+	struct ionic_qcq **rxqcqs;/*rx qcq数组，长度由nrxqs_per_lif指定*/
 	struct ionic_qcq *hwstamp_rxq;
 	struct ionic_rx_stats *rxqstats;
 	struct ionic_deferred deferred;
 	struct work_struct tx_timeout_work;
 	u64 last_eid;
 	unsigned int kern_pid;
-	u64 __iomem *kern_dbpage;
+	u64 __iomem *kern_dbpage;/*doorbell对应的页*/
 	unsigned int neqs;
-	unsigned int nxqs;
-	unsigned int ntxq_descs;
-	unsigned int nrxq_descs;
+	unsigned int nxqs;/*rx,tx队列数(rx与tx队列相等）*/
+	unsigned int ntxq_descs;/*tx队列描述符数目*/
+	unsigned int nrxq_descs;/*rx队列描述符数目*/
 	u64 rxq_features;
 	u64 hw_features;
 	u16 rx_copybreak;
@@ -267,13 +275,13 @@ struct ionic_phc {
 };
 
 struct ionic_queue_params {
-	unsigned int nxqs;
-	unsigned int ntxq_descs;
+	unsigned int nxqs;/*rx,tx队列数(rx与tx相等)*/
+	unsigned int ntxq_descs;/*txq描述符数目*/
 	unsigned int nrxq_descs;
 	u64 rxq_features;
 	struct bpf_prog *xdp_prog;
 	bool intr_split;
-	bool cmb_tx;
+	bool cmb_tx;/*是否使用cmb类型的tx(即tx ring是否放在网卡上）*/
 	bool cmb_rx;
 };
 
