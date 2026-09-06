@@ -331,6 +331,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 		goto err_atomic;
 	}
 	if (attrs->qp_type != IB_QPT_RC) {
+		/*只支持rc*/
 		siw_dbg(base_dev, "only RC QP's supported\n");
 		rv = -EOPNOTSUPP;
 		goto err_atomic;
@@ -339,6 +340,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 	    (attrs->cap.max_recv_wr > SIW_MAX_QP_WR) ||
 	    (attrs->cap.max_send_sge > SIW_MAX_SGE) ||
 	    (attrs->cap.max_recv_sge > SIW_MAX_SGE)) {
+		/*规格超限*/
 		siw_dbg(base_dev, "QP size error\n");
 		rv = -EINVAL;
 		goto err_atomic;

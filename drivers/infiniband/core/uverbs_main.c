@@ -302,7 +302,7 @@ static ssize_t ib_uverbs_comp_event_read(struct file *filp, char __user *buf,
 	struct ib_uverbs_completion_event_file *comp_ev_file =
 		filp->private_data;
 
-	/*读取event*/
+	/*自队列上读取一个event*/
 	return ib_uverbs_event_read(&comp_ev_file->ev_queue, filp, buf, count,
 				    pos,
 				    sizeof(struct ib_uverbs_comp_event_desc));
@@ -361,7 +361,7 @@ static int ib_uverbs_comp_event_fasync(int fd, struct file *filp, int on)
 
 const struct file_operations uverbs_event_fops = {
 	.owner	 = THIS_MODULE,
-	.read	 = ib_uverbs_comp_event_read,/*实现read读取事件*/
+	.read	 = ib_uverbs_comp_event_read,/*实现uverbs event read读取事件*/
 	.poll    = ib_uverbs_comp_event_poll,/*实现event的poll*/
 	.release = uverbs_uobject_fd_release,
 	.fasync  = ib_uverbs_comp_event_fasync,

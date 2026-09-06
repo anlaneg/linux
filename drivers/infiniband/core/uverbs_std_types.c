@@ -177,7 +177,7 @@ DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_COMP_CHANNEL,
 	UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_completion_event_file)/*obj大小*/,
 			     uverbs_completion_event_file_destroy_uobj,
-			     &uverbs_event_fops,
+			     &uverbs_event_fops,/*channel事件对应的fops*/
 			     "[infinibandevent]",
 			     O_RDONLY));
 

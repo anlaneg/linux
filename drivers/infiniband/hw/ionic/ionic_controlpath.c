@@ -235,6 +235,7 @@ static int ionic_get_mrid(struct ionic_ibdev *dev, u32 *mrid)
 	if (rc < 0)
 		return rc;
 
+	/*生成mr id*/
 	*mrid = ionic_mrid(rc, dev->next_mrkey++);
 	return 0;
 }
@@ -957,6 +958,7 @@ struct ib_mr *ionic_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 offset,
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
+	/*分配mr id*/
 	rc = ionic_get_mrid(dev, &mr->mrid);
 	if (rc)
 		goto err_mrid;
@@ -964,7 +966,7 @@ struct ib_mr *ionic_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 offset,
 	mr->ibmr.lkey = mr->mrid;
 	mr->ibmr.rkey = mr->mrid;
 	mr->ibmr.iova = addr;
-	mr->ibmr.length = length;
+	mr->ibmr.length = length;/*要注册的mr内存长度*/
 
 	mr->flags = IONIC_MRF_USER_MR | to_ionic_mr_flags(access);
 
@@ -1045,6 +1047,7 @@ struct ib_mr *ionic_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type type,
 	int rc;
 
 	if (type != IB_MR_TYPE_MEM_REG)
+		/*type必须是mem reg*/
 		return ERR_PTR(-EINVAL);
 
 	mr = kzalloc_obj(*mr);
@@ -1055,6 +1058,7 @@ struct ib_mr *ionic_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type type,
 	if (rc)
 		goto err_mrid;
 
+	/*为此mr设置id*/
 	mr->ibmr.lkey = mr->mrid;
 	mr->ibmr.rkey = mr->mrid;
 

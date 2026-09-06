@@ -153,7 +153,7 @@ static inline bool dma_map_direct(struct device *dev,
 	return dma_go_direct(dev, *dev->dma_mask, ops);
 }
 
-dma_addr_t dma_map_phys(struct device *dev/*设备*/, phys_addr_t phys, size_t size,
+dma_addr_t dma_map_phys(struct device *dev/*设备*/, phys_addr_t phys/*起始物理地址*/, size_t size/*内存大小*/,
 		enum dma_data_direction dir/*方向*/, unsigned long attrs)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
@@ -188,10 +188,10 @@ dma_addr_t dma_map_phys(struct device *dev/*设备*/, phys_addr_t phys, size_t s
 EXPORT_SYMBOL_GPL(dma_map_phys);
 
 dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
-		size_t offset, size_t size, enum dma_data_direction dir,
+		size_t offset/*在page中的偏移量*/, size_t size/*内存大小*/, enum dma_data_direction dir/*方向*/,
 		unsigned long attrs)
 {
-	phys_addr_t phys = page_to_phys(page) + offset;
+	phys_addr_t phys = page_to_phys(page) + offset;/*转换成物理地址*/
 
 	if (unlikely(attrs & DMA_ATTR_MMIO))
 		return DMA_MAPPING_ERROR;

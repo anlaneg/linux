@@ -4,6 +4,7 @@
 #include "core.h"
 #include "rdev-ops.h"
 
+/*取驱动信息*/
 void cfg80211_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;

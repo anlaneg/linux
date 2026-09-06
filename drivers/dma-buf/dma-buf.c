@@ -827,7 +827,7 @@ struct dma_buf *dma_buf_get(int fd)
 
 	DMA_BUF_TRACE(trace_dma_buf_get, dmabuf, fd);
 
-	return dmabuf;
+	return dmabuf;/*由fd获得dmabuf*/
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_get, "DMA_BUF");
 

@@ -46,6 +46,7 @@ int ionic_auxbus_register(struct ionic_lif *lif)
 	aux_dev->dev.release = ionic_auxbus_release;
 	/*指定其所对应的lif(在函数ionic_create_ibdev中设置ionic_fill_lif_cfg的即为此lif)*/
 	ionic_adev->lif = lif;
+	/*辅助设备初始化*/
 	err = auxiliary_device_init(aux_dev);
 	if (err) {
 		dev_err(lif->ionic->dev, "Failed to initialize %s aux device: %d\n",

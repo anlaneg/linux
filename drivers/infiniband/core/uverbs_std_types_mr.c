@@ -183,6 +183,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_MR)(
 	return IS_UVERBS_COPY_ERR(ret) ? ret : 0;
 }
 
+/*实现dmabuf mr;ibv_reg_dmabuf_mr 就是现代 Linux 上，让 IB 网卡（ConnectX）直接访问 GPU 显存的标准 API*/
 static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 	struct uverbs_attr_bundle *attrs)
 {
@@ -198,7 +199,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 	int ret;
 
 	if (!ib_dev->ops.reg_user_mr_dmabuf)
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*ib设备不支持此回调*/
 
 	ret = uverbs_copy_from(&offset, attrs,
 			       UVERBS_ATTR_REG_DMABUF_MR_OFFSET);
@@ -237,6 +238,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 	if (ret)
 		return ret;
 
+	/*直接触发驱动实现*/
 	mr = pd->device->ops.reg_user_mr_dmabuf(pd, offset, length, iova, fd,
 						access_flags, NULL,
 						attrs);

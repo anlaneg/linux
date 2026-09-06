@@ -119,7 +119,7 @@ struct ionic_ibdev {
 };
 
 struct ionic_eq {
-	struct ionic_ibdev	*dev;
+	struct ionic_ibdev	*dev;/*从属的ib设备*/
 
 	u32			eqid;
 	u32			intr;
@@ -131,7 +131,7 @@ struct ionic_eq {
 
 	struct work_struct	work;
 
-	int			irq;
+	int			irq;/*对应的中断*/
 	char			name[32];
 };
 
@@ -176,12 +176,12 @@ struct ionic_ctx {
 };
 
 struct ionic_tbl_buf {
-	u32		tbl_limit;
+	u32		tbl_limit;/*buffer占用的页数*/
 	u32		tbl_pages;
-	size_t		tbl_size;
+	size_t		tbl_size;/*tbl_buf占用的内存大小*/
 	__le64		*tbl_buf;
 	dma_addr_t	tbl_dma;
-	u8		page_size_log2;
+	u8		page_size_log2;/*页大小*/
 };
 
 struct ionic_pd {

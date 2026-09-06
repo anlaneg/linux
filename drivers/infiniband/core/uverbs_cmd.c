@@ -1035,7 +1035,7 @@ static int ib_uverbs_create_comp_channel(struct uverbs_attr_bundle *attrs)
 	ib_uverbs_init_event_queue(&ev_file->ev_queue);/*初始化event queue*/
 	uobj_finalize_uobj_create(uobj, attrs);
 
-	resp.fd = uobj->id;
+	resp.fd = uobj->id;/*fd对应的是uobj的id*/
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 

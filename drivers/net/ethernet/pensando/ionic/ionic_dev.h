@@ -236,8 +236,8 @@ struct ionic_queue {
 	struct ionic_lif *lif;/*对应的logic interface*/
 	union {
 		void *info;/*一组描述符*/
-		struct ionic_tx_desc_info *tx_info;
-		struct ionic_rx_desc_info *rx_info;
+		struct ionic_tx_desc_info *tx_info;/*tx描述符info*/
+		struct ionic_rx_desc_info *rx_info;/*rx描述符info*/
 		struct ionic_admin_desc_info *admin_info;/*存放与adminq对应的admin_info*/
 	};
 	u64 dbval;

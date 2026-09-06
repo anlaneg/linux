@@ -81,7 +81,7 @@ struct fw_priv {
 	bool need_uevent;
 	struct list_head pending_list;
 #endif
-	const char *fw_name;
+	const char *fw_name;/*fw文件名*/
 };
 
 extern struct mutex fw_lock;

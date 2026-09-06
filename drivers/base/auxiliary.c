@@ -284,15 +284,18 @@ int auxiliary_device_init(struct auxiliary_device *auxdev)
 	struct device *dev = &auxdev->dev;
 
 	if (!dev->parent) {
+		/*必须指定父设备*/
 		pr_err("auxiliary_device has a NULL dev->parent\n");
 		return -EINVAL;
 	}
 
 	if (!auxdev->name) {
+		/*必须提供名称*/
 		pr_err("auxiliary_device has a NULL name\n");
 		return -EINVAL;
 	}
 
+	/*指明所属bus*/
 	dev->bus = &auxiliary_bus_type;
 	device_initialize(&auxdev->dev);
 	mutex_init(&auxdev->sysfs.lock);

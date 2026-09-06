@@ -781,7 +781,7 @@ static bool ionic_next_eqe(struct ionic_eq *eq, struct ionic_v1_eqe *eqe)
 	ibdev_dbg(&eq->dev->ibdev, "poll eq prod %u\n", eq->q.prod);
 	print_hex_dump_debug("eqe ", DUMP_PREFIX_OFFSET, 16, 1,
 			     qeqe, BIT(eq->q.stride_log2), true);
-	*eqe = *qeqe;
+	*eqe = *qeqe;/*设置出参*/
 
 	return true;
 }
@@ -806,6 +806,7 @@ static void ionic_cq_event(struct ionic_ibdev *dev, u32 cqid, u8 code)
 
 	switch (code) {
 	case IONIC_V1_EQE_CQ_NOTIFY:
+		/*触发注册的回调*/
 		if (cq->vcq->ibcq.comp_handler)
 			cq->vcq->ibcq.comp_handler(&cq->vcq->ibcq,
 						   cq->vcq->ibcq.cq_context);
@@ -890,6 +891,7 @@ out:
 	kref_put(&qp->qp_kref, ionic_qp_complete);
 }
 
+/*负责poll eventq*/
 static u16 ionic_poll_eq(struct ionic_eq *eq, u16 budget)
 {
 	struct ionic_ibdev *dev = eq->dev;
@@ -963,7 +965,7 @@ static irqreturn_t ionic_poll_eq_isr(int irq, void *eqptr)
 	if (unlikely(!eq->enable) || !was_armed)
 		return IRQ_HANDLED;
 
-	npolled = ionic_poll_eq(eq, IONIC_EQ_ISR_BUDGET);
+	npolled = ionic_poll_eq(eq, IONIC_EQ_ISR_BUDGET);/*poll eventq*/
 	if (npolled == IONIC_EQ_ISR_BUDGET) {
 		ionic_intr_credits(eq->dev->lif_cfg.intr_ctrl, eq->intr,
 				   npolled, 0);
@@ -989,7 +991,7 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 
 	eq->dev = dev;
 
-	rc = ionic_queue_init(&eq->q, dev->lif_cfg.hwdev, IONIC_EQ_DEPTH,
+	rc = ionic_queue_init(&eq->q, dev->lif_cfg.hwdev, IONIC_EQ_DEPTH/*EQ深度*/,
 			      sizeof(struct ionic_v1_eqe));
 	if (rc)
 		goto err_q;
@@ -998,9 +1000,9 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 
 	eq->armed = true;
 	eq->enable = false;
-	INIT_WORK(&eq->work, ionic_poll_eq_work);
+	INIT_WORK(&eq->work, ionic_poll_eq_work/*负责poll eventq*/);
 
-	rc = ionic_intr_alloc(dev->lif_cfg.lif, &intr_obj);
+	rc = ionic_intr_alloc(dev->lif_cfg.lif, &intr_obj);/*申请中断*/
 	if (rc < 0)
 		goto err_intr;
 
@@ -1020,14 +1022,15 @@ static struct ionic_eq *ionic_create_eq(struct ionic_ibdev *dev, int eqid)
 	ionic_intr_coal_init(dev->lif_cfg.intr_ctrl, eq->intr, 0);
 	ionic_intr_clean(dev->lif_cfg.intr_ctrl, eq->intr);
 
-	eq->enable = true;
+	eq->enable = true;/*开启eventq*/
 
+	/*添加eventq中断处理函数*/
 	rc = request_irq(eq->irq, ionic_poll_eq_isr, 0, eq->name, eq);
 	if (rc)
 		goto err_irq;
 
 	rc = ionic_rdma_queue_devcmd(dev, &eq->q, eq->eqid, eq->intr,
-				     IONIC_CMD_RDMA_CREATE_EQ);
+				     IONIC_CMD_RDMA_CREATE_EQ);/*向fw要求创建EQ*/
 	if (rc)
 		goto err_cmd;
 
@@ -1085,7 +1088,7 @@ int ionic_create_rdma_admin(struct ionic_ibdev *dev)
 	if (dev->lif_cfg.eq_count > IONIC_EQ_COUNT) {
 		dev_dbg(&dev->ibdev.dev, "limiting eventq count to %d\n",
 			IONIC_EQ_COUNT);
-		dev->lif_cfg.eq_count = IONIC_EQ_COUNT;
+		dev->lif_cfg.eq_count = IONIC_EQ_COUNT;/*最大有32个eventq*/
 	}
 
 	/* need at least two eq and one aq */
@@ -1101,6 +1104,7 @@ int ionic_create_rdma_admin(struct ionic_ibdev *dev)
 		goto out;
 	}
 
+	/*遍历创建所有eventq*/
 	for (eq_i = 0; eq_i < dev->lif_cfg.eq_count; ++eq_i) {
 		eq = ionic_create_eq(dev, eq_i + dev->lif_cfg.eq_base);
 		if (IS_ERR(eq)) {
@@ -1123,7 +1127,7 @@ int ionic_create_rdma_admin(struct ionic_ibdev *dev)
 		dev->eq_vec[eq_i] = eq;
 	}
 
-	dev->lif_cfg.eq_count = eq_i;
+	dev->lif_cfg.eq_count = eq_i;/*eventq数目*/
 
 	dev->aq_vec = kmalloc_objs(*dev->aq_vec, dev->lif_cfg.aq_count);
 	if (!dev->aq_vec) {

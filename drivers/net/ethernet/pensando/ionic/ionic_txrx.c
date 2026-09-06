@@ -791,7 +791,7 @@ void ionic_rx_fill(struct ionic_queue *q, struct bpf_prog *xdp_prog)
 	if (n_fill < fill_threshold)
 		return;
 
-	len = netdev->mtu + VLAN_ETH_HLEN;
+	len = netdev->mtu + VLAN_ETH_HLEN;/*多考虑上双层vlan*/
 
 	if (xdp_prog) {
 		/* Always alloc the full size buffer, but only need
@@ -812,7 +812,7 @@ void ionic_rx_fill(struct ionic_queue *q, struct bpf_prog *xdp_prog)
 		/* fill main descriptor - buf[0] */
 		nfrags = 0;
 		remain_len = len;
-		desc = &q->rxq[q->head_idx];
+		desc = &q->rxq[q->head_idx];/*取描述符地址*/
 		desc_info = &q->rx_info[q->head_idx];
 		buf_info = &desc_info->bufs[0];
 
@@ -821,15 +821,18 @@ void ionic_rx_fill(struct ionic_queue *q, struct bpf_prog *xdp_prog)
 
 		/* get a new buffer if we can't reuse one */
 		if (!buf_info->page)
+			/*无空间，申请空间*/
 			buf_info->page = page_pool_alloc(q->page_pool,
 							 &buf_info->page_offset,
 							 &buf_info->len,
 							 GFP_ATOMIC);
 		if (unlikely(!buf_info->page)) {
+			/*空间申请失败，退出*/
 			buf_info->len = 0;
 			return;
 		}
 
+		/*指明buffer地址及长度*/
 		desc->addr = cpu_to_le64(ionic_rx_buf_pa(buf_info) + headroom);
 		desc->len = cpu_to_le16(frag_len);
 		remain_len -= frag_len;
@@ -1629,12 +1632,13 @@ static void ionic_tx_skb_frags(struct ionic_queue *q, struct sk_buff *skb,
 	unsigned int i;
 
 	elem = ionic_tx_sg_elems(q);
+	/*填各分片长度及地址*/
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++, buf_info++, elem++) {
 		elem->addr = cpu_to_le64(buf_info->dma_addr);
 		elem->len = cpu_to_le16(buf_info->len);
 	}
 
-	stats->frags += skb_shinfo(skb)->nr_frags;
+	stats->frags += skb_shinfo(skb)->nr_frags;/*分片数增加*/
 }
 
 static int ionic_tx(struct net_device *netdev, struct ionic_queue *q,
@@ -1659,8 +1663,8 @@ static int ionic_tx(struct net_device *netdev, struct ionic_queue *q,
 	ionic_tx_skb_frags(q, skb, desc_info);
 
 	skb_tx_timestamp(skb);
-	stats->pkts++;
-	stats->bytes += skb->len;
+	stats->pkts++;/*统计报数增加*/
+	stats->bytes += skb->len;/*统计字节数增加*/
 
 	if (likely(!ionic_txq_hwstamp_enabled(q))) {
 		struct netdev_queue *ndq = q_to_ndq(netdev, q);

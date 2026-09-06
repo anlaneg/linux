@@ -110,6 +110,7 @@ static inline int fw_state_wait(struct fw_priv *fw_priv)
 
 static void fw_cache_piggyback_on_request(struct fw_priv *fw_priv);
 
+/*创建fw_priv*/
 static struct fw_priv *__allocate_fw_priv(const char *fw_name,
 					  struct firmware_cache *fwc,
 					  void *dbuf,
@@ -160,13 +161,13 @@ static struct fw_priv *__lookup_fw_priv(const char *fw_name)
 
 	list_for_each_entry(tmp, &fwc->head, list)
 		if (!strcmp(tmp->fw_name, fw_name))
-			return tmp;
+			return tmp;/*在fw_cache上命中*/
 	return NULL;
 }
 
 /* Returns 1 for batching firmware requests with the same name */
 int alloc_lookup_fw_priv(const char *fw_name, struct firmware_cache *fwc,
-			 struct fw_priv **fw_priv, void *dbuf, size_t size,
+			 struct fw_priv **fw_priv/*出参，如存在返回查询结果，如不存在返回创建结果*/, void *dbuf, size_t size,
 			 size_t offset, u32 opt_flags)
 {
 	struct fw_priv *tmp;
@@ -181,7 +182,7 @@ int alloc_lookup_fw_priv(const char *fw_name, struct firmware_cache *fwc,
 		if (tmp) {
 			kref_get(&tmp->ref);
 			spin_unlock(&fwc->lock);
-			*fw_priv = tmp;
+			*fw_priv = tmp;/*使用cache中的*/
 			pr_debug("batched request - sharing the same struct fw_priv and lookup for multiple requests\n");
 			return 1;
 		}
@@ -470,7 +471,7 @@ static int fw_decompress_xz(struct device *dev, struct fw_priv *fw_priv,
 /* direct firmware loading support */
 static char fw_path_para[256];
 static const char * const fw_path[] = {
-	fw_path_para,
+	fw_path_para,/*模块参数（利用参数指明尝试目录)*/
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
@@ -487,7 +488,7 @@ MODULE_PARM_DESC(path, "customized firmware image search path with a higher prio
 
 static int
 fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
-			   const char *suffix,
+			   const char *suffix/*后缀*/,
 			   int (*decompress)(struct device *dev,
 					     struct fw_priv *fw_priv,
 					     size_t in_size,
@@ -517,7 +518,7 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 
 		/* skip the unset customized path */
 		if (!fw_path[i][0])
-			continue;
+			continue;/*跳过未用的path*/
 
 		/* strip off \n from customized path */
 		maxlen = strlen(fw_path[i]);
@@ -527,6 +528,7 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 				maxlen = nt - fw_path[i];
 		}
 
+		/*构造fw完整路径*/
 		len = snprintf(path, PATH_MAX, "%.*s/%s%s",
 			       maxlen, fw_path[i],
 			       fw_priv->fw_name, suffix);
@@ -546,7 +548,7 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 			file_size_ptr = &file_size;
 
 		/* load firmware files from the mount namespace of init */
-		rc = kernel_read_file_from_path_initns(path, fw_priv->offset,
+		rc = kernel_read_file_from_path_initns(path/*fw文件路径*/, fw_priv->offset,
 						       &buffer, msize,
 						       file_size_ptr,
 						       READING_FIRMWARE);
@@ -561,7 +563,7 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 						"loading %s failed for no such file or directory.\n",
 						path);
 			}
-			continue;
+			continue;/*跳过失败的路径*/
 		}
 		size = rc;
 		rc = 0;
@@ -755,6 +757,7 @@ _request_firmware_prepare(struct firmware **firmware_p, const char *name,
 	}
 
 	if (firmware_request_builtin_buf(firmware, name, dbuf, size)) {
+		/*使用了内置的fw*/
 		dev_dbg(device, "using built-in %s\n", name);
 		return 0; /* assigned */
 	}
@@ -824,7 +827,7 @@ static void fw_log_firmware_info(const struct firmware *fw, const char *name,
 
 /* called from request_firmware() and request_firmware_work_func() */
 static int
-_request_firmware(const struct firmware **firmware_p, const char *name,
+_request_firmware(const struct firmware **firmware_p, const char *name/*fw文件名称*/,
 		  struct device *device, void *buf, size_t size,
 		  size_t offset, u32 opt_flags)
 {
@@ -853,6 +856,7 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	 * the firmware base directory or at symlink contents.
 	 */
 	if (name_contains_dotdot(name)) {
+		/*不容许包含'..'*/
 		dev_warn(device,
 			 "Firmware load for '%s' refused, path contains '..' component\n",
 			 name);
@@ -871,6 +875,7 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	 * the kernel credentials to read the file.
 	 */
 	scoped_with_kernel_creds() {
+		/*尝试无后缀情况*/
 		ret = fw_get_filesystem_firmware(device, fw->priv, "", NULL);
 
 		/* Only full reads can support decompression, platform, and sysfs. */
@@ -879,11 +884,13 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 
 #ifdef CONFIG_FW_LOADER_COMPRESS_ZSTD
 		if (ret == -ENOENT && nondirect)
+			/*增加.zst后续尝试*/
 			ret = fw_get_filesystem_firmware(device, fw->priv, ".zst",
 							 fw_decompress_zstd);
 #endif
 #ifdef CONFIG_FW_LOADER_COMPRESS_XZ
 		if (ret == -ENOENT && nondirect)
+			/*增加.xz后续并尝试*/
 			ret = fw_get_filesystem_firmware(device, fw->priv, ".xz",
 							 fw_decompress_xz);
 #endif
@@ -939,7 +946,7 @@ out:
  *	resume callback.
  **/
 int
-request_firmware(const struct firmware **firmware_p, const char *name,
+request_firmware(const struct firmware **firmware_p, const char *name/*fw文件名称*/,
 		 struct device *device)
 {
 	int ret;

@@ -62,6 +62,7 @@ static int ionic_tbl_buf_alloc(struct ionic_ibdev *dev,
 	if (!buf->tbl_buf)
 		return -ENOMEM;
 
+	/*映射dma内存*/
 	buf->tbl_dma = dma_map_single(dev->lif_cfg.hwdev, buf->tbl_buf,
 				      buf->tbl_size, DMA_TO_DEVICE);
 	rc = dma_mapping_error(dev->lif_cfg.hwdev, buf->tbl_dma);
@@ -104,7 +105,7 @@ int ionic_pgtbl_init(struct ionic_ibdev *dev,
 		     struct ib_umem *umem,
 		     dma_addr_t dma,
 		     int limit,
-		     u64 page_size)
+		     u64 page_size/*页大小*/)
 {
 	int rc;
 
@@ -116,6 +117,7 @@ int ionic_pgtbl_init(struct ionic_ibdev *dev,
 	}
 
 	if (limit < 1)
+		/*页数为0，参数无效*/
 		return -EINVAL;
 
 	buf->tbl_limit = limit;

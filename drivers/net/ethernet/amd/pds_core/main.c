@@ -596,6 +596,7 @@ static int __init pdsc_init_module(void)
 		return -EINVAL;
 
 	pdsc_debugfs_create();
+	/*注册driver*/
 	return pci_register_driver(&pdsc_driver);
 }
 

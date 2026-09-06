@@ -51,6 +51,7 @@ bool firmware_request_builtin(struct firmware *fw, const char *name)
 	if (!fw)
 		return false;
 
+	/*遍历内建的fw*/
 	for (b_fw = __start_builtin_fw; b_fw != __end_builtin_fw; b_fw++) {
 		if (strcmp(name, b_fw->name) == 0) {
 			fw->size = b_fw->size;

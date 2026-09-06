@@ -494,7 +494,7 @@ static int __ionic_adminq_post_wait(struct ionic_lif *lif,
 
 int ionic_adminq_post_wait(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 {
-	/*发送并等待响应（显示出错信息）*/
+	/*发送ctx并等待fw响应（显示出错信息）*/
 	return __ionic_adminq_post_wait(lif, ctx, true);
 }
 EXPORT_SYMBOL_NS(ionic_adminq_post_wait, "NET_IONIC");

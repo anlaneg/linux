@@ -181,7 +181,7 @@ do {									\
 
 #define WARN_ONCE(cond, format, arg...) ({				\
 	int __ret_warn_on = !!(cond);					\
-	if (unlikely(__ret_warn_on)) {					\
+	if (unlikely(__ret_warn_on)/*条件为真，则按format样式显示*/) {					\
 		__WARN_print_arg(BUGFLAG_ONCE|BUGFLAG_TAINT(TAINT_WARN),\
 				format, ## arg);			\
 	}								\

@@ -4329,7 +4329,7 @@ static int rtnl_getlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	linkwatch_sync_dev(dev);
 
 	err = rtnl_fill_ifinfo(nskb, dev, net,
-			       RTM_NEWLINK, NETLINK_CB(skb).portid,
+			       RTM_NEWLINK/*以newlink响应*/, NETLINK_CB(skb).portid,
 			       nlh->nlmsg_seq, 0, 0, ext_filter_mask,
 			       0, NULL, 0, netnsid, GFP_KERNEL);
 	if (err < 0) {
@@ -7253,7 +7253,7 @@ static const struct rtnl_msg_handler rtnetlink_rtnl_msg_handlers[] __initconst =
 	//删除net link
 	{.msgtype = RTM_DELLINK, .doit = rtnl_dellink,
 	 .flags = RTNL_FLAG_DOIT_PERNET_WIP},
-	/*linux bridge link 显示，删除，设置*/
+	/*linux link 显示，删除，设置*/
 	{.msgtype = RTM_GETLINK, .doit = rtnl_getlink,
 	 .dumpit = rtnl_dump_ifinfo, .flags = RTNL_FLAG_DUMP_SPLIT_NLM_DONE},
 	{.msgtype = RTM_SETLINK, .doit = rtnl_setlink,

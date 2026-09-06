@@ -506,11 +506,11 @@ static inline void dma_free_noncoherent(struct device *dev, size_t size,
 	dma_free_pages(dev, size, virt_to_page(vaddr), dma_handle, dir);
 }
 
-static inline dma_addr_t dma_map_single_attrs(struct device *dev, void *ptr,
-		size_t size, enum dma_data_direction dir, unsigned long attrs)
+static inline dma_addr_t dma_map_single_attrs(struct device *dev/*设备*/, void *ptr/*kernel虚地址（起始地址）*/,
+		size_t size/*内存大小*/, enum dma_data_direction dir/*方向*/, unsigned long attrs)
 {
 	/* DMA must never operate on areas that might be remapped. */
-	if (dev_WARN_ONCE(dev, is_vmalloc_addr(ptr),
+	if (dev_WARN_ONCE(dev, is_vmalloc_addr(ptr)/*vmalloc虚拟地址是连续的，但物理地址不连续，因此拒绝*/,
 			  "rejecting DMA map of vmalloc memory\n"))
 		return DMA_MAPPING_ERROR;
 	debug_dma_map_single(dev, ptr, size);

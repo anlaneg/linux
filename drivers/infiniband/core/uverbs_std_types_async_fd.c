@@ -68,7 +68,7 @@ DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_ASYNC_EVENT,
 	UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_async_event_file),
 			     uverbs_async_event_destroy_uobj,
-			     &uverbs_async_event_fops,
+			     &uverbs_async_event_fops,/*异步事件fops*/
 			     "[infinibandevent]",
 			     O_RDONLY),
 	&UVERBS_METHOD(UVERBS_METHOD_ASYNC_EVENT_ALLOC));

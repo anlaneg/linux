@@ -434,6 +434,7 @@ static int ionic_comp_npg(struct ionic_qp *qp, struct ionic_v1_cqe *cqe)
 	meta = &qp->sq_meta[cqe_idx];
 	meta->local_comp = true;
 
+	/*指明cqe有误*/
 	if (ionic_v1_cqe_error(cqe)) {
 		meta->len = st_len;
 		meta->ibsts = ionic_to_ib_status(st_len);
@@ -673,11 +674,12 @@ static int ionic_req_notify_vcq_cq(struct ionic_ibdev *dev, struct ionic_cq *cq,
 	u64 dbell_val = cq->q.dbell;
 
 	if (flags & IB_CQ_SOLICITED) {
+		/*仅当有cqe,且指明solicited时才执行comp_handler通知*/
 		cq->arm_sol_prod = ionic_queue_next(&cq->q, cq->arm_sol_prod);
 		dbell_val |= cq->arm_sol_prod | IONIC_CQ_RING_SOL;
 	} else {
 		cq->arm_any_prod = ionic_queue_next(&cq->q, cq->arm_any_prod);
-		dbell_val |= cq->arm_any_prod | IONIC_CQ_RING_ARM;
+		dbell_val |= cq->arm_any_prod | IONIC_CQ_RING_ARM;/*要求一个事件通知*/ 
 	}
 
 	ionic_reserve_sync_cq(dev, cq);
@@ -709,7 +711,7 @@ int ionic_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 		if (!(vcq->udma_mask & BIT(cq_i)))
 			continue;
 
-		if (ionic_req_notify_vcq_cq(dev, &vcq->cq[cq_i], flags))
+		if (ionic_req_notify_vcq_cq(dev, &vcq->cq[cq_i]/*取指定CQ*/, flags))
 			rc = 1;
 	}
 

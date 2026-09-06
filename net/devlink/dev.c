@@ -1172,6 +1172,7 @@ int devlink_nl_flash_update_doit(struct sk_buff *skb, struct genl_info *info)
 		params.overwrite_mask = sections.value & sections.selector;
 	}
 
+	/*取fw文件名称*/
 	nla_file_name = info->attrs[DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME];
 	file_name = nla_data(nla_file_name);
 	ret = request_firmware(&params.fw, file_name, devlink->dev);

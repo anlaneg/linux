@@ -2485,7 +2485,7 @@ struct ib_device_ops {
 	void (*drain_sq)(struct ib_qp *qp);
 	int (*poll_cq)(struct ib_cq *cq, int num_entries, struct ib_wc *wc);
 	int (*peek_cq)(struct ib_cq *cq, int wc_cnt);
-	/*设置cq->notify*/
+	/*设置cq的通知方式*/
 	int (*req_notify_cq)(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 	int (*post_srq_recv)(struct ib_srq *srq,
 			     const struct ib_recv_wr *recv_wr,
