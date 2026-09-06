@@ -1,0 +1,14 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "18cae031ca872fc510ff34cdfe3dd1ee20a4d810",
+  "prompts": {},
+  "humans": {
+    "h_9255ef4456fee7": {
+      "author": "anlaneg <anlaneg@126.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
