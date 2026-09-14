@@ -594,8 +594,8 @@ static inline void deth_set_sqp(struct rxe_pkt_info *pkt, u32 sqp)
  * RDMA Extended Transport Header
  ******************************************************************************/
 struct rxe_reth {
-	__be64			va;/*buffer起始地址*/
-	__be32			rkey;
+	__be64			va;/*buffer起始地址（隐含的offset)*/
+	__be32			rkey;/*远端key*/
 	__be32			len;/*dma长度*/
 };
 

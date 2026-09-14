@@ -194,7 +194,8 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		.length = RXE_BTH_BYTES + RXE_RETH_BYTES,
 		.offset = {
 			[RXE_BTH]	= 0,
-			[RXE_RETH]	= RXE_BTH_BYTES,/*包含RETH*/
+			/*首包包含RETH*/
+			[RXE_RETH]	= RXE_BTH_BYTES,
 			[RXE_PAYLOAD]	= RXE_BTH_BYTES +
 					  RXE_RETH_BYTES,
 		}
@@ -224,7 +225,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE]		= {
 		.name	= "IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE",
 		.mask	= RXE_IMMDT_MASK | RXE_PAYLOAD_MASK | RXE_REQ_MASK |
-			  RXE_WRITE_MASK | RXE_COMP_MASK | RXE_RWR_MASK |
+			  RXE_WRITE_MASK | RXE_COMP_MASK/*产生cqe*/ | RXE_RWR_MASK |
 			  RXE_END_MASK,
 		.length = RXE_BTH_BYTES + RXE_IMMDT_BYTES,
 		.offset = {

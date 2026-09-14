@@ -2066,8 +2066,10 @@ static void *alloc_wr(size_t wr_size, __u32 num_sge)
 {
 	if (num_sge >= (U32_MAX - ALIGN(wr_size, sizeof(struct ib_sge))) /
 			       sizeof(struct ib_sge))
+		/*num_sge超限*/
 		return NULL;
 
+	/*wr_size需要按ib_sge对齐，且需要包含num_sge个sge*/
 	return kmalloc(ALIGN(wr_size, sizeof(struct ib_sge)) +
 			       num_sge * sizeof(struct ib_sge),
 		       GFP_KERNEL);
@@ -2120,11 +2122,11 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		goto out;
 	}
 
-	is_ud = qp->qp_type == IB_QPT_UD;
+	is_ud = qp->qp_type == IB_QPT_UD;/*是否ud类型的qp*/
 	sg_ind = 0;
 	last = NULL;
 	for (i = 0; i < cmd.wr_count; ++i) {
-	    /*取写入的第i个wrq,填充到user_wr中*/
+	    /*取写入的第i个wqe,填充到user_wr中*/
 		if (copy_from_user(user_wr, wqes + i * cmd.wqe_size,
 				   cmd.wqe_size)) {
 			ret = -EFAULT;
@@ -2132,6 +2134,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		}
 
 		if (user_wr->num_sge + sg_ind > cmd.sge_count) {
+			/*写入的sge数目超了sge_count,参数有误*/
 			ret = -EINVAL;
 			goto out_put;
 		}
@@ -2166,6 +2169,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		} else if (user_wr->opcode == IB_WR_RDMA_WRITE_WITH_IMM ||
 			   user_wr->opcode == IB_WR_RDMA_WRITE ||
 			   user_wr->opcode == IB_WR_RDMA_READ) {
+			/*针对write与read操作*/
 			struct ib_rdma_wr *rdma;
 
 			next_size = sizeof(*rdma);
@@ -2175,8 +2179,8 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 				goto out_put;
 			}
 
-			rdma->remote_addr = user_wr->wr.rdma.remote_addr;
-			rdma->rkey = user_wr->wr.rdma.rkey;
+			rdma->remote_addr = user_wr->wr.rdma.remote_addr;/*指明地址*/
+			rdma->rkey = user_wr->wr.rdma.rkey;/*指明rkey*/
 
 			next = &rdma->wr;
 		} else if (user_wr->opcode == IB_WR_ATOMIC_CMP_AND_SWP ||
@@ -2199,6 +2203,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		} else if (user_wr->opcode == IB_WR_SEND ||
 			   user_wr->opcode == IB_WR_SEND_WITH_IMM ||
 			   user_wr->opcode == IB_WR_SEND_WITH_INV) {
+			/*针对send操作*/
 			next_size = sizeof(*next);
 			next = alloc_wr(next_size, user_wr->num_sge);
 			if (!next) {
@@ -2206,12 +2211,14 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 				goto out_put;
 			}
 		} else {
+			/*不支持其它操作*/
 			ret = -EINVAL;
 			goto out_put;
 		}
 
 		if (user_wr->opcode == IB_WR_SEND_WITH_IMM ||
 		    user_wr->opcode == IB_WR_RDMA_WRITE_WITH_IMM) {
+			/*设置立即数*/
 			next->ex.imm_data =
 					(__be32 __force) user_wr->ex.imm_data;
 		} else if (user_wr->opcode == IB_WR_SEND_WITH_INV) {
@@ -2219,10 +2226,10 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		}
 
 		if (!last)
-		    /*wr指向首个wqe*/
+		    /*首个情况：wr指向首个wqe*/
 			wr = next;
 		else
-		    /*将weq串起来*/
+		    /*非首个情况：将wqe串起来*/
 			last->next = next;
 
 		/*更新last*/
@@ -2244,12 +2251,12 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 				ret = -EFAULT;
 				goto out_put;
 			}
-			sg_ind += next->num_sge;
+			sg_ind += next->num_sge;/*更新send index*/
 		} else
 			next->sg_list = NULL;
 	}
 
-	/*调用post_send*/
+	/*调用post_send发送wr*/
 	resp.bad_wr = 0;
 	ret = qp->device->ops.post_send(qp->real_qp, wr, &bad_wr);
 	if (ret)
@@ -4024,6 +4031,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			/*修改qp*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_DESTROY_QP,
+			/*销毁qp*/
 			ib_uverbs_destroy_qp,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_destroy_qp,
 					  struct ib_uverbs_destroy_qp_resp),
@@ -4041,13 +4049,14 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_METHOD_NEEDS_FN(modify_qp)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_POST_RECV,
+			/*执行post_recv*/
 			ib_uverbs_post_recv,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_post_recv,
 					  struct ib_uverbs_post_recv_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(post_recv)),
-			/*用户态post_send数据准备完成，通过此cmd触发kernel处理*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_POST_SEND,
+			/*用户态post_send数据准备完成，通过此cmd触发kernel处理*/
 			ib_uverbs_post_send,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_post_send,
 					  struct ib_uverbs_post_send_resp),

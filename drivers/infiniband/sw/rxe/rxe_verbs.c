@@ -787,6 +787,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 
 	if (qp_type(qp) == IB_QPT_UD ||
 	    qp_type(qp) == IB_QPT_GSI) {
+		/*ud,gsi处理*/
 		struct ib_ah *ibah = ud_wr(ibwr)->ah;
 
 		wr->wr.ud.remote_qpn = ud_wr(ibwr)->remote_qpn;
@@ -814,10 +815,12 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 			fallthrough;
 		case IB_WR_RDMA_READ:
 		case IB_WR_RDMA_WRITE:
+			/*写地址及rkey*/
 			wr->wr.rdma.remote_addr = rdma_wr(ibwr)->remote_addr;
 			wr->wr.rdma.rkey	= rdma_wr(ibwr)->rkey;
 			break;
 		case IB_WR_SEND_WITH_IMM:
+			/*写send立即数*/
 			wr->ex.imm_data = ibwr->ex.imm_data;
 			break;
 		case IB_WR_SEND_WITH_INV:
@@ -841,6 +844,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 			wr->ex.invalidate_rkey = ibwr->ex.invalidate_rkey;
 			break;
 		case IB_WR_REG_MR:
+			/*注册mr*/
 			wr->wr.reg.mr = reg_wr(ibwr)->mr;
 			wr->wr.reg.key = reg_wr(ibwr)->key;
 			wr->wr.reg.access = reg_wr(ibwr)->access;
@@ -930,7 +934,7 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr)
 	if (err)
 		return err;
 
-	/*检查队列是否已满*/
+	/*检查sq队列是否已满*/
 	full = queue_full(sq->queue, QUEUE_TYPE_FROM_ULP);
 	if (unlikely(full)) {
 		rxe_err_qp(qp, "send queue full\n");
@@ -939,10 +943,10 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr)
 
 	/*取生产者索引对应的wqe*/
 	send_wqe = queue_producer_addr(sq->queue, QUEUE_TYPE_FROM_ULP);
-	/*利用ibwr初始化send_wqe*/
+	/*利用待发送的ibwr初始化send_wqe*/
 	err = init_send_wqe(qp, ibwr, mask, length, send_wqe);
 	if (!err)
-		/*更新新产者指针*/
+		/*生产者指针前移，填写完成*/
 		queue_advance_producer(sq->queue, QUEUE_TYPE_FROM_ULP);
 
 	return err;
@@ -980,7 +984,7 @@ static int rxe_post_send_kernel(struct rxe_qp *qp,
 }
 
 /*rxe实现post_send函数,用于应用知会协议栈数据已准备完成*/
-static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
+static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr/*要发送的wr*/,
 			 const struct ib_send_wr **bad_wr)
 {
 	struct rxe_qp *qp = to_rqp(ibqp);/*获得要发送报文的qp*/
@@ -997,7 +1001,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 	}
 
 	if (unlikely(qp_state(qp) < IB_QPS_RTS)) {
-		/*qp状态还未准备好(不能发送)，返回无效参数*/
+		/*qp状态还未达到RTS状态(不能发送)，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		*bad_wr = wr;
 		rxe_err_qp(qp, "qp not ready to send\n");
@@ -1007,7 +1011,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 
 	if (qp->is_user) {
 		/* Utilize process context to do protocol processing */
-		rxe_sched_task(&qp->send_task);/*用户态创建的QP,由系统调用进入,触发发包task*/
+		rxe_sched_task(&qp->send_task);/*用户态创建的QP,由系统调用进入，调度task,触发发包task*/
 	} else {
 		/*kernel space创建的qp,此时send_wqe还未入队,采用直接调用post_send*/
 		err = rxe_post_send_kernel(qp, wr, bad_wr);

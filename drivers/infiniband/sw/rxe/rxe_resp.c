@@ -351,6 +351,7 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 			return RESPST_ERR_TOO_MANY_RDMA_ATM_REQ;
 	}
 
+	/*有此类标记，必须填充wqe*/
 	if (pkt->mask & RXE_RWR_MASK) {
 		if (srq)
 			return get_srq_wqe(qp);
@@ -420,7 +421,7 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	/* See IBA C9-94 */
 	if (pkt->mask & RXE_RETH_MASK) {
 		if (reth_len(pkt) > (1U << 31)) {
-			/*指明的dma长度有误*/
+			/*reth中指明的dma长度超过了u31最大值*/
 			rxe_dbg_qp(qp, "dma length too long\n");
 			return RESPST_ERR_LENGTH;
 		}
@@ -484,7 +485,7 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	 * middle/last packets.
 	 */
 	if (pkt->mask & (RXE_READ_OR_WRITE_MASK | RXE_ATOMIC_WRITE_MASK)) {
-		/*遇到读，写，原子写*/
+		/*遇到读，写，原子写等，且reth header时*/
 		if (pkt->mask & RXE_RETH_MASK)
 			/*报文包括reth头，自reth中提取va,offset等*/
 			qp_resp_from_reth(qp, pkt);
@@ -517,7 +518,7 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	 */
 	if ((pkt->mask & RXE_READ_OR_WRITE_MASK) &&
 	    (pkt->mask & RXE_RETH_MASK) && reth_len(pkt) == 0) {
-		/*reth长度指明为0时，mr为NULL*/
+		/*reth长度故意指明为0时，mr为NULL*/
 		qp->resp.mr = NULL;
 		return RESPST_EXECUTE;
 	}
@@ -528,7 +529,9 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	pktlen	= payload_size(pkt);/*取当前报文中包含的pktlen*/
 
 	if (rkey_is_mw(rkey)) {
-		/*这个rkey为mw,查询mw*/
+		/*MW Memory Window（内存窗口）,不能独立存在，必须先有 MR，
+		 * 并且 MR 注册时必须带上 `IBV_ACCESS_MW_BIND` flag，
+		 * 才能把 MW bind 绑定到 MR 上*/
 		mw = rxe_lookup_mw(qp, access, rkey);
 		if (!mw) {
 			rxe_dbg_qp(qp, "no MW matches rkey %#x\n", rkey);
@@ -550,8 +553,8 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		rxe_put(mw);
 		mw = NULL;
 	} else {
-		/*这种rkey是mr,通过rkey,access查询mr*/
-		mr = lookup_mr(qp->pd, access, rkey, RXE_LOOKUP_REMOTE);
+		/*这种rkey是普通mr,通过rkey,access查询mr*/
+		mr = lookup_mr(qp->pd, access, rkey, RXE_LOOKUP_REMOTE/*远端来的查询*/);
 		if (!mr) {
 			/*没有找到rkey对应的mr*/
 			rxe_dbg_qp(qp, "no MR matches rkey %#x\n", rkey);
@@ -640,8 +643,8 @@ static enum resp_states write_data_in(struct rxe_qp *qp,
 	int data_len = payload_size(pkt);
 
 	/*将pkt payload内容填充到qp->resp.mr*/
-	err = rxe_mr_copy(qp->resp.mr, qp->resp.va + qp->resp.offset,
-			  payload_addr(pkt), data_len, RXE_TO_MR_OBJ);
+	err = rxe_mr_copy(qp->resp.mr, qp->resp.va + qp->resp.offset/*va起始地址*/,
+			  payload_addr(pkt)/*报文中地址*/, data_len, RXE_TO_MR_OBJ);
 	if (err) {
 		rc = RESPST_ERR_RKEY_VIOLATION;
 		goto out;
@@ -1186,7 +1189,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 		rxe_counter_inc(rxe, RXE_CNT_RDMA_RECV);
 		wc->opcode = (pkt->mask & RXE_IMMDT_MASK &&
 				pkt->mask & RXE_WRITE_MASK) ?
-					IB_WC_RECV_RDMA_WITH_IMM : IB_WC_RECV;/*recv方向的两种opcode*/
+					IB_WC_RECV_RDMA_WITH_IMM/*收到imm*/ : IB_WC_RECV;/*recv方向的两种opcode*/
 		wc->byte_len = (pkt->mask & RXE_IMMDT_MASK &&
 				pkt->mask & RXE_WRITE_MASK) ?
 					qp->resp.length : wqe->dma.length - wqe->dma.resid;
@@ -1256,8 +1259,8 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 	/*wqe填充完成，将此设置NULL*/
 	qp->resp.wqe = NULL;
 
-	/*send cqe入队*/
-	if (rxe_cq_post(qp->rcq, &cqe, pkt ? bth_se(pkt)/*报文是否有se标记*/ : 1/*按有se标记处理*/))
+	/*使cqe入队*/
+	if (rxe_cq_post(qp->rcq, &cqe/*使cqe入队*/, pkt ? bth_se(pkt)/*报文是否有se标记*/ : 1/*按有se标记处理*/))
 		return RESPST_ERR_CQ_OVERFLOW;
 
 finish:
@@ -1352,6 +1355,7 @@ static enum resp_states acknowledge(struct rxe_qp *qp,
 		/*按报文要求，响应ack报文，并发送*/
 		send_ack(qp, AETH_ACK_UNLIMITED, pkt->psn);
 
+	/*如上示，write操作不响应ack*/
 	return RESPST_CLEANUP;
 }
 
@@ -1629,7 +1633,7 @@ int rxe_receiver(struct rxe_qp *qp)
 	/*qp无效或者状态为ERR,RESET*/
 	if (!qp->valid || qp_state(qp) == IB_QPS_ERR ||
 			  qp_state(qp) == IB_QPS_RESET) {
-		/*有效，但状态变更为err,则需要通知*/
+		/*无效，或状态变更为err,则需要通知*/
 		bool notify = qp->valid && (qp_state(qp) == IB_QPS_ERR);
 
 		drain_req_pkts(qp);/*移除此qp上缓存的所有请求报文*/

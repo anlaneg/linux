@@ -152,7 +152,7 @@ struct rxe_dma_info {
 	__u32			cur_sge;/*当前遍历到哪个sge数组成员（成员索引）*/
 	/*seg数组长度*/
 	__u32			num_sge;
-	__u32			sge_offset;
+	__u32			sge_offset;/*sge当前发送offset*/
 	__u32			reserved;
 	union {
 	    /*记录inline数据（有IB_SEND_INLINE标记时有效）*/
@@ -226,11 +226,11 @@ struct rxe_queue_buf {
 	__u32			log2_elem_size;/*队列元素大小针对log2的对数，1<<log2_elem_size即为元素大小*/
 	__u32			index_mask;/*队列长度是2的N次方的整数，index_mask是其对应的掩码*/
 	__u32			pad_1[30];
-	__u32			producer_index;/*生产者指针*/
+	__u32			producer_index;/*buf生产者指针*/
 	__u32			pad_2[31];
 	__u32			consumer_index;/*消费者指针*/
 	__u32			pad_3[31];
-	__u8			data[];/*指向队列元素*/
+	__u8			data[];/*指向队列元素(起始位置）*/
 };
 
 #endif /* RDMA_USER_RXE_H */

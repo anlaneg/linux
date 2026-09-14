@@ -252,7 +252,7 @@ struct rxe_qp {
 
 	/*所属的pd*/
 	struct rxe_pd		*pd;
-	struct rxe_srq		*srq;
+	struct rxe_srq		*srq;/*对应的share rq*/
 	/*send对应的cq*/
 	struct rxe_cq		*scq;
 	/*recv对应的cq（收到write,send报文后）*/

@@ -261,7 +261,7 @@ static inline void queue_advance_consumer(struct rxe_queue *q,
 	}
 }
 
-/*取生产者指针指向的元素*/
+/*取生产者指针指向的元素位置*/
 static inline void *queue_producer_addr(struct rxe_queue *q,
 					enum queue_type type)
 {

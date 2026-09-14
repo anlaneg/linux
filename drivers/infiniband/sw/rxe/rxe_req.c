@@ -236,16 +236,18 @@ static int rxe_wqe_is_fenced(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 		atomic_read(&qp->req.rd_atomic) != qp->attr.max_rd_atomic;
 }
 
-static int next_opcode_rc(struct rxe_qp *qp, u32 opcode, int fits)
+static int next_opcode_rc(struct rxe_qp *qp, u32 opcode, int fits/*是否最后一片*/)
 {
 	switch (opcode) {
 	case IB_WR_RDMA_WRITE:/*WRITE操作*/
+		/*当前qp请求的opcode如果标记为first或middle。当为最后一片时，则为last,否则则为middle*/
 		if (qp->req.opcode == IB_OPCODE_RC_RDMA_WRITE_FIRST ||
 		    qp->req.opcode == IB_OPCODE_RC_RDMA_WRITE_MIDDLE)
 			return fits ?
 				IB_OPCODE_RC_RDMA_WRITE_LAST :
 				IB_OPCODE_RC_RDMA_WRITE_MIDDLE;
 		else
+			/*如果上一次不为write操作，当为最后一片时，则为write only,否则为first*/
 			return fits ?
 				IB_OPCODE_RC_RDMA_WRITE_ONLY :
 				IB_OPCODE_RC_RDMA_WRITE_FIRST;
@@ -367,7 +369,7 @@ static int next_opcode_uc(struct rxe_qp *qp, u32 opcode, int fits)
 	return -EINVAL;
 }
 
-/*取opcode对应的next opcode*/
+/*利用当前状态及opcode取对应的next opcode*/
 static int next_opcode(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       u32 opcode)
 {
@@ -655,7 +657,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 			return ret;
 		}
 		break;
-	case IB_WR_REG_MR:
+	case IB_WR_REG_MR:/*注册mr处理为本机操作*/
 		ret = rxe_reg_fast_mr(qp, wqe);/*注册mr*/
 		if (unlikely(ret)) {
 			wqe->status = IB_WC_LOC_QP_OP_ERR;
@@ -695,7 +697,7 @@ int rxe_requester(struct rxe_qp *qp)
 	int opcode;
 	int err;
 	int ret;
-	/*取发送queue*/
+	/*取发送队列*/
 	struct rxe_queue *q = qp->sq.queue;
 	struct rxe_ah *ah;
 	struct rxe_av *av;
@@ -745,7 +747,7 @@ int rxe_requester(struct rxe_qp *qp)
 		qp->req.need_retry = 0;/*简单设置重传位置,后面会和正常发送一样,重传处理结束,置为0*/
 	}
 
-	/*自sq中提取一个用户态填充好的send wqe,准备发送这个wqe*/
+	/*自sq中提取一个填充好的send wqe,准备发送这个wqe*/
 	wqe = req_next_wqe(qp);
 	if (unlikely(!wqe))
 		goto exit;/*没有要发送的wqe,直接退出*/
@@ -755,7 +757,7 @@ int rxe_requester(struct rxe_qp *qp)
 		goto exit;
 	}
 
-	/*处理本机操作*/
+	/*处理本机操作(比如将mr做为wqe下发了）*/
 	if (wqe->mask & WR_LOCAL_OP_MASK) {
 		err = rxe_do_local_ops(qp, wqe);
 		if (unlikely(err))
@@ -779,7 +781,7 @@ int rxe_requester(struct rxe_qp *qp)
 		goto exit;
 	}
 
-	/*取next opcode*/
+	/*取当前opcode对应的next opcode*/
 	opcode = next_opcode(qp, wqe, wqe->wr.opcode/*wr指明的opcode*/);
 	if (unlikely(opcode < 0)) {
 		wqe->status = IB_WC_LOC_QP_OP_ERR;
@@ -788,7 +790,7 @@ int rxe_requester(struct rxe_qp *qp)
 
 	mask = rxe_opcode[opcode].mask;/*得到此opcode对应的标记数据*/
 	if (unlikely(mask & (RXE_READ_OR_ATOMIC_MASK |
-			RXE_ATOMIC_WRITE_MASK))) {//????
+			RXE_ATOMIC_WRITE_MASK))) {
 		if (check_init_depth(qp, wqe))
 			goto exit;
 	}
