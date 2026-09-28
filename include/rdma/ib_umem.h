@@ -78,10 +78,10 @@ static inline size_t ib_umem_num_dma_blocks(struct ib_umem *umem,
 	       pgsz;
 }
 
-/*取umem指定的内存范围，占多少页内存*/
+/*取umem指定的内存范围，需占多少页内存页*/
 static inline size_t ib_umem_num_pages(struct ib_umem *umem)
 {
-	return ib_umem_num_dma_blocks(umem, PAGE_SIZE);
+	return ib_umem_num_dma_blocks(umem, PAGE_SIZE/*4k页大小*/);
 }
 
 static inline void __rdma_umem_block_iter_start(struct ib_block_iter *biter,

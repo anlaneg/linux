@@ -31,7 +31,7 @@ int vsock_addr_validate(const struct sockaddr_vm *addr)
 		return -EAFNOSUPPORT;
 
 	if (addr->svm_flags & ~svm_valid_flags)
-		return -EINVAL;
+		return -EINVAL;/*有无效标记*/
 
 	return 0;
 }
@@ -62,9 +62,9 @@ int vsock_addr_cast(const struct sockaddr_unsized *addr,
 		    size_t len, struct sockaddr_vm **out_addr)
 {
 	if (len < sizeof(**out_addr))
-		return -EFAULT;
+		return -EFAULT;/*长度不符*/
 
 	*out_addr = (struct sockaddr_vm *)addr;
-	return vsock_addr_validate(*out_addr);
+	return vsock_addr_validate(*out_addr);/*做校验*/
 }
 EXPORT_SYMBOL_GPL(vsock_addr_cast);

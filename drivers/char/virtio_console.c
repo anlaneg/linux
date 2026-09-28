@@ -1029,7 +1029,7 @@ static int port_fops_open(struct inode *inode, struct file *filp)
 		/* Port was unplugged before we could proceed */
 		return -ENXIO;
 	}
-	filp->private_data = port;
+	filp->private_data = port;/*为此文件关联port*/
 
 	/*
 	 * Don't allow opening of console port devices -- that's done
@@ -1351,21 +1351,22 @@ static int add_port(struct ports_device *portdev, u32 id)
 	port->in_vq = portdev->in_vqs[port->id];
 	port->out_vq = portdev->out_vqs[port->id];
 
-	port->cdev = cdev_alloc();
+	port->cdev = cdev_alloc();/*为此port申请字符设备*/
 	if (!port->cdev) {
 		dev_err(&port->portdev->vdev->dev, "Error allocating cdev\n");
 		err = -ENOMEM;
 		goto free_port;
 	}
-	port->cdev->ops = &port_fops;
+	port->cdev->ops = &port_fops;/*此Port字符设备对应的操作集*/
 
 	devt = MKDEV(portdev->chr_major, id);
-	err = cdev_add(port->cdev, devt, 1);
+	err = cdev_add(port->cdev, devt, 1);/*添加此字符设备到系统*/
 	if (err < 0) {
 		dev_err(&port->portdev->vdev->dev,
 			"Error %d adding cdev for port %u\n", err, id);
 		goto free_cdev;
 	}
+	/*创建设备vport*/
 	port->dev = device_create(&port_class, &port->portdev->vdev->dev,
 				  devt, port, "vport%up%u",
 				  port->portdev->vdev->index, id);
@@ -1973,6 +1974,7 @@ static int virtcons_probe(struct virtio_device *vdev)
 	portdev->vdev = vdev;
 	vdev->priv = portdev;
 
+	/*注册virtio-portsdev字符设备(占用major)*/
 	portdev->chr_major = register_chrdev(0, "virtio-portsdev",
 					     &portdev_fops);
 	if (portdev->chr_major < 0) {
@@ -2042,7 +2044,7 @@ static int virtcons_probe(struct virtio_device *vdev)
 		 * For backward compatibility: Create a console port
 		 * if we're running on older host.
 		 */
-		add_port(portdev, 0);
+		add_port(portdev, 0);/*添加console port*/
 	}
 
 	spin_lock_irq(&pdrvdata_lock);
@@ -2063,7 +2065,7 @@ fail:
 }
 
 static const struct virtio_device_id id_table[] = {
-	{ VIRTIO_ID_CONSOLE, VIRTIO_DEV_ANY_ID },
+	{ VIRTIO_ID_CONSOLE/*匹配console设备*/, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 MODULE_DEVICE_TABLE(virtio, id_table);
@@ -2192,6 +2194,7 @@ static int __init virtio_console_init(void)
 	INIT_LIST_HEAD(&pdrvdata.consoles);
 	INIT_LIST_HEAD(&pdrvdata.portdevs);
 
+	/*注册virtio-console*/
 	err = register_virtio_driver(&virtio_console);
 	if (err < 0) {
 		pr_err("Error %d registering virtio driver\n", err);

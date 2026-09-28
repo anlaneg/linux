@@ -899,8 +899,8 @@ enum ionic_v1_admin_op {
 	IONIC_V1_ADMIN_CREATE_CQ,
 	IONIC_V1_ADMIN_CREATE_QP,
 	IONIC_V1_ADMIN_CREATE_MR,
-	IONIC_V1_ADMIN_STATS_HDRS,
-	IONIC_V1_ADMIN_STATS_VALS,
+	IONIC_V1_ADMIN_STATS_HDRS,/*取统计中的header信息（即统计字段的名称及偏移量）*/
+	IONIC_V1_ADMIN_STATS_VALS,/*取统计项中的stats信息（即统计字段的具体统计值）*/
 	IONIC_V1_ADMIN_DESTROY_MR,
 	IONIC_V1_ADMIN_RSVD_7,		/* RESIZE_CQ */
 	IONIC_V1_ADMIN_DESTROY_CQ,
@@ -1021,7 +1021,7 @@ struct ionic_v1_stat {
 		__be32		be_type_off;
 		u32		type_off;
 	};
-	char			name[28];
+	char			name[28];/*统计项名称*/
 };
 
 static inline int ionic_v1_stat_type(struct ionic_v1_stat *hdr)

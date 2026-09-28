@@ -141,6 +141,7 @@ static inline size_t virtio_vsock_skb_len(struct sk_buff *skb)
 #define VIRTIO_VSOCK_MAX_PKT_BUF_SIZE		(1024 * 64)
 
 enum {
+	/*收队列，从Host到guest*/
 	VSOCK_VQ_RX     = 0, /* for host to guest data */
 	VSOCK_VQ_TX     = 1, /* for guest to host data */
 	VSOCK_VQ_EVENT  = 2,
@@ -166,7 +167,7 @@ struct virtio_vsock_sock {
 	u32 rx_bytes;
 	u32 buf_alloc;
 	u32 buf_used;
-	struct sk_buff_head rx_queue;
+	struct sk_buff_head rx_queue;/*收到的内容*/
 	u32 msg_count;
 };
 
@@ -185,7 +186,7 @@ struct virtio_vsock_pkt_info {
 
 struct virtio_transport {
 	/* This must be the first field */
-	struct vsock_transport transport;
+	struct vsock_transport transport;/*vsock的transport*/
 
 	/* Takes ownership of the packet */
 	//向外发送报文

@@ -97,6 +97,7 @@ static inline u32 get_random_u32_below(u32 ceil)
  */
 static inline u32 get_random_u32_above(u32 floor)
 {
+	/*产生一个随机数，要求大于floor*/
 	BUILD_BUG_ON_MSG(__builtin_constant_p(floor) && floor == U32_MAX,
 			 "get_random_u32_above() must take floor < U32_MAX");
 	return floor + 1 + get_random_u32_below(U32_MAX - floor);

@@ -42,6 +42,7 @@ static inline int count_leading_zeros(unsigned long x)
  */
 static inline int count_trailing_zeros(unsigned long x)
 {
+	//返回 x 从最低位往高位数、连续 0 的个数 ，也就是"最低那个 1 所在的位号"。
 #define COUNT_TRAILING_ZEROS_0 (-1)
 
 	if (sizeof(x) == 4)

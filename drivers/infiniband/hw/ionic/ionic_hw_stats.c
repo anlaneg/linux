@@ -14,13 +14,13 @@ static int ionic_v1_stat_normalize(struct ionic_v1_stat *hw_stats,
 	for (hw_stat_i = 0; hw_stat_i < hw_stats_count; ++hw_stat_i) {
 		struct ionic_v1_stat *stat = &hw_stats[hw_stat_i];
 
-		stat->type_off = be32_to_cpu(stat->be_type_off);
+		stat->type_off = be32_to_cpu(stat->be_type_off);/*类型及偏移量*/
 		stat->name[sizeof(stat->name) - 1] = 0;
 		if (ionic_v1_stat_type(stat) == IONIC_V1_STAT_TYPE_NONE)
-			break;
+			break;/*统计类型为None,跳出（后面没有了）*/
 	}
 
-	return hw_stat_i;
+	return hw_stat_i;/*有多少有效统计项*/
 }
 
 static void ionic_fill_stats_desc(struct rdma_stat_desc *hw_stats_hdrs,
@@ -32,15 +32,15 @@ static void ionic_fill_stats_desc(struct rdma_stat_desc *hw_stats_hdrs,
 	for (hw_stat_i = 0; hw_stat_i < hw_stats_count; ++hw_stat_i) {
 		struct ionic_v1_stat *stat = &hw_stats[hw_stat_i];
 
-		hw_stats_hdrs[hw_stat_i].name = stat->name;
+		hw_stats_hdrs[hw_stat_i].name = stat->name;/*记录统计中的统计字段名称到hw_stats_hdrs*/
 	}
 }
 
 static u64 ionic_v1_stat_val(struct ionic_v1_stat *stat,
 			     void *vals_buf, size_t vals_len)
 {
-	unsigned int off = ionic_v1_stat_off(stat);
-	int type = ionic_v1_stat_type(stat);
+	unsigned int off = ionic_v1_stat_off(stat);/*偏移量*/
+	int type = ionic_v1_stat_type(stat);/*取数据类型*/
 
 #define __ionic_v1_stat_validate(__type)		\
 	((off + sizeof(__type) <= vals_len) &&		\
@@ -100,7 +100,7 @@ static int ionic_hw_stats_cmd(struct ionic_ibdev *dev,
 	if (dev->lif_cfg.admin_opcodes <= op)
 		return -EBADRQC;
 
-	ionic_admin_post(dev, &wr);
+	ionic_admin_post(dev, &wr);/*向adminq中存放获取stats cmd*/
 
 	return ionic_admin_wait(dev, &wr, IONIC_ADMIN_F_INTERRUPT);
 }
@@ -123,7 +123,7 @@ static int ionic_init_hw_stats(struct ionic_ibdev *dev)
 	}
 
 	/* buffer for names, sizes, offsets of values */
-	dev->hw_stats = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	dev->hw_stats = kzalloc(PAGE_SIZE, GFP_KERNEL);/*申请统计信息对应的页*/
 	if (!dev->hw_stats) {
 		rc = -ENOMEM;
 		goto err_hw_stats;
@@ -131,13 +131,13 @@ static int ionic_init_hw_stats(struct ionic_ibdev *dev)
 
 	/* request the names, sizes, offsets */
 	hw_stats_dma = dma_map_single(dev->lif_cfg.hwdev, dev->hw_stats,
-				      PAGE_SIZE, DMA_FROM_DEVICE);
+				      PAGE_SIZE, DMA_FROM_DEVICE);/*映射统计信息对应dma地址*/
 	rc = dma_mapping_error(dev->lif_cfg.hwdev, hw_stats_dma);
 	if (rc)
 		goto err_dma;
 
 	rc = ionic_hw_stats_cmd(dev, hw_stats_dma, PAGE_SIZE, 0,
-				IONIC_V1_ADMIN_STATS_HDRS);
+				IONIC_V1_ADMIN_STATS_HDRS);/*取统计信息中的header信息*/
 	if (rc)
 		goto err_cmd;
 
@@ -193,8 +193,9 @@ static struct rdma_hw_stats *ionic_alloc_hw_stats(struct ib_device *ibdev,
 					  RDMA_HW_STATS_DEFAULT_LIFESPAN);
 }
 
+/*获取硬件统计*/
 static int ionic_get_hw_stats(struct ib_device *ibdev,
-			      struct rdma_hw_stats *hw_stats,
+			      struct rdma_hw_stats *hw_stats/*出参，取得的统计值*/,
 			      u32 port, int index)
 {
 	struct ionic_ibdev *dev = to_ionic_ibdev(ibdev);
@@ -204,6 +205,7 @@ static int ionic_get_hw_stats(struct ib_device *ibdev,
 	if (port != 1)
 		return -EINVAL;
 
+	/*映射dma地址*/
 	hw_stats_dma = dma_map_single(dev->lif_cfg.hwdev, dev->hw_stats_buf,
 				      PAGE_SIZE, DMA_FROM_DEVICE);
 	rc = dma_mapping_error(dev->lif_cfg.hwdev, hw_stats_dma);
@@ -211,13 +213,14 @@ static int ionic_get_hw_stats(struct ib_device *ibdev,
 		goto err_dma;
 
 	rc = ionic_hw_stats_cmd(dev, hw_stats_dma, PAGE_SIZE,
-				0, IONIC_V1_ADMIN_STATS_VALS);
+				0, IONIC_V1_ADMIN_STATS_VALS);/*取统计值填写到hw_stats_dma中*/
 	if (rc)
 		goto err_cmd;
 
 	dma_unmap_single(dev->lif_cfg.hwdev, hw_stats_dma,
 			 PAGE_SIZE, DMA_FROM_DEVICE);
 
+	/*填充hw_stats*/
 	for (hw_stat_i = 0; hw_stat_i < dev->hw_stats_count; ++hw_stat_i)
 		hw_stats->value[hw_stat_i] =
 			ionic_v1_stat_val(&dev->hw_stats[hw_stat_i],

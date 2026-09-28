@@ -1232,10 +1232,15 @@ static inline struct dev_pagemap *page_pgmap(const struct page *page)
 static inline bool zone_device_pages_have_same_pgmap(const struct page *a,
 						     const struct page *b)
 {
+	/*Linux 把物理内存按 zone 组织（ ZONE_NORMAL / ZONE_DMA / ZONE_MOVABLE / ZONE_DEVICE ）。
+	 * ZONE_DEVICE 专门表示"由某个设备提供、通过 memmap 暴露成 struct page 的一段特殊内存"*/
 	if (memdesc_is_zone_device(a->flags) != memdesc_is_zone_device(b->flags))
-		return false;
+		return false;/*一个是zone device,另一个不是，不能合并*/
 	if (!memdesc_is_zone_device(a->flags))
-		return true;
+		return true;/*两个都不是zone device*/
+
+	/*对一个 ZONE_DEVICE 页返回它归属的 struct dev_pagemap * 。
+	 * 同一个 pgmap 意味着"同一段设备内存、同一驱动、同一 memtype"。*/
 	return page_pgmap(a) == page_pgmap(b);
 }
 

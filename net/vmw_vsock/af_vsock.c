@@ -201,9 +201,9 @@ struct proto vsock_proto = {
 #define VSOCK_DEFAULT_BUFFER_MIN_SIZE 128
 
 /* Transport used for host->guest communication */
-static const struct vsock_transport *transport_h2g;//由主机到guest
+static const struct vsock_transport *transport_h2g;//由主机到guest(系统仅一个）
 /* Transport used for guest->host communication */
-static const struct vsock_transport *transport_g2h;/*guest到主机的传输层*/
+static const struct vsock_transport *transport_g2h;/*guest到主机的传输层（系统仅一个）*/
 /* Transport used for DGRAM communication */
 static const struct vsock_transport *transport_dgram;
 /* Transport used for local communication */
@@ -242,9 +242,10 @@ static DEFINE_MUTEX(vsock_register_mutex);
 #define vsock_connected_sockets_vsk(vsk)				\
 	vsock_connected_sockets(&(vsk)->remote_addr, &(vsk)->local_addr)
 
+/*全局hash表（所有vsock绑定均记录在此链表上）*/
 struct list_head vsock_bind_table[VSOCK_HASH_SIZE + 1];
 EXPORT_SYMBOL_GPL(vsock_bind_table);
-/*vsock连接表*/
+/*vsock已连接表（全局hash)*/
 struct list_head vsock_connected_table[VSOCK_HASH_SIZE];
 EXPORT_SYMBOL_GPL(vsock_connected_table);
 DEFINE_SPINLOCK(vsock_table_lock);
@@ -257,7 +258,8 @@ static int vsock_auto_bind(struct vsock_sock *vsk)
 	struct sockaddr_vm local_addr;
 
 	if (vsock_addr_bound(&vsk->local_addr))
-		return 0;
+		return 0;/*明确指定port的，直接返回*/
+	/*绑定到any cid,any port(自动分配port）*/
 	vsock_addr_init(&local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
 	return __vsock_bind(sk, &local_addr);
 }
@@ -304,7 +306,7 @@ static struct sock *__vsock_find_bound_socket_net(struct sockaddr_vm *addr,
 {
 	struct vsock_sock *vsk;
 
-	/*遍历bind表*/
+	/*通过addr遍历bind hash表*/
 	list_for_each_entry(vsk, vsock_bound_sockets(addr), bound_table) {
 		struct sock *sk = sk_vsock(vsk);
 
@@ -419,7 +421,7 @@ EXPORT_SYMBOL_GPL(vsock_find_bound_socket);
  * Use this in transports that are namespace-aware and can provide the
  * network namespace context.
  */
-/*通过src,dst查询*/
+/*通过src,dst查询vsock*/
 struct sock *vsock_find_connected_socket_net(struct sockaddr_vm *src,
 					     struct sockaddr_vm *dst,
 					     struct net *net)
@@ -519,19 +521,22 @@ void vsock_enqueue_accept(struct sock *listener, struct sock *connected)
 }
 EXPORT_SYMBOL_GPL(vsock_enqueue_accept);
 
+/*检查remote_cid是否去往本地*/
 static bool vsock_use_local_transport(unsigned int remote_cid)
 {
 	lockdep_assert_held(&vsock_register_mutex);
 
 	if (!transport_local)
-		return false;
+		return false;/*未设置local*/
 
 	if (remote_cid == VMADDR_CID_LOCAL)
-		return true;
+		return true;/*是本地cid*/
 
 	if (transport_g2h) {
+		/*g2h有设置，检查remote_cid是否为自身cid*/
 		return remote_cid == transport_g2h->get_local_cid();
 	} else {
+		/*h2g情况，检查cid是否为host*/
 		return remote_cid == VMADDR_CID_HOST;
 	}
 }
@@ -588,12 +593,16 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		break;
 	case SOCK_STREAM:
 	case SOCK_SEQPACKET:
+		/* ** 通过Remote_cid确定transport ** */
 		if (vsock_use_local_transport(remote_cid))
+			/*去往本地的，将transport指向transport_local*/
 			new_transport = transport_local;
 		else if (remote_cid <= VMADDR_CID_HOST || !transport_h2g ||
 			 (remote_flags & VMADDR_FLAG_TO_HOST))
+			/*去往host的*/
 			new_transport = transport_g2h;
 		else
+			/*其它为去往guest的*/
 			new_transport = transport_h2g;
 		break;
 	default:
@@ -602,6 +611,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 	}
 
 	if (vsk->transport && vsk->transport == new_transport) {
+		/*vsk设置了transport，且与路由要求一致*/
 		ret = 0;
 		goto err;
 	}
@@ -610,6 +620,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 	 * while there are open sockets assigned to it.
 	 */
 	if (!new_transport || !try_module_get(new_transport->module)) {
+		/*transport不确定*/
 		ret = -ENODEV;
 		goto err;
 	}
@@ -620,7 +631,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 	 */
 	mutex_unlock(&vsock_register_mutex);
 
-	if (vsk->transport) {
+	if (vsk->transport) {/*先释放旧的*/
 		/* transport->release() must be called with sock lock acquired.
 		 * This path can only be taken during vsock_connect(), where we
 		 * have already held the sock lock. In the other cases, this
@@ -648,12 +659,14 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		}
 	}
 
+	/*执行transport初始化*/
 	ret = new_transport->init(vsk, psk);
 	if (ret) {
 		module_put(new_transport->module);
 		return ret;
 	}
 
+	/*重置transport*/
 	vsk->transport = new_transport;
 
 	return 0;
@@ -673,6 +686,7 @@ static u32 vsock_registered_transport_cid(const struct vsock_transport **transpo
 
 	mutex_lock(&vsock_register_mutex);
 	if (*transport)
+		/*从transport拿local cid*/
 		cid = (*transport)->get_local_cid();
 	mutex_unlock(&vsock_register_mutex);
 
@@ -685,7 +699,7 @@ bool vsock_find_cid(unsigned int cid)
 	if (cid == vsock_registered_transport_cid(&transport_g2h))
 		return true;
 
-    	/*g2h通信时，检查cid是否为local cid*/
+    /*g2h通信时，检查cid是否为local cid*/
 	if (transport_h2g && cid == VMADDR_CID_HOST)
 		return true;
 
@@ -796,11 +810,13 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 	struct sockaddr_vm new_addr;
 
 	if (!net->vsock.port)
+		/*设置一个随机值*/
 		net->vsock.port = get_random_u32_above(LAST_RESERVED_PORT);
 
 	vsock_addr_init(&new_addr, addr->svm_cid, addr->svm_port);
 
 	if (addr->svm_port == VMADDR_PORT_ANY) {
+		/*未提供svm_port,尝试多次，选择一个未用过的port*/
 		bool found = false;
 		unsigned int i;
 
@@ -812,13 +828,13 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 			new_addr.svm_port = net->vsock.port++;
 
 			if (!__vsock_find_bound_socket_net(&new_addr, net)) {
-				found = true;
+				found = true;/*可用*/
 				break;
 			}
 		}
 
 		if (!found)
-			return -EADDRNOTAVAIL;
+			return -EADDRNOTAVAIL;/*多次尝试仍未绑定*/
 	} else {
 		/* If port is in reserved range, ensure caller
 		 * has necessary privileges.
@@ -829,7 +845,7 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 		}
 
 		if (__vsock_find_bound_socket_net(&new_addr, net))
-			return -EADDRINUSE;
+			return -EADDRINUSE;/*此端口已被使用*/
 	}
 
 	vsock_addr_init(&vsk->local_addr, new_addr.svm_cid, new_addr.svm_port);
@@ -840,6 +856,7 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 	 * by AF_UNIX.
 	 */
 	__vsock_remove_bound(vsk);
+	/*添加此地址到绑定表*/
 	__vsock_insert_bound(vsock_bound_sockets(&vsk->local_addr), vsk);
 
 	return 0;
@@ -858,7 +875,7 @@ static int __vsock_bind(struct sock *sk, struct sockaddr_vm *addr)
 
 	/* First ensure this socket isn't already bound. */
 	if (vsock_addr_bound(&vsk->local_addr))
-		return -EINVAL;
+		return -EINVAL;/*绑定必须提供svm_port=0*/
 
 	/* Now bind to the provided address or select appropriate values if
 	 * none are provided (VMADDR_CID_ANY and VMADDR_PORT_ANY).  Note that
@@ -2573,6 +2590,7 @@ __vsock_connectible_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	}
 
 	if (sk->sk_type == SOCK_STREAM)
+		/*流式socket收消息处理*/
 		err = __vsock_stream_recvmsg(sk, msg, len, flags);
 	else
 		err = __vsock_seqpacket_recvmsg(sk, msg, len, flags);
@@ -2740,7 +2758,8 @@ static long vsock_dev_do_ioctl(struct file *filp,
 	u32 cid;
 
 	switch (cmd) {
-	case IOCTL_VM_SOCKETS_GET_LOCAL_CID:
+	case IOCTL_VM_SOCKETS_GET_LOCAL_CID:/*通过此接口找到自身cid*/
+		/*按顺序取以下三种cid*/
 		/* To be compatible with the VMCI behavior, we prioritize the
 		 * guest CID instead of well-know host CID (VMADDR_CID_HOST).
 		 */
@@ -2750,6 +2769,7 @@ static long vsock_dev_do_ioctl(struct file *filp,
 		if (cid == VMADDR_CID_ANY)
 			cid = vsock_registered_transport_cid(&transport_local);
 
+		/*向用户态返回*/
 		if (put_user(cid, p) != 0)
 			retval = -EFAULT;
 		break;
@@ -2761,6 +2781,7 @@ static long vsock_dev_do_ioctl(struct file *filp,
 	return retval;
 }
 
+/*vsock设备ioctl处理*/
 static long vsock_dev_ioctl(struct file *filp,
 			    unsigned int cmd, unsigned long arg)
 {
@@ -2980,7 +3001,7 @@ static int __init vsock_init(void)
 
 	vsock_proto.owner = THIS_MODULE;
 	vsock_device.minor = MISC_DYNAMIC_MINOR;
-	err = misc_register(&vsock_device);
+	err = misc_register(&vsock_device);/*注册vsock misc设备*/
 	if (err) {
 		pr_err("Failed to register misc device\n");
 		goto err_reset_transport;
@@ -3032,6 +3053,7 @@ const struct vsock_transport *vsock_core_get_transport(struct vsock_sock *vsk)
 }
 EXPORT_SYMBOL_GPL(vsock_core_get_transport);
 
+/*按features来注册transport,每种传输类型仅容许注册一次transport,多次注册会报已存在*/
 int vsock_core_register(const struct vsock_transport *t, int features/*注册哪种传输*/)
 {
 	const struct vsock_transport *t_h2g, *t_g2h, *t_dgram, *t_local;
@@ -3040,8 +3062,8 @@ int vsock_core_register(const struct vsock_transport *t, int features/*注册哪
 	if (err)
 		return err;
 
-	t_h2g = transport_h2g;//由主机到guest
-	t_g2h = transport_g2h;//由guest到主机
+	t_h2g = transport_h2g;//指向原来的（由主机到guest transport)
+	t_g2h = transport_g2h;//指向原来的（由guest到主机）
 	t_dgram = transport_dgram;
 	t_local = transport_local;
 

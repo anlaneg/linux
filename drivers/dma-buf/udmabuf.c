@@ -25,7 +25,7 @@ module_param(size_limit_mb, int, 0644);
 MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is 64.");
 
 struct udmabuf {
-	pgoff_t pagecount;
+	pgoff_t pagecount;/*页数*/
 	struct folio **folios;
 
 	/**
@@ -274,6 +274,7 @@ static int end_cpu_udmabuf(struct dma_buf *buf,
 	return 0;
 }
 
+/*udmabuf操作集*/
 static const struct dma_buf_ops udmabuf_ops = {
 	.map_dma_buf	   = map_udmabuf,
 	.unmap_dma_buf	   = unmap_udmabuf,
@@ -313,9 +314,9 @@ static struct dma_buf *export_udmabuf(struct udmabuf *ubuf,
 
 	ubuf->device = device;
 	exp_info.ops  = &udmabuf_ops;
-	exp_info.size = ubuf->pagecount << PAGE_SHIFT;
+	exp_info.size = ubuf->pagecount << PAGE_SHIFT;/*按页数换算成字大小*/
 	exp_info.priv = ubuf;
-	exp_info.flags = O_RDWR;
+	exp_info.flags = O_RDWR;/*默认读写*/
 
 	return dma_buf_export(&exp_info);
 }
@@ -512,6 +513,7 @@ static long udmabuf_ioctl(struct file *filp, unsigned int ioctl,
 
 	switch (ioctl) {
 	case UDMABUF_CREATE:
+		/*创建udma buffer*/
 		ret = udmabuf_ioctl_create(filp, arg);
 		break;
 	case UDMABUF_CREATE_LIST:

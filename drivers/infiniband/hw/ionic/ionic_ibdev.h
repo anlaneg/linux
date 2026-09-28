@@ -111,11 +111,11 @@ struct ionic_ibdev {
 
 	struct ionic_eq		**eq_vec;
 
-	struct ionic_v1_stat	*hw_stats;
-	void			*hw_stats_buf;
-	struct rdma_stat_desc	*hw_stats_hdrs;
+	struct ionic_v1_stat	*hw_stats;/*单页，用于存放取得的统计header列表格式*/
+	void			*hw_stats_buf;/*单页，用于存放与fw取统计信息时的通信buffer*/
+	struct rdma_stat_desc	*hw_stats_hdrs;/*硬件统计项名称列表*/
 	struct ionic_counter_stats *counter_stats;
-	int			hw_stats_count;
+	int			hw_stats_count;/*硬件统计项总数目*/
 };
 
 struct ionic_eq {

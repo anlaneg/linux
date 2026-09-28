@@ -809,10 +809,10 @@ static int ionic_create_mr_cmd(struct ionic_ibdev *dev,
 			.op = IONIC_V1_ADMIN_CREATE_MR,/*指明创建mr*/
 			.len = cpu_to_le16(IONIC_ADMIN_CREATE_MR_IN_V1_LEN),
 			.cmd.create_mr = {
-				.va = cpu_to_le64(addr),
+				.va = cpu_to_le64(addr),/*mr对应的va地址*/
 				.length = cpu_to_le64(length),
 				.pd_id = cpu_to_le32(pd->pdid),
-				.page_size_log2 = mr->buf.page_size_log2,
+				.page_size_log2 = mr->buf.page_size_log2,/*页大小*/
 				.tbl_index = cpu_to_le32(~0),
 				.map_count = cpu_to_le32(mr->buf.tbl_pages),
 				.dma_addr = ionic_pgtbl_dma(&mr->buf, addr),
@@ -902,6 +902,7 @@ struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start/*起始地址*/, u
 
 	mr->flags = IONIC_MRF_USER_MR | to_ionic_mr_flags(access);
 
+	/*取umem*/
 	mr->umem = ib_umem_get(&dev->ibdev, start, length, access);
 	if (IS_ERR(mr->umem)) {
 		rc = PTR_ERR(mr->umem);
@@ -910,13 +911,13 @@ struct ib_mr *ionic_reg_user_mr(struct ib_pd *ibpd, u64 start/*起始地址*/, u
 
 	pg_sz = ib_umem_find_best_pgsz(mr->umem,
 				       dev->lif_cfg.page_size_supported,
-				       addr);
+				       addr/*要注册的地址*/);/*选页大小*/
 	if (!pg_sz) {
 		rc = -EINVAL;
 		goto err_pgtbl;
 	}
 
-	rc = ionic_pgtbl_init(dev, &mr->buf, mr->umem, 0, 1, pg_sz);
+	rc = ionic_pgtbl_init(dev, &mr->buf, mr->umem, 0, 1, pg_sz/*页大小*/);
 	if (rc)
 		goto err_pgtbl;
 
@@ -965,7 +966,7 @@ struct ib_mr *ionic_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 offset,
 
 	mr->ibmr.lkey = mr->mrid;
 	mr->ibmr.rkey = mr->mrid;
-	mr->ibmr.iova = addr;
+	mr->ibmr.iova = addr;/*要注册的地址*/
 	mr->ibmr.length = length;/*要注册的mr内存长度*/
 
 	mr->flags = IONIC_MRF_USER_MR | to_ionic_mr_flags(access);

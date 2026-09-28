@@ -503,7 +503,7 @@ static inline __virtio64 cpu_to_virtio64(struct virtio_device *vdev, u64 val)
 		case 1:							\
 		case 2:							\
 		case 4:							\
-			vdev->config->get((vdev), 			\
+			vdev->config->get((vdev),/*取配置*/ 			\
 					  offsetof(structname, member), \
 					  &virtio_cread_v,		\
 					  sizeof(virtio_cread_v));	\

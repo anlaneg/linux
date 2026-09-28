@@ -45,7 +45,7 @@ struct vsock_sock {
 	u32 cached_peer;  /* Context ID of last dgram destination check. */
 	const struct cred *owner;
 	/* Rest are SOCK_STREAM only. */
-	long connect_timeout;
+	long connect_timeout;/*连接超时时间*/
 	/* Listening socket that this came from. */
 	struct sock *listener;
 	/* Used for pending list and accept queue during connection handshake.
@@ -97,8 +97,10 @@ struct vsock_transport_send_notify_data {
 
 /* Transport features flags */
 /* Transport provides host->guest communication */
+/*标记host到guest*/
 #define VSOCK_TRANSPORT_F_H2G		0x00000001
 /* Transport provides guest->host communication */
+/*标记guest到host*/
 #define VSOCK_TRANSPORT_F_G2H		0x00000002
 /* Transport provides DGRAM communication */
 #define VSOCK_TRANSPORT_F_DGRAM		0x00000004
@@ -109,7 +111,7 @@ struct vsock_transport {
 	struct module *module;
 
 	/* Initialize/tear-down socket. */
-	int (*init)(struct vsock_sock *, struct vsock_sock *);
+	int (*init/*初始化*/)(struct vsock_sock *, struct vsock_sock *);
 	void (*destruct)(struct vsock_sock *);
 	void (*release)(struct vsock_sock *);
 
@@ -117,7 +119,7 @@ struct vsock_transport {
 	int (*cancel_pkt)(struct vsock_sock *vsk);
 
 	/* Connections. */
-	int (*connect)(struct vsock_sock *);
+	int (*connect/*连接回调*/)(struct vsock_sock *);
 
 	/* DGRAM. */
 	int (*dgram_bind)(struct vsock_sock *, struct sockaddr_vm *);
@@ -310,7 +312,7 @@ static inline bool vsock_net_check_mode(struct net *ns0, struct net *ns1)
 	 * regardless of the mode.
 	 */
 	if (net_eq(ns0, ns1))
-		return true;
+		return true;/*两者ns相同*/
 
 	mode0 = vsock_net_mode(ns0);
 	mode1 = vsock_net_mode(ns1);

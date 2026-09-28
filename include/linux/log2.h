@@ -21,7 +21,7 @@
 static __always_inline __attribute__((const))
 int __ilog2_u32(u32 n)
 {
-    /*查找最高位的‘1’所在位置（从1开始编号）*/
+    /*查找最高位的‘1’所在位置（从1开始编号）,这样取的对数小于等于目标值*/
 	return fls(n) - 1;
 }
 #endif
@@ -30,7 +30,7 @@ int __ilog2_u32(u32 n)
 static __always_inline __attribute__((const))
 int __ilog2_u64(u64 n)
 {
-    /*查找最高位的‘1’所在位置（从1开始编号）*/
+    /*查找最高位的‘1’所在位置（从1开始编号）,这样取的对数小于等于目标值*/
 	return fls64(n) - 1;
 }
 #endif
@@ -157,7 +157,7 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
  * selects the appropriately-sized optimised version depending on sizeof(n)
  */
 #define ilog2(n) \
-( /*取n的以2为基的对数*/\
+( /*取n的以2为基的对数，此函数得到的结果小于等于目标值*/\
 	__builtin_constant_p(n) ?	\
 	((n) < 2 ? 0 :			\
 	 63 - __builtin_clzll(n)) :	\
@@ -201,6 +201,8 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
 static inline __attribute_const__
 int __order_base_2(unsigned long n)
 {
+	/*由于ilog2这个函数取得的值总是小于等于手算值
+	 * 这里先取n-1的对数，这样得到的结果<=手算值，再通过+1翻倍，则逻辑值值将大于n*/
 	return n > 1 ? ilog2(n - 1) + 1 : 0;
 }
 
@@ -222,15 +224,19 @@ int __order_base_2(unsigned long n)
 	__builtin_constant_p(n) ? (		\
 		((n) == 0 || (n) == 1) ? 0 :	\
 		ilog2((n) - 1) + 1) :		\
-	__order_base_2(n)			\
+	__order_base_2(n)/*向上取整，如ob2(3)= 2*/			\
 )
 
+/*表示数值 n 至少需要多少个 bit来存放*/
 static inline __attribute__((const))
 int __bits_per(unsigned long n)
 {
 	if (n < 2)
 		return 1;
 	if (is_power_of_2(n))
+		/*我们知道order_base_2返回的值总是大于等于n的实际对数
+		 * 且在n为power_of_2时，两者相等，故此时此函数返回的值更大
+		 * 用于表示n需要多少bits来存放*/
 		return order_base_2(n) + 1;
 	return order_base_2(n);
 }
@@ -256,7 +262,7 @@ int __bits_per(unsigned long n)
 		((n) == 0 || (n) == 1)		\
 			? 1 : ilog2(n) + 1	\
 	) :					\
-	__bits_per(n)				\
+	__bits_per(n)/*数字n至少需要多少bits来存放*/				\
 )
 
 /**

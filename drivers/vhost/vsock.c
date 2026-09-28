@@ -56,7 +56,7 @@ struct vhost_vsock {
 	struct hlist_node hash;
 
 	struct vhost_work send_pkt_work;/*vsock的发包函数*/
-	/*待发送的报文*/
+	/*待发送的报文队列（host向guest发送时，报文先挂到此队列）*/
 	struct sk_buff_head send_pkt_queue; /* host->guest pending packets */
 
 	atomic_t queued_replies;
@@ -65,7 +65,7 @@ struct vhost_vsock {
 	bool seqpacket_allow;
 };
 
-//返回local cid
+//返回host cid（默认为2）
 static u32 vhost_transport_get_local_cid(void)
 {
 	return VHOST_VSOCK_DEFAULT_HOST_CID;
@@ -128,10 +128,10 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		u32 offset;
 		int head;
 
-		//如果vsock没有报文，则跳出
 		skb = virtio_vsock_skb_dequeue(&vsock->send_pkt_queue);
 
 		if (!skb) {
+			//如果此vsock没有要发送到guest的报文，则跳出
 			vhost_enable_notify(&vsock->dev, vq);
 			break;
 		}
@@ -140,7 +140,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		head = vhost_get_vq_desc(vq, vq->iov, ARRAY_SIZE(vq->iov),
 					 &out, &in, NULL, NULL);
 		if (head < 0) {
-		    	/*获取数据片信息时出错，将报文加入send_pkt_list上，并退出*/
+		    /*获取数据片信息时出错，将报文加入send_pkt_list上，并退出*/
 			virtio_vsock_skb_queue_head(&vsock->send_pkt_queue, skb);
 			break;
 		}
@@ -294,7 +294,7 @@ static void vhost_transport_send_pkt_work(struct vhost_work *work)
 
 	//取得其对应的socket
 	vsock = container_of(work, struct vhost_vsock, send_pkt_work);
-	vq = &vsock->vqs[VSOCK_VQ_RX];
+	vq = &vsock->vqs[VSOCK_VQ_RX];/*取得从host到guest的队列*/
 
 	vhost_transport_do_send_pkt(vsock, vq);
 }
@@ -310,7 +310,7 @@ vhost_transport_send_pkt(struct sk_buff *skb, struct net *net)
 	rcu_read_lock();
 
 	/* Find the vhost_vsock according to guest context id  */
-	//确定此报文对应的vsock
+	//通过cid确定此报文对应的vhost_vsock（即哪个guest收此报文）
 	vsock = vhost_vsock_get(le64_to_cpu(hdr->dst_cid), net);
 	if (!vsock) {
 		rcu_read_unlock();
@@ -546,7 +546,7 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
 	mutex_lock(&vq->mutex);
 
 	if (!vhost_vq_get_backend(vq))
-		goto out;
+		goto out;/*此vq还没有后端不处理*/
 
 	if (!vq_meta_prefetch(vq))
 		goto out;
@@ -595,13 +595,14 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
 		hdr = virtio_vsock_hdr(skb);
 
 		/* Only accept correctly addressed packets */
-		/*报文必须是由guest_cid到host local cid的，否则被丢弃*/
 		if (le64_to_cpu(hdr->src_cid) == vsock->guest_cid &&
 		    le64_to_cpu(hdr->dst_cid) ==
 		    vhost_transport_get_local_cid())
+			/*报文必须是由guest_cid到host local cid的，否则被丢弃*/
 			virtio_transport_recv_pkt(&vhost_transport, skb,
 						  vsock->net);
 		else
+			/*释放报文*/
 			kfree_skb(skb);
 
 		vhost_add_used(vq, head, 0);
@@ -616,6 +617,7 @@ out:
 	mutex_unlock(&vq->mutex);
 }
 
+/*向guest发送*/
 static void vhost_vsock_handle_rx_kick(struct vhost_work *work)
 {
 	struct vhost_virtqueue *vq = container_of(work, struct vhost_virtqueue,
@@ -702,7 +704,7 @@ static int vhost_vsock_stop(struct vhost_vsock *vsock, bool check_owner)
 		struct vhost_virtqueue *vq = &vsock->vqs[i];
 
 		mutex_lock(&vq->mutex);
-		vhost_vq_set_backend(vq, NULL);
+		vhost_vq_set_backend(vq, NULL);/*将后端指定为空*/
 		mutex_unlock(&vq->mutex);
 	}
 
@@ -752,7 +754,9 @@ static int vhost_vsock_dev_open(struct inode *inode, struct file *file)
 	vqs[VSOCK_VQ_TX] = &vsock->vqs[VSOCK_VQ_TX];
 	vqs[VSOCK_VQ_RX] = &vsock->vqs[VSOCK_VQ_RX];
 	/*指明rx,tx对应的kick回调*/
+	/*被kick，从guest收取*/
 	vsock->vqs[VSOCK_VQ_TX].handle_kick = vhost_vsock_handle_tx_kick;
+	/*被kick，向guest发送*/
 	vsock->vqs[VSOCK_VQ_RX].handle_kick = vhost_vsock_handle_rx_kick;
 
 	//初始化vsock对应的设备
@@ -763,7 +767,7 @@ static int vhost_vsock_dev_open(struct inode *inode, struct file *file)
 	/*将vsock指定为私有数据*/
 	file->private_data = vsock;
 	skb_queue_head_init(&vsock->send_pkt_queue);
-	/*指明此work未在排队，并指定work的工作函数*/
+	/*指明此work未在排队，并指定work的工作函数（向guest发包用）*/
 	vhost_work_init(&vsock->send_pkt_work, vhost_transport_send_pkt_work);
 	return 0;
 
@@ -940,7 +944,7 @@ static long vhost_vsock_dev_ioctl(struct file *f, unsigned int ioctl,
 
 	switch (ioctl) {
 	case VHOST_VSOCK_SET_GUEST_CID:
-	    //为vsocket设置cid
+	    //为此vsocket设置cid（使一个vsock绑定到cid，即从属于一个guest)
 		if (copy_from_user(&guest_cid, argp, sizeof(guest_cid)))
 			return -EFAULT;
 		return vhost_vsock_set_cid(vsock, guest_cid);
@@ -951,9 +955,10 @@ static long vhost_vsock_dev_ioctl(struct file *f, unsigned int ioctl,
 		if (start/*参数为真，则启动*/)
 			return vhost_vsock_start(vsock);
 		else
+			/*停止*/
 			return vhost_vsock_stop(vsock, true);
 	case VHOST_GET_FEATURES:
-	    /*返回设备当前可支持的功能*/
+	    /*返回vsock设备当前可支持的功能*/
 		features = VHOST_VSOCK_FEATURES;
 		if (copy_to_user(argp, &features, sizeof(features)))
 			return -EFAULT;
@@ -1018,11 +1023,12 @@ static __poll_t vhost_vsock_chr_poll(struct file *file, poll_table *wait)
 
 static const struct file_operations vhost_vsock_fops = {
 	.owner          = THIS_MODULE,
-	.open           = vhost_vsock_dev_open,
+	.open           = vhost_vsock_dev_open,/*创建vsock设备后端(初始化vhost_vsock）*/
 	.release        = vhost_vsock_dev_release,
 	.llseek		= noop_llseek,
 	.unlocked_ioctl = vhost_vsock_dev_ioctl,
 	.compat_ioctl   = compat_ptr_ioctl,
+	/*自此sock读*/
 	.read_iter      = vhost_vsock_chr_read_iter,
 	.write_iter     = vhost_vsock_chr_write_iter,
 	.poll           = vhost_vsock_chr_poll,
@@ -1039,7 +1045,7 @@ static int __init vhost_vsock_init(void)
 {
 	int ret;
 
-	//注册host to guest传输方式
+	//注册host to guest传输方式(host侧）
 	ret = vsock_core_register(&vhost_transport.transport,
 				  VSOCK_TRANSPORT_F_H2G);
 	if (ret < 0)

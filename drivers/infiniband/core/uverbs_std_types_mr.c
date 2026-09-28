@@ -217,7 +217,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 		return ret;
 
 	if ((offset & ~PAGE_MASK) != (iova & ~PAGE_MASK))
-		return -EINVAL;
+		return -EINVAL;/*未按页对齐*/
 
 	ret = uverbs_copy_from(&fd, attrs,
 			       UVERBS_ATTR_REG_DMABUF_MR_FD);

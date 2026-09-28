@@ -420,10 +420,11 @@ static struct scatterlist *get_next_sg(struct sg_append_table *table,
 	return new_sg;
 }
 
-static bool pages_are_mergeable(struct page *a, struct page *b)
+/*检查这两个页是否可合并*/
+static bool pages_are_mergeable(struct page *a/*后一个*/, struct page *b/*前一个*/)
 {
 	if (page_to_pfn(a) != page_to_pfn(b) + 1)
-		return false;
+		return false;/*a,b两个页帧号不连续*/
 	if (!zone_device_pages_have_same_pgmap(a, b))
 		return false;
 	return true;
@@ -459,8 +460,8 @@ static bool pages_are_mergeable(struct page *a, struct page *b)
  *   In the fist call, sgt_append must by initialized.
  */
 int sg_alloc_append_table_from_pages(struct sg_append_table *sgt_append,
-		struct page **pages, unsigned int n_pages, unsigned int offset,
-		unsigned long size, unsigned int max_segment,
+		struct page **pages, unsigned int n_pages/*pages数组大小*/, unsigned int offset/*首页内偏移*/,
+		unsigned long size/*本次追加的有效字节数*/, unsigned int max_segment/*单个 sg 段字节数上限*/,
 		unsigned int left_pages, gfp_t gfp_mask)
 {
 	unsigned int chunks, cur_page, seg_len, i, prv_len = 0;
@@ -472,9 +473,9 @@ int sg_alloc_append_table_from_pages(struct sg_append_table *sgt_append,
 	 * The algorithm below requires max_segment to be aligned to PAGE_SIZE
 	 * otherwise it can overshoot.
 	 */
-	max_segment = ALIGN_DOWN(max_segment, PAGE_SIZE);
+	max_segment = ALIGN_DOWN(max_segment, PAGE_SIZE);/*按页大小向下对齐*/
 	if (WARN_ON(max_segment < PAGE_SIZE))
-		return -EINVAL;
+		return -EINVAL;/*不能小于一页*/
 
 	if (IS_ENABLED(CONFIG_ARCH_NO_SG_CHAIN) && sgt_append->prv)
 		return -EOPNOTSUPP;
@@ -486,30 +487,37 @@ int sg_alloc_append_table_from_pages(struct sg_append_table *sgt_append,
 			return -EINVAL;
 
 		/* Merge contiguous pages into the last SG */
-		prv_len = sgt_append->prv->length;
-		next_pfn = (sg_phys(sgt_append->prv) + prv_len) / PAGE_SIZE;
+		prv_len = sgt_append->prv->length;/*前一段的长度*/
+		next_pfn = (sg_phys(sgt_append->prv) + prv_len) / PAGE_SIZE;/*下一个页帧*/
 		if (page_to_pfn(pages[0]) == next_pfn) {
+			/*结尾页帧恰好是当前pages[0]对应的页帧*/
 			last_pg = pfn_to_page(next_pfn - 1);
 			while (n_pages && pages_are_mergeable(pages[0], last_pg)) {
+				/*last_pg与pages[0]可合并*/
 				if (sgt_append->prv->length + PAGE_SIZE > max_segment)
-					break;
+					break;/*合并后的大小超过了segment,不合并*/
+
+				/*合并一页，更新数据*/
 				sgt_append->prv->length += PAGE_SIZE;
 				last_pg = pages[0];
 				pages++;
 				n_pages--;
 			}
 			if (!n_pages)
+				/*都合并完了*/
 				goto out;
 		}
 	}
 
+	/*与上一个无法继续合并，或者首个块时进入*/
 	/* compute number of contiguous chunks */
 	chunks = 1;
 	seg_len = 0;
-	for (i = 1; i < n_pages; i++) {
+	for (i = 1/*从1开始，检查与前一个是否可合并*/; i < n_pages; i++) {
 		seg_len += PAGE_SIZE;
 		if (seg_len >= max_segment ||
 		    !pages_are_mergeable(pages[i], pages[i - 1])) {
+			/*达到max_segment或者与前一个无法合并,chunks数增加*/
 			chunks++;
 			seg_len = 0;
 		}
@@ -526,7 +534,7 @@ int sg_alloc_append_table_from_pages(struct sg_append_table *sgt_append,
 			seg_len += PAGE_SIZE;
 			if (seg_len >= max_segment ||
 			    !pages_are_mergeable(pages[j], pages[j - 1]))
-				break;
+				break;/*找到第i个chunks的分隔点*/
 		}
 
 		/* Pass how many chunks might be left */

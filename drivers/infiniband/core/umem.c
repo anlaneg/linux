@@ -84,7 +84,7 @@ static void __ib_umem_release(struct ib_device *dev, struct ib_umem *umem, int d
  * or smaller will never see a 0 result.
  */
 unsigned long ib_umem_find_best_pgsz(struct ib_umem *umem,
-				     unsigned long pgsz_bitmap,
+				     unsigned long pgsz_bitmap/**支持哪些页大小 */,
 				     unsigned long virt)
 {
 	unsigned long curr_len = 0;
@@ -127,7 +127,8 @@ unsigned long ib_umem_find_best_pgsz(struct ib_umem *umem,
 			curr_len = 0;
 
 			/* Reduce max page size if VA/PA bits differ */
-			mask |= (curr_base + pgoff) ^ va;
+			/*一个大的页尺寸同时满va与pa,则在此页尺寸下的va^pa部分应该是0 */
+			mask |= (curr_base/*物理起点*/ + pgoff) ^ va;
 
 			/* The alignment of any VA matching a discontinuity point
 			* in the physical memory sets the maximum possible page
@@ -138,8 +139,8 @@ unsigned long ib_umem_find_best_pgsz(struct ib_umem *umem,
 				mask |= va;
 		}
 
-		curr_len += sg_dma_len(sg);
-		va += sg_dma_len(sg) - pgoff;
+		curr_len += sg_dma_len(sg);/**pa增加准备检查end */
+		va += sg_dma_len(sg) - pgoff;/*VA前进*/
 
 		pgoff = 0;
 	}
@@ -149,7 +150,10 @@ unsigned long ib_umem_find_best_pgsz(struct ib_umem *umem,
 	 * size that can pass the VA through to the physical.
 	 */
 	if (mask)
+		/*mask的高位是支持的最大页尺寸，低位是上面pa分段能适用的最大页大小*/
+		/*pgsz_bitmap中记录的是设备支持的页尺寸通过与GENMASK，可得到可用的pasz_bitmap*/
 		pgsz_bitmap &= GENMASK(count_trailing_zeros(mask), 0);
+	/*然后我们找pgsz_bitmap中最高位的那个'1'即时最合适的页大小。*/
 	return pgsz_bitmap ? rounddown_pow_of_two(pgsz_bitmap) : 0;
 }
 EXPORT_SYMBOL(ib_umem_find_best_pgsz);
@@ -162,7 +166,7 @@ EXPORT_SYMBOL(ib_umem_find_best_pgsz);
  * @size: length of region to pin
  * @access: IB_ACCESS_xxx flags for memory being pinned
  */
-struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户态内存起始地址*/,
+struct ib_umem *ib_umem_get(struct ib_device *device/*ib设备*/, unsigned long addr/*用户态内存起始地址*/,
 			    size_t size/*内存区域长度*/, int access)
 {
 	struct ib_umem *umem;
@@ -192,6 +196,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户
 	    /*rxe不支持on demand*/
 		return ERR_PTR(-EOPNOTSUPP);
 
+	/**申请umem结构体*/
 	umem = kzalloc_obj(*umem);
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
@@ -202,7 +207,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户
 	 * Drivers should call ib_umem_find_best_pgsz() to set the iova
 	 * correctly.
 	 */
-	umem->iova = addr;
+	umem->iova = addr;/*iova地址先与address保持一致*/
 	umem->writable   = ib_access_writable(access);
 	umem->owning_mm = mm = current->mm;/*对应哪个进程的mm*/
 	mmgrab(mm);
@@ -214,7 +219,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户
 		goto umem_kfree;
 	}
 
-	/*取要注册的内存页数*/
+	/*取此umem要注册的内存页数*/
 	npages = ib_umem_num_pages(umem);
 	if (npages == 0 || npages > UINT_MAX) {
 	    /*内存过小/过大报错*/
@@ -245,7 +250,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户
 		pinned = pin_user_pages_fast(cur_base/*首页地址*/,
 					  min_t(unsigned long, npages,
 						PAGE_SIZE /
-						sizeof(struct page *)),
+						sizeof(struct page *)/*最多pin 512页*/),
 					  gup_flags, page_list);
 		if (pinned < 0) {
 			/*pin的过程中出错*/
@@ -256,6 +261,8 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr/*用户
 		/*跳过已经pin的内存页*/
 		cur_base += pinned * PAGE_SIZE;
 		npages -= pinned;/*待pin的内存页数减少*/
+		/*核心作用是"把物理上连续的相邻页合并成一个sg段"。
+		 * 参数 ib_dma_max_seg_size(device) 限制单个 sg 段最大字节数（受 DMA 引擎限制）。*/
 		ret = sg_alloc_append_table_from_pages(
 			&umem->sgt_append, page_list, pinned/*完成pin的数目，即page_list数组的大小*/, 0,
 			pinned << PAGE_SHIFT, ib_dma_max_seg_size(device),

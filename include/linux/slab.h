@@ -982,9 +982,9 @@ void *kmalloc_nolock_noprof(size_t size, gfp_t gfp_flags, int node);
  * Returns: Newly allocated pointer to (first) @TYPE of @COUNT-many
  * allocated @TYPE objects, or NULL on failure.
  */
-#define __alloc_objs(KMALLOC, GFP, TYPE, COUNT)				\
+#define __alloc_objs(KMALLOC/*申请函数*/, GFP, TYPE/*类型*/, COUNT/*数目*/)				\
 ({									\
-	const size_t __obj_size = size_mul(sizeof(TYPE), COUNT);	\
+	const size_t __obj_size = size_mul(sizeof(TYPE), COUNT);/*对象总大小*/	\
 	(TYPE *)KMALLOC(__obj_size, GFP);				\
 })
 

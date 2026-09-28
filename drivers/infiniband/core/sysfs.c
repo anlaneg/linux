@@ -172,10 +172,12 @@ static ssize_t hw_stat_device_store(struct device *dev,
 static ssize_t hw_stat_port_show(struct ib_device *ibdev, u32 port_num,
 				 struct ib_port_attribute *attr, char *buf)
 {
+	/*先转为stat_attr*/
 	struct hw_stats_port_attribute *stat_attr =
 		container_of(attr, struct hw_stats_port_attribute, attr);
 	struct ib_port *port = ibdev->port_data[port_num].sysfs;
 
+	/*再调其显示函数*/
 	return stat_attr->show(ibdev, port->hw_stats_data->stats,
 			       stat_attr - port->hw_stats_data->attrs,
 			       port->port_num, buf);
@@ -761,18 +763,19 @@ static const struct attribute_group *get_counter_table(struct ib_device *dev,
 	return &pma_group;
 }
 
+/*取硬件统计*/
 static int update_hw_stats(struct ib_device *dev, struct rdma_hw_stats *stats,
 			   u32 port_num, int index)
 {
 	int ret;
 
 	if (time_is_after_eq_jiffies(stats->timestamp + stats->lifespan))
-		return 0;
+		return 0;/*取间隔不大，用上次结果*/
 	ret = dev->ops.get_hw_stats(dev, stats, port_num, index);
 	if (ret < 0)
 		return ret;
 	if (ret == stats->num_counters)
-		stats->timestamp = jiffies;
+		stats->timestamp = jiffies;/*更新当前取时间*/
 
 	return 0;
 }
@@ -780,8 +783,10 @@ static int update_hw_stats(struct ib_device *dev, struct rdma_hw_stats *stats,
 static int print_hw_stat(struct ib_device *dev, int port_num,
 			 struct rdma_hw_stats *stats, int index, char *buf)
 {
+	/*取统计值*/
 	u64 v = rdma_counter_get_hwstat_value(dev, port_num, index);
 
+	/*显示*/
 	return sysfs_emit(buf, "%llu\n", stats->value[index] + v);
 }
 
@@ -995,7 +1000,7 @@ static int setup_hw_port_stats(struct ib_port *port,
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
-	ret = port->ibdev->ops.get_hw_stats(port->ibdev, data->stats,
+	ret = port->ibdev->ops.get_hw_stats(port->ibdev, data->stats/*出参，统计信息*/,
 					    port->port_num,
 					    data->stats->num_counters);
 	if (ret != data->stats->num_counters) {
@@ -1006,6 +1011,7 @@ static int setup_hw_port_stats(struct ib_port *port,
 
 	data->stats->timestamp = jiffies;
 
+	/*为每个统计值创建sysfs,并设置显示函数*/
 	for (i = 0; i < data->stats->num_counters; i++) {
 		if (data->stats->descs[i].flags & IB_STAT_FLAG_OPTIONAL) {
 			opstat_skipped = true;
@@ -1015,10 +1021,10 @@ static int setup_hw_port_stats(struct ib_port *port,
 		WARN_ON(opstat_skipped);
 		attr = &data->attrs[pos];
 		sysfs_attr_init(&attr->attr.attr);
-		attr->attr.attr.name = data->stats->descs[i].name;
+		attr->attr.attr.name = data->stats->descs[i].name;/*统计名称定为属性名*/
 		attr->attr.attr.mode = 0444;
 		attr->attr.show = hw_stat_port_show;
-		attr->show = show_hw_stats;
+		attr->show = show_hw_stats;/*显示硬件统计值*/
 		group->attrs[pos] = &attr->attr.attr;
 		pos++;
 	}
@@ -1029,7 +1035,7 @@ static int setup_hw_port_stats(struct ib_port *port,
 	attr->attr.attr.mode = 0644;
 	attr->attr.show = hw_stat_port_show;
 	attr->show = show_stats_lifespan;
-	attr->attr.store = hw_stat_port_store;
+	attr->attr.store = hw_stat_port_store;/*用于配置lifespan*/
 	attr->store = set_stats_lifespan;
 	group->attrs[pos] = &attr->attr.attr;
 

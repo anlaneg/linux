@@ -603,7 +603,7 @@ enum ib_stat_flag {
  * @priv: Driver private information; Core code should not use
  */
 struct rdma_stat_desc {
-	const char *name;
+	const char *name;/*统计名称*/
 	unsigned int flags;
 	const void *priv;
 };
@@ -2767,7 +2767,7 @@ struct ib_device_ops {
 	 */
 	/*获取统计结果并填充rdma_hw_stats结构*/
 	int (*get_hw_stats)(struct ib_device *device,
-			    struct rdma_hw_stats *stats, u32 port, int index);
+			    struct rdma_hw_stats *stats/*出参，取得的统计值*/, u32 port, int index);
 
 	/*
 	 * modify_hw_stat - Modify the counter configuration

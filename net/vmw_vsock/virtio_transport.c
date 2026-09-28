@@ -28,12 +28,12 @@ static DEFINE_MUTEX(the_virtio_vsock_mutex); /* protects the_virtio_vsock */
 static struct virtio_transport virtio_transport; /* forward declaration */
 
 struct virtio_vsock {
-	struct virtio_device *vdev;
+	struct virtio_device *vdev;/*virtio-vsock设备*/
 	struct virtqueue *vqs[VSOCK_VQ_MAX];
 
 	/* Virtqueue processing is deferred to a workqueue */
-	struct work_struct tx_work;
-	struct work_struct rx_work;
+	struct work_struct tx_work;/*发包work*/
+	struct work_struct rx_work;/*收包work*/
 	struct work_struct event_work;
 
 	/* The following fields are protected by tx_lock.  vqs[VSOCK_VQ_TX]
@@ -43,7 +43,7 @@ struct virtio_vsock {
 	bool tx_run;
 
 	struct work_struct send_pkt_work;
-	struct sk_buff_head send_pkt_queue;
+	struct sk_buff_head send_pkt_queue;/*发送队列（其它socket需要将报文挂在此socket上）*/
 
 	atomic_t queued_replies;
 
@@ -79,6 +79,7 @@ struct virtio_vsock {
 	__dma_from_device_group_end();
 };
 
+/*guest获取自身的local cid*/
 static u32 virtio_transport_get_local_cid(void)
 {
 	struct virtio_vsock *vsock;
@@ -91,7 +92,7 @@ static u32 virtio_transport_get_local_cid(void)
 		goto out_rcu;
 	}
 
-	ret = vsock->guest_cid;
+	ret = vsock->guest_cid;/*返回guest_cid*/
 out_rcu:
 	rcu_read_unlock();
 	return ret;
@@ -238,6 +239,8 @@ static int virtio_transport_send_skb_fast_path(struct virtio_vsock *vsock, struc
 	return ret;
 }
 
+/*将skb转交给系统的the_virtio_vsock的send_pkt_queue队列，如必要触发
+ * the_virtio_vsock的发送work*/
 static int
 virtio_transport_send_pkt(struct sk_buff *skb, struct net *net)
 {
@@ -256,6 +259,7 @@ virtio_transport_send_pkt(struct sk_buff *skb, struct net *net)
 	}
 
 	if (le64_to_cpu(hdr->dst_cid) == vsock->guest_cid) {
+		/*不容许通过此发送给自身*/
 		kfree_skb(skb);
 		len = -ENODEV;
 		goto out_rcu;
@@ -375,6 +379,7 @@ out:
 	mutex_unlock(&vsock->tx_lock);
 
 	if (added)
+		/*将发包work入队*/
 		queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
 }
 
@@ -435,6 +440,7 @@ static void virtio_vsock_update_guest_cid(struct virtio_vsock *vsock)
 	struct virtio_device *vdev = vsock->vdev;
 	__le64 guest_cid;
 
+	/*从vdev中通过回调获得guest_cid*/
 	vdev->config->get(vdev, offsetof(struct virtio_vsock_config, guest_cid),
 			  &guest_cid, sizeof(guest_cid));
 	vsock->guest_cid = le64_to_cpu(guest_cid);
@@ -558,6 +564,7 @@ bool virtio_transport_stream_allow(struct vsock_sock *vsk, u32 cid, u32 port)
 static bool virtio_transport_seqpacket_allow(struct vsock_sock *vsk,
 					     u32 remote_cid);
 
+/*guest到host的transport*/
 static struct virtio_transport virtio_transport = {
 	.transport = {
 		.module                   = THIS_MODULE,
@@ -609,6 +616,7 @@ static struct virtio_transport virtio_transport = {
 		.read_skb = virtio_transport_read_skb,
 	},
 
+	/*guest向外发送报文*/
 	.send_pkt = virtio_transport_send_pkt,
 	.can_msgzerocopy = virtio_transport_can_msgzerocopy,
 };
@@ -632,6 +640,7 @@ virtio_transport_seqpacket_allow(struct vsock_sock *vsk, u32 remote_cid)
 	return seqpacket_allow;
 }
 
+/*自virtio-ring收报文并分发给本机的vsock*/
 static void virtio_transport_rx_work(struct work_struct *work)
 {
 	struct virtio_vsock *vsock =
@@ -688,7 +697,7 @@ static void virtio_transport_rx_work(struct work_struct *work)
 			/* Force virtio-transport into global mode since it
 			 * does not yet support local-mode namespacing.
 			 */
-			virtio_transport_recv_pkt(&virtio_transport, skb, NULL);
+			virtio_transport_recv_pkt(&virtio_transport, skb/*自ring收到的报文*/, NULL);/*完成分发*/
 		}
 	} while (!virtqueue_enable_cb(vq));
 
@@ -715,6 +724,7 @@ static int virtio_vsock_vqs_init(struct virtio_vsock *vsock)
 
 	atomic_set(&vsock->queued_replies, 0);
 
+	/*设备创建vq*/
 	ret = virtio_find_vqs(vdev, VSOCK_VQ_MAX, vsock->vqs, vqs_info, NULL);
 	if (ret < 0)
 		return ret;
@@ -813,7 +823,7 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 	if (rcu_dereference_protected(the_virtio_vsock,
 				lockdep_is_held(&the_virtio_vsock_mutex))) {
 		ret = -EBUSY;
-		goto out;
+		goto out;/*已有此virtio-vsock设备了(只容许一个设备)*/
 	}
 
 	vsock = kzalloc_obj(*vsock);
@@ -829,10 +839,11 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 	mutex_init(&vsock->rx_lock);
 	mutex_init(&vsock->event_lock);
 	skb_queue_head_init(&vsock->send_pkt_queue);
-	INIT_WORK(&vsock->rx_work, virtio_transport_rx_work);
-	INIT_WORK(&vsock->tx_work, virtio_transport_tx_work);
+	INIT_WORK(&vsock->rx_work, virtio_transport_rx_work);/*自virtio-ring收报文并分发*/
+	INIT_WORK(&vsock->tx_work, virtio_transport_tx_work);/*向virtio-ring发报文*/
 	INIT_WORK(&vsock->event_work, virtio_transport_event_work);
-	/*指明guest2host发包处理函数*/
+	/*指明guest2host发包处理函数（这个函数用于将virtio_vsock的发送队列中的报文入队到virtio-ring中
+	 * 这些报文应来源于本机的其它vsock）*/
 	INIT_WORK(&vsock->send_pkt_work, virtio_transport_send_pkt_work);
 
 	if (virtio_has_feature(vdev, VIRTIO_VSOCK_F_SEQPACKET))
@@ -847,7 +858,7 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 	for (i = 0; i < ARRAY_SIZE(vsock->out_sgs); i++)
 		vsock->out_sgs[i] = &vsock->out_bufs[i];
 
-	rcu_assign_pointer(the_virtio_vsock, vsock);
+	rcu_assign_pointer(the_virtio_vsock, vsock);/*将此vsock做为the_virtio_vsock*/
 	virtio_vsock_vqs_start(vsock);
 
 	mutex_unlock(&the_virtio_vsock_mutex);
@@ -943,7 +954,7 @@ static struct virtio_driver virtio_vsock_driver = {
 	.feature_table = features,
 	.feature_table_size = ARRAY_SIZE(features),
 	.driver.name = KBUILD_MODNAME,
-	.id_table = id_table,/*需要匹配指定设备*/
+	.id_table = id_table,/*需要匹配vsock设备*/
 	.probe = virtio_vsock_probe,
 	.remove = virtio_vsock_remove,
 #ifdef CONFIG_PM_SLEEP
@@ -966,7 +977,9 @@ static int __init virtio_vsock_init(void)
 	if (ret)
 		goto out_wq;
 
-	/*注册virtio vsock driver*/
+	/*注册virtio vsock driver
+	 * （这个驱动用于实别virtio-vsock设备，并创建系统唯一的the_virtio_vsock，这个vsock具体
+	 * 负责自virtio-ring中读取信息并进行分发）*/
 	ret = register_virtio_driver(&virtio_vsock_driver);
 	if (ret)
 		goto out_vci;

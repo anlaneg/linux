@@ -654,15 +654,15 @@ static inline int dma_coerce_mask_and_coherent(struct device *dev, u64 mask)
 static inline unsigned int dma_get_max_seg_size(struct device *dev)
 {
 	if (dev->dma_parms && dev->dma_parms->max_segment_size)
-		return dev->dma_parms->max_segment_size;
-	return SZ_64K;
+		return dev->dma_parms->max_segment_size;/*如果指定了max sgement size，则返回*/
+	return SZ_64K;/*否则使用64K*/
 }
 
 static inline void dma_set_max_seg_size(struct device *dev, unsigned int size)
 {
 	if (WARN_ON_ONCE(!dev->dma_parms))
 		return;
-	dev->dma_parms->max_segment_size = size;
+	dev->dma_parms->max_segment_size = size;/*设置max sgement size*/
 }
 
 static inline unsigned long dma_get_seg_boundary(struct device *dev)

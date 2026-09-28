@@ -129,7 +129,7 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 	if (check_add_overflow(offset, (unsigned long)size, &end))
 		return ret;
 
-	dmabuf = dma_buf_get(fd);
+	dmabuf = dma_buf_get(fd);/*取得fd对应的dmabuf*/
 	if (IS_ERR(dmabuf))
 		return ERR_CAST(dmabuf);
 
@@ -150,6 +150,7 @@ ib_umem_dmabuf_get_with_dma_device(struct ib_device *device,
 	umem->is_dmabuf = 1;
 
 	if (!ib_umem_num_pages(umem))
+		/*页数为0*/
 		goto out_free_umem;
 
 	umem_dmabuf->attach = dma_buf_dynamic_attach(

@@ -45,7 +45,7 @@ static int vp_finalize_features(struct virtio_device *vdev)
 }
 
 /* virtio config->get() implementation */
-static void vp_get(struct virtio_device *vdev, unsigned int offset,
+static void vp_get(struct virtio_device *vdev, unsigned int offset/*偏移量*/,
 		   void *buf, unsigned int len)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);

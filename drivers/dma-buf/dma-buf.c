@@ -206,7 +206,7 @@ static const struct dentry_operations dma_buf_dentry_ops = {
 	.d_release = dma_buf_release,
 };
 
-static struct vfsmount *dma_buf_mnt;
+static struct vfsmount *dma_buf_mnt;/*dma buffer挂载点*/
 
 static int dma_buf_fs_init_context(struct fs_context *fc)
 {
@@ -219,6 +219,7 @@ static int dma_buf_fs_init_context(struct fs_context *fc)
 	return 0;
 }
 
+/*dma buffer文件系统*/
 static struct file_system_type dma_buf_fs_type = {
 	.name = "dmabuf",
 	.init_fs_context = dma_buf_fs_init_context,
@@ -624,16 +625,17 @@ static inline int is_dma_buf_file(struct file *file)
 	return file->f_op == &dma_buf_fops;
 }
 
+/*申请一个size大小的dma_buf文件*/
 static struct file *dma_buf_getfile(size_t size, int flags)
 {
 	static atomic64_t dmabuf_inode = ATOMIC64_INIT(0);
-	struct inode *inode = alloc_anon_inode(dma_buf_mnt->mnt_sb);
+	struct inode *inode = alloc_anon_inode(dma_buf_mnt->mnt_sb);/*申请inode*/
 	struct file *file;
 
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 
-	inode->i_size = size;
+	inode->i_size = size;/*指定大小*/
 	inode_set_bytes(inode, size);
 
 	/*
@@ -642,10 +644,10 @@ static struct file *dma_buf_getfile(size_t size, int flags)
 	 * Override ->i_ino with the unique and dmabuffs specific
 	 * value.
 	 */
-	inode->i_ino = atomic64_inc_return(&dmabuf_inode);
+	inode->i_ino = atomic64_inc_return(&dmabuf_inode);/*分配ino*/
 	flags &= O_ACCMODE | O_NONBLOCK;
 	file = alloc_file_pseudo(inode, dma_buf_mnt, "dmabuf",
-				 flags, &dma_buf_fops);
+				 flags, &dma_buf_fops/*dma buffer文件*/);/*创建pseudo文件*/
 	if (IS_ERR(file))
 		goto err_alloc_file;
 
@@ -717,14 +719,15 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		    || !exp_info->ops->map_dma_buf
 		    || !exp_info->ops->unmap_dma_buf
 		    || !exp_info->ops->release))
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);/*必须提供以上值*/
 
 	if (WARN_ON(!exp_info->ops->pin != !exp_info->ops->unpin))
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);/*要求配对*/
 
 	if (!try_module_get(exp_info->owner))
 		return ERR_PTR(-ENOENT);
 
+	/*分配文件*/
 	file = dma_buf_getfile(exp_info->size, exp_info->flags);
 	if (IS_ERR(file)) {
 		ret = PTR_ERR(file);
@@ -732,7 +735,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	}
 
 	if (!exp_info->resv)
-		alloc_size += sizeof(struct dma_resv);
+		alloc_size += sizeof(struct dma_resv);/*增加resv*/
 	else
 		/* prevent &dma_buf[1] == dma_buf->resv */
 		alloc_size += 1;
@@ -760,11 +763,11 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		dmabuf->resv = resv;
 	}
 
-	file->private_data = dmabuf;
+	file->private_data = dmabuf;/*文件指向此私有数据*/
 	file->f_path.dentry->d_fsdata = dmabuf;
 	dmabuf->file = file;
 
-	__dma_buf_list_add(dmabuf);
+	__dma_buf_list_add(dmabuf);/*串进链里*/
 
 	DMA_BUF_TRACE(trace_dma_buf_export, dmabuf);
 
@@ -812,7 +815,7 @@ struct dma_buf *dma_buf_get(int fd)
 	struct file *file;
 	struct dma_buf *dmabuf;
 
-	file = fget(fd);
+	file = fget(fd);/*找到file*/
 
 	if (!file)
 		return ERR_PTR(-EBADF);
@@ -1789,7 +1792,7 @@ static inline void dma_buf_uninit_debugfs(void)
 
 static int __init dma_buf_init(void)
 {
-	dma_buf_mnt = kern_mount(&dma_buf_fs_type);
+	dma_buf_mnt = kern_mount(&dma_buf_fs_type);/*挂载dma buffer文件系统*/
 	if (IS_ERR(dma_buf_mnt))
 		return PTR_ERR(dma_buf_mnt);
 
