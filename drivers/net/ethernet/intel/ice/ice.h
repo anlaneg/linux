@@ -655,7 +655,7 @@ struct ice_pf {
 	struct ice_esw_br_port *br_port;
 
 	struct xarray dyn_ports;
-	struct xarray sf_nums;
+	struct xarray sf_nums;/*用于管理sf编号*/
 
 #define ICE_INVALID_AGG_NODE_ID		0
 #define ICE_PF_AGG_NODE_ID_START	1

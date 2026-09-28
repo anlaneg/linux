@@ -904,14 +904,17 @@ int devlink_nl_port_new_doit(struct sk_buff *skb, struct genl_info *info)
 	int err;
 
 	if (!devlink->ops->port_new)
-		return -EOPNOTSUPP;
+		return -EOPNOTSUPP;/*必须提供port_new接口*/
 
 	if (!info->attrs[DEVLINK_ATTR_PORT_FLAVOUR] ||
 	    !info->attrs[DEVLINK_ATTR_PORT_PCI_PF_NUMBER]) {
+		/*必须提供以上参数*/
 		NL_SET_ERR_MSG(extack, "Port flavour or PCI PF are not specified");
 		return -EINVAL;
 	}
+	/*取端口类型*/
 	new_attrs.flavour = nla_get_u16(info->attrs[DEVLINK_ATTR_PORT_FLAVOUR]);
+	/*取pf编号*/
 	new_attrs.pfnum =
 		nla_get_u16(info->attrs[DEVLINK_ATTR_PORT_PCI_PF_NUMBER]);
 
@@ -919,7 +922,7 @@ int devlink_nl_port_new_doit(struct sk_buff *skb, struct genl_info *info)
 		/* Port index of the new port being created by driver. */
 		new_attrs.port_index =
 			nla_get_u32(info->attrs[DEVLINK_ATTR_PORT_INDEX]);
-		new_attrs.port_index_valid = true;
+		new_attrs.port_index_valid = true;/*用户指定了port_index*/
 	}
 	if (info->attrs[DEVLINK_ATTR_PORT_CONTROLLER_NUMBER]) {
 		new_attrs.controller =
@@ -928,12 +931,14 @@ int devlink_nl_port_new_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 	if (new_attrs.flavour == DEVLINK_PORT_FLAVOUR_PCI_SF &&
 	    info->attrs[DEVLINK_ATTR_PORT_PCI_SF_NUMBER]) {
+		/*创建sf时，指定sf编号*/
 		new_attrs.sfnum = nla_get_u32(info->attrs[DEVLINK_ATTR_PORT_PCI_SF_NUMBER]);
-		new_attrs.sfnum_valid = true;
+		new_attrs.sfnum_valid = true;/*用户指定了sf编号*/
 	}
 
+	/*驱动创建新port*/
 	err = devlink->ops->port_new(devlink, &new_attrs,
-				     extack, &devlink_port);
+				     extack, &devlink_port/*出参，驱动响应*/);
 	if (err)
 		return err;
 
@@ -946,7 +951,7 @@ int devlink_nl_port_new_doit(struct sk_buff *skb, struct genl_info *info)
 				   info->snd_portid, info->snd_seq, 0, NULL);
 	if (WARN_ON_ONCE(err))
 		goto err_out_msg_free;
-	err = genlmsg_reply(msg, info);
+	err = genlmsg_reply(msg, info);/*响应netlink消息*/
 	if (err)
 		goto err_out_port_del;
 	return 0;

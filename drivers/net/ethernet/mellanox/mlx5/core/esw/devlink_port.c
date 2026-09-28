@@ -174,8 +174,10 @@ int mlx5_esw_offloads_devlink_port_register(struct mlx5_eswitch *esw, struct mlx
 		return 0;
 
 	if (mlx5_esw_is_sf_vport(esw, vport_num))
+		/*sf port处理方式*/
 		ops = &mlx5_esw_dl_sf_port_ops;
 	else if (mlx5_eswitch_is_pf_vf_vport(esw, vport_num))
+		/*vf pf处理方式*/
 		ops = &mlx5_esw_pf_vf_dl_port_ops;
 	else
 		ops = NULL;

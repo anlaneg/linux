@@ -166,10 +166,10 @@ struct devlink_port_new_attrs {
 	unsigned int port_index;
 	u32 controller;
 	u32 sfnum;
-	u16 pfnum;
-	u8 port_index_valid:1,
+	u16 pfnum;/*pf编号*/
+	u8 port_index_valid:1,/*port_index是否被指定*/
 	   controller_valid:1,
-	   sfnum_valid:1;
+	   sfnum_valid:1;/*sfnum是否被指定*/
 };
 
 /**

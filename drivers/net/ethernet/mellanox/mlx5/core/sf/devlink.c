@@ -269,11 +269,13 @@ mlx5_sf_new_check_attr(struct mlx5_core_dev *dev, const struct devlink_port_new_
 		return -EOPNOTSUPP;
 	}
 	if (new_attr->port_index_valid) {
+		/*不支持指定port_index*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Driver does not support user defined port index assignment");
 		return -EOPNOTSUPP;
 	}
 	if (!new_attr->sfnum_valid) {
+		/*必须指定sf编号*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "User must provide unique sfnum. Driver does not support auto assignment");
 		return -EOPNOTSUPP;
@@ -297,10 +299,11 @@ static bool mlx5_sf_table_supported(const struct mlx5_core_dev *dev)
 	       mlx5_sf_hw_table_supported(dev);
 }
 
+/*此接口负责创建sf port*/
 int mlx5_devlink_sf_port_new(struct devlink *devlink,
 			     const struct devlink_port_new_attrs *new_attr,
 			     struct netlink_ext_ack *extack,
-			     struct devlink_port **dl_port)
+			     struct devlink_port **dl_port/*出参*/)
 {
 	/*由devlink找mlx5_core_dev*/
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
@@ -309,7 +312,7 @@ int mlx5_devlink_sf_port_new(struct devlink *devlink,
 
 	err = mlx5_sf_new_check_attr(dev, new_attr, extack);
 	if (err)
-		return err;
+		return err;/*参数校验失败*/
 
 	if (!mlx5_sf_table_supported(dev)) {
 		/*仅switchdev模式下支持sf port*/
@@ -318,6 +321,7 @@ int mlx5_devlink_sf_port_new(struct devlink *devlink,
 	}
 
 	if (!is_mdev_switchdev_mode(dev)) {
+		/*dev必须被切换到switchdev模式*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "SF ports are only supported in eswitch switchdev mode.");
 		return -EOPNOTSUPP;

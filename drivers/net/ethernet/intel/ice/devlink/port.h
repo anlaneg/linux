@@ -22,7 +22,7 @@
  * An instance of a dynamically added devlink port. Each port flavour
  */
 struct ice_dynamic_port {
-	u8 hw_addr[ETH_ALEN];
+	u8 hw_addr[ETH_ALEN];/*以太地址*/
 	u8 active: 1;
 	u8 attached: 1;
 	struct devlink_port devlink_port;

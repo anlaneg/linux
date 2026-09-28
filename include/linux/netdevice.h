@@ -2180,7 +2180,7 @@ struct net_device {
 		unsigned long		lltx:1;
 		unsigned long		netmem_tx:1;
 	);
-	const struct net_device_ops *netdev_ops;
+	const struct net_device_ops *netdev_ops;/*设备操作ops*/
 	//针对以太头的操作（例如增加以太头，解析以太头等）
 	//如果此ops为NULL，则这类设备无arp，直接发送
 	//以太网络设备常用eth_header_ops

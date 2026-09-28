@@ -626,6 +626,7 @@ struct ice_vsi *ice_vsi_alloc(struct ice_pf *pf)
 	 * is available to be populated
 	 */
 	if (pf->next_vsi == ICE_NO_VSI) {
+		/*没有vsi了*/
 		dev_dbg(dev, "out of VSI slots!\n");
 		goto unlock_pf;
 	}
@@ -634,7 +635,7 @@ struct ice_vsi *ice_vsi_alloc(struct ice_pf *pf)
 	if (!vsi)
 		goto unlock_pf;
 
-	vsi->back = pf;
+	vsi->back = pf;/*后端是pf*/
 	set_bit(ICE_VSI_DOWN, vsi->state);
 
 	/* fill slot and make note of the index */

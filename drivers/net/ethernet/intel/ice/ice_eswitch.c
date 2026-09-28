@@ -225,10 +225,10 @@ ice_eswitch_port_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	skb_dst_drop(skb);
 	dst_hold((struct dst_entry *)repr->dst);
 	skb_dst_set(skb, (struct dst_entry *)repr->dst);
-	skb->dev = repr->dst->u.port_info.lower_dev;
+	skb->dev = repr->dst->u.port_info.lower_dev;/*变换报文所属设备*/
 
-	ret = dev_queue_xmit(skb);
-	ice_repr_inc_tx_stats(repr, len, ret);
+	ret = dev_queue_xmit(skb);/*重走发包处理*/
+	ice_repr_inc_tx_stats(repr, len, ret);/*增加计数*/
 
 	return ret;
 }
@@ -467,7 +467,7 @@ ice_eswitch_attach(struct ice_pf *pf, struct ice_repr *repr, unsigned long *id)
 
 	ice_eswitch_stop_reprs(pf);
 
-	err = repr->ops.add(repr);
+	err = repr->ops.add(repr);/*添加此接口*/
 	if (err)
 		goto err_create_repr;
 

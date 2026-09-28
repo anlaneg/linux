@@ -279,7 +279,7 @@ static const struct net_device_ops ice_repr_sf_netdev_ops = {
 	.ndo_open = ice_repr_sf_open,
 	.ndo_stop = ice_repr_sf_stop,
 	.ndo_start_xmit = ice_eswitch_port_start_xmit,
-	.ndo_setup_tc = ice_repr_setup_tc,
+	.ndo_setup_tc = ice_repr_setup_tc,/*创建规则*/
 	.ndo_has_offload_stats = ice_repr_ndo_has_offload_stats,
 	.ndo_get_offload_stats = ice_repr_ndo_get_offload_stats,
 };
@@ -303,7 +303,7 @@ static int
 ice_repr_reg_netdev(struct net_device *netdev, const struct net_device_ops *ops)
 {
 	eth_hw_addr_random(netdev);
-	netdev->netdev_ops = ops;
+	netdev->netdev_ops = ops;/*指定操作集*/
 	ice_set_ethtool_repr_ops(netdev);
 
 	netdev->hw_features |= NETIF_F_HW_TC;
@@ -374,12 +374,14 @@ static struct ice_repr *ice_repr_create(struct ice_vsi *src_vsi)
 	if (!repr)
 		return ERR_PTR(-ENOMEM);
 
+	/*创建netdev设备*/
 	repr->netdev = alloc_etherdev(sizeof(struct ice_netdev_priv));
 	if (!repr->netdev) {
 		err =  -ENOMEM;
 		goto err_alloc;
 	}
 
+	/*分配统计信息*/
 	repr->stats = netdev_alloc_pcpu_stats(struct ice_repr_pcpu_stats);
 	if (!repr->stats) {
 		err = -ENOMEM;
@@ -508,6 +510,7 @@ err_netdev:
  */
 struct ice_repr *ice_repr_create_sf(struct ice_dynamic_port *sf)
 {
+	/*创建representor口*/
 	struct ice_repr *repr = ice_repr_create(sf->vsi);
 
 	if (IS_ERR(repr))

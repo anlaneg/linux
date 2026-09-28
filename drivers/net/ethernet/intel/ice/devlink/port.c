@@ -625,21 +625,25 @@ ice_devlink_port_new_check_attr(struct ice_pf *pf,
 				struct netlink_ext_ack *extack)
 {
 	if (new_attr->flavour != DEVLINK_PORT_FLAVOUR_PCI_SF) {
+		/*只支持sf*/
 		NL_SET_ERR_MSG_MOD(extack, "Flavour other than pcisf is not supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (new_attr->controller_valid) {
+		/*不支持指定controller*/
 		NL_SET_ERR_MSG_MOD(extack, "Setting controller is not supported");
 		return -EOPNOTSUPP;
 	}
 
 	if (new_attr->port_index_valid) {
+		/*不支持指定port_index*/
 		NL_SET_ERR_MSG_MOD(extack, "Driver does not support user defined port index assignment");
 		return -EOPNOTSUPP;
 	}
 
 	if (new_attr->pfnum != pf->hw.pf_id) {
+		/*pf必须与当前硬件一致*/
 		NL_SET_ERR_MSG_MOD(extack, "Incorrect pfnum supplied");
 		return -EINVAL;
 	}
@@ -838,12 +842,13 @@ ice_reserve_sf_num(struct ice_pf *pf,
 	/* Otherwise, check and use the number provided */
 	err = xa_insert(&pf->sf_nums, new_attr->sfnum, NULL, GFP_KERNEL);
 	if (err) {
+		/*这个sfnum已存在，报错*/
 		if (err == -EBUSY)
 			NL_SET_ERR_MSG_MOD(extack, "Subfunction with given sfnum already exists");
 		return err;
 	}
 
-	*sfnum = new_attr->sfnum;
+	*sfnum = new_attr->sfnum;/*指明此编号占用*/
 
 	return 0;
 }
@@ -916,10 +921,12 @@ ice_alloc_dynamic_port(struct ice_pf *pf,
 	u32 sfnum;
 	int err;
 
+	/*先占用编号*/
 	err = ice_reserve_sf_num(pf, new_attr, extack, &sfnum);
 	if (err)
 		return err;
 
+	/*申请动态port*/
 	dyn_port = kzalloc_obj(*dyn_port);
 	if (!dyn_port) {
 		err = -ENOMEM;
@@ -936,8 +943,9 @@ ice_alloc_dynamic_port(struct ice_pf *pf,
 	dyn_port->vsi = vsi;
 	dyn_port->pf = pf;
 	dyn_port->sfnum = sfnum;
-	eth_random_addr(dyn_port->hw_addr);
+	eth_random_addr(dyn_port->hw_addr);/*生成随机地址*/
 
+	/*为此vsi关联动态port*/
 	err = xa_insert(&pf->dyn_ports, vsi->idx, dyn_port, GFP_KERNEL);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack, "Port index reservation failed");
@@ -992,6 +1000,7 @@ ice_devlink_port_new(struct devlink *devlink,
 		return err;
 
 	if (!ice_is_eswitch_mode_switchdev(pf)) {
+		/*必须支持switchdev模式*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "SF ports are only supported in eswitch switchdev mode");
 		return -EOPNOTSUPP;
