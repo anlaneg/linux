@@ -733,6 +733,7 @@ static inline void feth_init(struct rxe_pkt_info *pkt, u8 type, u8 level)
  * Atomic Extended Transport Header
  ******************************************************************************/
 struct rxe_atmeth {
+	/*原子操作扩展头*/
 	__be64			va;
 	__be32			rkey;
 	__be64			swap_add;
@@ -749,6 +750,7 @@ static inline u64 __atmeth_va(void *arg)
 
 static inline void __atmeth_set_va(void *arg, u64 va)
 {
+	/*设置原子操作对应的va地址*/
 	struct rxe_atmeth *atmeth = arg;
 
 	atmeth->va = cpu_to_be64(va);

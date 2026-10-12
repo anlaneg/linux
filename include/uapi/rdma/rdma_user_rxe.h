@@ -96,10 +96,10 @@ struct rxe_send_wr {
 			__u32	reserved;
 		} rdma;
 		struct {
-			__aligned_u64 remote_addr;
-			__aligned_u64 compare_add;
-			__aligned_u64 swap;
-			__u32	rkey;
+			__aligned_u64 remote_addr;/*va地址*/
+			__aligned_u64 compare_add;/*faa时，要增加的值；cas时，要比较的值*/
+			__aligned_u64 swap;/*原子操作cas对应的交换值*/
+			__u32	rkey;/*原子操作对应的rkey*/
 			__u32	reserved;
 		} atomic;
 		struct {

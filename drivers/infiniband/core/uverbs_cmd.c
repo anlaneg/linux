@@ -2185,6 +2185,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 			next = &rdma->wr;
 		} else if (user_wr->opcode == IB_WR_ATOMIC_CMP_AND_SWP ||
 			   user_wr->opcode == IB_WR_ATOMIC_FETCH_AND_ADD) {
+			/*指明原子操作,转换为ib_atomic_wr结构*/
 			struct ib_atomic_wr *atomic;
 
 			next_size = sizeof(*atomic);
@@ -2196,7 +2197,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 
 			atomic->remote_addr = user_wr->wr.atomic.remote_addr;
 			atomic->compare_add = user_wr->wr.atomic.compare_add;
-			atomic->swap = user_wr->wr.atomic.swap;
+			atomic->swap = user_wr->wr.atomic.swap;/*设置cas对应的s*/
 			atomic->rkey = user_wr->wr.atomic.rkey;
 
 			next = &atomic->wr;

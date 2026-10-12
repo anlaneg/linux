@@ -29,7 +29,7 @@ struct ib_umem {
 	unsigned long		address;
 	/*标记内存是否可写*/
 	u32 writable : 1;
-	u32 is_odp : 1;
+	u32 is_odp : 1;/*不 pin；网卡页表为空；仅登记虚拟地址范围*/
 	u32 is_dmabuf : 1;
 	struct sg_append_table sgt_append;/*由(address,address+len)映射得到的pages*/
 };

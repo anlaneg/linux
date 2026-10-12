@@ -831,8 +831,8 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 			wr->wr.rdma.remote_addr = rdma_wr(ibwr)->remote_addr;
 			wr->wr.rdma.rkey	= rdma_wr(ibwr)->rkey;
 			break;
-		case IB_WR_ATOMIC_CMP_AND_SWP:
-		case IB_WR_ATOMIC_FETCH_AND_ADD:
+		case IB_WR_ATOMIC_CMP_AND_SWP:/*cas操作*/
+		case IB_WR_ATOMIC_FETCH_AND_ADD:/*faa操作*/
 			wr->wr.atomic.remote_addr =
 				atomic_wr(ibwr)->remote_addr;/*原子操作地址*/
 			wr->wr.atomic.compare_add =

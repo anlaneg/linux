@@ -1476,6 +1476,7 @@ static inline const struct ib_rdma_wr *rdma_wr(const struct ib_send_wr *wr)
 	return container_of(wr, struct ib_rdma_wr, wr);
 }
 
+/*原子操作对应的wr*/
 struct ib_atomic_wr {
 	struct ib_send_wr	wr;
 	u64			remote_addr;

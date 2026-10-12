@@ -454,10 +454,11 @@ static void qp_resp_from_reth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 		qp->resp.rkey = reth_rkey(pkt);/*取报文指明的rkey*/
 }
 
+/*原子操作提取va,rkey,默认认为是8个字节*/
 static void qp_resp_from_atmeth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 {
 	qp->resp.va = atmeth_va(pkt);
-	qp->resp.offset = 0;
+	qp->resp.offset = 0;/*偏移量为0*/
 	qp->resp.rkey = atmeth_rkey(pkt);
 	qp->resp.resid = sizeof(u64);/*dma长度为8个字节*/
 }
@@ -761,7 +762,7 @@ static enum resp_states atomic_reply(struct rxe_qp *qp,
 	}
 
 	if (!res->replay) {
-		u64 iova = qp->resp.va + qp->resp.offset;
+		u64 iova = qp->resp.va + qp->resp.offset;/*原子操作位置*/
 
 		if (is_odp_mr(mr))
 			err = rxe_odp_atomic_op(mr, iova, pkt->opcode,
@@ -769,8 +770,8 @@ static enum resp_states atomic_reply(struct rxe_qp *qp,
 						atmeth_swap_add(pkt),
 						&res->atomic.orig_val);
 		else
-			err = rxe_mr_do_atomic_op(mr, iova, pkt->opcode,
-						  atmeth_comp(pkt),
+			err = rxe_mr_do_atomic_op(mr, iova, pkt->opcode/*原子操作操作码*/,
+						  atmeth_comp(pkt)/*FAA情况下指增量;CAS情况下指C*/,
 						  atmeth_swap_add(pkt),
 						  &res->atomic.orig_val);
 		if (err)

@@ -600,7 +600,7 @@ int rxe_flush_pmem_iova(struct rxe_mr *mr, u64 start, unsigned int length)
 }
 
 /* Guarantee atomicity of atomic operations at the machine level. */
-DEFINE_SPINLOCK(atomic_ops_lock);
+DEFINE_SPINLOCK(atomic_ops_lock);/*全局锁，用于保证atomic操作*/
 
 enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 				     u64 compare, u64 swap_add, u64 *orig_val)
@@ -645,8 +645,8 @@ enum resp_states rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 
 	va = kmap_local_page(page);/*取此页对应的kernel va地址*/
 
-	spin_lock_bh(&atomic_ops_lock);
-	value = *orig_val = va[page_offset >> 3];
+	spin_lock_bh(&atomic_ops_lock);/*原子操作加锁*/
+	value = *orig_val = va[page_offset >> 3];/*取此va地址的原值*/
 
 	if (opcode == IB_OPCODE_RC_COMPARE_SWAP) {
 		if (value == compare)

@@ -846,7 +846,7 @@ struct ib_uverbs_send_wr {
 			__aligned_u64 swap;
 			__u32 rkey;
 			__u32 reserved;
-		} atomic;
+		} atomic;/*原子操作*/
 		struct {
 			__u32 ah;
 			__u32 remote_qpn;

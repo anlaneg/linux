@@ -349,7 +349,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 					  RXE_AETH_BYTES,
 		}
 	},
-	[IB_OPCODE_RC_COMPARE_SWAP]			= {
+	[IB_OPCODE_RC_COMPARE_SWAP/*CAS操作*/]			= {
 		.name	= "IB_OPCODE_RC_COMPARE_SWAP",
 		.mask	= RXE_ATMETH_MASK | RXE_REQ_MASK | RXE_ATOMIC_MASK |
 			  RXE_START_MASK | RXE_END_MASK,
@@ -361,7 +361,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 					  RXE_ATMETH_BYTES,
 		}
 	},
-	[IB_OPCODE_RC_FETCH_ADD]			= {
+	[IB_OPCODE_RC_FETCH_ADD/*FAA操作*/]			= {
 		.name	= "IB_OPCODE_RC_FETCH_ADD",
 		.mask	= RXE_ATMETH_MASK | RXE_REQ_MASK | RXE_ATOMIC_MASK |
 			  RXE_START_MASK | RXE_END_MASK,
