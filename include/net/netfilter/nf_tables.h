@@ -1989,6 +1989,7 @@ extern unsigned int nf_tables_net_id;
 
 static inline struct nftables_pernet *nft_pernet(const struct net *net)
 {
+	/*nft pernet对象*/
 	return net_generic(net, nf_tables_net_id);
 }
 

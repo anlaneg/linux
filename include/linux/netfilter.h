@@ -117,7 +117,7 @@ struct nf_hook_ops {
 };
 
 struct nf_hook_entry {
-	nf_hookfn			*hook;
+	nf_hookfn			*hook;/*hook函数*/
 	void				*priv;//hook点私有数据
 };
 
@@ -127,9 +127,9 @@ struct nf_hook_entries_rcu_head {
 };
 
 struct nf_hook_entries {
-	u16				num_hook_entries;
+	u16				num_hook_entries;/*hooks数组大小*/
 	/* padding */
-	struct nf_hook_entry		hooks[];
+	struct nf_hook_entry		hooks[];/*记录各hook*/
 
 	/* trailer: pointers to original orig_ops of each hook,
 	 * followed by rcu_head and scratch space used for freeing
@@ -147,6 +147,7 @@ struct nf_hook_entries {
 };
 
 #ifdef CONFIG_NETFILTER
+/*在nf_hook_entry数组后面存放nf_hook_ops数组，取此hook_entries对应的nf_hook_ops数组头*/
 static inline struct nf_hook_ops **nf_hook_entries_get_hook_ops(const struct nf_hook_entries *e)
 {
 	unsigned int n = e->num_hook_entries;
@@ -330,7 +331,7 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk, struct 
 	//先触发hook
 	int ret = nf_hook(pf, hook, net, sk, skb, in, out, okfn);
 	if (ret == 1)
-		//调用okfn
+		//运行结束再调用okfn
 		ret = okfn(net, sk, skb);
 	return ret;
 }

@@ -19,9 +19,9 @@ struct netns_nf {
 	struct ctl_table_header *nf_lwtnl_dir_header;
 #endif
 #endif
-	//ipv4的hooks
+	//存储各netns中ipv4的各netfilter hook点
 	struct nf_hook_entries __rcu *hooks_ipv4[NF_INET_NUMHOOKS];
-	//ipv6的hooks
+	//存储各netns中ipv6的各netfilter hooks点
 	struct nf_hook_entries __rcu *hooks_ipv6[NF_INET_NUMHOOKS];
 #ifdef CONFIG_NETFILTER_FAMILY_ARP
 	//arp对应的hooks

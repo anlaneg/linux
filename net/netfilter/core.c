@@ -47,6 +47,8 @@ static DEFINE_MUTEX(nf_hook_mutex);
 static struct nf_hook_entries *allocate_hook_entries_size(u16 num)
 {
 	struct nf_hook_entries *e;
+	/*这里大小除了num个nf_hook_entry，还增加了num个nf_hook_ops与rcu_head
+	 * 原因是：看nf_hook_entries_get_hook_ops*/
 	size_t alloc = sizeof(*e) +
 		       sizeof(struct nf_hook_entry) * num +
 		       sizeof(struct nf_hook_ops *) * num +
@@ -57,7 +59,7 @@ static struct nf_hook_entries *allocate_hook_entries_size(u16 num)
 
 	e = kvzalloc(alloc, GFP_KERNEL_ACCOUNT);
 	if (e)
-		e->num_hook_entries = num;
+		e->num_hook_entries = num;/*size定为num*/
 	return e;
 }
 
@@ -92,13 +94,14 @@ static unsigned int accept_all(void *priv,
 	return NF_ACCEPT; /* ACCEPT makes nf_hook_slow call next hook */
 }
 
+/*用于标记最后一个hook*/
 static const struct nf_hook_ops dummy_ops = {
 	.hook = accept_all,
 	.priority = INT_MIN,
 };
 
 static struct nf_hook_entries *
-nf_hook_entries_grow(const struct nf_hook_entries *old,
+nf_hook_entries_grow(const struct nf_hook_entries *old/*旧的hook列表*/,
 		     const struct nf_hook_ops *reg)
 {
 	unsigned int i, alloc_entries, nhooks, old_entries;
@@ -108,7 +111,7 @@ nf_hook_entries_grow(const struct nf_hook_entries *old,
 	bool inserted = false;
 
 	alloc_entries = 1;
-	old_entries = old ? old->num_hook_entries : 0;
+	old_entries = old ? old->num_hook_entries : 0;/*旧列表数*/
 
 	if (old) {
 		orig_ops = nf_hook_entries_get_hook_ops(old);
@@ -127,12 +130,12 @@ nf_hook_entries_grow(const struct nf_hook_entries *old,
 			 */
 			if (reg->priority == orig_ops[i]->priority &&
 			    reg->hook_ops_type == NF_HOOK_OP_BPF)
-				return ERR_PTR(-EBUSY);
+				return ERR_PTR(-EBUSY);/*bpf hook要求优先级不同*/
 		}
 	}
 
 	if (alloc_entries > MAX_HOOK_COUNT)
-		return ERR_PTR(-E2BIG);
+		return ERR_PTR(-E2BIG);/*注册数量超限*/
 
 	new = allocate_hook_entries_size(alloc_entries);
 	if (!new)
@@ -148,12 +151,13 @@ nf_hook_entries_grow(const struct nf_hook_entries *old,
 			continue;
 		}
 
-		//按优先级自小向大排列
+		//确保按优先级自小向大排列
 		if (inserted || reg->priority > orig_ops[i]->priority) {
 			new_ops[nhooks] = (void *)orig_ops[i];
 			new->hooks[nhooks] = old->hooks[i];
 			i++;
 		} else {
+			/*需要插入，占此位置*/
 			new_ops[nhooks] = (void *)reg;
 			new->hooks[nhooks].hook = reg->hook;
 			new->hooks[nhooks].priv = reg->priv;
@@ -163,14 +167,17 @@ nf_hook_entries_grow(const struct nf_hook_entries *old,
 	}
 
 	if (!inserted) {
+		/*无需插入放在最后*/
 		new_ops[nhooks] = (void *)reg;
 		new->hooks[nhooks].hook = reg->hook;
 		new->hooks[nhooks].priv = reg->priv;
 	}
 
+	/*完成加入，此时dummy_ops未存放*/
 	return new;
 }
 
+/*校验数据按优先级大小排序*/
 static void hooks_validate(const struct nf_hook_entries *hooks)
 {
 #ifdef CONFIG_DEBUG_MISC
@@ -395,7 +402,7 @@ static void nf_static_key_dec(const struct nf_hook_ops *reg, int pf)
 
 /*netfilter注册钩子点*/
 static int __nf_register_net_hook(struct net *net, int pf,
-				  const struct nf_hook_ops *reg)
+				  const struct nf_hook_ops *reg/*要注册的hook*/)
 {
 	struct nf_hook_entries *p, *new_hooks;
 	struct nf_hook_entries __rcu **pp;
@@ -426,6 +433,7 @@ static int __nf_register_net_hook(struct net *net, int pf,
 		break;
 	}
 
+	/*取此Hook应放在哪个链上*/
 	pp = nf_hook_entry_head(net, pf, reg->hooknum, reg->dev);
 	if (!pp)
 		return -EINVAL;
@@ -436,7 +444,7 @@ static int __nf_register_net_hook(struct net *net, int pf,
 	p = nf_entry_dereference(*pp);
 	new_hooks = nf_hook_entries_grow(p, reg);
 
-	//设置新的回调
+	//更新为新列表
 	if (!IS_ERR(new_hooks)) {
 		hooks_validate(new_hooks);
 		rcu_assign_pointer(*pp, new_hooks);
@@ -576,7 +584,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 
 			err = __nf_register_net_hook(net, NFPROTO_IPV6, reg);
 			if (err < 0) {
-				//注册ipv6时解注册ipv4
+				//注册ipv6失败时解注册ipv4
 				__nf_unregister_net_hook(net, NFPROTO_IPV4, reg);
 				return err;
 			}
@@ -594,7 +602,7 @@ EXPORT_SYMBOL(nf_register_net_hook);
 
 //为net注册一组nf hook钩子
 int nf_register_net_hooks(struct net *net, const struct nf_hook_ops *reg,
-			  unsigned int n)
+			  unsigned int n/*netfilter钩子数*/)
 {
 	unsigned int i;
 	int err = 0;

@@ -32,9 +32,9 @@
 
 unsigned int nf_tables_net_id __read_mostly;
 
-//记录netfilter tables支持的表达式
+//记录系统中netfilter tables支持的表达式
 static LIST_HEAD(nf_tables_expressions);
-//记录netfilter tables支持objects
+//记录系统中netfilter tables支持objects
 static LIST_HEAD(nf_tables_objects);
 static LIST_HEAD(nf_tables_flowtables);
 static LIST_HEAD(nf_tables_gc_list);
@@ -397,7 +397,7 @@ static void nft_netdev_unregister_hooks(struct net *net,
 	}
 }
 
-//注册hook
+//nftables注册hook
 static int nf_tables_register_hook(struct net *net,
 				   const struct nft_table *table,
 				   struct nft_chain *chain)
@@ -4602,6 +4602,7 @@ static struct nft_rule *nft_rule_lookup_byid(const struct net *net,
 	u32 id = ntohl(nla_get_be32(nla));
 	struct nft_trans *trans;
 
+	/*遍历commit_list查找rule*/
 	list_for_each_entry(trans, &nft_net->commit_list, list) {
 		if (trans->msg_type == NFT_MSG_NEWRULE &&
 		    nft_trans_rule_chain(trans) == chain &&

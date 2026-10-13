@@ -232,7 +232,7 @@ ipt_do_table(void *priv,
 	     struct sk_buff *skb,
 	     const struct nf_hook_state *state)
 {
-	const struct xt_table *table = priv;
+	const struct xt_table *table = priv;/*私有数据为要查询的表*/
 	unsigned int hook = state->hook;//当前执行table的hook点（决定了用哪些规则）
 	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	const struct iphdr *ip;
@@ -280,7 +280,7 @@ ipt_do_table(void *priv,
 	if (static_key_false(&xt_tee_enabled))
 		jumpstack += private->stacksize * current->in_nf_duplicate;
 
-	//取此hook点首个规则
+	//取此hook点的首条规则
 	e = get_entry(table_base, private->hook_entry[hook]);
 
 	//按顺序遍历所有规则，并执行
@@ -1833,11 +1833,13 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 		goto out_free;
 	}
 
+	/*priv指向此new_table*/
 	for (i = 0; i < num_ops; i++)
 		ops[i].priv = new_table;
 
 	new_table->ops = ops;
 
+	/*注册这一组hooks*/
 	ret = nf_register_net_hooks(net, ops, num_ops);
 	if (ret != 0)
 		goto out_free;
